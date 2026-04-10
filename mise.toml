@@ -1,0 +1,239 @@
+[settings]
+experimental = true
+env_shell_expand = true
+
+[tools]
+actionlint = "1.7.12"
+cargo-binstall = "1.17.6"
+"github:KevinGimbel/mktoc" = "5.1.1"
+"github:RobertDeRose/nixfmt" = "1.2.0"
+"github:badboy/mdbook-mermaid" = "0.17.0"
+"github:joshrotenberg/mdbook-lint" = "0.14.3"
+hk = "1.44.3"
+mdbook = "0.5.2"
+node = "lts"
+"npm:@commitlint/cli" = "20.5.3"
+"npm:markdown-table-formatter" = "1.7.0"
+pkl = "0.31.1"
+rumdl = "0.1.69"
+ruff = "0.15.12"
+shellcheck = "0.11.0"
+shfmt = "3.13.1"
+tombi = "0.9.16"
+typos = "1.45.0"
+
+[env]
+HK_MISE = 1
+_.file = ".env"
+
+[hooks]
+postinstall = "hk install --mise"
+
+# ── Tasks ──────────────────────────────────────────────────────────────────────
+
+[tasks.check]
+description = "Verify flake evaluates cleanly (nix flake check)"
+run = "nix flake check"
+
+[tasks._lima]
+description = "Ensure Lima VM is running (hidden helper)"
+hide = true
+usage = 'arg "<vm>" help="Lima VM instance name" default="default"'
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+if ! command -v limactl &>/dev/null; then
+  echo "ERROR: limactl not found. Install Lima: https://lima-vm.io/"
+  exit 1
+fi
+limactl start "${usage_vm}" 2>/dev/null || true
+"""
+
+[tasks."build:squashfs"]
+description = "Build squashfs rootfs"
+usage = """
+flag "--lima" help="Build inside a Lima VM"
+flag "--vm <name>" help="Lima VM instance name" default="default"
+"""
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+cmd=()
+if [ "${usage_lima:-false}" = "true" ]; then
+  mise run _lima "${usage_vm}"
+  cmd+=(limactl shell "${usage_vm}" --)
+fi
+"${cmd[@]}" nix build .#squashfs -o result-squashfs
+"""
+
+[tasks."build:rauc-bundle"]
+description = "Build signed RAUC bundle"
+usage = """
+flag "--lima" help="Build inside a Lima VM"
+flag "--vm <name>" help="Lima VM instance name" default="default"
+"""
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+cmd=()
+if [ "${usage_lima:-false}" = "true" ]; then
+  mise run _lima "${usage_vm}"
+  cmd+=(limactl shell "${usage_vm}" --)
+fi
+"${cmd[@]}" nix build .#rauc-bundle -o result-rauc-bundle
+"""
+
+[tasks."build:boot-script"]
+description = "Build U-Boot boot script"
+usage = """
+flag "--lima" help="Build inside a Lima VM"
+flag "--vm <name>" help="Lima VM instance name" default="default"
+"""
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+cmd=()
+if [ "${usage_lima:-false}" = "true" ]; then
+  mise run _lima "${usage_vm}"
+  cmd+=(limactl shell "${usage_vm}" --)
+fi
+"${cmd[@]}" nix build .#boot-script -o result-boot-script
+"""
+
+[tasks.build]
+description = "Build artifacts and retain the last 2 distinct images"
+usage = """
+flag "--lima" help="Build inside a Lima VM"
+flag "--vm <name>" help="Lima VM instance name" default="default"
+flag "-o --output <path>" help="Copy .img to this path (default: cwd)"
+"""
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+cmd=()
+using_lima=false
+if [ "${usage_lima:-false}" = "true" ]; then
+  mise run _lima "${usage_vm}"
+  cmd+=(limactl shell "${usage_vm}" --)
+  using_lima=true
+fi
+
+GCROOTS=.gcroots
+IMGROOT="$GCROOTS/images"
+BUNDLEROOT="$GCROOTS/bundles"
+
+"${cmd[@]}" mkdir -p "$IMGROOT" "$BUNDLEROOT"
+
+"${cmd[@]}" rm -f "$GCROOTS/kernel" "$GCROOTS/toplevel" "$GCROOTS/uboot" "$GCROOTS/uboot-env-tools"
+"${cmd[@]}" nix build .#nixosConfigurations.rock64.config.system.build.kernel -o "$GCROOTS/kernel"
+"${cmd[@]}" nix build .#nixosConfigurations.rock64.config.system.build.toplevel -o "$GCROOTS/toplevel"
+"${cmd[@]}" nix build .#uboot -o "$GCROOTS/uboot"
+"${cmd[@]}" nix build .#uboot-env-tools -o "$GCROOTS/uboot-env-tools"
+
+prev_image_target=""
+if [ -L "$IMGROOT/image.1" ]; then
+  prev_image_target=$(readlink "$IMGROOT/image.1")
+fi
+
+"${cmd[@]}" rm -f "$IMGROOT/image.1.new"
+"${cmd[@]}" nix build .#image -o "$IMGROOT/image.1.new"
+new_image_target=$(readlink "$IMGROOT/image.1.new")
+
+if [ -n "$prev_image_target" ] && [ "$prev_image_target" != "$new_image_target" ]; then
+  "${cmd[@]}" rm -f "$IMGROOT/image.2"
+  "${cmd[@]}" mv "$IMGROOT/image.1" "$IMGROOT/image.2"
+fi
+
+"${cmd[@]}" rm -f "$IMGROOT/image.1"
+"${cmd[@]}" mv "$IMGROOT/image.1.new" "$IMGROOT/image.1"
+
+prev_bundle_target=""
+if [ -L "$BUNDLEROOT/rauc-bundle.1" ]; then
+  prev_bundle_target=$(readlink "$BUNDLEROOT/rauc-bundle.1")
+fi
+
+"${cmd[@]}" rm -f "$BUNDLEROOT/rauc-bundle.1.new"
+"${cmd[@]}" nix build .#rauc-bundle -o "$BUNDLEROOT/rauc-bundle.1.new"
+new_bundle_target=$(readlink "$BUNDLEROOT/rauc-bundle.1.new")
+
+if [ -n "$prev_bundle_target" ] && [ "$prev_bundle_target" != "$new_bundle_target" ]; then
+  "${cmd[@]}" rm -f "$BUNDLEROOT/rauc-bundle.2"
+  "${cmd[@]}" mv "$BUNDLEROOT/rauc-bundle.1" "$BUNDLEROOT/rauc-bundle.2"
+fi
+
+"${cmd[@]}" rm -f "$BUNDLEROOT/rauc-bundle.1"
+"${cmd[@]}" mv "$BUNDLEROOT/rauc-bundle.1.new" "$BUNDLEROOT/rauc-bundle.1"
+
+IMG=$("${cmd[@]}" sh -c 'set -- "$1"/*.img; [ -e "$1" ] && printf "%s\n" "$1"' _ "$IMGROOT/image.1")
+
+if [ -n "${usage_output:-}" ]; then
+  DEST="${usage_output}"
+  if [ "${DEST#/}" != "$DEST" ]; then
+    DEST_PATH="$DEST"
+  else
+    DEST_PATH="$PWD/$DEST"
+  fi
+  if [ "$using_lima" = "true" ]; then
+    "${cmd[@]}" sh -c 'cat "$1"' _ "$IMG" >"$DEST_PATH"
+  else
+    cp "$IMG" "$DEST_PATH"
+  fi
+  chmod u+w "$DEST_PATH"
+  SIZE=$(stat -c%s "$DEST_PATH" 2>/dev/null || stat -f%z "$DEST_PATH")
+  echo ""
+  echo "Image: $DEST_PATH ($((SIZE / 1024 / 1024)) MiB)"
+else
+  if [ "$using_lima" = "true" ]; then
+    SIZE=$("${cmd[@]}" sh -c 'stat -c%s "$1" 2>/dev/null || stat -f%z "$1"' _ "$IMG")
+  else
+    SIZE=$(stat -c%s "$IMG" 2>/dev/null || stat -f%z "$IMG")
+  fi
+  echo ""
+  echo "Image: $IMG ($((SIZE / 1024 / 1024)) MiB)"
+fi
+"""
+
+[tasks.gc]
+description = "Garbage collect unrooted Nix store paths"
+usage = """
+flag "--lima" help="Run inside a Lima VM"
+flag "--vm <name>" help="Lima VM instance name" default="default"
+"""
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+cmd=()
+if [ "${usage_lima:-false}" = "true" ]; then
+  mise run _lima "${usage_vm}"
+  cmd+=(limactl shell "${usage_vm}" --)
+fi
+
+"${cmd[@]}" nix-collect-garbage -d
+"""
+
+[tasks.e2e]
+description = "Run all E2E integration tests"
+usage = """
+flag "--lima" help="Run E2E tasks inside a Lima VM"
+flag "--vm <name>" help="Lima VM instance name" default="default"
+"""
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+
+args=()
+if [ "${usage_lima:-false}" = "true" ]; then
+  args+=(--lima)
+  args+=(--vm "${usage_vm}")
+fi
+
+mise run e2e:rauc-slots "${args[@]}"
+mise run e2e:rauc-update "${args[@]}"
+mise run e2e:rauc-rollback "${args[@]}"
+mise run e2e:rauc-confirm "${args[@]}"
+mise run e2e:rauc-power-loss "${args[@]}"
+mise run e2e:rauc-watchdog "${args[@]}"
+mise run e2e:firewall "${args[@]}"
+mise run e2e:network-isolation "${args[@]}"
+mise run e2e:ssh-wan-toggle "${args[@]}"
+"""

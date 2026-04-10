@@ -1,0 +1,43 @@
+module.exports = {
+  rules: {
+    "body-max-line-length": [2, "always", 100],
+    "header-max-length": [2, "always", 72],
+    "header-trim": [2, "always"],
+    "scope-enum": [
+      2,
+      "always",
+      [
+        "modules",
+        "nix",
+        "scripts",
+        "tests",
+        "docs",
+        "openspec",
+        "ci",
+        "tooling",
+        "repo",
+      ],
+    ],
+    "subject-empty": [2, "never"],
+    "subject-full-stop": [2, "never", "."],
+    "type-case": [2, "always", "lower-case"],
+    "type-empty": [2, "never"],
+    "type-enum": [
+      2,
+      "always",
+      [
+        "build",
+        "chore",
+        "ci",
+        "docs",
+        "feat",
+        "fix",
+        "perf",
+        "refactor",
+        "revert",
+        "style",
+        "test",
+      ],
+    ],
+  },
+};

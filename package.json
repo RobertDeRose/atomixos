@@ -1,0 +1,7 @@
+{
+  "name": "atomixos-tooling",
+  "private": true,
+  "devDependencies": {
+    "@commitlint/cli": "20.5.3"
+  }
+}

@@ -1,0 +1,81 @@
+amends "package://github.com/jdx/hk/releases/download/v1.41.0/hk@1.41.0#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v1.41.0/hk@1.41.0#/Builtins.pkl"
+
+local commit_message_validation: Step = new Step {
+  check =
+    #"""
+    perl -0pi -e "s/[ \t]+\$//mg; s/(?<=\S) {2,}/ /g; s/\A([^\n]*\n)\n*(?=.)/$1\n/s" {{commit_msg_file}}
+    perl -0ne 'BEGIN { $/ = undef } exit 1 if /\A[^\n]*\n\n\n/ || /\A[^\n]*\n[^\n]/' {{commit_msg_file}}
+    typos {{commit_msg_file}}
+    commitlint --edit {{commit_msg_file}}
+    """#
+}
+
+local linters = new Mapping<String, Step> {
+  ["actionlint"] = Builtins.actionlint
+  ["check_byte_order_marker"] = Builtins.check_byte_order_marker
+  ["check_case_conflict"] = Builtins.check_case_conflict
+  ["check_executables_have_shebangs"] = Builtins.check_executables_have_shebangs
+  ["check_symlinks"] = Builtins.check_symlinks
+  ["check-added-large-files"] = Builtins.check_added_large_files
+  ["check-exec-shebangs"] = Builtins.check_executables_have_shebangs
+  ["check-merge-conflict"] = Builtins.check_merge_conflict
+  ["detect-private-key"] = (Builtins.detect_private_key) {
+    exclude = List("certs/dev.*.key.pem")
+  }
+  ["mise"] = Builtins.mise
+  ["mixed-line-ending"] = Builtins.mixed_line_ending
+  ["markdown-table-formatter"] = new Step {
+    glob = List("**/*.md", "**/*.markdown")
+    check_diff = "markdown-table-formatter --check {{ files }}"
+    fix = "markdown-table-formatter {{ files }}"
+  }
+  ["rumdl"] = (Builtins.rumdl) {
+    check_diff = "rumdl check --config .config/rumdl.toml --diff {{ files }}"
+    fix = "rumdl check --config .config/rumdl.toml --fix {{ files }}"
+  }
+  ["ruff"] = Builtins.ruff
+  ["newlines"] = Builtins.newlines
+  ["nixfmt"] = Builtins.nix_fmt
+  ["pkl_format"] = Builtins.pkl_format
+  ["mktoc"] = new Step {
+    glob = List("**/*.md", "**/*.markdown")
+    check_diff = "for file in {{ files }}; do mktoc \"$file\" >/dev/null; done"
+    fix = "for file in {{ files }}; do mktoc \"$file\" >/dev/null; done"
+  }
+  ["shellcheck"] = Builtins.shellcheck
+  ["shfmt"] = Builtins.shfmt
+  ["tombi_format"] = Builtins.tombi_format
+  ["tombi"] = Builtins.tombi
+  ["mdbook-lint"] = new Step {
+    glob = List("docs/src/**/*.md")
+    check_diff = "mdbook-lint lint --config .mdbook-lint.toml {{ files }}"
+    fix = "mdbook-lint fix --config .mdbook-lint.toml {{ files }}"
+  }
+  ["typos"] = Builtins.typos
+  ["trailing-whitespace"] = Builtins.trailing_whitespace
+}
+
+default_branch = "main"
+exclude = List("**/mermaid.min.js")
+fail_fast = false
+
+hooks {
+  ["pre-commit"] {
+    fix = true
+    stash = "git"
+    steps = linters
+  }
+  ["commit-msg"] {
+    steps = new Mapping<String, Step> {
+      ["commit_message_format"] = commit_message_validation
+    }
+  }
+  ["check"] {
+    steps = linters
+  }
+  ["fix"] {
+    fix = true
+    steps = linters
+  }
+}

@@ -1,0 +1,20 @@
+# Nix build outputs
+result
+result-*
+
+# Private keys (RAUC signing)
+*.key.pem
+*.csr.pem
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# AI Agents
+.opencode
