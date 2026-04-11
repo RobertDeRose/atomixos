@@ -1,0 +1,4 @@
+# Private keys — NEVER commit
+*.key.pem
+*.csr.pem
+*.srl
