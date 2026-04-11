@@ -5,8 +5,8 @@
 # Dependencies (must be on PATH): nft, awk
 set -euo pipefail
 
-# Remove any existing dynamic SSH rule
-HANDLE=$(nft -a list chain inet filter input 2>/dev/null | grep 'SSH-WAN-dynamic' | awk '{print $NF}')
+# Remove any existing dynamic SSH rule (grep may find nothing — that's OK)
+HANDLE=$(nft -a list chain inet filter input 2>/dev/null | grep 'SSH-WAN-dynamic' | awk '{print $NF}' || true)
 if [ -n "$HANDLE" ]; then
 	nft delete rule inet filter input handle "$HANDLE"
 fi

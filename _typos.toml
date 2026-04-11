@@ -1,0 +1,3 @@
+[default.extend-words]
+# nftables input interface shorthand — not a typo of "if"
+iif = "iif"
