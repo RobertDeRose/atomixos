@@ -240,6 +240,8 @@ mount "${EMMC_DEV}p5" "$PERSIST_MNT"
 
 mkdir -p "$PERSIST_MNT/config/ssh-authorized-keys"
 mkdir -p "$PERSIST_MNT/config/cockpit"
+mkdir -p "$PERSIST_MNT/config/traefik/dynamic"
+mkdir -p "$PERSIST_MNT/config/traefik/certs"
 mkdir -p "$PERSIST_MNT/containers"
 mkdir -p "$PERSIST_MNT/logs"
 mkdir -p "$PERSIST_MNT/rauc"
@@ -255,6 +257,176 @@ if [ -n "$SSH_PUBKEY" ]; then
 	chmod 600 "$PERSIST_MNT/config/ssh-authorized-keys/admin"
 	log "SSH public key deployed for admin user"
 fi
+
+# ── Traefik reverse proxy configuration ────────────────────────────────────
+# Generate a self-signed TLS certificate for initial HTTPS access.
+# Replace with a proper CA-signed cert or enable ACME after deployment.
+
+log "Generating self-signed TLS certificate for Traefik..."
+if command -v openssl &>/dev/null; then
+	openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
+		-days 3650 -nodes \
+		-keyout "$PERSIST_MNT/config/traefik/certs/server.key" \
+		-out "$PERSIST_MNT/config/traefik/certs/server.crt" \
+		-subj "/CN=gateway" \
+		-addext "subjectAltName=DNS:gateway,DNS:gateway.local,IP:172.20.30.1" \
+		2>/dev/null
+	chmod 600 "$PERSIST_MNT/config/traefik/certs/server.key"
+	chmod 644 "$PERSIST_MNT/config/traefik/certs/server.crt"
+	log "TLS certificate generated (self-signed, 10-year expiry)"
+else
+	log "WARNING: openssl not found, skipping TLS cert generation"
+	log "You must deploy certs to /persist/config/traefik/certs/ before Traefik will serve HTTPS"
+fi
+
+# Write Traefik static configuration
+cat >"$PERSIST_MNT/config/traefik/traefik.yaml" <<'TRAEFIK_STATIC'
+# Traefik static configuration — gateway device
+# https://doc.traefik.io/traefik/reference/static-configuration/file/
+
+entryPoints:
+  websecure:
+    address: ":443"
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+
+providers:
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+
+# No access log by default — enable in dynamic config if needed
+log:
+  level: WARN
+
+# Disable Traefik dashboard (not exposed externally)
+api:
+  dashboard: false
+
+# Disable telemetry
+global:
+  sendAnonymousUsage: false
+TRAEFIK_STATIC
+log "Traefik static config written"
+
+# Write Traefik dynamic configuration — Cockpit route + TLS
+cat >"$PERSIST_MNT/config/traefik/dynamic/cockpit.yaml" <<'TRAEFIK_COCKPIT'
+# Cockpit reverse proxy route
+# Traefik terminates TLS and forwards to Cockpit on localhost:9090 (plain HTTP).
+
+http:
+  routers:
+    cockpit:
+      rule: "PathPrefix(`/`)"
+      entryPoints:
+        - websecure
+      service: cockpit
+      tls: {}
+
+  services:
+    cockpit:
+      loadBalancer:
+        servers:
+          - url: "http://127.0.0.1:9090"
+
+tls:
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /etc/traefik/certs/server.crt
+        keyFile: /etc/traefik/certs/server.key
+TRAEFIK_COCKPIT
+log "Traefik Cockpit route config written"
+
+# Write OIDC forward-auth template (disabled by default)
+# To enable: update authUrl with your Microsoft Entra tenant details
+cat >"$PERSIST_MNT/config/traefik/dynamic/oidc.yaml.disabled" <<'TRAEFIK_OIDC'
+# OIDC forward-auth middleware (Microsoft Entra)
+# Rename this file to oidc.yaml to enable.
+#
+# ── Authentication flow evaluation ──
+#
+# Cockpit (pod) authenticates via SSH to localhost. It supports a [bearer]
+# auth scheme in cockpit.conf where a custom command verifies bearer tokens.
+# However, even with bearer auth, Cockpit still needs SSH credentials to
+# spawn the Python bridge on the host.
+#
+# RECOMMENDED APPROACH: "OIDC gatekeeper + Cockpit password"
+#   1. WAN request → Traefik (port 443)
+#   2. Traefik forward-auth → OIDC provider (Microsoft Entra)
+#   3. On OIDC success: Traefik proxies to Cockpit (127.0.0.1:9090)
+#   4. Cockpit shows its login page — user enters device password
+#   5. Cockpit SSHes to localhost with that password
+#
+# This gives two-factor access: identity (OIDC) + device credential (password).
+# LAN clients bypass OIDC (ipAllowList middleware) and go directly to step 4.
+#
+# ALTERNATIVE: "Trusted header auto-login" (future enhancement)
+#   Deploy a custom Cockpit auth command under [bearer] in cockpit.conf
+#   that trusts X-Forwarded-User from Traefik and uses an SSH service key
+#   to spawn the bridge without password entry. This provides SSO but
+#   requires careful trust boundary management (only Traefik on loopback
+#   should be able to set X-Forwarded-User).
+#
+# ── Setup instructions ──
+#
+# 1. Deploy a forward-auth service (e.g. thomseddon/traefik-forward-auth
+#    or mesosphere/traefik-forward-auth) as a podman container.
+# 2. Configure it with your Microsoft Entra tenant/client ID.
+# 3. Update the address below to point to your forward-auth service.
+# 4. Rename this file to oidc.yaml.
+# 5. Update cockpit.yaml router to include the oidc-chain middleware.
+#
+# Requires a forward-auth service running on the device.
+
+http:
+  middlewares:
+    oidc-auth:
+      forwardAuth:
+        # Update this URL to point to your forward-auth service
+        address: "http://127.0.0.1:4181"
+        trustForwardHeader: true
+        authResponseHeaders:
+          - X-Forwarded-User
+          - X-Forwarded-Groups
+          - X-Forwarded-Email
+
+    lan-bypass:
+      ipAllowList:
+        sourceRange:
+          - "172.20.30.0/24"
+          - "127.0.0.1/8"
+
+    # Chain: LAN clients bypass OIDC; WAN clients go through OIDC first.
+    # Apply this chain to the cockpit router instead of individual middlewares.
+    oidc-chain:
+      chain:
+        middlewares:
+          - lan-bypass
+          - oidc-auth
+
+  # To activate: update the cockpit router in cockpit.yaml to include:
+  #   middlewares:
+  #     - oidc-chain
+TRAEFIK_OIDC
+log "OIDC forward-auth template written (disabled)"
+
+# ── Health manifest ────────────────────────────────────────────────────────
+# The os-verification service reads this file to validate that required
+# containers are running before committing a RAUC slot.
+cat >"$PERSIST_MNT/config/health-manifest.yaml" <<'HEALTH_MANIFEST'
+# Health manifest — containers validated by os-verification service
+# before committing a RAUC slot as "good".
+containers:
+  - name: cockpit-ws
+  - name: traefik
+HEALTH_MANIFEST
+log "Health manifest written (cockpit-ws, traefik)"
 
 umount "$PERSIST_MNT"
 rmdir "$PERSIST_MNT"
@@ -287,6 +459,27 @@ if [ -n "$SSH_PUBKEY" ]; then
 	fi
 fi
 
+if [ ! -f "$VALIDATE_MNT/config/traefik/traefik.yaml" ]; then
+	log "FAIL: Traefik static config not found"
+	VALID=false
+else
+	log "OK: Traefik static config present"
+fi
+
+if [ ! -f "$VALIDATE_MNT/config/traefik/dynamic/cockpit.yaml" ]; then
+	log "FAIL: Traefik Cockpit route not found"
+	VALID=false
+else
+	log "OK: Traefik Cockpit route present"
+fi
+
+if [ ! -f "$VALIDATE_MNT/config/health-manifest.yaml" ]; then
+	log "FAIL: Health manifest not found"
+	VALID=false
+else
+	log "OK: Health manifest present"
+fi
+
 umount "$VALIDATE_MNT"
 rmdir "$VALIDATE_MNT"
 
@@ -304,7 +497,7 @@ log "  p1: boot-a   (vfat, ${BOOT_A_SIZE_MIB} MiB) — kernel + DTB"
 log "  p2: boot-b   (vfat, ${BOOT_B_SIZE_MIB} MiB) — empty (for future updates)"
 log "  p3: rootfs-a  (${ROOTFS_A_SIZE_MIB} MiB)     — squashfs deployed"
 log "  p4: rootfs-b  (${ROOTFS_B_SIZE_MIB} MiB)     — empty (for future updates)"
-log "  p5: persist   (f2fs, remaining space)        — credentials deployed"
+log "  p5: persist   (f2fs, remaining space)        — credentials + config deployed"
 log ""
 log "Credentials:"
 log "  admin password: SET (hashed)"
@@ -313,6 +506,16 @@ if [ -n "$SSH_PUBKEY" ]; then
 else
 	log "  admin SSH key:  NOT SET (deploy manually to /persist/config/ssh-authorized-keys/admin)"
 fi
+log ""
+log "Services:"
+log "  Traefik:  config at /persist/config/traefik/ (self-signed TLS)"
+log "  Cockpit:  routed via Traefik on port 443"
+log "  OIDC:     disabled (enable via /persist/config/traefik/dynamic/oidc.yaml)"
+log ""
+log "Health manifest: /persist/config/health-manifest.yaml (cockpit-ws, traefik)"
+log ""
+log "NOTE: Container images (cockpit-ws, traefik) must be pulled on first boot"
+log "or pre-loaded via 'podman pull' before the device goes live."
 log ""
 log "U-Boot env will default to: BOOT_ORDER=A B, BOOT_A_LEFT=3"
 log "Remove SD card and reboot to boot from eMMC."

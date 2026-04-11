@@ -17,6 +17,7 @@
     ./openvpn.nix
     ./rauc.nix
     ./cockpit.nix
+    ./traefik.nix
     ./os-verification.nix
     ./os-upgrade.nix
     ./watchdog.nix

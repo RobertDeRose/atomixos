@@ -199,12 +199,21 @@
 
 ## 17. Cockpit Pod Configuration
 
-- [x] 17.1 Create a Quadlet or systemd unit for the Cockpit pod (`quay.io/cockpit/ws`) that SSHes into the host on localhost — raw systemd service using podman run, host networking, zero closure cost
-- [x] 17.2 Configure cockpit.conf for the pod (listen address, certificate paths, allowed origins) — COCKPIT_WS_ARGS env sets --address=127.0.0.1 --port=9090 --no-tls; config mounted from /persist/config/cockpit
-- [ ] 17.3 Integrate Cockpit pod with Traefik reverse proxy (routing, TLS termination)
-- [ ] 17.4 Evaluate Cockpit OAuth/bearer token flow for OIDC pass-through from Traefik
+- [x] 17.1 Create a Quadlet or systemd unit for the Cockpit pod (`quay.io/cockpit/ws`) that SSHes into the host on
+  localhost — raw systemd service using podman run, host networking, zero closure cost
+- [x] 17.2 Configure cockpit.conf for the pod (listen address, certificate paths, allowed origins) — COCKPIT_WS_ARGS env
+  sets --address=127.0.0.1 --port=9090 --no-tls; config mounted from /persist/config/cockpit
+- [x] 17.3 Integrate Cockpit pod with Traefik reverse proxy (routing, TLS termination) — traefik.nix raw systemd service
+  (same pattern as cockpit.nix: podman run docker.io/library/traefik:v3, host networking, zero closure cost). TLS
+  from /persist/config/traefik/certs/, reverse-proxies to Cockpit on 127.0.0.1:9090, HTTP→HTTPS redirect.
+  Provisioning writes config + self-signed cert.
+- [x] 17.4 Evaluate Cockpit OAuth/bearer token flow for OIDC pass-through from Traefik — Cockpit supports [bearer] auth
+  scheme but still needs SSH credentials for the bridge. Recommended: "OIDC gatekeeper + Cockpit password"
+  (two-factor: identity via OIDC + device password). Alternative: custom [bearer] command trusting X-Forwarded-User
+  with SSH service key (SSO, future). OIDC template with chain middleware written to provisioning.
 - [ ] 17.5 Verify Cockpit pod can SSH to host using provisioned password and spawn Python bridge via python3Minimal
-- [ ] 17.6 Add Cockpit pod to the health manifest for os-verification service validation — provisioning task: create /persist/config/health-manifest.yaml with cockpit-ws container entry
+- [x] 17.6 Add Cockpit pod to the health manifest for os-verification service validation — provisioning task creates
+  /persist/config/health-manifest.yaml with cockpit-ws and traefik container entries
 
 ## 18. Authentication Provisioning
 

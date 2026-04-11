@@ -82,6 +82,8 @@ The image ships with no embedded credentials. During provisioning:
 
 - `/persist/config/admin-password-hash` -- unique sha-512 password hash per device
 - `/persist/config/ssh-authorized-keys/admin` -- operator's SSH public key
+- `/persist/config/traefik/` -- Traefik static/dynamic config and self-signed TLS certificate
+- `/persist/config/health-manifest.yaml` -- container health entries for os-verification
 
 Remote SSH is key-only. Localhost SSH allows password auth so the Cockpit pod can connect to the host. OIDC (Microsoft
 Entra via Traefik forward-auth) is the primary web auth when internet is available; the provisioned password is the
@@ -102,6 +104,8 @@ modules/
   firewall.nix                     nftables rules (WAN/LAN/VPN/FORWARD)
   lan-gateway.nix                  dnsmasq DHCP, chrony NTP, IP forwarding off
   rauc.nix                         RAUC system.conf, slot definitions
+  cockpit.nix                      Cockpit pod (quay.io/cockpit/ws) systemd service
+  traefik.nix                      Traefik reverse proxy pod systemd service
   watchdog.nix                     systemd watchdog config
   os-verification.nix              Post-update health check service
   os-upgrade.nix                   Update polling + hawkBit toggle
@@ -190,21 +194,15 @@ For factory provisioning with the eMMC attached as a block device (requires Linu
 
 ```sh
 mise run provision:emmc /dev/mmcblk1 /path/to/uboot /path/to/kernel /path/to/dtb /path/to/squashfs
+# Optional: --ssh-key ~/.ssh/id_ed25519.pub
 ```
 
-This partitions the eMMC, writes U-Boot, deploys the first image to slot A, and leaves the persist region for `systemd-repart` to create on first boot.
+This partitions the eMMC, writes U-Boot, deploys the first image to slot A, and pre-creates the persist partition with:
 
-### Post-boot setup
-
-After first boot, provision per-device credentials (EN18031 -- no default passwords):
-
-```sh
-# Set admin password (unique per device)
-mkpasswd -m sha-512 | ssh admin@<device> 'cat > /persist/config/admin-password-hash'
-
-# Deploy SSH public key
-ssh admin@<device> 'cat > /persist/config/ssh-authorized-keys/admin' < ~/.ssh/id_ed25519.pub
-```
+- Admin password (prompted interactively, sha-512 hashed, EN18031 compliant)
+- SSH public key (if `--ssh-key` provided)
+- Traefik reverse proxy configuration and self-signed TLS certificate
+- Health manifest (cockpit-ws, traefik) for os-verification
 
 ## Flake outputs
 
@@ -220,4 +218,5 @@ ssh admin@<device> 'cat > /persist/config/ssh-authorized-keys/admin' < ~/.ssh/id
 
 ## Status
 
-Implementation is in progress. 59 of 104 tasks complete. All core implementation tasks are done; remaining tasks are verification, hardware testing, and Cockpit pod/auth integration. See `openspec/changes/rock64-ab-image/tasks.md` for details.
+Implementation is in progress. 80 of 111 tasks complete. All core implementation tasks are done. Remaining tasks are
+hardware verification and end-to-end integration testing. See `openspec/changes/rock64-ab-image/tasks.md` for details.

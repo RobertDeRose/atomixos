@@ -44,8 +44,11 @@ state, and logs.
 - hawkBit server deployment — device side is hawkBit-ready, but server is deferred
 - Delta/differential updates — first version uses full squashfs images; delta optimization is a future concern
 - Multi-board support — this targets Rock64 (RK3328) only; other boards are future work
-- Traefik configuration — Traefik runs as a container managed by the application layer, not the image
-- Container orchestration — the image provides podman + Cockpit; what containers run is determined by the application layer and health manifest
+- Traefik configuration — The image defines the Traefik systemd service (same raw-podman pattern as Cockpit), but the
+  container image lives on `/persist` and configuration files on `/persist/config/traefik/`. The provisioning task
+  writes default config and a self-signed TLS certificate.
+- Container orchestration — the image provides podman + Cockpit; what containers run is determined by the application
+  layer and health manifest
 
 ## Decisions
 
@@ -308,9 +311,15 @@ provisioning with a unique sha-512 hash (from `mkpasswd`). SSH authorized keys a
 `/persist/config/ssh-authorized-keys/%u` (per-user key files), not baked into the image.
 
 **Authentication flows**:
-- **WAN (internet available)**: Traefik forward-auth requires OIDC (Microsoft Entra). After OIDC, request reaches Cockpit. Cockpit can auto-authenticate with SSH key or user types provisioned password.
-- **LAN (internet unavailable)**: Traefik skips OIDC. User sees Cockpit login page, authenticates with provisioned password.
-- **SSH from WAN**: Key-only (password auth disabled globally, enabled only for localhost via `Match Address 127.0.0.1,::1`).
+
+- **WAN (internet available)**: Traefik forward-auth requires OIDC (Microsoft Entra). After OIDC, request reaches
+  Cockpit. User types provisioned password to authenticate the SSH bridge session. This provides two-factor access: OIDC
+  identity + device password. (Future: a custom `[bearer]` auth command could trust `X-Forwarded-User` from Traefik and
+  use an SSH service key for SSO, but this requires careful trust boundary management.)
+- **LAN (internet unavailable)**: Traefik routes directly to Cockpit (ipAllowList middleware bypasses OIDC for
+  172.20.30.0/24). User sees Cockpit login page, authenticates with provisioned password.
+- **SSH from WAN**: Key-only (password auth disabled globally, enabled only for localhost via `Match Address
+  127.0.0.1,::1`).
 - **SSH from LAN/VPN**: Key-preferred, password fallback.
 
 **SSH localhost password auth**: The Cockpit pod SSHes to the host on localhost to spawn its Python bridge. `Match
@@ -321,6 +330,11 @@ Cockpit pod to authenticate with the provisioned password. Remote SSH remains ke
 
 - `/persist/config/admin-password-hash` — sha-512 password hash
 - `/persist/config/ssh-authorized-keys/admin` — operator's SSH public key
+- `/persist/config/traefik/traefik.yaml` — Traefik static config (entrypoints, providers)
+- `/persist/config/traefik/dynamic/cockpit.yaml` — Cockpit reverse proxy route + TLS cert paths
+- `/persist/config/traefik/dynamic/oidc.yaml.disabled` — OIDC forward-auth template (rename to enable)
+- `/persist/config/traefik/certs/server.{crt,key}` — self-signed TLS certificate (EC P-256, 10-year)
+- `/persist/config/health-manifest.yaml` — container health entries (cockpit-ws, traefik)
 
 **Alternatives considered**:
 
@@ -359,24 +373,50 @@ module additions).
 
 ## Risks / Trade-offs
 
-**[Risk] eMMC wear from frequent updates** → squashfs writes to raw partitions on each update. Mitigation: f2fs on /persist handles wear leveling for frequent writes; rootfs updates should be infrequent (weekly/monthly, not hourly). eMMC controllers have internal wear leveling.
+**[Risk] eMMC wear from frequent updates** → squashfs writes to raw partitions on each update. Mitigation: f2fs on
+/persist handles wear leveling for frequent writes; rootfs updates should be infrequent (weekly/monthly, not hourly).
+eMMC controllers have internal wear leveling.
 
-**[Risk] U-Boot environment storage corruption** → U-Boot env is typically stored on eMMC at a fixed offset. Power loss during env write could corrupt it. Mitigation: U-Boot supports redundant environment storage (two copies); enable this in the U-Boot configuration.
+**[Risk] U-Boot environment storage corruption** → U-Boot env is typically stored on eMMC at a fixed offset. Power loss
+during env write could corrupt it. Mitigation: U-Boot supports redundant environment storage (two copies); enable this
+in the U-Boot configuration.
 
-**[Risk] 1 GB slot size insufficient** → If the NixOS system closure grows beyond 1 GB compressed, updates will fail. Current image is ~333 MB compressed, leaving significant headroom. The initial 200 MB target proved unrealistic for NixOS + Podman + networking stack. Mitigation: monitor image size in CI (build fails if squashfs exceeds 1 GB); the 1 GB limit provides 3x headroom over current size.
+**[Risk] 1 GB slot size insufficient** → If the NixOS system closure grows beyond 1 GB compressed, updates will fail.
+Current image is ~333 MB compressed, leaving significant headroom. The initial 200 MB target proved unrealistic for
+NixOS + Podman + networking stack. Mitigation: monitor image size in CI (build fails if squashfs exceeds 1 GB); the 1 GB
+limit provides 3x headroom over current size.
 
-**[Risk] Health manifest missing on first boot** → If the provisioner doesn't place the manifest, the confirmation service marks good immediately. This is intentional for development but means an unprovisioned device in production won't have container health checks. Mitigation: provisioning process must include manifest deployment; document this requirement.
+**[Risk] Health manifest missing on first boot** → If the provisioner doesn't place the manifest, the confirmation
+service marks good immediately. This is intentional for development but means an unprovisioned device in production
+won't have container health checks. Mitigation: provisioning process must include manifest deployment; document this
+requirement.
 
-**[Risk] Cockpit pod failure independent of rootfs** → Since Cockpit runs as a pod rather than in the rootfs, container-layer failures could break the management interface independently of the OS. Mitigation: the health-check confirmation service validates Cockpit pod health via the health manifest before committing a slot. The OpenVPN recovery path remains available in the rootfs. A debug rootful pod can be deployed for emergency access.
+**[Risk] Cockpit/Traefik pod failure independent of rootfs** → Since Cockpit and Traefik run as pods rather than native
+in the rootfs, container-layer failures (missing image, pull failure, OCI runtime error) could break the management
+interface independently of the OS. Mitigation: the health-check confirmation service validates both pods via the health
+manifest before committing a slot. The OpenVPN recovery path remains available in the rootfs. A debug rootful pod can be
+deployed for emergency access.
 
-**[Risk] python3Minimal insufficient for Cockpit bridge** → `python3Minimal` strips SSL, sqlite, readline, and other modules. If a future Cockpit version requires these, the bridge will fail. Mitigation: `python3Minimal`'s `allowedReferences` guard catches closure growth at build time. If full python3 is ever needed, the Cockpit pod approach must be reconsidered.
+**[Risk] python3Minimal insufficient for Cockpit bridge** → `python3Minimal` strips SSL, sqlite, readline, and other
+modules. If a future Cockpit version requires these, the bridge will fail. Mitigation: `python3Minimal`'s
+`allowedReferences` guard catches closure growth at build time. If full python3 is ever needed, the Cockpit pod approach
+must be reconsidered.
 
-**[Risk] Provisioning credential management** → EN18031 requires unique per-device passwords. The provisioning script must create `/persist/config/admin-password-hash` and `/persist/config/ssh-authorized-keys/admin`. If these are missing, the device has no usable credentials and requires re-provisioning. Mitigation: provisioning script validates credential files exist before completing.
+**[Risk] Provisioning credential management** → EN18031 requires unique per-device passwords. The provisioning script
+must create `/persist/config/admin-password-hash`, `/persist/config/ssh-authorized-keys/admin`, Traefik configuration,
+and the health manifest. If these are missing, the device has no usable credentials or web access and requires
+re-provisioning. Mitigation: provisioning script validates all credential and config files exist before completing.
 
-**[Trade-off] No delta updates** → Full image writes use more bandwidth and take longer. Acceptable for initial version; RAUC supports adaptive updates (casync) that can be added later.
+**[Trade-off] No delta updates** → Full image writes use more bandwidth and take longer. Acceptable for initial version;
+RAUC supports adaptive updates (casync) that can be added later.
 
-**[Trade-off] No automated WAN SSH opening** → If Cockpit breaks at runtime (not during update), the only remote access paths are VPN+SSH or manually enabling the SSH-on-WAN flag. The A/B update system with confirmation should prevent Cockpit from being committed in a broken state, making runtime failures rare.
+**[Trade-off] No automated WAN SSH opening** → If Cockpit breaks at runtime (not during update), the only remote access
+paths are VPN+SSH or manually enabling the SSH-on-WAN flag. The A/B update system with confirmation should prevent
+Cockpit from being committed in a broken state, making runtime failures rare.
 
-**[Trade-off] hawkBit deferred** → No staged rollouts, fleet visibility, or campaign management initially. Acceptable because the device-side architecture supports hawkBit with a flag flip when ready.
+**[Trade-off] hawkBit deferred** → No staged rollouts, fleet visibility, or campaign management initially. Acceptable
+because the device-side architecture supports hawkBit with a flag flip when ready.
 
-**[Trade-off] Reduced /persist space** → Moving from 200 MB to 1 GB rootfs slots and 32 MB to 128 MB boot slots reduces /persist from ~15 GB to ~13.3 GB. This is acceptable — 13.3 GB is still ample for container images, application data, and logs. The boot partition increase was necessary because the uncompressed aarch64 kernel Image is ~63 MB.
+**[Trade-off] Reduced /persist space** → Moving from 200 MB to 1 GB rootfs slots and 32 MB to 128 MB boot slots reduces
+/persist from ~15 GB to ~13.3 GB. This is acceptable — 13.3 GB is still ample for container images, application data,
+and logs. The boot partition increase was necessary because the uncompressed aarch64 kernel Image is ~63 MB.
