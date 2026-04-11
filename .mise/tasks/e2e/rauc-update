@@ -6,6 +6,7 @@ set -euo pipefail
 echo "Running E2E test: rauc-update"
 echo "  Builds test bundle, installs via RAUC, verifies slot switch A→B"
 echo ""
-nix build .#checks.aarch64-linux.rauc-update --no-link --print-build-logs
+nix build .#checks.aarch64-linux.rauc-update --no-link --print-build-logs \
+	2> >(grep -v 'SQLite database.*is busy' >&2)
 echo ""
 echo "PASS: rauc-update"
