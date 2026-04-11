@@ -165,6 +165,12 @@
     '';
   };
 
+  # Mask systemd-ssh-generator outputs — systemd 258+ auto-creates sshd
+  # socket units that conflict with our explicitly managed sshd.service
+  # (port 22 "Address already in use"). We manage SSH via services.openssh.
+  systemd.sockets.sshd-unix-local.enable = false;
+  systemd.sockets.sshd-unix-export.enable = false;
+
   # ── Essential packages ───────────────────────────────────────────────────────
 
   environment.systemPackages = with pkgs; [

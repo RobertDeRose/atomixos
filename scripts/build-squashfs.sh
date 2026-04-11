@@ -16,10 +16,11 @@ mkdir -p "$out"
 PSEUDO_ROOT=$(mktemp -d)
 
 # Copy all closure paths into the pseudo-root's /nix/store.
-# --no-preserve=mode ensures we can clean up (store paths are read-only).
+# Use cp -a to preserve all attributes (including +x on binaries).
+# Cleanup of the read-only copies is handled by rm -rf as root in the sandbox.
 mkdir -p "$PSEUDO_ROOT/nix/store"
 while IFS= read -r path; do
-	cp -a --no-preserve=mode "$path" "$PSEUDO_ROOT/nix/store/"
+	cp -a "$path" "$PSEUDO_ROOT/nix/store/"
 done <"@closureInfo@/store-paths"
 
 # Create /sbin/init pointing to the system toplevel
@@ -35,6 +36,8 @@ mksquashfs "$PSEUDO_ROOT" "$out/rootfs.squashfs" \
 	-all-root \
 	-progress
 
+# Restore write permissions before cleanup — cp -a preserves read-only nix store perms
+chmod -R u+w "$PSEUDO_ROOT"
 rm -rf "$PSEUDO_ROOT"
 
 # Size check — fail if image exceeds slot size
