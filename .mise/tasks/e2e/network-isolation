@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#MISE description="Run network isolation E2E test"
+#MISE alias="net-iso"
+set -euo pipefail
+
+echo "Running E2E test: network-isolation"
+echo "  Verifies LAN gets DHCP/NTP, cannot reach WAN (ip_forward=0)"
+echo ""
+nix build .#checks.aarch64-linux.network-isolation --no-link --print-build-logs \
+	2> >(grep -v 'SQLite database.*is busy' >&2)
+echo ""
+echo "PASS: network-isolation"

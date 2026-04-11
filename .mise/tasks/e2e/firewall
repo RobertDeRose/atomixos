@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#MISE description="Run nftables firewall rules E2E test"
+#MISE alias="firewall"
+set -euo pipefail
+
+echo "Running E2E test: firewall"
+echo "  Verifies WAN/LAN/VPN firewall rules with multi-node VLAN setup"
+echo ""
+nix build .#checks.aarch64-linux.firewall --no-link --print-build-logs \
+	2> >(grep -v 'SQLite database.*is busy' >&2)
+echo ""
+echo "PASS: firewall"

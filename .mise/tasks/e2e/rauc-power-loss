@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#MISE description="Run RAUC power-loss simulation E2E test"
+#MISE alias="power-loss"
+set -euo pipefail
+
+echo "Running E2E test: rauc-power-loss"
+echo "  Crashes VM during RAUC install, verifies slot A intact after reboot"
+echo ""
+nix build .#checks.aarch64-linux.rauc-power-loss --no-link --print-build-logs \
+	2> >(grep -v 'SQLite database.*is busy' >&2)
+echo ""
+echo "PASS: rauc-power-loss"

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Launch interactive QEMU VM for debugging E2E tests"
-#USAGE flag "-t --test <name>" help="Test to debug (slots, update, rollback, confirm)" default="slots"
+#USAGE flag "-t --test <name>" help="Test to debug" default="slots"
 #USAGE flag "--keep" help="Keep VM state between runs"
 set -euo pipefail
 
@@ -8,13 +8,18 @@ TEST_NAME="${usage_test:-slots}"
 
 # Map short names to flake check attributes
 case "$TEST_NAME" in
-	slots)   CHECK="rauc-slots" ;;
-	update)  CHECK="rauc-update" ;;
-	rollback) CHECK="rauc-rollback" ;;
-	confirm) CHECK="rauc-confirm" ;;
+	slots)      CHECK="rauc-slots" ;;
+	update)     CHECK="rauc-update" ;;
+	rollback)   CHECK="rauc-rollback" ;;
+	confirm)    CHECK="rauc-confirm" ;;
+	power-loss) CHECK="rauc-power-loss" ;;
+	watchdog)   CHECK="rauc-watchdog" ;;
+	firewall)   CHECK="firewall" ;;
+	net-iso)    CHECK="network-isolation" ;;
+	ssh-toggle) CHECK="ssh-wan-toggle" ;;
 	*)
 		echo "Unknown test: $TEST_NAME"
-		echo "Available: slots, update, rollback, confirm"
+		echo "Available: slots, update, rollback, confirm, power-loss, watchdog, firewall, net-iso, ssh-toggle"
 		exit 1
 		;;
 esac

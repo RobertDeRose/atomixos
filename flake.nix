@@ -119,6 +119,10 @@
             base.overrideTestDerivation (prev: {
               requiredSystemFeatures = builtins.filter (f: f != "kvm") (prev.requiredSystemFeatures or [ ]);
             });
+          # Common args for firewall/network tests (no RAUC modules needed)
+          netTestArgs = {
+            inherit pkgs self;
+          };
         in
         {
           # Verify RAUC slot logic works in QEMU with virtual block devices.
@@ -140,6 +144,22 @@
           # successful health checks (dnsmasq, chronyd, eth0/eth1 IPs).
           # No health manifest — container checks are skipped.
           rauc-confirm = dropKvm (import ./nix/tests/rauc-confirm.nix raucTestArgs);
+
+          # Verify power loss during RAUC install leaves the previous
+          # slot intact. Crashes the VM mid-install and reboots.
+          rauc-power-loss = dropKvm (import ./nix/tests/rauc-power-loss.nix raucTestArgs);
+
+          # Verify nftables firewall rules: WAN allows HTTPS + OpenVPN,
+          # LAN allows SSH + DHCP + NTP, everything else dropped.
+          firewall = dropKvm (import ./nix/tests/firewall.nix netTestArgs);
+
+          # Verify LAN devices get DHCP/NTP from gateway but cannot
+          # reach WAN addresses (ip_forward=0, no routing).
+          network-isolation = dropKvm (import ./nix/tests/network-isolation.nix netTestArgs);
+
+          # Verify SSH-on-WAN toggle: flag file enables/disables SSH
+          # on the WAN interface via dynamic nftables rule.
+          ssh-wan-toggle = dropKvm (import ./nix/tests/ssh-wan-toggle.nix netTestArgs);
         };
 
       # ── QEMU VM for development ───────────────────────────────────────────
