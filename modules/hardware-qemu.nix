@@ -48,4 +48,8 @@
     rootfs0 = "/dev/vdd";
     rootfs1 = "/dev/vde";
   };
+
+  # Use custom bootloader backend in QEMU — simulates U-Boot boot selection
+  # via plain files instead of fw_setenv/fw_printenv.
+  atomixos.rauc.bootloader = "custom";
 }

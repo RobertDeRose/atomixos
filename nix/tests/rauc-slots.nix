@@ -94,7 +94,10 @@ nixos-lib.runTest {
     assert "/dev/vdd" in conf, f"rootfs slot A device not in system.conf: {conf}"
     assert "/dev/vde" in conf, f"rootfs slot B device not in system.conf: {conf}"
     assert "compatible=rock64" in conf, f"compatible string missing: {conf}"
-    assert "bootloader=uboot" in conf, f"bootloader setting missing: {conf}"
+    assert "bootloader=custom" in conf, f"bootloader setting missing: {conf}"
+
+    # Verify custom bootloader backend is configured
+    assert "bootloader-custom-backend=" in conf, f"custom backend handler missing: {conf}"
 
     # Verify bootname labels and parent relationships
     assert "bootname=A" in conf, f"bootname A missing: {conf}"
@@ -122,6 +125,14 @@ nixos-lib.runTest {
     assert "/dev/vdc" in status, f"vdc not in rauc status: {status}"
     assert "/dev/vdd" in status, f"vdd not in rauc status: {status}"
     assert "/dev/vde" in status, f"vde not in rauc status: {status}"
+
+    # Verify custom bootloader backend works — mark-good should succeed
+    # (this would fail with bootloader=uboot since fw_setenv is missing)
+    gateway.succeed("rauc status mark-good")
+
+    # Verify the slot was actually marked good via the custom backend
+    slot_state = gateway.succeed("cat /var/lib/rauc/state.A 2>/dev/null || echo missing")
+    assert "good" in slot_state, f"Slot A not marked good: {slot_state}"
 
     gateway.log("RAUC slot logic verification passed — all 4 slots detected with correct device paths")
   '';
