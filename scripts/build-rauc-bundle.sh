@@ -12,8 +12,8 @@ set -euo pipefail
 mkdir -p bundle
 
 # ── Create boot partition image (vfat with kernel + DTB) ──
-# 32 MiB vfat image
-dd if=/dev/zero of=bundle/boot.vfat bs=1M count=32
+# 128 MiB vfat image (aarch64 kernel Image is ~63 MB uncompressed)
+dd if=/dev/zero of=bundle/boot.vfat bs=1M count=128
 mkfs.vfat -n "BOOT" bundle/boot.vfat
 
 # Copy kernel and DTB into the vfat image
@@ -41,19 +41,8 @@ type=raw
 EOF
 
 # ── Sign and create the bundle ──
-# @signingKey@ is substituted by Nix at build time
-# shellcheck disable=SC2157
-if [ -n "@signingKey@" ]; then
-	rauc bundle \
-		--cert="@signingCert@" \
-		--key="@signingKey@" \
-		bundle/ \
-		rock64.raucb
-else
-	echo "WARNING: No signing key provided. Creating unsigned bundle for development."
-	echo "Pass signingKeyPath to create a signed production bundle."
-	rauc bundle \
-		--no-verify \
-		bundle/ \
-		rock64.raucb
-fi
+rauc bundle \
+	--cert="@signingCert@" \
+	--key="@signingKey@" \
+	bundle/ \
+	rock64.raucb

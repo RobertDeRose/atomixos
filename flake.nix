@@ -78,16 +78,14 @@
         };
 
         # Signed RAUC bundle (multi-slot: boot + rootfs)
-        # For signed builds: nix build .#rauc-bundle --impure
-        # after setting RAUC_SIGNING_KEY=/path/to/key.pem,
-        # or build unsigned for development/testing.
+        # Uses development signing keys by default (committed to repo).
+        # For production: override signingCert/signingKeyPath with production keys.
         rauc-bundle = pkgs.callPackage ./nix/rauc-bundle.nix {
           nixosConfig = rock64Config;
           squashfsImage = self.packages.${system}.squashfs;
-          signingCert = ./certs/signing.cert.pem;
-          # signingKeyPath is empty by default (unsigned dev bundle).
-          # For production: override via .override { signingKeyPath = "/path/to/key.pem"; }
-          caCert = ./certs/ca.cert.pem;
+          signingCert = ./certs/dev.signing.cert.pem;
+          signingKeyPath = ./certs/dev.signing.key.pem;
+          caCert = ./certs/dev.ca.cert.pem;
         };
 
         # U-Boot boot script compiled for Rock64

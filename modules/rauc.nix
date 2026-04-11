@@ -53,7 +53,7 @@
   '';
 
   # CA certificate for bundle verification
-  # The actual cert is generated during development setup (task 10.3)
-  # and placed at this path
-  environment.etc."rauc/ca.cert.pem".source = ../certs/ca.cert.pem;
+  # Uses the development CA by default. Production devices override this
+  # with a production CA cert provisioned separately.
+  environment.etc."rauc/ca.cert.pem".source = ../certs/dev.ca.cert.pem;
 }

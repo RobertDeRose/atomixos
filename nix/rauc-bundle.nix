@@ -1,19 +1,16 @@
 # Build a signed RAUC bundle containing both boot partition image and rootfs.
 # This is a multi-slot bundle that RAUC installs atomically to the inactive slot pair.
-#
-# signingKey is a path string (not a Nix store path) so it doesn't need to be
-# in the git tree / flake source. Pass it at build time:
-#   nix build .#rauc-bundle --override-input ... or via --arg
 {
   lib,
   stdenv,
   rauc,
   dosfstools,
   mtools,
+  squashfsTools,
   nixosConfig,
   squashfsImage,
   signingCert,
-  signingKeyPath ? "",
+  signingKeyPath,
   caCert,
 }:
 
@@ -47,6 +44,7 @@ stdenv.mkDerivation {
     rauc
     dosfstools
     mtools
+    squashfsTools # mksquashfs — required by rauc bundle
   ];
 
   dontUnpack = true;

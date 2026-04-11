@@ -1,4 +1,6 @@
-# Private keys — NEVER commit
+# Private keys — NEVER commit production keys
 *.key.pem
-*.csr.pem
-*.srl
+
+# Allow development signing keys (not a secret — only signs dev/test bundles)
+!dev.ca.key.pem
+!dev.signing.key.pem

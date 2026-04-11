@@ -6,7 +6,8 @@
 - [x] 1.2 Create a shared NixOS module (`modules/base.nix`) for configuration shared between hardware and QEMU targets
 - [x] 1.3 Configure base NixOS system: systemd as init, locale, timezone, hostname, and minimal users
 - [x] 1.4 Enable core services: podman (`virtualisation.podman`), openssh (`services.openssh`)
-- [ ] 1.5 Verify flake evaluates with `nix flake check` (cross-compile or native aarch64)
+- [x] 1.5 Verify flake evaluates with `nix flake check` (cross-compile or native aarch64) — verified in Lima VM
+  (aarch64-linux), all outputs evaluate cleanly
 
 ## 2. Stripped Kernel Configuration
 
@@ -31,7 +32,7 @@
 - [x] 4.1 Add a squashfs image derivation that packages the NixOS system closure (including kernel modules,
   python3Minimal, OpenVPN, chrony, dnsmasq) into a read-only squashfs image with 1 MB block size
 - [x] 4.2 Expose the squashfs image as `packages.aarch64-linux.squashfs` in flake outputs
-- [ ] 4.3 Verify the built squashfs image is under 1 GB
+- [x] 4.3 Verify the built squashfs image is under 1 GB — 334 MB (zstd-19, 30.47% compression ratio)
 - [x] 4.4 Add a CI-friendly size check (script or assertion) that fails the build if squashfs exceeds 1 GB
 
 ## 4b. Flashable Disk Image and Build Tasks
@@ -44,7 +45,8 @@
   `build:image`, `build` (depends on all)
 - [x] 4b.5 Create `.mise/tasks/provision/image` file task to copy built `.img` to user-specified output path
 - [x] 4b.6 Verify all flake outputs evaluate cleanly with `nix flake check --no-build`
-- [ ] 4b.7 Verify `nix build .#image` produces a valid disk image (correct partition table, U-Boot at correct offsets, boot-a vfat readable, rootfs-a squashfs mountable)
+- [x] 4b.7 Verify `nix build .#image` produces a valid disk image — GPT partition table correct, U-Boot at sectors
+  64/16384, boot-a vfat contains Image (63 MB) + DTB + boot.scr, rootfs-a has valid squashfs (hsqs magic, 334 MB)
 
 ## 5. NIC Naming and Network Interface Configuration
 
@@ -121,8 +123,10 @@
 - [x] 11.1 Create a RAUC bundle derivation in the flake that wraps both the boot image (kernel + DTB) and the squashfs
   rootfs image into a single `.raucb` file, signed with the project CA key
 - [x] 11.2 Expose the bundle as `packages.aarch64-linux.rauc-bundle` in flake outputs
-- [ ] 11.3 Verify the bundle with `rauc info` — signature is valid, manifest lists both boot and rootfs images
-- [ ] 11.4 Test installing the bundle on device: `rauc install` writes both boot and rootfs to inactive slot pair, updates U-Boot env, device reboots into new slot
+- [x] 11.3 Verify the bundle with `rauc info` — signature valid (dev CA), manifest lists boot.vfat (134 MB) and
+  rootfs.squashfs (350 MB), compatible=rock64, version=0.1.0
+- [ ] 11.4 Test installing the bundle on device: `rauc install` writes both boot and rootfs to inactive slot pair,
+  updates U-Boot env, device reboots into new slot
 
 ## 12. Watchdog Configuration
 
