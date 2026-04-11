@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+#MISE description="Generate a flashable eMMC disk image (builds all artifacts first)"
+#MISE depends=["build:image"]
+#USAGE flag "-o --output <path>" help="Output image path" default="rock64.img"
+set -euo pipefail
+
+IMAGE_SRC="result-image/rock64.img"
+
+if [ ! -f "$IMAGE_SRC" ]; then
+	echo "ERROR: Image not found at $IMAGE_SRC"
+	echo "The build:image task should have created it. Check for build errors above."
+	exit 1
+fi
+
+cp "$IMAGE_SRC" "${usage_output}"
+echo "Flashable image written to: ${usage_output}"
+echo ""
+
+SIZE=$(stat -c%s "${usage_output}" 2>/dev/null || stat -f%z "${usage_output}")
+echo "Size: $((SIZE / 1024 / 1024)) MiB"
+echo ""
+echo "Flash with:"
+echo "  dd if=${usage_output} of=/dev/mmcblkN bs=4M status=progress"
+echo "  Or use a tool like Etcher."
+echo ""
+echo "On first boot, systemd-repart will create and format the /persist"
+echo "partition (f2fs) using all remaining eMMC space."

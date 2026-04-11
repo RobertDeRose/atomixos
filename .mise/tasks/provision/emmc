@@ -1,23 +1,30 @@
 #!/usr/bin/env bash
-# Apollo Rock64 eMMC Provisioning Script
-#
-# Partitions the eMMC, writes U-Boot, deploys the first image to slot A,
-# and sets up the /persist partition.
-#
-# Usage: sudo ./provision-emmc.sh <emmc-device> <uboot-dir> <kernel-image> <dtb-file> <squashfs-image>
-#
-# Example:
-#   sudo ./provision-emmc.sh /dev/mmcblk1 ./u-boot ./kernel/Image ./kernel/rk3328-rock64.dtb ./rootfs.squashfs
-
+#MISE description="Flash image directly to eMMC block device (requires Linux + root)"
+#MISE depends=["build"]
+#USAGE flag "-y --yes" help="Skip confirmation prompt"
+#USAGE arg "<emmc-device>" help="eMMC block device (e.g. /dev/mmcblk1)"
+#USAGE arg "<uboot-dir>" help="Directory containing idbloader.img and u-boot.itb"
+#USAGE arg "<kernel-image>" help="Path to kernel Image file"
+#USAGE arg "<dtb-file>" help="Path to DTB file (e.g. rk3328-rock64.dtb)"
+#USAGE arg "<squashfs-image>" help="Path to squashfs root filesystem image"
 set -euo pipefail
+
+# ── Platform check ─────────────────────────────────────────────────────────────
+
+if [ "$(uname -s)" != "Linux" ]; then
+	echo "ERROR: This task must run on Linux (requires block device access, mount, sfdisk)."
+	echo "Run from inside a Linux VM (e.g. limactl shell) with the eMMC device attached."
+	exit 1
+fi
 
 # ── Arguments ──────────────────────────────────────────────────────────────────
 
-EMMC_DEV="${1:?Usage: $0 <emmc-device> <uboot-dir> <kernel-image> <dtb-file> <squashfs-image>}"
-UBOOT_DIR="${2:?Missing U-Boot directory (containing idbloader.img and u-boot.itb)}"
-KERNEL_IMAGE="${3:?Missing kernel image path}"
-DTB_FILE="${4:?Missing DTB file path}"
-SQUASHFS_IMAGE="${5:?Missing squashfs image path}"
+EMMC_DEV="${usage_emmc_device}"
+UBOOT_DIR="${usage_uboot_dir}"
+KERNEL_IMAGE="${usage_kernel_image}"
+DTB_FILE="${usage_dtb_file}"
+SQUASHFS_IMAGE="${usage_squashfs_image}"
+SKIP_CONFIRM="${usage_yes:-false}"
 
 # ── Partition layout (sizes in MiB) ───────────────────────────────────────────
 #
@@ -25,19 +32,21 @@ SQUASHFS_IMAGE="${5:?Missing squashfs image path}"
 # 0          4 MiB      U-Boot (raw, idbloader @ sector 64, u-boot.itb @ sector 16384)
 # 4 MiB      32 MiB     boot slot A (vfat) — kernel + DTB
 # 36 MiB     32 MiB     boot slot B (vfat) — kernel + DTB
-# 68 MiB     200 MiB    rootfs slot A (squashfs)
-# 268 MiB    200 MiB    rootfs slot B (squashfs)
-# 468 MiB    remaining  /persist (f2fs)
+# 68 MiB     1024 MiB   rootfs slot A (squashfs)
+# 1092 MiB   1024 MiB   rootfs slot B (squashfs)
+# 2116 MiB   remaining  /persist (f2fs) — created by systemd-repart on first boot
+#
+# Note: the /persist partition is not created here. systemd-repart creates and
+# formats it as f2fs on first boot, filling all remaining eMMC space.
 
 BOOT_A_START_MIB=4
 BOOT_A_SIZE_MIB=32
 BOOT_B_START_MIB=36
 BOOT_B_SIZE_MIB=32
 ROOTFS_A_START_MIB=68
-ROOTFS_A_SIZE_MIB=200
-ROOTFS_B_START_MIB=268
-ROOTFS_B_SIZE_MIB=200
-PERSIST_START_MIB=468
+ROOTFS_A_SIZE_MIB=1024
+ROOTFS_B_START_MIB=1092
+ROOTFS_B_SIZE_MIB=1024
 
 # ── Validation ─────────────────────────────────────────────────────────────────
 
@@ -65,15 +74,17 @@ fi
 
 # ── Idempotency check ─────────────────────────────────────────────────────────
 
-if sfdisk -d "$EMMC_DEV" &>/dev/null; then
-	EXISTING_PARTS=$(sfdisk -d "$EMMC_DEV" 2>/dev/null | grep -c "^${EMMC_DEV}p" || true)
-	if [ "$EXISTING_PARTS" -gt 0 ]; then
-		log "WARNING: $EMMC_DEV already has $EXISTING_PARTS partition(s)"
-		log "This will DESTROY all existing data on $EMMC_DEV"
-		read -rp "Type 'yes' to continue: " CONFIRM
-		if [ "$CONFIRM" != "yes" ]; then
-			log "Aborted"
-			exit 1
+if [ "$SKIP_CONFIRM" != "true" ]; then
+	if sfdisk -d "$EMMC_DEV" &>/dev/null; then
+		EXISTING_PARTS=$(sfdisk -d "$EMMC_DEV" 2>/dev/null | grep -c "^${EMMC_DEV}p" || true)
+		if [ "$EXISTING_PARTS" -gt 0 ]; then
+			log "WARNING: $EMMC_DEV already has $EXISTING_PARTS partition(s)"
+			log "This will DESTROY all existing data on $EMMC_DEV"
+			read -rp "Type 'yes' to continue: " CONFIRM
+			if [ "$CONFIRM" != "yes" ]; then
+				log "Aborted"
+				exit 1
+			fi
 		fi
 	fi
 fi
@@ -112,9 +123,6 @@ start=${ROOTFS_A_START_MIB}MiB, size=${ROOTFS_A_SIZE_MIB}MiB, type=0FC63DAF-8483
 
 # rootfs slot B
 start=${ROOTFS_B_START_MIB}MiB, size=${ROOTFS_B_SIZE_MIB}MiB, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, name="rootfs-b"
-
-# /persist
-start=${PERSIST_START_MIB}MiB, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, name="persist"
 EOF
 
 # Force kernel to re-read partition table
@@ -130,9 +138,7 @@ log "Creating vfat on boot slot B (${EMMC_DEV}p2)..."
 mkfs.vfat -n "BOOT-B" "${EMMC_DEV}p2"
 
 # rootfs partitions don't need a filesystem — squashfs is written directly
-
-log "Creating f2fs on /persist (${EMMC_DEV}p5)..."
-mkfs.f2fs -l "persist" -f "${EMMC_DEV}p5"
+# /persist is NOT created here — systemd-repart handles it on first boot
 
 # ── Deploy boot slot A ─────────────────────────────────────────────────────────
 
@@ -152,34 +158,17 @@ rmdir "$BOOT_A_MNT"
 log "Writing squashfs image to rootfs slot A (${EMMC_DEV}p3)..."
 dd if="$SQUASHFS_IMAGE" of="${EMMC_DEV}p3" bs=4M status=progress
 
-# ── Set U-Boot environment ─────────────────────────────────────────────────────
-
-log "Setting U-Boot environment variables..."
-# fw_setenv requires U-Boot tools and proper env config
-# These set the initial boot-count variables for RAUC
-if command -v fw_setenv &>/dev/null; then
-	fw_setenv BOOT_ORDER "A B"
-	fw_setenv BOOT_A_LEFT 3
-	fw_setenv BOOT_B_LEFT 0
-	log "U-Boot environment set: BOOT_ORDER=A B, BOOT_A_LEFT=3, BOOT_B_LEFT=0"
-else
-	log "WARNING: fw_setenv not available — U-Boot env must be set manually or via U-Boot console"
-	log "  Required variables:"
-	log "    BOOT_ORDER=A B"
-	log "    BOOT_A_LEFT=3"
-	log "    BOOT_B_LEFT=0"
-fi
-
 # ── Done ───────────────────────────────────────────────────────────────────────
 
 log ""
 log "=== Provisioning complete ==="
 log ""
 log "Partition layout on $EMMC_DEV:"
-log "  p1: boot-a  (vfat, ${BOOT_A_SIZE_MIB} MiB) — kernel + DTB"
-log "  p2: boot-b  (vfat, ${BOOT_B_SIZE_MIB} MiB) — empty (for future updates)"
-log "  p3: rootfs-a (${ROOTFS_A_SIZE_MIB} MiB) — squashfs deployed"
-log "  p4: rootfs-b (${ROOTFS_B_SIZE_MIB} MiB) — empty (for future updates)"
-log "  p5: persist  (f2fs, remaining) — writable storage"
+log "  p1: boot-a   (vfat, ${BOOT_A_SIZE_MIB} MiB) — kernel + DTB"
+log "  p2: boot-b   (vfat, ${BOOT_B_SIZE_MIB} MiB) — empty (for future updates)"
+log "  p3: rootfs-a  (${ROOTFS_A_SIZE_MIB} MiB)     — squashfs deployed"
+log "  p4: rootfs-b  (${ROOTFS_B_SIZE_MIB} MiB)     — empty (for future updates)"
+log "  persist — will be created by systemd-repart on first boot"
 log ""
+log "U-Boot env will default to: BOOT_ORDER=A B, BOOT_A_LEFT=3"
 log "Remove SD card and reboot to boot from eMMC."
