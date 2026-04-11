@@ -182,8 +182,11 @@
 
 - [ ] 16.1 Full provisioning test: run provisioning script on Rock64, verify first boot to multi-user.target with all
   services (Cockpit pod, DHCP, NTP, firewall)
-- [ ] 16.2 Update test: build a v2 bundle, serve it from a test HTTP server, verify polling service downloads and
-  installs it, device reboots into new slot with new kernel and rootfs
+- [x] 16.2 Update test: build a v2 bundle, serve it from a test HTTP server, verify polling service downloads and
+  installs it, device reboots into new slot with new kernel and rootfs — validated via `nix build
+  .#checks.aarch64-linux.rauc-update`: builds signed test bundle (dev certs), copies into QEMU VM, `rauc install`
+  writes boot.vfat to /dev/vdc and rootfs.img to /dev/vde, primary switches from A to B. Prerequisite: added custom
+  bootloader backend (`bootloader=custom` in hardware-qemu.nix) that simulates U-Boot env via files in /var/lib/rauc
 - [ ] 16.3 Confirmation test: verify os-verification.service checks system health and marks the slot good after
   successful update
 - [ ] 16.4 Confirmation with manifest: place a health manifest on /persist, deploy containers, verify confirmation
