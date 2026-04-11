@@ -93,6 +93,22 @@
     neededForBoot = false;
   };
 
+  # ── First-boot persist partition creation ───────────────────────────────────
+  # systemd-repart runs Before=sysinit.target on every boot. When the persist
+  # partition already exists it is a no-op. On first boot (freshly flashed
+  # image with no persist partition) it creates the partition, formats it as
+  # f2fs, and pre-creates the required directory structure. Zero additional
+  # closure cost — the binary is compiled into the systemd package.
+  systemd.repart = {
+    enable = true;
+    partitions."50-persist" = {
+      Type = "linux-generic";
+      Label = "persist";
+      Format = "f2fs";
+      MakeDirectories = "/config /config/ssh-authorized-keys /containers /logs";
+    };
+  };
+
   # ── Users ────────────────────────────────────────────────────────────────────
 
   users.mutableUsers = false;
