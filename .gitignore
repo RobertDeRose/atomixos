@@ -2,6 +2,9 @@
 result
 result-*
 
+# Generated disk images
+*.img
+
 # Private keys (RAUC signing)
 *.key.pem
 *.csr.pem

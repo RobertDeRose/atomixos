@@ -92,6 +92,15 @@
 
         # U-Boot boot script compiled for Rock64
         boot-script = pkgs.callPackage ./nix/boot-script.nix { };
+
+        # Flashable disk image for eMMC provisioning
+        # Flash with: dd if=result-image/rock64.img of=/dev/mmcblkN bs=4M
+        # Or use a tool like Etcher.
+        image = pkgs.callPackage ./nix/image.nix {
+          nixosConfig = rock64Config;
+          squashfsImage = self.packages.${system}.squashfs;
+          bootScript = self.packages.${system}.boot-script;
+        };
       };
 
       # ── QEMU VM for development ───────────────────────────────────────────
