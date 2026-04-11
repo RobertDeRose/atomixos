@@ -149,6 +149,12 @@
           # slot intact. Crashes the VM mid-install and reboots.
           rauc-power-loss = dropKvm (import ./nix/tests/rauc-power-loss.nix raucTestArgs);
 
+          # Verify watchdog-triggered reboot leads to RAUC rollback.
+          # Freezes systemd (kill -STOP 1) to trigger the i6300esb
+          # watchdog, then verifies boot-count exhaustion rolls back
+          # from slot B to slot A.
+          rauc-watchdog = dropKvm (import ./nix/tests/rauc-watchdog.nix raucTestArgs);
+
           # Verify nftables firewall rules: WAN allows HTTPS + OpenVPN,
           # LAN allows SSH + DHCP + NTP, everything else dropped.
           firewall = dropKvm (import ./nix/tests/firewall.nix netTestArgs);

@@ -196,8 +196,11 @@
 - [x] 16.5 Rollback test: deploy a deliberately broken image, verify boot-count exhaustion triggers automatic rollback
   to previous slot pair — validated via `nix build .#checks.aarch64-linux.rauc-rollback`: installs bundle to slot B,
   marks B bad, re-activates A as primary, verifies A=good/primary and B=bad
-- [ ] 16.6 Watchdog rollback test: deploy an image that causes a hang, verify watchdog fires and eventually triggers
-  rollback
+- [x] 16.6 Watchdog rollback test: deploy an image that causes a hang, verify watchdog fires and eventually triggers
+  rollback — validated via `nix build .#checks.aarch64-linux.rauc-watchdog`: boots VM with i6300esb watchdog + RAUC
+  custom backend, verifies watchdog device present and systemd kicking at 10s, installs bundle to slot B with
+  boot-count=2, simulates two watchdog reboots via crash()/start(), verifies boot-count decrement (2 -> 1 -> 0),
+  rollback to A, and slot B marked bad
 - [x] 16.7 Power-loss simulation: interrupt an update mid-write (pull power during `rauc install`), verify device boots
   from the previous good slot pair — validated via `nix build .#checks.aarch64-linux.rauc-power-loss`: installs 64 MB
   bundle, crashes VM mid-write via `machine.crash()`, reboots and verifies slot A still intact and RAUC functional

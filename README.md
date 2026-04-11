@@ -172,6 +172,7 @@ nix/
     rauc-rollback.nix              Install → mark-bad → rollback
     rauc-confirm.nix               os-verification health check → mark-good
     rauc-power-loss.nix            Crash mid-install, verify recovery
+    rauc-watchdog.nix              Watchdog + boot-count rollback
     firewall.nix                   2-node WAN/LAN port allow/deny
     network-isolation.nix          2-node DHCP/NTP/WAN isolation
     ssh-wan-toggle.nix             SSH-on-WAN flag enable/disable
@@ -198,6 +199,7 @@ scripts/
   rauc-rollback                    Run RAUC rollback test
   rauc-confirm                     Run os-verification confirmation test
   rauc-power-loss                  Run power-loss simulation test
+  rauc-watchdog                    Run watchdog rollback test
   firewall                         Run firewall test
   network-isolation                Run network isolation test
   ssh-wan-toggle                   Run SSH toggle test
@@ -275,7 +277,7 @@ This partitions the eMMC, writes U-Boot, deploys the first image to slot A, and 
 | `packages.aarch64-linux.boot-script` | Compiled U-Boot `boot.scr`                             |
 | `packages.aarch64-linux.image`       | Flashable eMMC disk image (U-Boot + boot-a + rootfs-a) |
 | `apps.aarch64-linux.rock64-qemu-vm`  | QEMU VM runner                                         |
-| `checks.aarch64-linux.*`             | E2E integration tests (8 tests, see `nix/tests/`)     |
+| `checks.aarch64-linux.*`             | E2E integration tests (9 tests, see `nix/tests/`)     |
 
 ## Versioned Image Naming
 
@@ -290,5 +292,5 @@ updates automatically everywhere it is produced.
 
 ## Status
 
-Implementation is in progress. 93 of 116 tasks complete. All core implementation tasks are done. Remaining tasks are
+Implementation is in progress. 94 of 116 tasks complete. All core implementation tasks are done. Remaining tasks are
 hardware verification and end-to-end integration testing. See `openspec/changes/rock64-ab-image/tasks.md` for details.
