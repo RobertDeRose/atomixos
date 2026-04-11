@@ -34,6 +34,18 @@
 - [ ] 4.3 Verify the built squashfs image is under 1 GB
 - [x] 4.4 Add a CI-friendly size check (script or assertion) that fails the build if squashfs exceeds 1 GB
 
+## 4b. Flashable Disk Image and Build Tasks
+
+- [x] 4b.1 Create `nix/image.nix` derivation that assembles a flashable eMMC `.img` (GPT, U-Boot, boot-a vfat, rootfs-a
+  squashfs) using mtools (no loop devices/mount needed in Nix sandbox)
+- [x] 4b.2 Create `scripts/build-image.sh` template with `@variable@` placeholders for Nix substitute
+- [x] 4b.3 Expose the image as `packages.aarch64-linux.image` in flake outputs
+- [x] 4b.4 Add mise TOML build tasks: `check`, `build:squashfs`, `build:rauc-bundle`, `build:boot-script`,
+  `build:image`, `build` (depends on all)
+- [x] 4b.5 Create `.mise/tasks/provision/image` file task to copy built `.img` to user-specified output path
+- [x] 4b.6 Verify all flake outputs evaluate cleanly with `nix flake check --no-build`
+- [ ] 4b.7 Verify `nix build .#image` produces a valid disk image (correct partition table, U-Boot at correct offsets, boot-a vfat readable, rootfs-a squashfs mountable)
+
 ## 5. NIC Naming and Network Interface Configuration
 
 - [x] 5.1 Disable systemd predictable interface names (`networking.usePredictableInterfaceNames = false`)
@@ -68,21 +80,25 @@
 - [ ] 7.7 Verify: HTTPS works on WAN, SSH blocked on WAN by default, SSH works on LAN and VPN, no forwarding between
   interfaces
 
-## 8. eMMC Partition Layout and Provisioning Script
+## 8. eMMC Partition Layout and Provisioning
 
-- [x] 8.1 Create the initial provisioning script (`scripts/provision-emmc.sh`) that partitions the eMMC: raw U-Boot region (4 MB), boot A (vfat, 32 MB), boot B (vfat, 32 MB), rootfs A (1 GB), rootfs B (1 GB), /persist (f2fs, remaining)
+- [x] 8.1 Create the provisioning task (`.mise/tasks/provision/emmc`) that partitions the eMMC: raw U-Boot region (4 MB), boot A (vfat, 32 MB), boot B (vfat, 32 MB), rootfs A (1 GB), rootfs B (1 GB). Persist partition deferred to systemd-repart on first boot.
 - [x] 8.2 Add U-Boot writing step: dd idbloader.img to sector 64 and u-boot.itb to sector 16384 using `ubootRock64` from nixpkgs
 - [x] 8.3 Create vfat filesystem on boot slot A, copy kernel image and DTB
 - [x] 8.4 Write the initial squashfs image to rootfs slot A partition
-- [x] 8.5 Create f2fs filesystem on /persist partition
-- [x] 8.6 Set initial U-Boot environment: `BOOT_ORDER=A B`, `BOOT_A_LEFT=3`, `BOOT_B_LEFT=0`
+- [x] 8.5 Configure systemd-repart to create f2fs /persist partition on first boot (zero closure cost — binary already
+  in systemd)
+- [x] 8.6 U-Boot environment defaults handled by boot.cmd script (lines 17-19: `BOOT_ORDER=A B`, `BOOT_A_LEFT=3`,
+  `BOOT_B_LEFT=3` when env unset)
 - [x] 8.7 Add idempotency check: detect if eMMC is already provisioned and prompt for confirmation before overwriting
 - [ ] 8.8 Test provisioning script: device boots from eMMC into slot A and reaches multi-user.target
 
 ## 9. U-Boot Configuration and Boot-Count Logic
 
-- [ ] 9.1 Verify `ubootRock64` from nixpkgs produces idbloader.img and u-boot.itb suitable for RK3328 boot ROM
-- [x] 9.2 Write U-Boot boot script that reads `BOOT_ORDER` and `BOOT_X_LEFT` variables, decrements the counter, and selects the appropriate boot slot and rootfs partition
+- [x] 9.1 Verify `ubootRock64` from nixpkgs produces idbloader.img and u-boot.itb suitable for RK3328 boot ROM
+  (confirmed: idbloader.img 137 KiB, u-boot.itb 940 KiB, plus u-boot-rockchip.bin combined blob)
+- [x] 9.2 Write U-Boot boot script that reads `BOOT_ORDER` and `BOOT_X_LEFT` variables, decrements the counter, and
+  selects the appropriate boot slot and rootfs partition
 - [x] 9.3 Configure redundant U-Boot environment storage (two copies at different eMMC offsets)
 - [ ] 9.4 Test boot-count logic: simulate 3 consecutive failed boots on slot B and verify U-Boot falls back to slot A
 
@@ -182,8 +198,8 @@
 
 ## 18. Authentication Provisioning
 
-- [ ] 18.1 Update `provision-emmc.sh` to prompt for and create `/persist/config/admin-password-hash` (sha-512 via mkpasswd)
-- [ ] 18.2 Update `provision-emmc.sh` to accept and deploy SSH public key to `/persist/config/ssh-authorized-keys/admin`
+- [ ] 18.1 Update `.mise/tasks/provision/emmc` to prompt for and create `/persist/config/admin-password-hash` (sha-512 via mkpasswd)
+- [ ] 18.2 Update `.mise/tasks/provision/emmc` to accept and deploy SSH public key to `/persist/config/ssh-authorized-keys/admin`
 - [ ] 18.3 Add provisioning validation: fail if credential files are missing after provisioning
 - [ ] 18.4 Verify device boots with provisioned credentials: SSH key auth works, password auth works via Cockpit pod on localhost
 - [ ] 18.5 Verify no credentials exist in the squashfs image itself (EN18031 compliance)
