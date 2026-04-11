@@ -34,7 +34,7 @@ IMAGE_SIZE_MIB=$((ROOTFS_B_START_MIB + ROOTFS_B_SIZE_MIB))
 log() { echo "[build-image] $*"; }
 
 mkdir -p "$out"
-IMAGE="$out/rock64.img"
+IMAGE="$out/@imageName@"
 
 # ── Create sparse image file ──────────────────────────────────────────────────
 

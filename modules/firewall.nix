@@ -29,7 +29,7 @@ in
         type filter hook input priority 0; policy drop;
 
         # Allow loopback
-        iif "lo" accept
+        if "lo" accept
 
         # Allow established/related connections on all interfaces
         ct state established,related accept

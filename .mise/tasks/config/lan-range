@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+#MISE description="Set LAN gateway/DHCP range across all configs"
+#USAGE flag "--gateway-cidr <value>" help="LAN gateway CIDR for eth1 (e.g. 172.20.30.1/24)" default="172.20.30.1/24"
+#USAGE flag "--dhcp-start <value>" help="DHCP range start IP (e.g. 172.20.30.10)" default="172.20.30.10"
+#USAGE flag "--dhcp-end <value>" help="DHCP range end IP (e.g. 172.20.30.254)" default="172.20.30.254"
+set -euo pipefail
+# shellcheck disable=SC2154 # mise injects usage_* variables from #USAGE
+
+ROOT_DIR="$(git rev-parse --show-toplevel)"
+
+NETWORKING_NIX="$ROOT_DIR/modules/networking.nix"
+LAN_GATEWAY_NIX="$ROOT_DIR/modules/lan-gateway.nix"
+OS_VERIFICATION_SH="$ROOT_DIR/scripts/os-verification.sh"
+PROVISION_EMMC="$ROOT_DIR/.mise/tasks/provision/emmc"
+
+GATEWAY_CIDR="${usage_gateway_cidr:-172.20.30.1/24}"
+DHCP_START="${usage_dhcp_start:-172.20.30.10}"
+DHCP_END="${usage_dhcp_end:-172.20.30.254}"
+
+GATEWAY_IP="${GATEWAY_CIDR%/*}"
+PREFIX="${GATEWAY_CIDR#*/}"
+
+if [[ "$GATEWAY_CIDR" == "$GATEWAY_IP" ]]; then
+	echo "ERROR: --gateway-cidr must include CIDR suffix (example: 10.50.0.1/24)"
+	exit 1
+fi
+
+if ! [[ "$GATEWAY_IP" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+	echo "ERROR: invalid gateway IP: $GATEWAY_IP"
+	exit 1
+fi
+
+for octet in ${GATEWAY_IP//./ }; do
+	if [ "$octet" -lt 0 ] || [ "$octet" -gt 255 ]; then
+		echo "ERROR: invalid gateway IP: $GATEWAY_IP"
+		exit 1
+	fi
+done
+
+if ! [[ "$PREFIX" =~ ^[0-9]+$ ]] || [ "$PREFIX" -lt 1 ] || [ "$PREFIX" -gt 32 ]; then
+	echo "ERROR: invalid CIDR prefix: $PREFIX"
+	exit 1
+fi
+
+if [ "$PREFIX" != "24" ]; then
+	echo "ERROR: only /24 is supported by this helper right now"
+	echo "       got: $GATEWAY_CIDR"
+	exit 1
+fi
+
+SUBNET_PREFIX="${GATEWAY_IP%.*}"
+SUBNET_CIDR="$SUBNET_PREFIX.0/$PREFIX"
+NETMASK="255.255.255.0"
+
+for ip in "$DHCP_START" "$DHCP_END"; do
+	if ! [[ "$ip" =~ ^${SUBNET_PREFIX//./\.}\.[0-9]{1,3}$ ]]; then
+		echo "ERROR: DHCP IP $ip is not in subnet $SUBNET_CIDR"
+		exit 1
+	fi
+	last="${ip##*.}"
+	if [ "$last" -lt 1 ] || [ "$last" -gt 254 ]; then
+		echo "ERROR: DHCP IP $ip has invalid host octet"
+		exit 1
+	fi
+done
+
+python3 - <<'PY' "$NETWORKING_NIX" "$LAN_GATEWAY_NIX" "$OS_VERIFICATION_SH" "$PROVISION_EMMC" "$GATEWAY_CIDR" "$GATEWAY_IP" "$DHCP_START" "$DHCP_END" "$NETMASK" "$SUBNET_CIDR"
+import pathlib
+import re
+import sys
+
+networking, lan_gateway, os_verification, provision_emmc, gateway_cidr, gateway_ip, dhcp_start, dhcp_end, netmask, subnet_cidr = sys.argv[1:]
+
+def replace_file(path: str, patterns: list[tuple[str, str]]) -> None:
+    p = pathlib.Path(path)
+    text = p.read_text()
+    original = text
+    for pattern, repl in patterns:
+        text, count = re.subn(pattern, repl, text, flags=re.MULTILINE)
+        if count == 0:
+            raise SystemExit(f"ERROR: pattern not found in {path}: {pattern}")
+    if text != original:
+        p.write_text(text)
+
+replace_file(networking, [
+    (r'Address\s*=\s*"[0-9.]+/[0-9]+";', f'Address = "{gateway_cidr}";'),
+])
+
+replace_file(lan_gateway, [
+    (r'dhcp-range\s*=\s*"[0-9.]+,[0-9.]+,[0-9.]+,24h";', f'dhcp-range = "{dhcp_start},{dhcp_end},{netmask},24h";'),
+    (r'"3,[0-9.]+"', f'"3,{gateway_ip}"'),
+    (r'"42,[0-9.]+"', f'"42,{gateway_ip}"'),
+    (r'allow\s+[0-9.]+/[0-9]+', f'allow {subnet_cidr}'),
+])
+
+replace_file(os_verification, [
+    (r'# Check eth1 is [0-9.]+ \(LAN\)', f'# Check eth1 is {gateway_ip} (LAN)'),
+    (r'if \[ "\$ETH1_IP" = "[0-9.]+" \]; then', f'if [ "$ETH1_IP" = "{gateway_ip}" ]; then'),
+    (r'OK eth1 is [0-9.]+', f'OK eth1 is {gateway_ip}'),
+    (r'FAIL eth1 is not [0-9.]+', f'FAIL eth1 is not {gateway_ip}'),
+])
+
+replace_file(provision_emmc, [
+    (r'(subjectAltName=DNS:gateway,DNS:gateway\.local,IP:)[0-9.]+', f'\\g<1>{gateway_ip}'),
+    (r'(sourceRange:\n\s*-\s+")[0-9.]+/[0-9]+("\n\s*-\s+"127\.0\.0\.1/8")', f'\\g<1>{subnet_cidr}\\g<2>'),
+])
+PY
+
+echo "Updated LAN settings:"
+echo "  gateway:    $GATEWAY_CIDR"
+echo "  subnet:     $SUBNET_CIDR"
+echo "  dhcp range: $DHCP_START - $DHCP_END"
+echo ""
+echo "Updated files:"
+echo "  modules/networking.nix"
+echo "  modules/lan-gateway.nix"
+echo "  scripts/os-verification.sh"
+echo "  .mise/tasks/provision/emmc"
+echo ""
+echo "Next steps:"
+echo "  mise run check"
+echo "  mise run build:image"

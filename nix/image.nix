@@ -18,6 +18,13 @@
 let
   kernel = nixosConfig.boot.kernelPackages.kernel;
   dtbPath = "rockchip/rk3328-rock64.dtb";
+  nixosVersion = nixosConfig.system.nixos.version;
+  nixosSeries =
+    let
+      match = builtins.match "([0-9]+\\.[0-9]+).*" nixosVersion;
+    in
+    if match == null then nixosVersion else builtins.elemAt match 0;
+  imageName = "atomixos-${nixosSeries}.img";
 
   buildScript = stdenv.mkDerivation {
     name = "build-image-script";
@@ -30,7 +37,8 @@ let
         --replace-fail "@dtbPath@" "${dtbPath}" \
         --replace-fail "@squashfs@" "${squashfsImage}" \
         --replace-fail "@bootScript@" "${bootScript}" \
-        --replace-fail "@uboot@" "${ubootRock64}"
+        --replace-fail "@uboot@" "${ubootRock64}" \
+        --replace-fail "@imageName@" "${imageName}"
       chmod +x $out
     '';
   };

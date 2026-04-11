@@ -92,7 +92,7 @@
         boot-script = pkgs.callPackage ./nix/boot-script.nix { };
 
         # Flashable disk image for eMMC provisioning
-        # Flash with: dd if=result-image/rock64.img of=/dev/mmcblkN bs=4M
+        # Flash with: dd if=result-image/atomixos-<nixos-series>.img of=/dev/mmcblkN bs=4M
         # Or use a tool like Etcher.
         image = pkgs.callPackage ./nix/image.nix {
           nixosConfig = rock64Config;
