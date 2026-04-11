@@ -92,6 +92,7 @@ LAN/offline fallback.
 ```
 flake.nix                          Main flake (nixos-25.11, aarch64-linux)
 flake.lock                         Pinned nixpkgs
+mise.toml                          Tool versions, build tasks, hooks
 
 modules/
   base.nix                         Shared NixOS config (systemd, podman, ssh, auth, closure opts)
@@ -110,17 +111,22 @@ nix/
   squashfs.nix                     Squashfs image derivation (closureInfo + mksquashfs)
   rauc-bundle.nix                  Multi-slot RAUC bundle derivation
   boot-script.nix                  U-Boot boot.scr compilation
+  image.nix                        Flashable eMMC disk image derivation
 
 scripts/
-  build-squashfs.sh                Squashfs build (called from Nix derivation)
-  build-rauc-bundle.sh             RAUC bundle build (called from Nix derivation)
-  provision-emmc.sh                Initial eMMC partitioning and image deployment
+  build-squashfs.sh                Squashfs build template (Nix derivation)
+  build-rauc-bundle.sh             RAUC bundle build template (Nix derivation)
+  build-image.sh                   Disk image assembly template (Nix derivation)
   os-verification.sh               Runtime health check script
   os-upgrade.sh                    Runtime update polling script
   ssh-wan-toggle.sh                SSH-on-WAN flag check
   ssh-wan-reload.sh                SSH-on-WAN runtime reload
   boot.cmd                         U-Boot A/B boot script source
   fw_env.config                    Redundant U-Boot env storage config
+
+.mise/tasks/provision/
+  image                            Generate flashable .img file
+  emmc                             Flash directly to eMMC block device (Linux only)
 
 certs/
   ca.cert.pem                      RAUC CA certificate (public)
@@ -132,18 +138,33 @@ certs/
 
 Builds require an aarch64-linux system (native or cross). All outputs target `aarch64-linux`.
 
+### With mise (recommended)
+
 ```sh
-# Check the flake evaluates
+# Install tools and hooks
+mise install
+
+# Check the flake evaluates cleanly
+mise run check
+
+# Build individual artifacts
+mise run build:squashfs        # result-squashfs/
+mise run build:rauc-bundle     # result-rauc-bundle/
+mise run build:boot-script     # result-boot-script/
+mise run build:image           # result-image/
+
+# Build everything
+mise run build
+```
+
+### With nix directly
+
+```sh
 nix flake check
-
-# Build the squashfs root filesystem image
-nix build .#squashfs
-
-# Build the signed RAUC bundle (boot + rootfs)
-nix build .#rauc-bundle
-
-# Build the U-Boot boot script
-nix build .#boot-script
+nix build .#squashfs -o result-squashfs
+nix build .#rauc-bundle -o result-rauc-bundle
+nix build .#boot-script -o result-boot-script
+nix build .#image -o result-image
 
 # Run the QEMU testing VM
 nix run .#rock64-qemu-vm
@@ -151,13 +172,39 @@ nix run .#rock64-qemu-vm
 
 ## Provisioning
 
-Flash a new Rock64 by booting from SD card and running:
+### Option 1: Flashable disk image
+
+Build an `.img` file that can be written to eMMC (or SD card) with `dd` or Etcher:
 
 ```sh
-sudo ./scripts/provision-emmc.sh /dev/mmcblk1 /path/to/uboot /path/to/squashfs /path/to/boot-script
+mise run provision:image -o rock64.img
+dd if=rock64.img of=/dev/mmcblkN bs=4M status=progress
 ```
 
-This partitions the eMMC, writes U-Boot, deploys the first image to slot A, and creates the f2fs /persist partition.
+The image includes U-Boot, boot slot A (kernel + DTB), and rootfs slot A (squashfs). On first boot, `systemd-repart`
+automatically creates and formats the `/persist` partition (f2fs) using all remaining eMMC space.
+
+### Option 2: Direct eMMC provisioning
+
+For factory provisioning with the eMMC attached as a block device (requires Linux + root):
+
+```sh
+mise run provision:emmc /dev/mmcblk1 /path/to/uboot /path/to/kernel /path/to/dtb /path/to/squashfs
+```
+
+This partitions the eMMC, writes U-Boot, deploys the first image to slot A, and leaves the persist region for `systemd-repart` to create on first boot.
+
+### Post-boot setup
+
+After first boot, provision per-device credentials (EN18031 -- no default passwords):
+
+```sh
+# Set admin password (unique per device)
+mkpasswd -m sha-512 | ssh admin@<device> 'cat > /persist/config/admin-password-hash'
+
+# Deploy SSH public key
+ssh admin@<device> 'cat > /persist/config/ssh-authorized-keys/admin' < ~/.ssh/id_ed25519.pub
+```
 
 ## Flake outputs
 
@@ -168,8 +215,9 @@ This partitions the eMMC, writes U-Boot, deploys the first image to slot A, and 
 | `packages.aarch64-linux.squashfs` | Compressed squashfs root filesystem |
 | `packages.aarch64-linux.rauc-bundle` | Signed multi-slot `.raucb` bundle |
 | `packages.aarch64-linux.boot-script` | Compiled U-Boot `boot.scr` |
+| `packages.aarch64-linux.image` | Flashable eMMC disk image (U-Boot + boot-a + rootfs-a) |
 | `apps.aarch64-linux.rock64-qemu-vm` | QEMU VM runner |
 
 ## Status
 
-Implementation is in progress. 59 of 104 tasks complete. All implementation tasks are done; remaining tasks are verification and hardware testing. See `openspec/changes/rock64-ab-image/tasks.md` for details.
+Implementation is in progress. 59 of 104 tasks complete. All core implementation tasks are done; remaining tasks are verification, hardware testing, and Cockpit pod/auth integration. See `openspec/changes/rock64-ab-image/tasks.md` for details.
