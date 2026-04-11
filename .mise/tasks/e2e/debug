@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+#MISE description="Launch interactive QEMU VM for debugging E2E tests"
+#USAGE flag "-t --test <name>" help="Test to debug (slots, update, rollback, confirm)" default="slots"
+#USAGE flag "--keep" help="Keep VM state between runs"
+set -euo pipefail
+
+TEST_NAME="${usage_test:-slots}"
+
+# Map short names to flake check attributes
+case "$TEST_NAME" in
+	slots)   CHECK="rauc-slots" ;;
+	update)  CHECK="rauc-update" ;;
+	rollback) CHECK="rauc-rollback" ;;
+	confirm) CHECK="rauc-confirm" ;;
+	*)
+		echo "Unknown test: $TEST_NAME"
+		echo "Available: slots, update, rollback, confirm"
+		exit 1
+		;;
+esac
+
+echo "Building interactive test driver for: $CHECK"
+echo ""
+
+nix build ".#checks.aarch64-linux.${CHECK}.driverInteractive" -o "result-e2e-${CHECK}"
+
+DRIVER="./result-e2e-${CHECK}/bin/nixos-test-driver"
+
+if [ ! -x "$DRIVER" ]; then
+	echo "ERROR: Test driver not found at $DRIVER"
+	exit 1
+fi
+
+ARGS=(--interactive)
+if [ "${usage_keep:-false}" = "true" ]; then
+	ARGS+=(--keep-vm-state)
+fi
+
+echo ""
+echo "Starting interactive test driver..."
+echo ""
+echo "  Available commands in the Python REPL:"
+echo "    gateway.start()                # boot the VM"
+echo "    gateway.wait_for_unit(\"multi-user.target\")"
+echo "    gateway.succeed(\"rauc status\") # run a command"
+echo "    gateway.shell_interact()       # drop into a root shell"
+echo "    gateway.screenshot(\"name\")     # save a screenshot"
+echo ""
+echo "  Press Ctrl+D to exit the REPL and shut down the VM."
+echo ""
+
+exec "$DRIVER" "${ARGS[@]}"

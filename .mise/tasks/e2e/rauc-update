@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+#MISE description="Run RAUC update install E2E test"
+#MISE alias="update"
+set -euo pipefail
+
+echo "Running E2E test: rauc-update"
+echo "  Builds test bundle, installs via RAUC, verifies slot switch A→B"
+echo ""
+nix build .#checks.aarch64-linux.rauc-update --print-build-logs
+echo ""
+echo "PASS: rauc-update"
