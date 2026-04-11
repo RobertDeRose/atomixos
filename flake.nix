@@ -130,6 +130,11 @@
           # Builds a test bundle, installs it, and confirms the primary
           # slot switches from A to B.
           rauc-update = dropKvm (import ./nix/tests/rauc-update.nix raucTestArgs);
+
+          # Verify RAUC rollback: install to slot B, mark B bad, verify
+          # primary reverts to A. Tests the custom bootloader backend's
+          # state management that underpins U-Boot boot-count rollback.
+          rauc-rollback = dropKvm (import ./nix/tests/rauc-rollback.nix raucTestArgs);
         };
 
       # ── QEMU VM for development ───────────────────────────────────────────
