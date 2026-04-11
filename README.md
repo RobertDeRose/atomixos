@@ -19,11 +19,11 @@ NixOS-based firmware image for the Rock64 (Rockchip RK3328, aarch64) with atomic
 ```text
 Offset     Size       Content          Filesystem
 0          4 MB       U-Boot           raw (idbloader + u-boot.itb)
-4 MB       32 MB      boot slot A      vfat (kernel + DTB)
-36 MB      32 MB      boot slot B      vfat (kernel + DTB)
-68 MB      1 GB       rootfs slot A    squashfs (zstd, 1 MB block)
-1092 MB    1 GB       rootfs slot B    squashfs (zstd, 1 MB block)
-2116 MB    ~13.5 GB   /persist         f2fs (containers, state, logs)
+4 MB       128 MB     boot slot A      vfat (kernel + DTB)
+132 MB     128 MB     boot slot B      vfat (kernel + DTB)
+260 MB     1 GB       rootfs slot A    squashfs (zstd, 1 MB block)
+1284 MB    1 GB       rootfs slot B    squashfs (zstd, 1 MB block)
+2308 MB    ~13.3 GB   /persist         f2fs (containers, state, logs)
 ```
 
 ### Network topology

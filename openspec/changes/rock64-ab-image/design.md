@@ -108,14 +108,19 @@ included in the squashfs. They compress to nearly nothing and only consume RAM w
 ```text
 Offset     Size       Content          Filesystem
 0          4 MB       U-Boot           raw (idbloader @ sector 64, u-boot.itb @ sector 16384)
-4 MB       32 MB      boot slot A      vfat (kernel + DTB for slot A)
-36 MB      32 MB      boot slot B      vfat (kernel + DTB for slot B)
-68 MB      1 GB       rootfs slot A    squashfs (NixOS system + kernel modules)
-1092 MB    1 GB       rootfs slot B    squashfs (NixOS system + kernel modules)
-2116 MB    ~13.5 GB   /persist         f2fs (containers, state, logs, health manifest)
+4 MB       128 MB     boot slot A      vfat (kernel + DTB for slot A)
+132 MB     128 MB     boot slot B      vfat (kernel + DTB for slot B)
+260 MB     1 GB       rootfs slot A    squashfs (NixOS system + kernel modules)
+1284 MB    1 GB       rootfs slot B    squashfs (NixOS system + kernel modules)
+2308 MB    ~13.3 GB   /persist         f2fs (containers, state, logs, health manifest)
 ```
 
-**Rationale**: Per-slot boot partitions eliminate the shared /boot single point of failure. 32 MB per boot partition is generous — a stripped kernel + DTB is typically 5-15 MB. The 1 GB rootfs slots accommodate the NixOS system closure (currently ~333 MB compressed) with room for growth. The initial design targeted 200 MB slots but this proved unrealistic for NixOS + Podman + networking stack. f2fs is chosen for /persist because it's designed for flash storage (wear leveling awareness, power-loss resilience). The layout leaves ~13.5 GB for /persist, which holds container images, application data, and logs.
+**Rationale**: Per-slot boot partitions eliminate the shared /boot single point of failure. 128 MB per boot partition
+accommodates the uncompressed aarch64 kernel Image (~63 MB) plus DTB and boot.scr with room for growth. The 1 GB rootfs
+slots accommodate the NixOS system closure (currently ~333 MB compressed) with room for growth. The initial design
+targeted 200 MB slots but this proved unrealistic for NixOS + Podman + networking stack. f2fs is chosen for /persist
+because it's designed for flash storage (wear leveling awareness, power-loss resilience). The layout leaves ~13.3 GB for
+/persist, which holds container images, application data, and logs.
 
 **Alternatives considered**:
 
@@ -374,4 +379,4 @@ module additions).
 
 **[Trade-off] hawkBit deferred** → No staged rollouts, fleet visibility, or campaign management initially. Acceptable because the device-side architecture supports hawkBit with a flag flip when ready.
 
-**[Trade-off] Reduced /persist space** → Moving from 200 MB to 1 GB rootfs slots reduces /persist from ~15 GB to ~13.5 GB. This is acceptable — 13.5 GB is still ample for container images, application data, and logs.
+**[Trade-off] Reduced /persist space** → Moving from 200 MB to 1 GB rootfs slots and 32 MB to 128 MB boot slots reduces /persist from ~15 GB to ~13.3 GB. This is acceptable — 13.3 GB is still ample for container images, application data, and logs. The boot partition increase was necessary because the uncompressed aarch64 kernel Image is ~63 MB.

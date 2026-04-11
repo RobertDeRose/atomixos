@@ -82,8 +82,11 @@
 
 ## 8. eMMC Partition Layout and Provisioning
 
-- [x] 8.1 Create the provisioning task (`.mise/tasks/provision/emmc`) that partitions the eMMC: raw U-Boot region (4 MB), boot A (vfat, 32 MB), boot B (vfat, 32 MB), rootfs A (1 GB), rootfs B (1 GB). Persist partition deferred to systemd-repart on first boot.
-- [x] 8.2 Add U-Boot writing step: dd idbloader.img to sector 64 and u-boot.itb to sector 16384 using `ubootRock64` from nixpkgs
+- [x] 8.1 Create the provisioning task (`.mise/tasks/provision/emmc`) that partitions the eMMC: raw U-Boot region (4
+  MB), boot A (vfat, 128 MB), boot B (vfat, 128 MB), rootfs A (1 GB), rootfs B (1 GB). Persist partition deferred to
+  systemd-repart on first boot.
+- [x] 8.2 Add U-Boot writing step: dd idbloader.img to sector 64 and u-boot.itb to sector 16384 using `ubootRock64` from
+  nixpkgs
 - [x] 8.3 Create vfat filesystem on boot slot A, copy kernel image and DTB
 - [x] 8.4 Write the initial squashfs image to rootfs slot A partition
 - [x] 8.5 Configure systemd-repart to create f2fs /persist partition on first boot (zero closure cost — binary already

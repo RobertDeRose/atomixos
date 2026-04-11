@@ -13,19 +13,19 @@ set -euo pipefail
 #
 # Offset     Size       Content
 # 0          4 MiB      U-Boot (raw, idbloader @ sector 64, u-boot.itb @ sector 16384)
-# 4 MiB      32 MiB     boot slot A (vfat) — kernel + DTB + boot.scr
-# 36 MiB     32 MiB     boot slot B (vfat) — empty
-# 68 MiB     1024 MiB   rootfs slot A (squashfs)
-# 1092 MiB   1024 MiB   rootfs slot B (empty)
+# 4 MiB      128 MiB    boot slot A (vfat) — kernel + DTB + boot.scr
+# 132 MiB    128 MiB    boot slot B (vfat) — empty
+# 260 MiB    1024 MiB   rootfs slot A (squashfs)
+# 1284 MiB   1024 MiB   rootfs slot B (empty)
 # No persist partition — systemd-repart creates it on first boot.
 
 BOOT_A_START_MIB=4
-BOOT_A_SIZE_MIB=32
-BOOT_B_START_MIB=36
-BOOT_B_SIZE_MIB=32
-ROOTFS_A_START_MIB=68
+BOOT_A_SIZE_MIB=128
+BOOT_B_START_MIB=132
+BOOT_B_SIZE_MIB=128
+ROOTFS_A_START_MIB=260
 ROOTFS_A_SIZE_MIB=1024
-ROOTFS_B_START_MIB=1092
+ROOTFS_B_START_MIB=1284
 ROOTFS_B_SIZE_MIB=1024
 
 # Total image size: end of rootfs-b
