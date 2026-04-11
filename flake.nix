@@ -135,6 +135,11 @@
           # primary reverts to A. Tests the custom bootloader backend's
           # state management that underpins U-Boot boot-count rollback.
           rauc-rollback = dropKvm (import ./nix/tests/rauc-rollback.nix raucTestArgs);
+
+          # Verify os-verification service confirms a RAUC slot after
+          # successful health checks (dnsmasq, chronyd, eth0/eth1 IPs).
+          # No health manifest — container checks are skipped.
+          rauc-confirm = dropKvm (import ./nix/tests/rauc-confirm.nix raucTestArgs);
         };
 
       # ── QEMU VM for development ───────────────────────────────────────────

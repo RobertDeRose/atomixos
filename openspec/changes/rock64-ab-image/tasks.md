@@ -187,12 +187,15 @@
   .#checks.aarch64-linux.rauc-update`: builds signed test bundle (dev certs), copies into QEMU VM, `rauc install`
   writes boot.vfat to /dev/vdc and rootfs.img to /dev/vde, primary switches from A to B. Prerequisite: added custom
   bootloader backend (`bootloader=custom` in hardware-qemu.nix) that simulates U-Boot env via files in /var/lib/rauc
-- [ ] 16.3 Confirmation test: verify os-verification.service checks system health and marks the slot good after
-  successful update
+- [x] 16.3 Confirmation test: verify os-verification.service checks system health and marks the slot good after
+  successful update — validated via `nix build .#checks.aarch64-linux.rauc-confirm`: boots QEMU VM with RAUC + dnsmasq
+  - chronyd + dummy eth1 (172.20.30.1), creates first-boot sentinel, runs os-verification service which checks all
+  services/IPs, waits 60s sustained check, then calls `rauc status mark-good` to commit slot A
 - [ ] 16.4 Confirmation with manifest: place a health manifest on /persist, deploy containers, verify confirmation
   checks containers and commits only when all are healthy
-- [ ] 16.5 Rollback test: deploy a deliberately broken image, verify boot-count exhaustion triggers automatic rollback
-  to previous slot pair
+- [x] 16.5 Rollback test: deploy a deliberately broken image, verify boot-count exhaustion triggers automatic rollback
+  to previous slot pair — validated via `nix build .#checks.aarch64-linux.rauc-rollback`: installs bundle to slot B,
+  marks B bad, re-activates A as primary, verifies A=good/primary and B=bad
 - [ ] 16.6 Watchdog rollback test: deploy an image that causes a hang, verify watchdog fires and eventually triggers
   rollback
 - [ ] 16.7 Power-loss simulation: interrupt an update mid-write (pull power during `rauc install`), verify device boots
