@@ -199,17 +199,21 @@
 
 ## 17. Cockpit Pod Configuration
 
-- [ ] 17.1 Create a Quadlet or systemd unit for the Cockpit pod (`quay.io/cockpit/ws`) that SSHes into the host on localhost
-- [ ] 17.2 Configure cockpit.conf for the pod (listen address, certificate paths, allowed origins)
+- [x] 17.1 Create a Quadlet or systemd unit for the Cockpit pod (`quay.io/cockpit/ws`) that SSHes into the host on localhost — raw systemd service using podman run, host networking, zero closure cost
+- [x] 17.2 Configure cockpit.conf for the pod (listen address, certificate paths, allowed origins) — COCKPIT_WS_ARGS env sets --address=127.0.0.1 --port=9090 --no-tls; config mounted from /persist/config/cockpit
 - [ ] 17.3 Integrate Cockpit pod with Traefik reverse proxy (routing, TLS termination)
 - [ ] 17.4 Evaluate Cockpit OAuth/bearer token flow for OIDC pass-through from Traefik
 - [ ] 17.5 Verify Cockpit pod can SSH to host using provisioned password and spawn Python bridge via python3Minimal
-- [ ] 17.6 Add Cockpit pod to the health manifest for os-verification service validation
+- [ ] 17.6 Add Cockpit pod to the health manifest for os-verification service validation — provisioning task: create /persist/config/health-manifest.yaml with cockpit-ws container entry
 
 ## 18. Authentication Provisioning
 
-- [ ] 18.1 Update `.mise/tasks/provision/emmc` to prompt for and create `/persist/config/admin-password-hash` (sha-512 via mkpasswd)
-- [ ] 18.2 Update `.mise/tasks/provision/emmc` to accept and deploy SSH public key to `/persist/config/ssh-authorized-keys/admin`
-- [ ] 18.3 Add provisioning validation: fail if credential files are missing after provisioning
-- [ ] 18.4 Verify device boots with provisioned credentials: SSH key auth works, password auth works via Cockpit pod on localhost
+- [x] 18.1 Update `.mise/tasks/provision/emmc` to prompt for and create `/persist/config/admin-password-hash` (sha-512
+  via mkpasswd) — interactive password prompt with confirmation, min 8 chars
+- [x] 18.2 Update `.mise/tasks/provision/emmc` to accept and deploy SSH public key to
+  `/persist/config/ssh-authorized-keys/admin` — via --ssh-key flag, accepts key string or .pub file path
+- [x] 18.3 Add provisioning validation: fail if credential files are missing after provisioning — validation step
+  re-mounts persist read-only and checks files exist and are non-empty
+- [ ] 18.4 Verify device boots with provisioned credentials: SSH key auth works, password auth works via Cockpit pod on
+  localhost
 - [ ] 18.5 Verify no credentials exist in the squashfs image itself (EN18031 compliance)

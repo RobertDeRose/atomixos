@@ -16,6 +16,7 @@
     ./lan-gateway.nix
     ./openvpn.nix
     ./rauc.nix
+    ./cockpit.nix
     ./os-verification.nix
     ./os-upgrade.nix
     ./watchdog.nix
