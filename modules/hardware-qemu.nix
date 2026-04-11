@@ -33,6 +33,19 @@
   # (systemd watchdog config from watchdog.nix still applies,
   #  but hardware watchdog is simulated)
 
-  # Virtual block devices for A/B slot testing
-  # In QEMU, we use files as virtual disks
+  # ── RAUC slot device paths (virtio block devices) ──────────────────────────
+  # When launched with the test runner (scripts/run-qemu-rauc-test.sh), QEMU
+  # attaches four extra virtio-blk disks for A/B slot testing:
+  #   vdb = boot A (vfat, 128 MB)
+  #   vdc = boot B (vfat, 128 MB)
+  #   vdd = rootfs A (1 GB)
+  #   vde = rootfs B (1 GB)
+  #
+  # The primary disk (vda) is the NixOS root filesystem.
+  atomixos.rauc.slots = {
+    boot0 = "/dev/vdb";
+    boot1 = "/dev/vdc";
+    rootfs0 = "/dev/vdd";
+    rootfs1 = "/dev/vde";
+  };
 }

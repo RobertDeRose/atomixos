@@ -104,4 +104,14 @@
     "mmc_block"
     "dw_mmc_rockchip"
   ];
+
+  # ── RAUC slot device paths (eMMC) ──────────────────────────────────────────
+  # These map to the GPT partition layout created by the provisioning script:
+  #   p1 = boot A (vfat), p2 = boot B (vfat), p3 = rootfs A, p4 = rootfs B
+  atomixos.rauc.slots = {
+    boot0 = "/dev/mmcblk1p1";
+    boot1 = "/dev/mmcblk1p2";
+    rootfs0 = "/dev/mmcblk1p3";
+    rootfs1 = "/dev/mmcblk1p4";
+  };
 }

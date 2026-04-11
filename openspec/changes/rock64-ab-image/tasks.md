@@ -174,7 +174,9 @@
 - [x] 15.4 Verify QEMU VM boots with systemd, podman, Cockpit, firewall, and network configuration functional —
   validated via systemd-nspawn: multi-user.target reached, nftables loaded, chronyd running, networkd running,
   podman socket active. dnsmasq/sshd expected failures in container (no eth1, host port 22 conflict)
-- [ ] 15.5 Verify RAUC slot logic works in QEMU with virtual block devices
+- [x] 15.5 Verify RAUC slot logic works in QEMU with virtual block devices — validated via `nix build
+  .#checks.aarch64-linux.rauc-slots`: VM boots with 4 virtio disks, RAUC service starts (D-Bus), `rauc status`
+  reports all 4 slots (boot.0/1, rootfs.0/1) with correct device paths (/dev/vdb-vde)
 
 ## 16. End-to-End Integration Testing
 
