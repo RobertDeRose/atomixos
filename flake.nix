@@ -103,24 +103,34 @@
 
       # ── Tests ────────────────────────────────────────────────────────────
 
-      checks.${system} = {
-        # Verify RAUC slot logic works in QEMU with virtual block devices.
-        # Boots a minimal VM with four extra virtio disks and validates
-        # `rauc status` sees all A/B slot pairs.
-        rauc-slots =
-          let
-            base = import ./nix/tests/rauc-slots.nix {
-              inherit pkgs self;
-              raucModule = ./modules/rauc.nix;
-              qemuModule = ./modules/hardware-qemu.nix;
-            };
-          in
-          # Drop "kvm" from requiredSystemFeatures so the test can run under
+      checks.${system} =
+        let
+          # Common args for all RAUC tests
+          raucTestArgs = {
+            inherit pkgs self;
+            raucModule = ./modules/rauc.nix;
+            qemuModule = ./modules/hardware-qemu.nix;
+          };
+
+          # Drop "kvm" from requiredSystemFeatures so tests can run under
           # TCG (software emulation) in environments without /dev/kvm.
-          base.overrideTestDerivation (prev: {
-            requiredSystemFeatures = builtins.filter (f: f != "kvm") (prev.requiredSystemFeatures or [ ]);
-          });
-      };
+          dropKvm =
+            base:
+            base.overrideTestDerivation (prev: {
+              requiredSystemFeatures = builtins.filter (f: f != "kvm") (prev.requiredSystemFeatures or [ ]);
+            });
+        in
+        {
+          # Verify RAUC slot logic works in QEMU with virtual block devices.
+          # Boots a minimal VM with four extra virtio disks and validates
+          # `rauc status` sees all A/B slot pairs.
+          rauc-slots = dropKvm (import ./nix/tests/rauc-slots.nix raucTestArgs);
+
+          # Verify RAUC bundle install switches to the inactive slot pair.
+          # Builds a test bundle, installs it, and confirms the primary
+          # slot switches from A to B.
+          rauc-update = dropKvm (import ./nix/tests/rauc-update.nix raucTestArgs);
+        };
 
       # ── QEMU VM for development ───────────────────────────────────────────
 
