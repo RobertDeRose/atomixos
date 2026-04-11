@@ -158,6 +158,7 @@ modules/
   watchdog.nix                     systemd watchdog config
   os-verification.nix              Post-update health check service
   os-upgrade.nix                   Update polling + hawkBit toggle
+  first-boot.nix                   First-boot RAUC slot commit + sentinel
   openvpn.nix                      OpenVPN recovery tunnel
 
 nix/
@@ -165,6 +166,15 @@ nix/
   rauc-bundle.nix                  Multi-slot RAUC bundle derivation
   boot-script.nix                  U-Boot boot.scr compilation
   image.nix                        Flashable eMMC disk image derivation
+  tests/                           NixOS VM integration tests (nixos-lib.runTest)
+    rauc-slots.nix                 RAUC slot detection + custom backend
+    rauc-update.nix                Bundle install + slot switch
+    rauc-rollback.nix              Install → mark-bad → rollback
+    rauc-confirm.nix               os-verification health check → mark-good
+    rauc-power-loss.nix            Crash mid-install, verify recovery
+    firewall.nix                   2-node WAN/LAN port allow/deny
+    network-isolation.nix          2-node DHCP/NTP/WAN isolation
+    ssh-wan-toggle.nix             SSH-on-WAN flag enable/disable
 
 scripts/
   build-squashfs.sh                Squashfs build template (Nix derivation)
@@ -174,6 +184,7 @@ scripts/
   os-upgrade.sh                    Runtime update polling script
   ssh-wan-toggle.sh                SSH-on-WAN flag check
   ssh-wan-reload.sh                SSH-on-WAN runtime reload
+  first-boot.sh                    First-boot RAUC mark-good + sentinel
   boot.cmd                         U-Boot A/B boot script source
   fw_env.config                    Redundant U-Boot env storage config
 
@@ -181,10 +192,23 @@ scripts/
   image                            Generate flashable .img file
   emmc                             Flash directly to eMMC block device (Linux only)
 
+.mise/tasks/e2e/
+  rauc-slots                       Run RAUC slot logic test
+  rauc-update                      Run RAUC update install test
+  rauc-rollback                    Run RAUC rollback test
+  rauc-confirm                     Run os-verification confirmation test
+  rauc-power-loss                  Run power-loss simulation test
+  firewall                         Run firewall test
+  network-isolation                Run network isolation test
+  ssh-wan-toggle                   Run SSH toggle test
+  debug                            Interactive QEMU debugging
+
 certs/
-  ca.cert.pem                      RAUC CA certificate (public)
-  signing.cert.pem                 RAUC signing certificate (public)
-  *.key.pem                        Private keys (gitignored)
+  dev.ca.cert.pem                  Development RAUC CA certificate (public)
+  dev.signing.cert.pem             Development RAUC signing certificate (public)
+  dev.*.key.pem                    Private keys (gitignored)
+
+_typos.toml                        Typos checker config (iif nftables keyword allowlist)
 ```
 
 ## Building
@@ -251,6 +275,7 @@ This partitions the eMMC, writes U-Boot, deploys the first image to slot A, and 
 | `packages.aarch64-linux.boot-script` | Compiled U-Boot `boot.scr`                             |
 | `packages.aarch64-linux.image`       | Flashable eMMC disk image (U-Boot + boot-a + rootfs-a) |
 | `apps.aarch64-linux.rock64-qemu-vm`  | QEMU VM runner                                         |
+| `checks.aarch64-linux.*`             | E2E integration tests (8 tests, see `nix/tests/`)     |
 
 ## Versioned Image Naming
 
@@ -265,5 +290,5 @@ updates automatically everywhere it is produced.
 
 ## Status
 
-Implementation is in progress. 80 of 111 tasks complete. All core implementation tasks are done. Remaining tasks are
+Implementation is in progress. 93 of 116 tasks complete. All core implementation tasks are done. Remaining tasks are
 hardware verification and end-to-end integration testing. See `openspec/changes/rock64-ab-image/tasks.md` for details.

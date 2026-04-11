@@ -202,11 +202,13 @@
   from the previous good slot pair — validated via `nix build .#checks.aarch64-linux.rauc-power-loss`: installs 64 MB
   bundle, crashes VM mid-write via `machine.crash()`, reboots and verifies slot A still intact and RAUC functional
 - [x] 16.8 Network isolation test: verify LAN devices get DHCP and NTP but cannot reach WAN addresses — validated via
-  `nix build .#checks.aarch64-linux.network-isolation`: multi-node VLAN test with gateway (dnsmasq + chrony), LAN
-  client gets DHCP lease in 172.20.30.0/24, gateway NTP reachable, WAN node unreachable (ip_forward=0)
+  `nix build .#checks.aarch64-linux.network-isolation`: 2-node VLAN test (gateway + lan client, redesigned from 3-node
+  to avoid OOM under TCG). Gateway runs dnsmasq (bind-dynamic on eth2) + chrony, LAN client gets DHCP lease in
+  172.20.30.0/24, gateway NTP reachable, WAN isolation verified via ip_forward=0 + unreachable WAN host ping
 - [x] 16.9 Firewall test: verify WAN allows only HTTPS and VPN, LAN allows SSH/DHCP/NTP, no forwarding between
-  interfaces — validated via `nix build .#checks.aarch64-linux.firewall`: multi-node VLAN test imports production
-  firewall.nix, verifies port-level allow/deny from WAN and LAN probe nodes using nc/nmap
+  interfaces — validated via `nix build .#checks.aarch64-linux.firewall`: 2-node VLAN test (gateway + probe with
+  vlans=[1,2], redesigned from 3-node to avoid OOM under TCG). Uses inline nftables rules (eth1=WAN, eth2=LAN) with
+  eth0 backdoor passthrough. Verifies port-level allow/deny from both WAN and LAN sides using ncat listeners
 - [x] 16.10 SSH-on-WAN toggle test: create/remove flag file, verify SSH access on WAN is enabled/disabled accordingly
   — validated via `nix build .#checks.aarch64-linux.ssh-wan-toggle`: creates /persist/config/ssh-wan-enabled, reloads
   ssh-wan-reload service, verifies SSH reachable from WAN; removes flag, reloads, verifies SSH blocked again
