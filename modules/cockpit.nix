@@ -14,8 +14,8 @@
 
 {
   # ── Cockpit container via raw systemd + podman ─────────────────────────────
-  # The container image is pulled during device provisioning (not baked into
-  # the squashfs). It lives on /persist/containers via podman's graph root.
+  # The container image lives on /persist/containers via podman's graph root.
+  # On first boot, ExecStartPre pulls the image if not already present.
 
   systemd.services.cockpit-ws = {
     description = "Cockpit web management (container)";
@@ -34,10 +34,13 @@
       Restart = "on-failure";
       RestartSec = "10s";
 
-      # Remove any existing container (from a previous failed start), then
-      # run the Cockpit container. --replace handles the common case where
-      # the container name already exists.
-      ExecStartPre = "-${config.virtualisation.podman.package}/bin/podman rm -f cockpit-ws";
+      ExecStartPre = [
+        # Pull the image if not already present (first boot).
+        # Subsequent boots use the cached image — pull is a no-op.
+        "${config.virtualisation.podman.package}/bin/podman pull --quiet quay.io/cockpit/ws"
+        # Remove any existing container from a previous failed start.
+        "-${config.virtualisation.podman.package}/bin/podman rm -f cockpit-ws"
+      ];
       ExecStart = builtins.concatStringsSep " " [
         "${config.virtualisation.podman.package}/bin/podman"
         "run"

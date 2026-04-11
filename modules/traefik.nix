@@ -21,8 +21,8 @@
 
 {
   # ── Traefik container via raw systemd + podman ─────────────────────────────
-  # The container image is pulled during device provisioning (not baked into
-  # the squashfs). It lives on /persist/containers via podman's graph root.
+  # The container image lives on /persist/containers via podman's graph root.
+  # On first boot, ExecStartPre pulls the image if not already present.
 
   systemd.services.traefik = {
     description = "Traefik reverse proxy (container)";
@@ -42,7 +42,13 @@
       Restart = "on-failure";
       RestartSec = "10s";
 
-      ExecStartPre = "-${config.virtualisation.podman.package}/bin/podman rm -f traefik";
+      ExecStartPre = [
+        # Pull the image if not already present (first boot).
+        # Subsequent boots use the cached image — pull is a no-op.
+        "${config.virtualisation.podman.package}/bin/podman pull --quiet docker.io/library/traefik:v3"
+        # Remove any existing container from a previous failed start.
+        "-${config.virtualisation.podman.package}/bin/podman rm -f traefik"
+      ];
       ExecStart = builtins.concatStringsSep " " [
         "${config.virtualisation.podman.package}/bin/podman"
         "run"

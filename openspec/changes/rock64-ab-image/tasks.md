@@ -215,6 +215,19 @@
 - [x] 17.6 Add Cockpit pod to the health manifest for os-verification service validation — provisioning task creates
   /persist/config/health-manifest.yaml with cockpit-ws and traefik container entries
 
+## 17b. First-Boot Initialization and Container Image Pulls
+
+- [x] 17b.1 Create `modules/first-boot.nix` — systemd oneshot service with
+  `ConditionPathExists=!/persist/.completed_first_boot` that runs on first boot only
+- [x] 17b.2 Create `scripts/first-boot.sh` — marks RAUC slot good unconditionally and writes
+  `/persist/.completed_first_boot` sentinel
+- [x] 17b.3 Add `ConditionPathExists=/persist/.completed_first_boot` to `os-verification.service` so it skips on first
+  boot (before sentinel exists)
+- [x] 17b.4 Add `ExecStartPre=podman pull` to `cockpit-ws.service` and `traefik.service` for automatic container image
+  fetch on first boot (cached no-op on subsequent boots)
+- [x] 17b.5 Verify in nspawn: `first-boot.service` runs and creates sentinel, `os-verification.service` is skipped
+  (condition unmet), both container services attempt pull (fail expected in nspawn — no network)
+
 ## 18. Authentication Provisioning
 
 - [x] 18.1 Update `.mise/tasks/provision/emmc` to prompt for and create `/persist/config/admin-password-hash` (sha-512

@@ -171,13 +171,18 @@ application containers running?
 **Flow**:
 
 1. Device boots into new slot
-2. `os-verification.service` starts after `multi-user.target`
-3. Check system health: eth0 has WAN address, eth1 is 172.20.30.1, dnsmasq running, chronyd running
-4. If `/persist/config/health-manifest.yaml` exists, check each container listed is in "running" state (timeout: 5 minutes) — this includes the Cockpit pod
-5. If no manifest exists (bare/unprovisioned image), skip container checks
-6. Sustain all checks passing for 60 seconds (catch restart loops — check every 5s)
-7. All pass → `rauc status mark-good`
-8. Any fail → exit non-zero, slot stays uncommitted, boot-count continues to decrement
+2. If this is the **first boot** (no `/persist/.completed_first_boot` sentinel): `first-boot.service` runs — marks the
+   RAUC slot good unconditionally and writes the sentinel. `os-verification.service` is skipped (its
+   `ConditionPathExists=/persist/.completed_first_boot` is unmet). This ensures the initial provisioned image is always
+   committed without health-check gates — the device has just been flashed and verified by the operator.
+3. On **subsequent boots** (sentinel exists): `os-verification.service` starts after `multi-user.target`
+4. Check system health: eth0 has WAN address, eth1 is 172.20.30.1, dnsmasq running, chronyd running
+5. If `/persist/config/health-manifest.yaml` exists, check each container listed is in "running" state (timeout: 5
+   minutes) — this includes the Cockpit pod and Traefik
+6. If no manifest exists (bare/unprovisioned image), skip container checks
+7. Sustain all checks passing for 60 seconds (catch restart loops — check every 5s)
+8. All pass → `rauc status mark-good`
+9. Any fail → exit non-zero, slot stays uncommitted, boot-count continues to decrement
 
 The health manifest is placed on `/persist/config/` by the device provisioning process (initial flash or remote
 provisioning service), not shipped in the image. This allows different deployments to define different health criteria.

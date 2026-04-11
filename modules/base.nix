@@ -18,6 +18,7 @@
     ./rauc.nix
     ./cockpit.nix
     ./traefik.nix
+    ./first-boot.nix
     ./os-verification.nix
     ./os-upgrade.nix
     ./watchdog.nix
