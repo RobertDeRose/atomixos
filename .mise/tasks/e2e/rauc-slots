@@ -6,6 +6,6 @@ set -euo pipefail
 echo "Running E2E test: rauc-slots"
 echo "  Boots QEMU VM, verifies RAUC sees all 4 A/B slots"
 echo ""
-nix build .#checks.aarch64-linux.rauc-slots --print-build-logs
+nix build .#checks.aarch64-linux.rauc-slots --no-link --print-build-logs
 echo ""
 echo "PASS: rauc-slots"

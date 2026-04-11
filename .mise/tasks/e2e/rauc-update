@@ -6,6 +6,6 @@ set -euo pipefail
 echo "Running E2E test: rauc-update"
 echo "  Builds test bundle, installs via RAUC, verifies slot switch A→B"
 echo ""
-nix build .#checks.aarch64-linux.rauc-update --print-build-logs
+nix build .#checks.aarch64-linux.rauc-update --no-link --print-build-logs
 echo ""
 echo "PASS: rauc-update"

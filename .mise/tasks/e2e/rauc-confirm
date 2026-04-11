@@ -7,6 +7,6 @@ echo "Running E2E test: rauc-confirm"
 echo "  Runs os-verification.sh health checks, verifies slot marked good"
 echo "  (includes 60s sustained health check — expect ~3 min total)"
 echo ""
-nix build .#checks.aarch64-linux.rauc-confirm --print-build-logs
+nix build .#checks.aarch64-linux.rauc-confirm --no-link --print-build-logs
 echo ""
 echo "PASS: rauc-confirm"
