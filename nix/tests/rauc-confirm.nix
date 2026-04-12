@@ -13,6 +13,7 @@
 # Run:  nix build .#checks.aarch64-linux.rauc-confirm
 {
   pkgs,
+  hostPkgs ? pkgs,
   self,
   raucModule,
   qemuModule,
@@ -30,7 +31,7 @@ in
 nixos-lib.runTest {
   name = "rauc-confirm";
 
-  hostPkgs = pkgs;
+  inherit hostPkgs;
 
   nodes.gateway =
     { config, lib, ... }:

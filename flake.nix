@@ -103,7 +103,7 @@
 
       # ── Tests ────────────────────────────────────────────────────────────
 
-      checks.${system} =
+      checks =
         let
           # Common args for all RAUC tests
           raucTestArgs = {
@@ -123,49 +123,55 @@
           netTestArgs = {
             inherit pkgs self;
           };
+
+          # All test derivations (system-independent — hostPkgs assigned below)
+          raucTests = {
+            rauc-slots = import ./nix/tests/rauc-slots.nix raucTestArgs;
+            rauc-update = import ./nix/tests/rauc-update.nix raucTestArgs;
+            rauc-rollback = import ./nix/tests/rauc-rollback.nix raucTestArgs;
+            rauc-confirm = import ./nix/tests/rauc-confirm.nix raucTestArgs;
+            rauc-power-loss = import ./nix/tests/rauc-power-loss.nix raucTestArgs;
+            rauc-watchdog = import ./nix/tests/rauc-watchdog.nix raucTestArgs;
+          };
+
+          netTests = {
+            firewall = import ./nix/tests/firewall.nix netTestArgs;
+            network-isolation = import ./nix/tests/network-isolation.nix netTestArgs;
+            ssh-wan-toggle = import ./nix/tests/ssh-wan-toggle.nix netTestArgs;
+          };
+
+          allTests = raucTests // netTests;
+
+          # Linux checks — run under TCG (software emulation), no KVM needed.
+          # Use: nix build .#checks.aarch64-linux.rauc-slots
+          linuxChecks = builtins.mapAttrs (_: dropKvm) allTests;
+
+          # Darwin checks — test driver runs natively on macOS using
+          # Apple Virtualization Framework (apple-virt). The linux-builder
+          # builds the VM system closures; QEMU runs on the Mac host.
+          # Use: nix build .#checks.aarch64-darwin.rauc-slots
+          darwinPkgs = import nixpkgs { system = "aarch64-darwin"; };
+          darwinRaucTestArgs = raucTestArgs // {
+            hostPkgs = darwinPkgs;
+          };
+          darwinNetTestArgs = netTestArgs // {
+            hostPkgs = darwinPkgs;
+          };
+          darwinTests = {
+            rauc-slots = import ./nix/tests/rauc-slots.nix darwinRaucTestArgs;
+            rauc-update = import ./nix/tests/rauc-update.nix darwinRaucTestArgs;
+            rauc-rollback = import ./nix/tests/rauc-rollback.nix darwinRaucTestArgs;
+            rauc-confirm = import ./nix/tests/rauc-confirm.nix darwinRaucTestArgs;
+            rauc-power-loss = import ./nix/tests/rauc-power-loss.nix darwinRaucTestArgs;
+            rauc-watchdog = import ./nix/tests/rauc-watchdog.nix darwinRaucTestArgs;
+            firewall = import ./nix/tests/firewall.nix darwinNetTestArgs;
+            network-isolation = import ./nix/tests/network-isolation.nix darwinNetTestArgs;
+            ssh-wan-toggle = import ./nix/tests/ssh-wan-toggle.nix darwinNetTestArgs;
+          };
         in
         {
-          # Verify RAUC slot logic works in QEMU with virtual block devices.
-          # Boots a minimal VM with four extra virtio disks and validates
-          # `rauc status` sees all A/B slot pairs.
-          rauc-slots = dropKvm (import ./nix/tests/rauc-slots.nix raucTestArgs);
-
-          # Verify RAUC bundle install switches to the inactive slot pair.
-          # Builds a test bundle, installs it, and confirms the primary
-          # slot switches from A to B.
-          rauc-update = dropKvm (import ./nix/tests/rauc-update.nix raucTestArgs);
-
-          # Verify RAUC rollback: install to slot B, mark B bad, verify
-          # primary reverts to A. Tests the custom bootloader backend's
-          # state management that underpins U-Boot boot-count rollback.
-          rauc-rollback = dropKvm (import ./nix/tests/rauc-rollback.nix raucTestArgs);
-
-          # Verify os-verification service confirms a RAUC slot after
-          # successful health checks (dnsmasq, chronyd, eth0/eth1 IPs).
-          # No health manifest — container checks are skipped.
-          rauc-confirm = dropKvm (import ./nix/tests/rauc-confirm.nix raucTestArgs);
-
-          # Verify power loss during RAUC install leaves the previous
-          # slot intact. Crashes the VM mid-install and reboots.
-          rauc-power-loss = dropKvm (import ./nix/tests/rauc-power-loss.nix raucTestArgs);
-
-          # Verify watchdog-triggered reboot leads to RAUC rollback.
-          # Freezes systemd (kill -STOP 1) to trigger the i6300esb
-          # watchdog, then verifies boot-count exhaustion rolls back
-          # from slot B to slot A.
-          rauc-watchdog = dropKvm (import ./nix/tests/rauc-watchdog.nix raucTestArgs);
-
-          # Verify nftables firewall rules: WAN allows HTTPS + OpenVPN,
-          # LAN allows SSH + DHCP + NTP, everything else dropped.
-          firewall = dropKvm (import ./nix/tests/firewall.nix netTestArgs);
-
-          # Verify LAN devices get DHCP/NTP from gateway but cannot
-          # reach WAN addresses (ip_forward=0, no routing).
-          network-isolation = dropKvm (import ./nix/tests/network-isolation.nix netTestArgs);
-
-          # Verify SSH-on-WAN toggle: flag file enables/disables SSH
-          # on the WAN interface via dynamic nftables rule.
-          ssh-wan-toggle = dropKvm (import ./nix/tests/ssh-wan-toggle.nix netTestArgs);
+          ${system} = linuxChecks;
+          "aarch64-darwin" = darwinTests;
         };
 
       # ── QEMU VM for development ───────────────────────────────────────────

@@ -21,6 +21,7 @@
 # Run:  nix build .#checks.aarch64-linux.firewall
 {
   pkgs,
+  hostPkgs ? pkgs,
   self,
   ...
 }:
@@ -31,7 +32,7 @@ in
 nixos-lib.runTest {
   name = "firewall";
 
-  hostPkgs = pkgs;
+  inherit hostPkgs;
 
   nodes.gateway =
     { config, lib, ... }:

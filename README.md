@@ -19,6 +19,7 @@ updates, automatic rollback, and a container-based application deployment model.
 - [Project structure](#project-structure)
 - [Building](#building)
   - [With mise (recommended)](#with-mise-recommended)
+  - [Running E2E tests](#running-e2e-tests)
 - [Provisioning](#provisioning)
   - [Option 1: Flashable disk image](#option-1-flashable-disk-image)
   - [Option 2: Direct eMMC provisioning](#option-2-direct-emmc-provisioning)
@@ -236,6 +237,24 @@ mise run build:image           # result-image/
 mise run build
 ```
 
+### Running E2E tests
+
+Tests can run on Linux (under TCG software emulation) or natively on macOS (via Apple Virtualization Framework).
+
+```sh
+# Linux (in Lima VM or CI) — all tests via mise
+mise run e2e
+
+# Linux — individual test
+nix build .#checks.aarch64-linux.rauc-slots --no-link -L
+
+# macOS — requires nix-darwin with linux-builder enabled
+nix build .#checks.aarch64-darwin.rauc-slots --no-link -L
+```
+
+On macOS, the linux-builder VM builds the NixOS test closures, and the test driver runs QEMU natively on the Mac
+host using `apple-virt` hardware acceleration. This is significantly faster than TCG software emulation.
+
 ## Provisioning
 
 ### Option 1: Flashable disk image
@@ -278,6 +297,7 @@ This partitions the eMMC, writes U-Boot, deploys the first image to slot A, and 
 | `packages.aarch64-linux.image`       | Flashable eMMC disk image (U-Boot + boot-a + rootfs-a) |
 | `apps.aarch64-linux.rock64-qemu-vm`  | QEMU VM runner                                         |
 | `checks.aarch64-linux.*`             | E2E integration tests (9 tests, see `nix/tests/`)     |
+| `checks.aarch64-darwin.*`            | Same tests, run natively on macOS via apple-virt       |
 
 ## Versioned Image Naming
 

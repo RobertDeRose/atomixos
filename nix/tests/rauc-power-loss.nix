@@ -12,6 +12,7 @@
 # Run:  nix build .#checks.aarch64-linux.rauc-power-loss
 {
   pkgs,
+  hostPkgs ? pkgs,
   self,
   raucModule,
   qemuModule,
@@ -73,7 +74,7 @@ in
 nixos-lib.runTest {
   name = "rauc-power-loss";
 
-  hostPkgs = pkgs;
+  inherit hostPkgs;
 
   nodes.gateway =
     { config, lib, ... }:

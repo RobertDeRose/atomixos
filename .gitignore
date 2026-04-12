@@ -4,10 +4,14 @@ result-*
 
 # Generated disk images
 *.img
+*.qcow2
 
 # Private keys (RAUC signing)
 *.key.pem
 *.csr.pem
+
+# Linux builder artifacts
+keys/
 
 # Editor files
 *.swp

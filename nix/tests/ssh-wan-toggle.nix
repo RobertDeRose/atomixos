@@ -15,6 +15,7 @@
 # Run:  nix build .#checks.aarch64-linux.ssh-wan-toggle
 {
   pkgs,
+  hostPkgs ? pkgs,
   self,
   ...
 }:
@@ -54,7 +55,7 @@ in
 nixos-lib.runTest {
   name = "ssh-wan-toggle";
 
-  hostPkgs = pkgs;
+  inherit hostPkgs;
 
   nodes.gateway =
     { config, lib, ... }:

@@ -12,6 +12,7 @@
 # Run:  nix build .#checks.aarch64-linux.rauc-update
 {
   pkgs,
+  hostPkgs ? pkgs,
   self,
   raucModule,
   qemuModule,
@@ -76,7 +77,7 @@ in
 nixos-lib.runTest {
   name = "rauc-update-install";
 
-  hostPkgs = pkgs;
+  inherit hostPkgs;
 
   nodes.gateway =
     { config, lib, ... }:

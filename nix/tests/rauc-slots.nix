@@ -9,6 +9,7 @@
 # Run:  nix build .#checks.aarch64-linux.rauc-slots
 {
   pkgs,
+  hostPkgs ? pkgs,
   self,
   raucModule,
   qemuModule,
@@ -21,7 +22,7 @@ in
 nixos-lib.runTest {
   name = "rauc-slot-logic";
 
-  hostPkgs = pkgs;
+  inherit hostPkgs;
 
   nodes.gateway =
     { config, lib, ... }:

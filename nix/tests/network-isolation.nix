@@ -18,6 +18,7 @@
 # Run:  nix build .#checks.aarch64-linux.network-isolation
 {
   pkgs,
+  hostPkgs ? pkgs,
   self,
   ...
 }:
@@ -28,7 +29,7 @@ in
 nixos-lib.runTest {
   name = "network-isolation";
 
-  hostPkgs = pkgs;
+  inherit hostPkgs;
 
   nodes.gateway =
     { config, lib, ... }:

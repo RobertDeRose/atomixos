@@ -21,6 +21,7 @@
 # Run:  nix build .#checks.aarch64-linux.rauc-watchdog
 {
   pkgs,
+  hostPkgs ? pkgs,
   self,
   raucModule,
   qemuModule,
@@ -81,7 +82,7 @@ in
 nixos-lib.runTest {
   name = "rauc-watchdog-rollback";
 
-  hostPkgs = pkgs;
+  inherit hostPkgs;
 
   nodes.gateway =
     { config, lib, ... }:
