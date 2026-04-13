@@ -3,10 +3,13 @@
 #MISE alias="firewall"
 set -euo pipefail
 
-echo "Running E2E test: firewall"
+ARCH="aarch64-linux"
+[[ "$(uname -s)" == "Darwin" ]] && ARCH="aarch64-darwin"
+
+echo "Running E2E test: firewall ($ARCH)"
 echo "  Verifies WAN/LAN/VPN firewall rules with multi-node VLAN setup"
 echo ""
-nix build .#checks.aarch64-linux.firewall --no-link --print-build-logs \
+nix build ".#checks.${ARCH}.firewall" --no-link --print-build-logs \
 	2> >(grep -v 'SQLite database.*is busy' >&2)
 echo ""
 echo "PASS: firewall"

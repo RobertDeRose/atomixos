@@ -3,11 +3,14 @@
 #MISE alias="confirm"
 set -euo pipefail
 
-echo "Running E2E test: rauc-confirm"
+ARCH="aarch64-linux"
+[[ "$(uname -s)" == "Darwin" ]] && ARCH="aarch64-darwin"
+
+echo "Running E2E test: rauc-confirm ($ARCH)"
 echo "  Runs os-verification.sh health checks, verifies slot marked good"
 echo "  (includes 60s sustained health check — expect ~3 min total)"
 echo ""
-nix build .#checks.aarch64-linux.rauc-confirm --no-link --print-build-logs \
+nix build ".#checks.${ARCH}.rauc-confirm" --no-link --print-build-logs \
 	2> >(grep -v 'SQLite database.*is busy' >&2)
 echo ""
 echo "PASS: rauc-confirm"

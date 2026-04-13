@@ -3,10 +3,13 @@
 #MISE alias="watchdog"
 set -euo pipefail
 
-echo "Running E2E test: rauc-watchdog"
+ARCH="aarch64-linux"
+[[ "$(uname -s)" == "Darwin" ]] && ARCH="aarch64-darwin"
+
+echo "Running E2E test: rauc-watchdog ($ARCH)"
 echo "  Freezes systemd to trigger watchdog reboot, verifies boot-count rollback"
 echo ""
-nix build .#checks.aarch64-linux.rauc-watchdog --no-link --print-build-logs \
+nix build ".#checks.${ARCH}.rauc-watchdog" --no-link --print-build-logs \
 	2> >(grep -v 'SQLite database.*is busy' >&2)
 echo ""
 echo "PASS: rauc-watchdog"

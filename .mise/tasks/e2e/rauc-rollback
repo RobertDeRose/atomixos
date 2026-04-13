@@ -3,10 +3,13 @@
 #MISE alias="rollback"
 set -euo pipefail
 
-echo "Running E2E test: rauc-rollback"
+ARCH="aarch64-linux"
+[[ "$(uname -s)" == "Darwin" ]] && ARCH="aarch64-darwin"
+
+echo "Running E2E test: rauc-rollback ($ARCH)"
 echo "  Installs to slot B, marks B bad, verifies rollback to A"
 echo ""
-nix build .#checks.aarch64-linux.rauc-rollback --no-link --print-build-logs \
+nix build ".#checks.${ARCH}.rauc-rollback" --no-link --print-build-logs \
 	2> >(grep -v 'SQLite database.*is busy' >&2)
 echo ""
 echo "PASS: rauc-rollback"

@@ -4,6 +4,9 @@
 #USAGE flag "--keep" help="Keep VM state between runs"
 set -euo pipefail
 
+ARCH="aarch64-linux"
+[[ "$(uname -s)" == "Darwin" ]] && ARCH="aarch64-darwin"
+
 TEST_NAME="${usage_test:-slots}"
 
 # Map short names to flake check attributes
@@ -24,10 +27,10 @@ case "$TEST_NAME" in
 		;;
 esac
 
-echo "Building interactive test driver for: $CHECK"
+echo "Building interactive test driver for: $CHECK ($ARCH)"
 echo ""
 
-nix build ".#checks.aarch64-linux.${CHECK}.driverInteractive" -o "result-e2e-${CHECK}"
+nix build ".#checks.${ARCH}.${CHECK}.driverInteractive" -o "result-e2e-${CHECK}"
 
 DRIVER="./result-e2e-${CHECK}/bin/nixos-test-driver"
 

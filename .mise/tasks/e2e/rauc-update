@@ -3,10 +3,13 @@
 #MISE alias="update"
 set -euo pipefail
 
-echo "Running E2E test: rauc-update"
+ARCH="aarch64-linux"
+[[ "$(uname -s)" == "Darwin" ]] && ARCH="aarch64-darwin"
+
+echo "Running E2E test: rauc-update ($ARCH)"
 echo "  Builds test bundle, installs via RAUC, verifies slot switch A→B"
 echo ""
-nix build .#checks.aarch64-linux.rauc-update --no-link --print-build-logs \
+nix build ".#checks.${ARCH}.rauc-update" --no-link --print-build-logs \
 	2> >(grep -v 'SQLite database.*is busy' >&2)
 echo ""
 echo "PASS: rauc-update"

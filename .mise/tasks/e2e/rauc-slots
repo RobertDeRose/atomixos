@@ -3,10 +3,13 @@
 #MISE alias="slots"
 set -euo pipefail
 
-echo "Running E2E test: rauc-slots"
+ARCH="aarch64-linux"
+[[ "$(uname -s)" == "Darwin" ]] && ARCH="aarch64-darwin"
+
+echo "Running E2E test: rauc-slots ($ARCH)"
 echo "  Boots QEMU VM, verifies RAUC sees all 4 A/B slots"
 echo ""
-nix build .#checks.aarch64-linux.rauc-slots --no-link --print-build-logs \
+nix build ".#checks.${ARCH}.rauc-slots" --no-link --print-build-logs \
 	2> >(grep -v 'SQLite database.*is busy' >&2)
 echo ""
 echo "PASS: rauc-slots"

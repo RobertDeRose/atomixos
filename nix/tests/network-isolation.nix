@@ -167,9 +167,11 @@ nixos-lib.runTest {
 
     # Wait for DHCP lease (the LAN client should get an IP in 172.20.30.10-254)
     # LAN client has vlans=[2], so its VLAN interface is eth1
+    # NixOS test driver also auto-assigns 192.168.2.x on VLAN interfaces,
+    # so we must filter specifically for the DHCP range.
     # TCG boots are slow — allow up to 60s for DHCP negotiation
     lan.wait_until_succeeds("ip -4 addr show eth1 | grep '172.20.30.'", timeout=60)
-    lan_ip = lan.succeed("ip -4 addr show eth1 | grep -oP 'inet \\K[\\d.]+'").strip()
+    lan_ip = lan.succeed("ip -4 addr show eth1 | grep -oP 'inet \\K[\\d.]+' | grep '^172\\.20\\.30\\.'").strip()
     gateway.log(f"LAN client got IP: {lan_ip}")
     assert lan_ip.startswith("172.20.30."), f"Unexpected LAN IP: {lan_ip}"
 
