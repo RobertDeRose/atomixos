@@ -19,10 +19,15 @@ updates, automatic rollback, and a container-based application deployment model.
 - [Project structure](#project-structure)
 - [Building](#building)
   - [With mise (recommended)](#with-mise-recommended)
-  - [Running E2E tests](#running-e2e-tests)
+- [Running E2E Tests](#running-e2e-tests)
+  - [Run all tests](#run-all-tests)
+  - [Run individual tests](#run-individual-tests)
+  - [Interactive debugging](#interactive-debugging)
+  - [Running tests directly with Nix](#running-tests-directly-with-nix)
 - [Provisioning](#provisioning)
   - [Option 1: Flashable disk image](#option-1-flashable-disk-image)
   - [Option 2: Direct eMMC provisioning](#option-2-direct-emmc-provisioning)
+- [mise Task Reference](#mise-task-reference)
 - [Flake outputs](#flake-outputs)
 - [Versioned Image Naming](#versioned-image-naming)
 - [Status](#status)
@@ -190,6 +195,9 @@ scripts/
   boot.cmd                         U-Boot A/B boot script source
   fw_env.config                    Redundant U-Boot env storage config
 
+.mise/tasks/config/
+  lan-range                        Update LAN gateway/DHCP range across all configs
+
 .mise/tasks/provision/
   image                            Generate flashable .img file
   emmc                             Flash directly to eMMC block device (Linux only)
@@ -237,23 +245,78 @@ mise run build:image           # result-image/
 mise run build
 ```
 
-### Running E2E tests
+## Running E2E Tests
 
-Tests can run on Linux (under TCG software emulation) or natively on macOS (via Apple Virtualization Framework).
+Nine NixOS VM integration tests validate the full RAUC update lifecycle, network security, and rollback behavior. Tests
+run on both Linux (TCG software emulation) and macOS (Apple Virtualization Framework). The mise task wrappers
+auto-detect the platform and select the correct flake output (`aarch64-linux` or `aarch64-darwin`).
+
+### Run all tests
 
 ```sh
-# Linux (in Lima VM or CI) — all tests via mise
 mise run e2e
+```
 
-# Linux — individual test
+This runs all nine tests sequentially. Expect 15-30 minutes depending on hardware (TCG is slow; macOS apple-virt is
+significantly faster).
+
+### Run individual tests
+
+```sh
+mise run e2e:rauc-slots          # RAUC sees all 4 A/B slots after boot
+mise run e2e:rauc-update         # Bundle install writes to inactive slot pair, slot switches A→B
+mise run e2e:rauc-rollback       # Install to B, mark bad, verify rollback to A
+mise run e2e:rauc-confirm        # os-verification health checks pass, slot marked good (~3 min)
+mise run e2e:rauc-power-loss     # Crash VM mid-install, verify slot A intact after reboot
+mise run e2e:rauc-watchdog       # Freeze systemd to trigger watchdog, verify boot-count rollback
+mise run e2e:firewall            # 2-node test: WAN allows HTTPS/VPN, LAN allows SSH/DHCP/NTP
+mise run e2e:network-isolation   # 2-node test: LAN gets DHCP/NTP, cannot reach WAN
+mise run e2e:ssh-wan-toggle      # Flag file enables/disables SSH on WAN via nftables reload
+```
+
+### Interactive debugging
+
+Launch an interactive QEMU VM with a Python REPL for hands-on debugging:
+
+```sh
+# Debug the default test (rauc-slots)
+mise run e2e:debug
+
+# Debug a specific test
+mise run e2e:debug -t update
+mise run e2e:debug -t confirm
+mise run e2e:debug -t watchdog
+
+# Keep VM state between runs
+mise run e2e:debug -t slots --keep
+```
+
+Available test short names: `slots`, `update`, `rollback`, `confirm`, `power-loss`, `watchdog`, `firewall`, `net-iso`,
+`ssh-toggle`.
+
+Inside the REPL:
+
+```python
+gateway.start()                          # boot the VM
+gateway.wait_for_unit("multi-user.target")
+gateway.succeed("rauc status")           # run a command
+gateway.shell_interact()                 # drop into a root shell
+gateway.screenshot("name")              # save a screenshot
+# Ctrl+D to exit
+```
+
+### Running tests directly with Nix
+
+```sh
+# Linux
 nix build .#checks.aarch64-linux.rauc-slots --no-link -L
 
-# macOS — requires nix-darwin with linux-builder enabled
+# macOS (requires nix-darwin with linux-builder enabled)
 nix build .#checks.aarch64-darwin.rauc-slots --no-link -L
 ```
 
-On macOS, the linux-builder VM builds the NixOS test closures, and the test driver runs QEMU natively on the Mac
-host using `apple-virt` hardware acceleration. This is significantly faster than TCG software emulation.
+On macOS, the linux-builder VM builds the NixOS test closures and the test driver runs QEMU natively on the Mac host
+using `apple-virt` hardware acceleration.
 
 ## Provisioning
 
@@ -285,6 +348,37 @@ This partitions the eMMC, writes U-Boot, deploys the first image to slot A, and 
 - Traefik reverse proxy configuration and self-signed TLS certificate
 - Health manifest (cockpit-ws, traefik) for os-verification
 
+## mise Task Reference
+
+All tasks are run with `mise run <task>`. Run `mise tasks` to list them.
+
+| Task | Description |
+|---|---|
+| `check` | Verify flake evaluates cleanly (`nix flake check`) |
+| **Build** | |
+| `build` | Build all image artifacts (depends on all `build:*` tasks) |
+| `build:squashfs` | Build squashfs rootfs → `result-squashfs/` |
+| `build:rauc-bundle` | Build signed RAUC bundle → `result-rauc-bundle/` |
+| `build:boot-script` | Build U-Boot boot script → `result-boot-script/` |
+| `build:image` | Build flashable disk image → `result-image/` |
+| **E2E Tests** | |
+| `e2e` | Run all 9 integration tests sequentially |
+| `e2e:rauc-slots` | RAUC slot detection after boot |
+| `e2e:rauc-update` | Bundle install + slot switch A→B |
+| `e2e:rauc-rollback` | Install → mark bad → rollback to previous slot |
+| `e2e:rauc-confirm` | os-verification health check → mark-good (~3 min) |
+| `e2e:rauc-power-loss` | Crash mid-install, verify recovery |
+| `e2e:rauc-watchdog` | Watchdog + boot-count rollback |
+| `e2e:firewall` | WAN/LAN/VPN port allow/deny (2-node VLAN) |
+| `e2e:network-isolation` | DHCP/NTP/WAN isolation (2-node VLAN) |
+| `e2e:ssh-wan-toggle` | SSH-on-WAN flag enable/disable |
+| `e2e:debug` | Interactive QEMU VM for debugging (`-t <test>`, `--keep`) |
+| **Provisioning** | |
+| `provision:image` | Generate flashable `.img` file (builds all artifacts first) |
+| `provision:emmc` | Flash directly to eMMC block device (Linux + root only) |
+| **Configuration** | |
+| `config:lan-range` | Update LAN gateway/DHCP range across all config files |
+
 ## Flake outputs
 
 | Output                               | Description                                            |
@@ -312,5 +406,12 @@ updates automatically everywhere it is produced.
 
 ## Status
 
-Implementation is in progress. 94 of 116 tasks complete. All core implementation tasks are done. Remaining tasks are
-hardware verification and end-to-end integration testing. See `openspec/changes/rock64-ab-image/tasks.md` for details.
+Implementation is in progress. **94 of 116 tasks complete (81%)**. All core implementation and software-testable E2E
+integration tests are done. The remaining 22 tasks are:
+
+- **Hardware verification (16 tasks)** -- require a physical Rock64 board (kernel boot, NIC naming, DHCP/NTP on real
+  network, watchdog driver, RAUC on-device, provisioning boot, Cockpit SSH bridge, credential verification)
+- **E2E integration gaps (2 tasks)** -- full provisioning end-to-end on hardware, confirmation with real containers
+- **Software-only verification (4 tasks)** -- Cockpit pod HTTPS, OpenVPN tun0, watchdog driver/systemd verification
+
+See `openspec/changes/rock64-ab-image/tasks.md` for the full task breakdown.
