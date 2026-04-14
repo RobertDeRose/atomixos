@@ -1,0 +1,15 @@
+[book]
+title = "AtomixOS"
+description = "NixOS-based firmware with atomic A/B OTA updates for Rock64 edge gateways"
+authors = ["Robert DeRose"]
+language = "en"
+src = "src"
+
+[build]
+build-dir = "../book"
+
+[output.html]
+default-theme = "navy"
+preferred-dark-theme = "navy"
+git-repository-url = "https://github.com/checkpoint/apollo-image"
+edit-url-template = "https://github.com/checkpoint/apollo-image/edit/main/docs/{path}"

@@ -400,6 +400,9 @@ All tasks are run with `mise run <task>`. Run `mise tasks` to list them.
 | `provision:emmc` | Flash directly to eMMC block device (Linux + root only) |
 | **Configuration** | |
 | `config:lan-range` | Update LAN gateway/DHCP range across all config files |
+| **Documentation** | |
+| `docs:build` | Build the documentation site (mdBook) → `book/` |
+| `docs:serve` | Serve the documentation site locally with hot-reload |
 
 ## Flake outputs
 
@@ -414,6 +417,7 @@ All tasks are run with `mise run <task>`. Run `mise tasks` to list them.
 | `apps.aarch64-linux.rock64-qemu-vm`  | QEMU VM runner                                         |
 | `checks.aarch64-linux.*`             | E2E integration tests (9 tests, see `nix/tests/`)     |
 | `checks.aarch64-darwin.*`            | Same tests, run natively on macOS via apple-virt       |
+| `devShells.*.default`                | Development shell with mdBook                          |
 
 ## Versioned Image Naming
 

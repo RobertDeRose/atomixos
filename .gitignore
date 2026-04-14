@@ -23,5 +23,8 @@ keys/
 .DS_Store
 Thumbs.db
 
+# mdBook output
+book/
+
 # AI Agents
 .opencode

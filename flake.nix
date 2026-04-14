@@ -181,5 +181,19 @@
         type = "app";
         program = "${self.nixosConfigurations.rock64-qemu.config.system.build.vm}/bin/run-nixos-vm";
       };
+
+      # ── Development shell ────────────────────────────────────────────────
+
+      devShells.${system}.default = pkgs.mkShell {
+        packages = [ pkgs.mdbook ];
+      };
+
+      devShells."aarch64-darwin".default =
+        let
+          darwinPkgs = import nixpkgs { system = "aarch64-darwin"; };
+        in
+        darwinPkgs.mkShell {
+          packages = [ darwinPkgs.mdbook ];
+        };
     };
 }

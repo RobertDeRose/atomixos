@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+#MISE description="Serve the documentation site locally with hot-reload"
+#USAGE flag "-p --port <port>" help="Port to serve on (default: 3000)"
+set -euo pipefail
+
+PORT="${usage_port:-3000}"
+
+cd docs
+
+run_serve() {
+  echo "Serving documentation at http://localhost:${PORT}"
+  echo "Press Ctrl+C to stop."
+  echo ""
+  mdbook serve --port "$PORT"
+}
+
+if command -v mdbook &>/dev/null; then
+  run_serve
+elif command -v nix &>/dev/null; then
+  nix develop --command bash -c "$(declare -f run_serve); PORT=$PORT run_serve"
+else
+  echo "Error: mdbook not found. Install via 'nix develop' or 'cargo install mdbook'." >&2
+  exit 1
+fi

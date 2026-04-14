@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+#MISE description="Build the documentation site (mdBook)"
+set -euo pipefail
+
+cd docs
+
+if command -v mdbook &>/dev/null; then
+  mdbook build
+elif command -v nix &>/dev/null; then
+  nix develop --command mdbook build
+else
+  echo "Error: mdbook not found. Install via 'nix develop' or 'cargo install mdbook'." >&2
+  exit 1
+fi
+
+echo ""
+echo "Documentation built to book/"
+echo "Open book/index.html in a browser to view."

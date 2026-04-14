@@ -1,5 +1,5 @@
 [global]
-disable = ["MD033"]
+disable = ["MD033", "MD036"]
 
 [MD007]
 indent = 2
