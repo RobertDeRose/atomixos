@@ -20,14 +20,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install mdBook
-        uses: taiki-e/install-action@v2
-        with:
-          tool: mdbook
+      - name: Install mise
+        uses: jdx/mise-action@v2
 
       - name: Build docs
-        run: mdbook build
-        working-directory: docs
+        run: mise run docs:build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
@@ -43,4 +40,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
