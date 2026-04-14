@@ -1,0 +1,147 @@
+#!/usr/bin/env bash
+#MISE description="Flash image to disk device (eMMC/SD) using dd with progress"
+#USAGE flag "-y --yes" help="Skip confirmation prompt"
+#USAGE flag "-i --image <path>" help="Path to image file (default: auto-detect atomixos-*.img)"
+#USAGE arg "<disk>" help="Target disk device (e.g. /dev/disk4 on macOS, /dev/mmcblk0 on Linux)"
+set -euo pipefail
+
+# ── Resolve image path ─────────────────────────────────────────────────────────
+
+IMAGE_PATH="${usage_image:-}"
+if [ -z "$IMAGE_PATH" ]; then
+	# Auto-detect: prefer local copy, then result-image symlink
+	for candidate in atomixos-*.img result-image/atomixos-*.img; do
+		if [ -f "$candidate" ]; then
+			IMAGE_PATH="$candidate"
+			break
+		fi
+	done
+fi
+
+if [ -z "$IMAGE_PATH" ] || [ ! -f "$IMAGE_PATH" ]; then
+	echo "ERROR: No image file found."
+	echo ""
+	echo "Either:"
+	echo "  1. Run 'mise run provision:image' to build and copy the image"
+	echo "  2. Specify the image path: mise run flash --image /path/to/image.img /dev/diskN"
+	exit 1
+fi
+
+IMAGE_SIZE=$(stat -c%s "$IMAGE_PATH" 2>/dev/null || stat -f%z "$IMAGE_PATH")
+IMAGE_SIZE_MIB=$((IMAGE_SIZE / 1024 / 1024))
+
+# ── Resolve target disk ────────────────────────────────────────────────────────
+
+DISK="${usage_disk}"
+SKIP_CONFIRM="${usage_yes:-false}"
+OS=$(uname -s)
+
+# On macOS, use the raw device for much faster writes
+RAW_DISK="$DISK"
+if [ "$OS" = "Darwin" ]; then
+	# /dev/disk4 -> /dev/rdisk4 (raw device, bypasses buffer cache)
+	RAW_DISK="${DISK/\/dev\/disk//dev/rdisk}"
+fi
+
+# ── Validate target ───────────────────────────────────────────────────────────
+
+if [ "$OS" = "Darwin" ]; then
+	# macOS: check disk exists via diskutil
+	if ! diskutil info "$DISK" &>/dev/null; then
+		echo "ERROR: Disk not found: $DISK"
+		echo ""
+		echo "Available disks:"
+		diskutil list | grep -E "^/dev/disk"
+		exit 1
+	fi
+
+	# Safety: refuse to write to the boot disk
+	BOOT_DISK=$(diskutil info / | grep "Device Node" | awk '{print $NF}' | sed 's/s[0-9]*$//')
+	if [ "$DISK" = "$BOOT_DISK" ]; then
+		echo "ERROR: Refusing to write to boot disk ($BOOT_DISK)"
+		exit 1
+	fi
+else
+	# Linux: check block device exists
+	if [ ! -b "$DISK" ]; then
+		echo "ERROR: Not a block device: $DISK"
+		exit 1
+	fi
+fi
+
+# ── Show info and confirm ─────────────────────────────────────────────────────
+
+echo "=== AtomixOS Flash ==="
+echo ""
+echo "  Image:  $IMAGE_PATH ($IMAGE_SIZE_MIB MiB)"
+echo "  Target: $DISK"
+if [ "$OS" = "Darwin" ] && [ "$RAW_DISK" != "$DISK" ]; then
+	echo "  Raw:    $RAW_DISK (using raw device for speed)"
+fi
+echo ""
+
+if [ "$OS" = "Darwin" ]; then
+	echo "Target disk info:"
+	diskutil list "$DISK" 2>/dev/null || true
+	echo ""
+fi
+
+if [ "$SKIP_CONFIRM" != "true" ]; then
+	echo "WARNING: This will DESTROY all data on $DISK"
+	echo ""
+	read -rp "Type 'yes' to continue: " CONFIRM
+	if [ "$CONFIRM" != "yes" ]; then
+		echo "Aborted."
+		exit 1
+	fi
+	echo ""
+fi
+
+# ── Unmount partitions ─────────────────────────────────────────────────────────
+
+echo "Unmounting partitions on $DISK..."
+if [ "$OS" = "Darwin" ]; then
+	diskutil unmountDisk "$DISK" 2>/dev/null || true
+else
+	# Linux: unmount any mounted partitions
+	for part in "${DISK}"*; do
+		if mountpoint -q "$part" 2>/dev/null; then
+			umount "$part" 2>/dev/null || true
+		fi
+	done
+fi
+
+# ── Flash ──────────────────────────────────────────────────────────────────────
+
+echo "Flashing $IMAGE_SIZE_MIB MiB to $RAW_DISK..."
+echo ""
+
+if [ "$OS" = "Darwin" ]; then
+	# macOS: sudo required for raw disk access, use 4M block size
+	sudo dd if="$IMAGE_PATH" of="$RAW_DISK" bs=4m status=progress
+else
+	# Linux: may already be root
+	dd if="$IMAGE_PATH" of="$RAW_DISK" bs=4M status=progress
+fi
+
+# ── Sync and eject ─────────────────────────────────────────────────────────────
+
+echo ""
+echo "Syncing..."
+sync
+
+if [ "$OS" = "Darwin" ]; then
+	echo "Ejecting $DISK..."
+	diskutil eject "$DISK" 2>/dev/null || true
+fi
+
+echo ""
+echo "=== Flash complete ==="
+echo ""
+echo "Image $IMAGE_PATH ($IMAGE_SIZE_MIB MiB) written to $DISK"
+echo ""
+if [ "$OS" = "Darwin" ]; then
+	echo "The disk has been ejected. You can remove the eMMC module."
+else
+	echo "You can now remove the eMMC module or reboot the device."
+fi

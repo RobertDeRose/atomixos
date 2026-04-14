@@ -114,4 +114,13 @@
     rootfs0 = "/dev/mmcblk1p3";
     rootfs1 = "/dev/mmcblk1p4";
   };
+
+  # ── Serial console (UART2) ─────────────────────────────────────────────────
+  # Enable login prompt on the debug serial console (ttyS2 @ 1.5Mbaud).
+  # This is the 3-pin header on the Rock64 board.
+  systemd.services."serial-getty@ttyS2" = {
+    enable = true;
+    wantedBy = [ "getty.target" ];
+    serviceConfig.Restart = "always";
+  };
 }

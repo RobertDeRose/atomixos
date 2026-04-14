@@ -2,6 +2,7 @@
 # Build a flashable disk image for the Rock64 eMMC.
 # Called from the Nix derivation — variables are substituted by Nix:
 #   @kernel@       — path to kernel package (contains Image and dtbs/)
+#   @initrd@       — path to initrd package (contains initrd)
 #   @dtbPath@      — relative DTB path (e.g. rockchip/rk3328-rock64.dtb)
 #   @squashfs@     — path to squashfs image directory (contains rootfs.squashfs)
 #   @bootScript@   — path to boot-script directory (contains boot.scr)
@@ -12,20 +13,23 @@ set -euo pipefail
 # ── Partition layout (sizes in MiB) ───────────────────────────────────────────
 #
 # Offset     Size       Content
-# 0          4 MiB      U-Boot (raw, idbloader @ sector 64, u-boot.itb @ sector 16384)
-# 4 MiB      128 MiB    boot slot A (vfat) — kernel + DTB + boot.scr
-# 132 MiB    128 MiB    boot slot B (vfat) — empty
-# 260 MiB    1024 MiB   rootfs slot A (squashfs)
-# 1284 MiB   1024 MiB   rootfs slot B (empty)
+# 0          16 MiB     U-Boot (raw, idbloader @ sector 64, u-boot.itb @ sector 16384)
+# 16 MiB     128 MiB    boot slot A (vfat) — kernel + DTB + boot.scr
+# 144 MiB    128 MiB    boot slot B (vfat) — empty
+# 272 MiB    1024 MiB   rootfs slot A (squashfs)
+# 1296 MiB   1024 MiB   rootfs slot B (empty)
 # No persist partition — systemd-repart creates it on first boot.
+#
+# NOTE: The first partition MUST start at or after 16 MiB to avoid overwriting
+# u-boot.itb which is written at sector 16384 (byte offset 8 MiB, ~9 MiB end).
 
-BOOT_A_START_MIB=4
+BOOT_A_START_MIB=16
 BOOT_A_SIZE_MIB=128
-BOOT_B_START_MIB=132
+BOOT_B_START_MIB=144
 BOOT_B_SIZE_MIB=128
-ROOTFS_A_START_MIB=260
+ROOTFS_A_START_MIB=272
 ROOTFS_A_SIZE_MIB=1024
-ROOTFS_B_START_MIB=1284
+ROOTFS_B_START_MIB=1296
 ROOTFS_B_SIZE_MIB=1024
 
 # Total image size: end of rootfs-b
@@ -55,8 +59,8 @@ log "Creating GPT partition table..."
 sfdisk "$IMAGE" <<EOF
 label: gpt
 
-start=${BOOT_A_START_MIB}MiB, size=${BOOT_A_SIZE_MIB}MiB, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B, name="boot-a"
-start=${BOOT_B_START_MIB}MiB, size=${BOOT_B_SIZE_MIB}MiB, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B, name="boot-b"
+start=${BOOT_A_START_MIB}MiB, size=${BOOT_A_SIZE_MIB}MiB, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, name="boot-a"
+start=${BOOT_B_START_MIB}MiB, size=${BOOT_B_SIZE_MIB}MiB, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, name="boot-b"
 start=${ROOTFS_A_START_MIB}MiB, size=${ROOTFS_A_SIZE_MIB}MiB, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, name="rootfs-a"
 start=${ROOTFS_B_START_MIB}MiB, size=${ROOTFS_B_SIZE_MIB}MiB, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, name="rootfs-b"
 EOF
@@ -72,6 +76,7 @@ mkfs.vfat -n "BOOT-A" "$BOOT_VFAT"
 mmd -i "$BOOT_VFAT" ::dtbs
 mmd -i "$BOOT_VFAT" ::dtbs/rockchip
 mcopy -i "$BOOT_VFAT" "@kernel@/Image" ::Image
+mcopy -i "$BOOT_VFAT" "@initrd@/initrd" ::initrd
 mcopy -i "$BOOT_VFAT" "@kernel@/dtbs/@dtbPath@" "::dtbs/rockchip/rk3328-rock64.dtb"
 mcopy -i "$BOOT_VFAT" "@bootScript@/boot.scr" ::boot.scr
 

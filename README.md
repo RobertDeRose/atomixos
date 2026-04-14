@@ -339,11 +339,15 @@ nix build .#checks.aarch64-darwin.rauc-slots --no-link -L
 
 ### Option 1: Flashable disk image
 
-Build an `.img` file that can be written to eMMC (or SD card) with `dd` or Etcher:
+Build an `.img` file that can be written to eMMC (or SD card):
 
 ```sh
 mise run provision:image -o atomixos-<series>.img
-dd if=atomixos-<series>.img of=/dev/mmcblkN bs=4M status=progress
+
+# Flash to a disk device (eMMC module via USB/SD adapter)
+mise run flash /dev/disk4          # macOS — auto-detects image, uses raw device for speed
+mise run flash -i custom.img /dev/disk4   # specify image explicitly
+mise run flash -y /dev/mmcblk0     # Linux — skip confirmation prompt
 ```
 
 The image includes U-Boot, boot slot A (kernel + DTB), and rootfs slot A (squashfs). On first boot, `systemd-repart`
@@ -391,6 +395,7 @@ All tasks are run with `mise run <task>`. Run `mise tasks` to list them.
 | `e2e:ssh-wan-toggle` | SSH-on-WAN flag enable/disable |
 | `e2e:debug` | Interactive QEMU VM for debugging (`-t <test>`, `--keep`) |
 | **Provisioning** | |
+| `flash` | Flash image to disk device with dd + progress (macOS/Linux) |
 | `provision:image` | Generate flashable `.img` file (builds all artifacts first) |
 | `provision:emmc` | Flash directly to eMMC block device (Linux + root only) |
 | **Configuration** | |
@@ -423,13 +428,13 @@ updates automatically everywhere it is produced.
 
 ## Status
 
-Implementation is in progress. **98 of 116 tasks complete (84%)**. All core implementation, E2E integration tests, and
-software-verifiable tasks are done. The remaining 18 tasks require a physical Rock64 board or network access for
-container image pulls:
+Implementation is in progress. **99 of 116 tasks complete (85%)**. All core implementation, E2E integration tests, and
+software-verifiable tasks are done. Hardware bring-up is underway — NixOS boots to login prompt on Rock64 via serial
+console. The remaining 17 tasks require physical hardware testing or network access for container image pulls:
 
-- **Hardware verification (16 tasks)** -- require a physical Rock64 board (kernel boot, NIC naming, DHCP/NTP on real
-  network, watchdog driver, RAUC on-device, provisioning boot, Cockpit SSH bridge, credential verification)
-- **Integration tests needing containers (2 tasks)** -- Cockpit pod HTTPS verification, confirmation with real
+- **Hardware verification (15 tasks)** — require a physical Rock64 board (NIC naming, DHCP/NTP on real
+  network, RAUC on-device, provisioning boot, Cockpit SSH bridge, credential verification)
+- **Integration tests needing containers (2 tasks)** — Cockpit pod HTTPS verification, confirmation with real
   containers and health manifest
 
 See `openspec/changes/rock64-ab-image/tasks.md` for the full task breakdown.

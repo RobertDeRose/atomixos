@@ -80,20 +80,142 @@
   boot.kexec.enable = false; # kexec-tools (~300 KB) — no kexec on A/B image
   services.lvm.enable = false; # lvm2 (~150 KB) — no LVM or device-mapper
 
+  # Disable systemd-timesyncd — we use chrony for NTP (chrony also serves
+  # NTP to LAN devices, which timesyncd cannot do).
+  services.timesyncd.enable = false;
+
+  # D-Bus config files shipped by systemd reference the systemd-timesync
+  # user even when timesyncd is disabled. Declare it so dbus-daemon doesn't
+  # log "Unknown username" and stall during startup.
+  users.users.systemd-timesync = {
+    isSystemUser = true;
+    group = "systemd-timesync";
+  };
+  users.groups.systemd-timesync = { };
+
+  # Disable EFI-related units — Rock64 uses U-Boot, not UEFI.
+  boot.loader.efi.canTouchEfiVariables = false;
+  systemd.services.systemd-boot-update.enable = false;
+
+  # ── Writable /var directory structure ───────────────────────────────────────
+  # /var is a tmpfs — empty on every boot. systemd services expect their
+  # StateDirectory / CacheDirectory / working dirs to exist under /var.
+  # tmpfiles.d rules create them early in boot (before services start).
+  systemd.tmpfiles.rules = [
+    "d /var/empty 0555 root root -"
+    "d /var/lib 0755 root root -"
+    "d /var/lib/systemd 0755 root root -"
+    "d /var/lib/systemd/network 0755 systemd-network systemd-network -"
+    "d /var/lib/private 0700 root root -"
+    "d /var/lib/private/systemd 0700 root root -"
+    "d /var/lib/private/systemd/resolve 0755 systemd-resolve systemd-resolve -"
+    "d /var/lib/chrony 0750 chrony chrony -"
+    "d /var/lib/dnsmasq 0755 dnsmasq dnsmasq -"
+    "d /var/cache 0755 root root -"
+    "d /var/cache/nscd 0755 nscd nscd -"
+    "d /var/log 0755 root root -"
+    "d /var/log/journal 2755 root systemd-journal -"
+    "d /var/db 0755 root root -"
+    "d /var/run 0755 root root -"
+  ];
+
   # Root filesystem — at runtime U-Boot selects the active slot via kernel cmdline
-  # (root=/dev/mmcblk2pN). This declaration satisfies NixOS assertions and provides
+  # (root=PARTLABEL=rootfs-a). This declaration satisfies NixOS assertions and provides
   # the fallback device; the actual root is overridden by the bootloader.
   fileSystems."/" = {
-    device = "/dev/disk/by-label/rootfs-a";
+    device = "/dev/disk/by-partlabel/rootfs-a";
     fsType = "squashfs";
     options = [ "ro" ];
   };
 
-  # Read-only root filesystem — mutable state lives on /persist
+  # ── Writable tmpfs overlays for read-only squashfs root ─────────────────────
+  # The squashfs root is immutable. NixOS Stage 2 needs writable /etc, /var, /tmp
+  # for runtime state (systemd, /etc/resolv.conf, /var/log, etc.).
+  # These tmpfs mounts are ephemeral — persistent state lives on /persist.
+  fileSystems."/etc" = {
+    device = "tmpfs";
+    fsType = "tmpfs";
+    options = [
+      "mode=0755"
+      "size=50M"
+    ];
+    neededForBoot = true;
+  };
+
+  fileSystems."/var" = {
+    device = "tmpfs";
+    fsType = "tmpfs";
+    options = [
+      "mode=0755"
+      "size=100M"
+    ];
+    neededForBoot = true;
+  };
+
+  fileSystems."/tmp" = {
+    device = "tmpfs";
+    fsType = "tmpfs";
+    options = [
+      "mode=1777"
+      "size=50M"
+    ];
+    neededForBoot = true;
+  };
+
+  fileSystems."/root" = {
+    device = "tmpfs";
+    fsType = "tmpfs";
+    options = [
+      "mode=0700"
+      "size=5M"
+    ];
+    neededForBoot = true;
+  };
+
+  fileSystems."/home" = {
+    device = "tmpfs";
+    fsType = "tmpfs";
+    options = [
+      "mode=0755"
+      "size=10M"
+    ];
+    neededForBoot = true;
+  };
+
+  # /bin and /usr/bin — NixOS activation scripts create /bin/sh and /usr/bin/env
+  # symlinks. On a read-only squashfs root these directories must be writable.
+  fileSystems."/bin" = {
+    device = "tmpfs";
+    fsType = "tmpfs";
+    options = [
+      "mode=0755"
+      "size=1M"
+    ];
+    neededForBoot = true;
+  };
+
+  fileSystems."/usr" = {
+    device = "tmpfs";
+    fsType = "tmpfs";
+    options = [
+      "mode=0755"
+      "size=1M"
+    ];
+    neededForBoot = true;
+  };
+
+  # Read-only root filesystem — mutable state lives on /persist.
+  # nofail: on first boot the partition doesn't exist yet (systemd-repart creates
+  # it), and even on subsequent boots it's not essential for basic operation.
+  # x-systemd.device-timeout=10s: don't wait 90s if the partition is missing.
   fileSystems."/persist" = {
-    device = "/dev/disk/by-label/persist";
+    device = "/dev/disk/by-partlabel/persist";
     fsType = "f2fs";
     neededForBoot = false;
+    options = [
+      "nofail"
+      "x-systemd.device-timeout=10s"
+    ];
   };
 
   # ── First-boot persist partition creation ───────────────────────────────────
@@ -115,6 +237,13 @@
   # ── Users ────────────────────────────────────────────────────────────────────
 
   users.mutableUsers = false;
+
+  # Root login for serial console debugging — allows emergency access when
+  # /persist is not yet provisioned. Set an empty password for initial boot
+  # testing; the serial console is physically secured.
+  users.users.root = {
+    hashedPassword = "";
+  };
 
   users.users.admin = {
     isNormalUser = true;
@@ -182,6 +311,7 @@
     curl
     jq
     f2fs-tools
+    kmod # modprobe — systemd needs this for loading kernel modules
     python3Minimal # Required by Cockpit (pod) for systemd D-Bus interaction
   ];
 }

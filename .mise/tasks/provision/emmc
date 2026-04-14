@@ -31,23 +31,26 @@ SSH_KEY="${usage_ssh_key:-}"
 # ── Partition layout (sizes in MiB) ───────────────────────────────────────────
 #
 # Offset     Size       Content
-# 0          4 MiB      U-Boot (raw, idbloader @ sector 64, u-boot.itb @ sector 16384)
-# 4 MiB      128 MiB    boot slot A (vfat) — kernel + DTB
-# 132 MiB    128 MiB    boot slot B (vfat) — kernel + DTB
-# 260 MiB    1024 MiB   rootfs slot A (squashfs)
-# 1284 MiB   1024 MiB   rootfs slot B (squashfs)
-# 2308 MiB   remaining  /persist (f2fs) — created by systemd-repart on first boot
+# 0          16 MiB     U-Boot (raw, idbloader @ sector 64, u-boot.itb @ sector 16384)
+# 16 MiB     128 MiB    boot slot A (vfat) — kernel + DTB
+# 144 MiB    128 MiB    boot slot B (vfat) — kernel + DTB
+# 272 MiB    1024 MiB   rootfs slot A (squashfs)
+# 1296 MiB   1024 MiB   rootfs slot B (squashfs)
+# 2320 MiB   remaining  /persist (f2fs) — created by systemd-repart on first boot
+#
+# NOTE: The first partition MUST start at or after 16 MiB to avoid overwriting
+# u-boot.itb which is written at sector 16384 (byte offset 8 MiB, ~9 MiB end).
 #
 # Note: the /persist partition is not created here. systemd-repart creates and
 # formats it as f2fs on first boot, filling all remaining eMMC space.
 
-BOOT_A_START_MIB=4
+BOOT_A_START_MIB=16
 BOOT_A_SIZE_MIB=128
-BOOT_B_START_MIB=132
+BOOT_B_START_MIB=144
 BOOT_B_SIZE_MIB=128
-ROOTFS_A_START_MIB=260
+ROOTFS_A_START_MIB=272
 ROOTFS_A_SIZE_MIB=1024
-ROOTFS_B_START_MIB=1284
+ROOTFS_B_START_MIB=1296
 ROOTFS_B_SIZE_MIB=1024
 
 # ── Validation ─────────────────────────────────────────────────────────────────
@@ -166,10 +169,10 @@ sfdisk "$EMMC_DEV" <<EOF
 label: gpt
 
 # boot slot A (vfat)
-start=${BOOT_A_START_MIB}MiB, size=${BOOT_A_SIZE_MIB}MiB, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B, name="boot-a"
+start=${BOOT_A_START_MIB}MiB, size=${BOOT_A_SIZE_MIB}MiB, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, name="boot-a"
 
 # boot slot B (vfat)
-start=${BOOT_B_START_MIB}MiB, size=${BOOT_B_SIZE_MIB}MiB, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B, name="boot-b"
+start=${BOOT_B_START_MIB}MiB, size=${BOOT_B_SIZE_MIB}MiB, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, name="boot-b"
 
 # rootfs slot A
 start=${ROOTFS_A_START_MIB}MiB, size=${ROOTFS_A_SIZE_MIB}MiB, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, name="rootfs-a"
@@ -223,7 +226,7 @@ dd if="$SQUASHFS_IMAGE" of="${EMMC_DEV}p3" bs=4M status=progress
 log "Creating persist partition for credential deployment..."
 
 # Create persist partition using remaining space
-PERSIST_START_MIB=2308
+PERSIST_START_MIB=2320
 sfdisk --append "$EMMC_DEV" <<EOF
 start=${PERSIST_START_MIB}MiB, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, name="persist"
 EOF

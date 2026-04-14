@@ -23,9 +23,16 @@ while IFS= read -r path; do
 	cp -a "$path" "$PSEUDO_ROOT/nix/store/"
 done <"@closureInfo@/store-paths"
 
-# Create /sbin/init pointing to the system toplevel
+# Create /sbin/init and /init pointing to the system toplevel
+# NixOS Stage 1 initrd looks for /mnt-root/init to start Stage 2
 mkdir -p "$PSEUDO_ROOT/sbin"
 ln -s "@systemClosure@/init" "$PSEUDO_ROOT/sbin/init"
+ln -s "@systemClosure@/init" "$PSEUDO_ROOT/init"
+
+# Create empty mount-point directories required by NixOS Stage 2.
+# The squashfs is read-only; these directories exist solely as mount points
+# for virtual filesystems (proc, sys, dev, run) and tmpfs overlays (etc, var, tmp).
+mkdir -p "$PSEUDO_ROOT"/{proc,sys,dev,run,etc,var,tmp,root,home,bin,usr/bin}
 
 # Build the squashfs image using zstd compression (best ratio on ARM)
 mksquashfs "$PSEUDO_ROOT" "$out/rootfs.squashfs" \

@@ -16,7 +16,11 @@
 - [x] 2.2 Configure USB WiFi drivers (rtlwifi, ath9k_htc, mt76), Bluetooth (btusb), and USB serial (ftdi, cp210x) as
   modules (`=m`)
 - [x] 2.3 Include the RK3328 Rock64 device tree blob (`rk3328-rock64.dtb`)
-- [ ] 2.4 Verify stripped kernel boots on Rock64 hardware and detects eMMC, ethernet, USB, and watchdog
+- [x] 2.4 Verify stripped kernel boots on Rock64 hardware and detects eMMC, ethernet, USB, and watchdog — verified via
+  serial console: kernel 6.19.11 boots on Rock64, eMMC detected (mmcblk1 14.5 GiB, HS200 mode), ethernet
+  (rk_gmac-dwmac + RTL8211F PHY), USB host controllers (dwc2, xhci, ehci, ohci), hardware watchdog
+  (dw_wdt /dev/watchdog0, 30s timeout). Required fixes: initrd for MMC_BLOCK=m, partition offset fix
+  (boot-a at 16 MiB), PARTLABEL root=, rootwait, ramdisk_addr_r override to 0x08000000
 - [ ] 2.5 Verify WiFi/BT modules load on demand when USB dongles are plugged in
 
 ## 3. Cockpit Pod and OpenVPN in Rootfs
