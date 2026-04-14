@@ -22,6 +22,7 @@ updates, automatic rollback, and a container-based application deployment model.
 - [Running E2E Tests](#running-e2e-tests)
   - [Run all tests](#run-all-tests)
   - [Run individual tests](#run-individual-tests)
+  - [Test performance: macOS apple-virt vs Linux TCG](#test-performance-macos-apple-virt-vs-linux-tcg)
   - [Interactive debugging](#interactive-debugging)
   - [Running tests directly with Nix](#running-tests-directly-with-nix)
 - [Provisioning](#provisioning)
@@ -257,9 +258,6 @@ auto-detect the platform and select the correct flake output (`aarch64-linux` or
 mise run e2e
 ```
 
-This runs all nine tests sequentially. Expect 15-30 minutes depending on hardware (TCG is slow; macOS apple-virt is
-significantly faster).
-
 ### Run individual tests
 
 ```sh
@@ -273,6 +271,28 @@ mise run e2e:firewall            # 2-node test: WAN allows HTTPS/VPN, LAN allows
 mise run e2e:network-isolation   # 2-node test: LAN gets DHCP/NTP, cannot reach WAN
 mise run e2e:ssh-wan-toggle      # Flag file enables/disables SSH on WAN via nftables reload
 ```
+
+### Test performance: macOS apple-virt vs Linux TCG
+
+On macOS, the nix-darwin `linux-builder` builds the NixOS test closures and the test driver runs QEMU natively on the
+Mac host using Apple Virtualization Framework (`apple-virt`) for hardware acceleration. On Linux (e.g. Lima VM), tests
+run under TCG software emulation without KVM. Measured wall-clock times:
+
+| Test | macOS (apple-virt) | Linux (TCG, Lima 4 GB) | Speedup |
+|---|---|---|---|
+| `rauc-slots` | 34s | 132s | 3.9x |
+| `rauc-update` | 25s | 137s | 5.5x |
+| `rauc-rollback` | 22s | 120s | 5.5x |
+| `rauc-confirm` | 95s | 171s | 1.8x |
+| `rauc-power-loss` | 46s | 184s | 4.0x |
+| `rauc-watchdog` | 57s | 315s | 5.5x |
+| `firewall` | 65s | 205s | 3.2x |
+| `network-isolation` | 68s | -- | -- |
+| `ssh-wan-toggle` | 35s | -- | -- |
+| **Total** | **~7.5 min** | **~21 min** (7 tests) | **~3.7x** |
+
+The `rauc-confirm` test has the smallest speedup because most of its runtime is a fixed 60s sustained health check
+timer. For CPU-bound tests (boot, install, rollback), apple-virt delivers a consistent 4-5x improvement over TCG.
 
 ### Interactive debugging
 
@@ -314,9 +334,6 @@ nix build .#checks.aarch64-linux.rauc-slots --no-link -L
 # macOS (requires nix-darwin with linux-builder enabled)
 nix build .#checks.aarch64-darwin.rauc-slots --no-link -L
 ```
-
-On macOS, the linux-builder VM builds the NixOS test closures and the test driver runs QEMU natively on the Mac host
-using `apple-virt` hardware acceleration.
 
 ## Provisioning
 
