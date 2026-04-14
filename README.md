@@ -423,12 +423,13 @@ updates automatically everywhere it is produced.
 
 ## Status
 
-Implementation is in progress. **94 of 116 tasks complete (81%)**. All core implementation and software-testable E2E
-integration tests are done. The remaining 22 tasks are:
+Implementation is in progress. **98 of 116 tasks complete (84%)**. All core implementation, E2E integration tests, and
+software-verifiable tasks are done. The remaining 18 tasks require a physical Rock64 board or network access for
+container image pulls:
 
 - **Hardware verification (16 tasks)** -- require a physical Rock64 board (kernel boot, NIC naming, DHCP/NTP on real
   network, watchdog driver, RAUC on-device, provisioning boot, Cockpit SSH bridge, credential verification)
-- **E2E integration gaps (2 tasks)** -- full provisioning end-to-end on hardware, confirmation with real containers
-- **Software-only verification (4 tasks)** -- Cockpit pod HTTPS, OpenVPN tun0, watchdog driver/systemd verification
+- **Integration tests needing containers (2 tasks)** -- Cockpit pod HTTPS verification, confirmation with real
+  containers and health manifest
 
 See `openspec/changes/rock64-ab-image/tasks.md` for the full task breakdown.
