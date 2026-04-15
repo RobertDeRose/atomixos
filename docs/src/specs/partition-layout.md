@@ -30,7 +30,8 @@ and rootfs are always consistent for a given slot.
 ### ADDED: Flashable disk image
 
 The `build:image` task produces a flashable `.img` file containing U-Boot, boot slot A, and rootfs slot A. The
-`/persist` partition is created on first boot by `systemd-repart`.
+`/persist` partition is created on first boot by `create-persist.service` (a custom service that fixes the GPT backup
+header and invokes `systemd-repart`).
 
 ### ADDED: U-Boot at RK3328 offsets
 

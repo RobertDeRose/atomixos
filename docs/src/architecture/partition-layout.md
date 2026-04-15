@@ -43,8 +43,10 @@ resilience for the boot-count variables.
 
 ## Persist Partition
 
-The `/persist` partition is **not** included in the flashable image. On first boot, `systemd-repart` automatically
-creates and formats it as f2fs using all remaining eMMC space. This partition survives all updates and rollbacks.
+The `/persist` partition is **not** included in the flashable image. On first boot, a custom `create-persist.service`
+fixes the GPT backup header (stranded at the old image boundary after dd'ing a smaller image onto the larger eMMC), then
+invokes `systemd-repart` with an explicit device path to create and format the partition as f2fs using all remaining
+eMMC space. This partition survives all updates and rollbacks.
 
 Contents created during provisioning:
 

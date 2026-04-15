@@ -42,26 +42,37 @@ mounts, user accounts, and system packages.
 | `security.sudo.enable`         | `false`     | Uses `run0` instead               |
 | `virtualisation.podman.enable` | `true`      | Container runtime                 |
 
-**Filesystem layout:**
+**Filesystem layout (OverlayFS root):**
 
-| Mount      | Filesystem                          | Size      | `neededForBoot` |
-|------------|-------------------------------------|-----------|-----------------|
-| `/`        | squashfs (via `PARTLABEL=rootfs-a`) | --        | yes (root)      |
-| `/etc`     | tmpfs                               | 50 MB     | yes             |
-| `/var`     | tmpfs                               | 100 MB    | yes             |
-| `/tmp`     | tmpfs                               | 50 MB     | yes             |
-| `/root`    | tmpfs                               | 5 MB      | yes             |
-| `/home`    | tmpfs                               | 10 MB     | yes             |
-| `/bin`     | tmpfs                               | 1 MB      | yes             |
-| `/usr`     | tmpfs                               | 1 MB      | yes             |
-| `/persist` | f2fs (`PARTLABEL=persist`)          | remaining | no (`nofail`)   |
+The root filesystem uses a single OverlayFS set up in the initrd (via `boot.initrd.postMountCommands`):
+
+| Layer              | Mount            | Filesystem | Size   | Description                                    |
+|--------------------|------------------|------------|--------|------------------------------------------------|
+| overlay (combined) | `/`              | overlay    | --     | Unified writable root presented to userspace   |
+| lower (read-only)  | `/media/root-ro` | squashfs   | --     | Immutable NixOS system (`PARTLABEL=rootfs-a`)  |
+| upper (writable)   | `/media/root-rw` | tmpfs      | 256 MB | Ephemeral writes, lost on reboot               |
+| persistent state   | `/persist`       | f2fs       | ~13 GB | Survives reboots (`PARTLABEL=persist`, nofail) |
+
+The overlay is assembled in the initrd after the squashfs root is mounted at `/mnt-root` but before `switch_root`:
+
+1. Move squashfs from `/mnt-root` to `/mnt-lower`
+2. Mount tmpfs (256 MB) at `/mnt-upper`, create `upper/` and `work/` dirs
+3. Mount overlay at `/mnt-root` with `lowerdir=/mnt-lower,upperdir=/mnt-upper/upper,workdir=/mnt-upper/work`
+4. Move layers into final root at `/mnt-root/media/root-ro` and `/mnt-root/media/root-rw`
+
+This approach replaces per-directory tmpfs mounts, which broke systemd's mount namespace sandboxing (PrivateTmp,
+ProtectHome, etc.). The overlay presents a single writable filesystem, so mount propagation works correctly.
+
+**First-boot persist partition:** Created by a custom `create-persist.service` (not upstream `systemd-repart`) that
+fixes the GPT backup header (`sfdisk --relocate`) after the smaller image is dd'd onto the larger eMMC, then invokes
+`systemd-repart` with an explicit device path.
 
 **tmpfiles.d rules** (created on boot):
 
 ```text
 /var/empty, /var/lib, /var/lib/systemd/network, /var/lib/private,
-/var/lib/chrony, /var/lib/dnsmasq, /var/cache/nscd,
-/var/log/journal, /var/db, /var/run
+/var/lib/private/systemd/resolve, /var/lib/chrony, /var/lib/dnsmasq,
+/var/cache, /var/cache/nscd, /var/log, /var/log/journal, /var/db, /var/run
 ```
 
 **User accounts:**
@@ -87,7 +98,7 @@ mounts, user accounts, and system packages.
 | Ethernet    | `STMMAC_ETH`, `DWMAC_ROCKCHIP`                                   | built-in        |
 | USB         | `DWC2`, `USB_XHCI_HCD`, `USB_EHCI_HCD`, `USB_OHCI_HCD`           | built-in        |
 | Watchdog    | `DW_WATCHDOG`                                                    | built-in        |
-| Filesystems | `SQUASHFS`, `SQUASHFS_ZSTD`, `F2FS_FS`                           | built-in        |
+| Filesystems | `SQUASHFS`, `SQUASHFS_ZSTD`, `F2FS_FS`, `OVERLAY_FS`             | built-in        |
 | WiFi        | `RTL8XXXU`, `ATH9K_HTC`, `MT76_USB`, `MT7601U`, `RTW88`, `RTW89` | module (`=m`)   |
 | Bluetooth   | `BT`, `BT_HCIBTUSB`                                              | module          |
 | USB Serial  | `FTDI_SIO`, `CP210X`                                             | module          |

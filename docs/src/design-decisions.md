@@ -23,11 +23,12 @@ the current use case.
 
 ## Decision 2: Squashfs rootfs
 
-**Choice**: Read-only squashfs root filesystem with tmpfs overlays.
+**Choice**: Read-only squashfs root filesystem with OverlayFS (tmpfs upper layer).
 
 **Rationale**: Squashfs eliminates runtime drift -- every boot starts from a known-good state. It compresses well (zstd,
-1 MB blocks), fitting the NixOS closure into the 1 GB slot with room to spare. Writable state lives on `/persist`
-(f2fs).
+1 MB blocks), fitting the NixOS closure into the 1 GB slot with room to spare. A single OverlayFS (squashfs lower +
+tmpfs upper) set up in the initrd provides a unified writable root, which is required for systemd's mount namespace
+sandboxing (PrivateTmp, ProtectHome, etc.) to work correctly. Writable state lives on `/persist` (f2fs).
 
 **Trade-off**: Any runtime state not explicitly persisted to `/persist` is lost on reboot. This is intentional for an
 appliance but requires careful placement of writable directories.

@@ -154,7 +154,8 @@ mkimage -C none -A arm64 -T script -d boot.cmd boot.scr
 The image name is derived from the pinned NixOS release series (e.g., `atomixos-25.11.img`). The persist partition is
 intentionally omitted; `systemd-repart` creates it at first boot.
 
-**GPT partition types:** All partitions use the Linux filesystem GUID (`0FC63DAF-...`), not EFI System.
+**GPT partition types:** Boot partitions use the Linux filesystem GUID (`0FC63DAF-...`). Rootfs partitions use the Linux
+root aarch64 GUID (`B921B045-...`), which is the architecturally correct type for aarch64 root filesystems.
 
 **U-Boot raw writes:**
 

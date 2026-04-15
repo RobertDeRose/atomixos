@@ -26,8 +26,8 @@ AtomixOS eliminates this class of failure through:
 - **Local health-check confirmation** -- commits new slots only after verifying that all services and containers are
   healthy for a sustained 60-second window
 - **Signed RAUC bundles** -- reproducible, CA-signed `.raucb` artifacts built from the Nix flake
-- **Read-only root filesystem** -- squashfs rootfs with tmpfs overlays prevents runtime drift; every boot starts from a
-  known-good state
+- **Read-only root filesystem** -- squashfs rootfs with OverlayFS (tmpfs upper layer) prevents runtime drift; every boot
+  starts from a known-good state
 
 ## Supported Hardware
 

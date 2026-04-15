@@ -14,7 +14,8 @@ configuration (kernel drivers, device paths, boot method).
 
 ## Packages
 
-All packages target `aarch64-linux`:
+All packages target `aarch64-linux`. An `aarch64-darwin` alias is provided so that `nix build .#image` works directly
+from macOS when a linux-builder is available (the alias points to the same `aarch64-linux` package set):
 
 | Output                               | Description                                                     |
 |--------------------------------------|-----------------------------------------------------------------|
