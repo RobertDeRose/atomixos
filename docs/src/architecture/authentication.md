@@ -5,7 +5,7 @@ provisioned at factory time -- there are no default passwords or shared secrets.
 
 ## Credential Provisioning
 
-During [eMMC provisioning](../provisioning/emmc-provisioning.md), the operator provides:
+During provisioning, the operator provides:
 
 | Credential      | Storage Path                                | Format                          |
 |-----------------|---------------------------------------------|---------------------------------|

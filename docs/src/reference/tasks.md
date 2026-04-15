@@ -13,7 +13,9 @@ All `build:*` tasks accept `--lima` to run inside a Lima VM and `--vm <name>` to
 | `build:squashfs`    | Build squashfs rootfs &rarr; `result-squashfs/`            |
 | `build:rauc-bundle` | Build signed RAUC bundle &rarr; `result-rauc-bundle/`      |
 | `build:boot-script` | Build U-Boot boot script &rarr; `result-boot-script/`      |
-| `build:image`       | Build flashable disk image &rarr; `result-image/`          |
+| `build:image`       | Build flashable disk image, copy `.img` to cwd             |
+
+`build:image` also accepts `-o <path>` to specify the output filename.
 
 ## E2E Test Tasks
 
@@ -33,11 +35,9 @@ All `build:*` tasks accept `--lima` to run inside a Lima VM and `--vm <name>` to
 
 ## Provisioning Tasks
 
-| Task              | Description                                                 |
-|-------------------|-------------------------------------------------------------|
-| `flash`           | Flash image to disk device with dd + progress (macOS/Linux) |
-| `provision:image` | Generate flashable `.img` file (builds all artifacts first) |
-| `provision:emmc`  | Flash directly to eMMC block device (Linux + root only)     |
+| Task    | Description                                                 |
+|---------|-------------------------------------------------------------|
+| `flash` | Flash image to disk device with dd + progress (macOS/Linux) |
 
 ## Configuration Tasks
 

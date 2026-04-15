@@ -13,7 +13,6 @@
 - [Testing](./testing.md)
 - [Provisioning](./provisioning.md)
   - [Flashable Disk Image](./provisioning/flash-image.md)
-  - [Direct eMMC Provisioning](./provisioning/emmc-provisioning.md)
   - [LAN Range Configuration](./provisioning/lan-range.md)
 
 ## Operations

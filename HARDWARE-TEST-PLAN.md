@@ -20,13 +20,12 @@ software alone.
 ### Flash the image
 
 ```sh
-# Option A: flashable image via dd
-dd if=result-image/atomixos-25.11.img of=/dev/mmcblkN bs=4M status=progress
+# Flash with mise
+mise run build:image
+mise run flash /dev/diskN
 
-# Option B: full provisioning with credentials (requires Linux + root)
-mise run provision:emmc /dev/mmcblk1 \
-  result-image/uboot result-image/Image result-image/rk3328-rock64.dtb result-squashfs \
-  --ssh-key ~/.ssh/id_ed25519.pub
+# Or with dd directly
+dd if=atomixos-25.11.img of=/dev/mmcblkN bs=4M status=progress
 ```
 
 ### Task 8.8 -- Provisioning boots to multi-user.target

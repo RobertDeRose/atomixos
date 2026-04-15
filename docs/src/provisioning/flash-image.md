@@ -5,17 +5,17 @@ Build a complete `.img` file that can be written to eMMC (or SD card) using `dd`
 ## Build the Image
 
 ```sh
-# Build with mise
+# Build with mise (copies .img to current directory)
 mise run build:image
 
-# Or with Nix directly
+# Specify output path
+mise run build:image -- -o atomixos-25.11.img
+
+# Build via Lima VM
+mise run build:image -- --lima
+
+# Or with Nix directly (result stays in Nix store, symlinked to result-image/)
 nix build .#image -o result-image
-```
-
-## Copy to Working Directory
-
-```sh
-mise run provision:image -o atomixos-25.11.img
 ```
 
 ## Flash to eMMC
@@ -82,7 +82,6 @@ The flashable image method does **not** provision credentials. After flashing:
 - Cockpit and Traefik have no configuration
 - The health manifest is empty
 
-For production deployment, use [direct eMMC provisioning](./emmc-provisioning.md) instead, which handles credential
-setup as part of the flash process.
+Credentials must be deployed manually to `/persist/config/` after first boot, or pre-populated on the persist partition.
 
 For development, the `root` user has an empty password and serial console access on UART2 (ttyS2, 1.5 Mbaud).

@@ -21,16 +21,14 @@ The task modifies four files to keep the LAN configuration consistent:
 | `modules/networking.nix`     | eth1 static `Address`                                                                      |
 | `modules/lan-gateway.nix`    | dnsmasq `dhcp-range`, gateway DHCP option (3), NTP DHCP option (42), chrony `allow` subnet |
 | `scripts/os-verification.sh` | Expected eth1 IP in health checks                                                          |
-| `.mise/tasks/provision/emmc` | Traefik TLS SAN IP, OIDC LAN bypass `sourceRange` CIDR                                     |
 
 ## After Changing
 
-Rebuild and re-provision:
+Rebuild:
 
 ```sh
 mise run check
 mise run build:image
-mise run provision:image -o atomixos-25.11.img
 ```
 
 ## Constraints

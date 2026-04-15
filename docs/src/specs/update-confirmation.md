@@ -70,6 +70,5 @@ decrement on each subsequent boot until rollback occurs.
 
 ### ADDED: Health manifest provided by provisioning
 
-The health manifest is not shipped in the image. It is written to `/persist/config/health-manifest.yaml` during [eMMC
-provisioning](../provisioning/emmc-provisioning.md). This allows different devices to have different container
-configurations.
+The health manifest is not shipped in the image. It is written to `/persist/config/health-manifest.yaml` during
+provisioning. This allows different devices to have different container configurations.

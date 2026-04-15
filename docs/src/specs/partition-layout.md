@@ -27,17 +27,10 @@ and rootfs are always consistent for a given slot.
 - Then boot-a contains `Image`, `initrd`, `rk3328-rock64.dtb`, and `boot.scr`
 - And boot-b is either empty or contains the other slot's kernel
 
-### ADDED: Provisioning script
+### ADDED: Flashable disk image
 
-The `provision:emmc` task partitions the eMMC, writes U-Boot, deploys the first image to slot A, and creates the persist
-partition. It is idempotent -- running it twice on the same device produces the same result (with a confirmation prompt
-if partitions already exist).
-
-#### Scenario: Provisioning is idempotent
-
-- Given a previously provisioned eMMC
-- When `provision:emmc` is run again with `--yes`
-- Then the device is re-partitioned and re-populated without error
+The `build:image` task produces a flashable `.img` file containing U-Boot, boot slot A, and rootfs slot A. The
+`/persist` partition is created on first boot by `systemd-repart`.
 
 ### ADDED: U-Boot at RK3328 offsets
 

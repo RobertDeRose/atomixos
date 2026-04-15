@@ -26,8 +26,6 @@ updates, automatic rollback, and a container-based application deployment model.
   - [Interactive debugging](#interactive-debugging)
   - [Running tests directly with Nix](#running-tests-directly-with-nix)
 - [Provisioning](#provisioning)
-  - [Option 1: Flashable disk image](#option-1-flashable-disk-image)
-  - [Option 2: Direct eMMC provisioning](#option-2-direct-emmc-provisioning)
 - [mise Task Reference](#mise-task-reference)
 - [Flake outputs](#flake-outputs)
 - [Versioned Image Naming](#versioned-image-naming)
@@ -135,14 +133,12 @@ This updates:
 - `modules/networking.nix` (`eth1` static address)
 - `modules/lan-gateway.nix` (DHCP pool, DHCP options, chrony allow subnet)
 - `scripts/os-verification.sh` (expected `eth1` IP)
-- `.mise/tasks/provision/emmc` (Traefik cert SAN IP and OIDC LAN allowlist CIDR)
 
-After changing the range, rebuild and re-provision:
+After changing the range, rebuild:
 
 ```sh
 mise run check
 mise run build:image
-mise run provision:image -o atomixos-<series>.img
 ```
 
 ## Project structure
@@ -198,10 +194,6 @@ scripts/
 
 .mise/tasks/config/
   lan-range                        Update LAN gateway/DHCP range across all configs
-
-.mise/tasks/provision/
-  image                            Generate flashable .img file
-  emmc                             Flash directly to eMMC block device (Linux only)
 
 .mise/tasks/e2e/
   rauc-slots                       Run RAUC slot logic test
@@ -341,12 +333,10 @@ nix build .#checks.aarch64-darwin.rauc-slots --no-link -L
 
 ## Provisioning
 
-### Option 1: Flashable disk image
-
 Build an `.img` file that can be written to eMMC (or SD card):
 
 ```sh
-mise run provision:image -o atomixos-<series>.img
+mise run build:image
 
 # Flash to a disk device (eMMC module via USB/SD adapter)
 mise run flash /dev/disk4          # macOS — auto-detects image, uses raw device for speed
@@ -356,22 +346,6 @@ mise run flash -y /dev/mmcblk0     # Linux — skip confirmation prompt
 
 The image includes U-Boot, boot slot A (kernel + DTB), and rootfs slot A (squashfs). On first boot, `systemd-repart`
 automatically creates and formats the `/persist` partition (f2fs) using all remaining eMMC space.
-
-### Option 2: Direct eMMC provisioning
-
-For factory provisioning with the eMMC attached as a block device (requires Linux + root):
-
-```sh
-mise run provision:emmc /dev/mmcblk1 /path/to/uboot /path/to/kernel /path/to/dtb /path/to/squashfs
-# Optional: --ssh-key ~/.ssh/id_ed25519.pub
-```
-
-This partitions the eMMC, writes U-Boot, deploys the first image to slot A, and pre-creates the persist partition with:
-
-- Admin password (prompted interactively, sha-512 hashed, EN18031 compliant)
-- SSH public key (if `--ssh-key` provided)
-- Traefik reverse proxy configuration and self-signed TLS certificate
-- Health manifest (cockpit-ws, traefik) for os-verification
 
 ## mise Task Reference
 
@@ -385,8 +359,9 @@ All tasks are run with `mise run <task>`. Run `mise tasks` to list them.
 | `build:squashfs`        | Build squashfs rootfs → `result-squashfs/`                  |
 | `build:rauc-bundle`     | Build signed RAUC bundle → `result-rauc-bundle/`            |
 | `build:boot-script`     | Build U-Boot boot script → `result-boot-script/`            |
-| `build:image`           | Build flashable disk image → `result-image/`                |
+| `build:image`           | Build flashable disk image, copy `.img` to cwd              |
 |                         | All `build:*` tasks accept `--lima` and `--vm <name>`       |
+|                         | `build:image` also accepts `-o <path>`                      |
 | **E2E Tests**           |                                                             |
 | `e2e`                   | Run all 9 integration tests sequentially                    |
 | `e2e:rauc-slots`        | RAUC slot detection after boot                              |
@@ -401,8 +376,6 @@ All tasks are run with `mise run <task>`. Run `mise tasks` to list them.
 | `e2e:debug`             | Interactive QEMU VM for debugging (`-t <test>`, `--keep`)   |
 | **Provisioning**        |                                                             |
 | `flash`                 | Flash image to disk device with dd + progress (macOS/Linux) |
-| `provision:image`       | Generate flashable `.img` file (builds all artifacts first) |
-| `provision:emmc`        | Flash directly to eMMC block device (Linux + root only)     |
 | **Configuration**       |                                                             |
 | `config:lan-range`      | Update LAN gateway/DHCP range across all config files       |
 | **Documentation**       |                                                             |

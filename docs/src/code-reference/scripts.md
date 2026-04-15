@@ -188,36 +188,6 @@ Serial console capture wrapper.
 
 Launches `scripts/serial-capture.py` in a `nix-shell` with pyserial.
 
-### provision/image
-
-**Location:** `.mise/tasks/provision/image`
-
-Copies the built disk image to the working directory.
-
-| Flag        | Description                                    |
-|-------------|------------------------------------------------|
-| `-o <path>` | Output filename (defaults to image's own name) |
-
-Depends on `build:image` task.
-
-### provision/emmc
-
-**Location:** `.mise/tasks/provision/emmc`
-
-Full factory provisioning of eMMC block device.
-
-| Argument          | Description            |
-|-------------------|------------------------|
-| `<device>`        | eMMC block device      |
-| `<uboot-dir>`     | U-Boot directory       |
-| `<kernel>`        | Kernel Image path      |
-| `<dtb>`           | DTB file path          |
-| `<squashfs>`      | Squashfs image path    |
-| `--ssh-key <key>` | SSH public key or path |
-
-Creates partitions, writes U-Boot, deploys image, formats /persist, provisions credentials (password, SSH key, Traefik
-config, TLS cert, health manifest). Linux + root only.
-
 ### config/lan-range
 
 **Location:** `.mise/tasks/config/lan-range`
@@ -230,5 +200,4 @@ Updates LAN gateway/DHCP configuration across all files.
 | `--dhcp-start`   | `172.20.30.10`   | DHCP pool start       |
 | `--dhcp-end`     | `172.20.30.254`  | DHCP pool end         |
 
-Modifies: `modules/networking.nix`, `modules/lan-gateway.nix`, `scripts/os-verification.sh`,
-`.mise/tasks/provision/emmc`.
+Modifies: `modules/networking.nix`, `modules/lan-gateway.nix`, `scripts/os-verification.sh`.

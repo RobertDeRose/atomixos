@@ -22,7 +22,7 @@ if [ -z "$IMAGE_PATH" ] || [ ! -f "$IMAGE_PATH" ]; then
 	echo "ERROR: No image file found."
 	echo ""
 	echo "Either:"
-	echo "  1. Run 'mise run provision:image' to build and copy the image"
+	echo "  1. Run 'mise run build:image' to build and copy the image"
 	echo "  2. Specify the image path: mise run flash --image /path/to/image.img /dev/diskN"
 	exit 1
 fi
