@@ -1,0 +1,31 @@
+# mdbook-lint configuration for AtomixOS docs
+#
+# Only docs/src/**/*.md files are linted (configured in hk.pkl glob).
+# Rules disabled here are either false positives for this project or
+# already covered by other linters (rumdl handles general markdown).
+
+# Disable noisy / false-positive rules globally
+disabled-rules = [
+  # Line length -- prose lines >80 chars are normal; rumdl handles this if needed
+  "MD013",
+  # Inline HTML -- we use <img> for centered logo, <br> occasionally
+  "MD033",
+  # Orphaned files -- picks up .md files outside docs/src/ (openspec, .opencode, etc.)
+  "MDBOOK005",
+  # Part titles must be h1 -- mdBook supports ## for part titles in SUMMARY.md
+  "MDBOOK003",
+  # Unclosed math blocks -- false positive on $out, $NIX_BUILD_TOP, etc.
+  "MDBOOK010",
+  # Chapter title vs H1 mismatch -- intentional (e.g., "Introduction" links to "AtomixOS")
+  "MDBOOK023",
+  # Heading capitalization style -- we use Title Case for major headings, mixed elsewhere
+  "CONTENT004",
+  # Insufficient introduction before subheading -- not applicable to SUMMARY.md / short chapters
+  "CONTENT005",
+  # Consistent terminology -- "config" vs "configuration" are both acceptable
+  "CONTENT007",
+  # Minimum word count -- code-block-only pages (e.g., project-structure.md) are valid
+  "CONTENT003",
+  # Future tense -- too pedantic for technical docs
+  "CONTENT011",
+]
