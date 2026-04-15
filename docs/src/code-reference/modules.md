@@ -33,28 +33,28 @@ mounts, user accounts, and system packages.
 
 **Key configuration:**
 
-| Setting | Value | Notes |
-|---------|-------|-------|
-| `system.stateVersion` | `"25.11"` | NixOS release |
-| `networking.hostName` | `"gateway"` | |
-| `nix.enable` | `false` | No Nix daemon on read-only rootfs |
-| `documentation.enable` | `false` | Saves closure space |
-| `security.sudo.enable` | `false` | Uses `run0` instead |
-| `virtualisation.podman.enable` | `true` | Container runtime |
+| Setting                        | Value       | Notes                             |
+|--------------------------------|-------------|-----------------------------------|
+| `system.stateVersion`          | `"25.11"`   | NixOS release                     |
+| `networking.hostName`          | `"gateway"` |                                   |
+| `nix.enable`                   | `false`     | No Nix daemon on read-only rootfs |
+| `documentation.enable`         | `false`     | Saves closure space               |
+| `security.sudo.enable`         | `false`     | Uses `run0` instead               |
+| `virtualisation.podman.enable` | `true`      | Container runtime                 |
 
 **Filesystem layout:**
 
-| Mount | Filesystem | Size | `neededForBoot` |
-|-------|-----------|------|-----------------|
-| `/` | squashfs (via `PARTLABEL=rootfs-a`) | -- | yes (root) |
-| `/etc` | tmpfs | 50 MB | yes |
-| `/var` | tmpfs | 100 MB | yes |
-| `/tmp` | tmpfs | 50 MB | yes |
-| `/root` | tmpfs | 5 MB | yes |
-| `/home` | tmpfs | 10 MB | yes |
-| `/bin` | tmpfs | 1 MB | yes |
-| `/usr` | tmpfs | 1 MB | yes |
-| `/persist` | f2fs (`PARTLABEL=persist`) | remaining | no (`nofail`) |
+| Mount      | Filesystem                          | Size      | `neededForBoot` |
+|------------|-------------------------------------|-----------|-----------------|
+| `/`        | squashfs (via `PARTLABEL=rootfs-a`) | --        | yes (root)      |
+| `/etc`     | tmpfs                               | 50 MB     | yes             |
+| `/var`     | tmpfs                               | 100 MB    | yes             |
+| `/tmp`     | tmpfs                               | 50 MB     | yes             |
+| `/root`    | tmpfs                               | 5 MB      | yes             |
+| `/home`    | tmpfs                               | 10 MB     | yes             |
+| `/bin`     | tmpfs                               | 1 MB      | yes             |
+| `/usr`     | tmpfs                               | 1 MB      | yes             |
+| `/persist` | f2fs (`PARTLABEL=persist`)          | remaining | no (`nofail`)   |
 
 **tmpfiles.d rules** (created on boot):
 
@@ -66,9 +66,9 @@ mounts, user accounts, and system packages.
 
 **User accounts:**
 
-| User | Groups | Authentication |
-|------|--------|---------------|
-| `root` | -- | Empty password (development) |
+| User    | Groups            | Authentication                                                                                                |
+|---------|-------------------|---------------------------------------------------------------------------------------------------------------|
+| `root`  | --                | Empty password (development)                                                                                  |
 | `admin` | `wheel`, `podman` | Password from `/persist/config/admin-password-hash`; SSH key from `/persist/config/ssh-authorized-keys/admin` |
 
 **System packages:** `nano`, `htop`, `curl`, `jq`, `f2fs-tools`, `kmod`, `python3Minimal`
@@ -81,16 +81,16 @@ mounts, user accounts, and system packages.
 
 **Kernel configuration:**
 
-| Category | Drivers | Build |
-|----------|---------|-------|
-| eMMC | `MMC_DW`, `MMC_DW_ROCKCHIP` | built-in (`=y`) |
-| Ethernet | `STMMAC_ETH`, `DWMAC_ROCKCHIP` | built-in |
-| USB | `DWC2`, `USB_XHCI_HCD`, `USB_EHCI_HCD`, `USB_OHCI_HCD` | built-in |
-| Watchdog | `DW_WATCHDOG` | built-in |
-| Filesystems | `SQUASHFS`, `SQUASHFS_ZSTD`, `F2FS_FS` | built-in |
-| WiFi | `RTL8XXXU`, `ATH9K_HTC`, `MT76_USB`, `MT7601U`, `RTW88`, `RTW89` | module (`=m`) |
-| Bluetooth | `BT`, `BT_HCIBTUSB` | module |
-| USB Serial | `FTDI_SIO`, `CP210X` | module |
+| Category    | Drivers                                                          | Build           |
+|-------------|------------------------------------------------------------------|-----------------|
+| eMMC        | `MMC_DW`, `MMC_DW_ROCKCHIP`                                      | built-in (`=y`) |
+| Ethernet    | `STMMAC_ETH`, `DWMAC_ROCKCHIP`                                   | built-in        |
+| USB         | `DWC2`, `USB_XHCI_HCD`, `USB_EHCI_HCD`, `USB_OHCI_HCD`           | built-in        |
+| Watchdog    | `DW_WATCHDOG`                                                    | built-in        |
+| Filesystems | `SQUASHFS`, `SQUASHFS_ZSTD`, `F2FS_FS`                           | built-in        |
+| WiFi        | `RTL8XXXU`, `ATH9K_HTC`, `MT76_USB`, `MT7601U`, `RTW88`, `RTW89` | module (`=m`)   |
+| Bluetooth   | `BT`, `BT_HCIBTUSB`                                              | module          |
+| USB Serial  | `FTDI_SIO`, `CP210X`                                             | module          |
 
 **RAUC slot mapping:**
 
@@ -113,11 +113,11 @@ atomixos.rauc.slots = {
 
 **Differences from hardware-rock64.nix:**
 
-| Setting | Rock64 | QEMU |
-|---------|--------|------|
-| Boot method | U-Boot `boot.scr` | extlinux |
-| Block devices | `/dev/mmcblk1pN` | `/dev/vdN` (virtio) |
-| RAUC backend | `uboot` | `custom` (file-based) |
+| Setting        | Rock64            | QEMU                             |
+|----------------|-------------------|----------------------------------|
+| Boot method    | U-Boot `boot.scr` | extlinux                         |
+| Block devices  | `/dev/mmcblk1pN`  | `/dev/vdN` (virtio)              |
+| RAUC backend   | `uboot`           | `custom` (file-based)            |
 | Kernel modules | Hardware-specific | `virtio_pci`, `virtio_blk`, etc. |
 
 ---
@@ -128,18 +128,18 @@ atomixos.rauc.slots = {
 
 **Link files:**
 
-| Priority | Match | Result |
-|----------|-------|--------|
-| `10-onboard-eth` | Platform `platform-ff540000.ethernet` | Name = `eth0` |
-| `20-usb-eth` | Drivers `r8152`, `ax88179_178a`, `cdc_ether` | Kernel default |
-| `30-wifi` | WiFi drivers | Kernel default |
+| Priority         | Match                                        | Result         |
+|------------------|----------------------------------------------|----------------|
+| `10-onboard-eth` | Platform `platform-ff540000.ethernet`        | Name = `eth0`  |
+| `20-usb-eth`     | Drivers `r8152`, `ax88179_178a`, `cdc_ether` | Kernel default |
+| `30-wifi`        | WiFi drivers                                 | Kernel default |
 
 **Network files:**
 
-| Priority | Interface | Configuration |
-|----------|-----------|--------------|
-| `10-wan` | `eth0` | DHCP v4, uses DHCP DNS, no NTP from DHCP |
-| `20-lan` | `eth1` | Static `172.20.30.1/24`, no DHCP |
+| Priority | Interface | Configuration                            |
+|----------|-----------|------------------------------------------|
+| `10-wan` | `eth0`    | DHCP v4, uses DHCP DNS, no NTP from DHCP |
+| `20-lan` | `eth1`    | Static `172.20.30.1/24`, no DHCP         |
 
 **Sysctl:** `net.ipv4.ip_forward = 0`, `net.ipv6.conf.all.forwarding = 0`
 
@@ -151,18 +151,18 @@ atomixos.rauc.slots = {
 
 **nftables rules (inet filter):**
 
-| Chain | Policy | Rules |
-|-------|--------|-------|
-| `input` | drop | lo: accept; established: accept; eth0: TCP 443, UDP 1194; eth1: UDP 67-68, UDP 123, TCP 22; tun0: TCP 22 |
-| `forward` | drop | (no exceptions) |
-| `output` | accept | |
+| Chain     | Policy | Rules                                                                                                    |
+|-----------|--------|----------------------------------------------------------------------------------------------------------|
+| `input`   | drop   | lo: accept; established: accept; eth0: TCP 443, UDP 1194; eth1: UDP 67-68, UDP 123, TCP 22; tun0: TCP 22 |
+| `forward` | drop   | (no exceptions)                                                                                          |
+| `output`  | accept |                                                                                                          |
 
 **Dynamic SSH toggle services:**
 
-| Service | When | What |
-|---------|------|------|
-| `ssh-wan-toggle` | Boot (after nftables) | Reads flag file, adds SSH rule if present |
-| `ssh-wan-reload` | On demand | Removes old rule, re-adds if flag file exists |
+| Service          | When                  | What                                          |
+|------------------|-----------------------|-----------------------------------------------|
+| `ssh-wan-toggle` | Boot (after nftables) | Reads flag file, adds SSH rule if present     |
+| `ssh-wan-reload` | On demand             | Removes old rule, re-adds if flag file exists |
 
 Flag file: `/persist/config/ssh-wan-enabled`
 
@@ -174,22 +174,22 @@ Flag file: `/persist/config/ssh-wan-enabled`
 
 **dnsmasq configuration:**
 
-| Setting | Value |
-|---------|-------|
-| Interface | `eth1` (bind-interfaces) |
-| DHCP range | `172.20.30.10` -- `172.20.30.254`, 24h lease |
-| Gateway option | `172.20.30.1` |
-| DNS option | (empty -- no DNS forwarding) |
-| NTP option | `172.20.30.1` |
-| DNS port | `0` (disabled) |
+| Setting        | Value                                        |
+|----------------|----------------------------------------------|
+| Interface      | `eth1` (bind-interfaces)                     |
+| DHCP range     | `172.20.30.10` -- `172.20.30.254`, 24h lease |
+| Gateway option | `172.20.30.1`                                |
+| DNS option     | (empty -- no DNS forwarding)                 |
+| NTP option     | `172.20.30.1`                                |
+| DNS port       | `0` (disabled)                               |
 
 **chrony configuration:**
 
-| Setting | Value |
-|---------|-------|
+| Setting  | Value                      |
+|----------|----------------------------|
 | Upstream | `pool pool.ntp.org iburst` |
-| Serve to | `172.20.30.0/24` only |
-| Fallback | `local stratum 10` |
+| Serve to | `172.20.30.0/24` only      |
+| Fallback | `local stratum 10`         |
 
 ---
 
@@ -199,15 +199,15 @@ Flag file: `/persist/config/ssh-wan-enabled`
 
 **Custom NixOS options (`atomixos.rauc.*`):**
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `compatible` | string | `"rock64"` | RAUC compatible string |
-| `bootloader` | string | `"uboot"` | Backend: `uboot` or `custom` |
-| `statusFile` | string | `/persist/rauc/status.raucs` | RAUC status file |
-| `slots.boot0` | string | (required) | Boot slot A device path |
-| `slots.boot1` | string | (required) | Boot slot B device path |
-| `slots.rootfs0` | string | (required) | Rootfs slot A device path |
-| `slots.rootfs1` | string | (required) | Rootfs slot B device path |
+| Option          | Type   | Default                      | Description                  |
+|-----------------|--------|------------------------------|------------------------------|
+| `compatible`    | string | `"rock64"`                   | RAUC compatible string       |
+| `bootloader`    | string | `"uboot"`                    | Backend: `uboot` or `custom` |
+| `statusFile`    | string | `/persist/rauc/status.raucs` | RAUC status file             |
+| `slots.boot0`   | string | (required)                   | Boot slot A device path      |
+| `slots.boot1`   | string | (required)                   | Boot slot B device path      |
+| `slots.rootfs0` | string | (required)                   | Rootfs slot A device path    |
+| `slots.rootfs1` | string | (required)                   | Rootfs slot B device path    |
 
 When `bootloader = "custom"`, a file-based shell script is generated that simulates U-Boot environment management using
 files in `/var/lib/rauc/`.
@@ -218,14 +218,14 @@ files in `/var/lib/rauc/`.
 
 **Purpose**: Cockpit web UI as a podman container.
 
-| Setting | Value |
-|---------|-------|
-| Image | `quay.io/cockpit/ws` |
-| Network | Host networking |
-| Listen | `127.0.0.1:9090` (loopback, no TLS) |
-| TLS termination | Traefik (port 443) |
-| Volumes | `/persist/config/cockpit:/etc/cockpit:ro` |
-| Ordering | After `network-online.target`, `podman.socket` |
+| Setting         | Value                                          |
+|-----------------|------------------------------------------------|
+| Image           | `quay.io/cockpit/ws`                           |
+| Network         | Host networking                                |
+| Listen          | `127.0.0.1:9090` (loopback, no TLS)            |
+| TLS termination | Traefik (port 443)                             |
+| Volumes         | `/persist/config/cockpit:/etc/cockpit:ro`      |
+| Ordering        | After `network-online.target`, `podman.socket` |
 
 ---
 
@@ -233,13 +233,13 @@ files in `/var/lib/rauc/`.
 
 **Purpose**: Traefik v3 reverse proxy as a podman container.
 
-| Setting | Value |
-|---------|-------|
-| Image | `docker.io/library/traefik:v3` |
-| Network | Host networking |
-| Listen | `0.0.0.0:443` (TLS), `0.0.0.0:80` (redirect) |
-| Volumes | Static config, dynamic config, TLS certs from `/persist/config/traefik/` |
-| Ordering | After `cockpit-ws.service`; requires `cockpit-ws.service` |
+| Setting  | Value                                                                    |
+|----------|--------------------------------------------------------------------------|
+| Image    | `docker.io/library/traefik:v3`                                           |
+| Network  | Host networking                                                          |
+| Listen   | `0.0.0.0:443` (TLS), `0.0.0.0:80` (redirect)                             |
+| Volumes  | Static config, dynamic config, TLS certs from `/persist/config/traefik/` |
+| Ordering | After `cockpit-ws.service`; requires `cockpit-ws.service`                |
 
 ---
 
@@ -260,13 +260,13 @@ systemd.settings.Manager = {
 
 **Purpose**: Post-update health-check service.
 
-| Setting | Value |
-|---------|-------|
-| Type | oneshot |
+| Setting   | Value                                                |
+|-----------|------------------------------------------------------|
+| Type      | oneshot                                              |
 | Condition | `ConditionPathExists=/persist/.completed_first_boot` |
-| Timeout | 600s (10 min) |
-| Script | `scripts/os-verification.sh` |
-| PATH | `rauc`, `podman`, `jq`, `systemd`, `iproute2` |
+| Timeout   | 600s (10 min)                                        |
+| Script    | `scripts/os-verification.sh`                         |
+| PATH      | `rauc`, `podman`, `jq`, `systemd`, `iproute2`        |
 
 ---
 
@@ -276,11 +276,11 @@ systemd.settings.Manager = {
 
 **Custom NixOS options (`os-upgrade.*`):**
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `useHawkbit` | bool | `false` | Switch to rauc-hawkbit-updater |
-| `pollingInterval` | string | `"1h"` | Timer interval |
-| `serverUrl` | string | `"http://localhost/updates"` | Update server URL |
+| Option            | Type   | Default                      | Description                    |
+|-------------------|--------|------------------------------|--------------------------------|
+| `useHawkbit`      | bool   | `false`                      | Switch to rauc-hawkbit-updater |
+| `pollingInterval` | string | `"1h"`                       | Timer interval                 |
+| `serverUrl`       | string | `"http://localhost/updates"` | Update server URL              |
 
 **Timer:** `OnBootSec=5min`, `OnUnitActiveSec=<pollingInterval>`, `RandomizedDelaySec=10min`
 
@@ -290,12 +290,12 @@ systemd.settings.Manager = {
 
 **Purpose**: One-time first-boot slot confirmation.
 
-| Setting | Value |
-|---------|-------|
-| Type | oneshot |
+| Setting   | Value                                                 |
+|-----------|-------------------------------------------------------|
+| Type      | oneshot                                               |
 | Condition | `ConditionPathExists=!/persist/.completed_first_boot` |
-| Script | `scripts/first-boot.sh` |
-| Effect | `rauc status mark-good` + write sentinel |
+| Script    | `scripts/first-boot.sh`                               |
+| Effect    | `rauc status mark-good` + write sentinel              |
 
 Mutually exclusive with `os-verification.service` via the sentinel file.
 
@@ -305,8 +305,8 @@ Mutually exclusive with `os-verification.service` via the sentinel file.
 
 **Purpose**: OpenVPN recovery tunnel.
 
-| Setting | Value |
-|---------|-------|
-| Config path | `/persist/config/openvpn/client.conf` |
-| Auto-start | `false` |
-| Condition | `ConditionPathExists=/persist/config/openvpn/client.conf` |
+| Setting     | Value                                                     |
+|-------------|-----------------------------------------------------------|
+| Config path | `/persist/config/openvpn/client.conf`                     |
+| Auto-start  | `false`                                                   |
+| Condition   | `ConditionPathExists=/persist/config/openvpn/client.conf` |

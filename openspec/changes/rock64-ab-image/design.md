@@ -369,12 +369,12 @@ module additions).
 
 **Structural deps that cannot be removed within NixOS**:
 
-| Package | Size | Reason |
-|---|---|---|
-| linux-6.19 kernel + modules | ~308 MB | Kernel build tree + modules |
-| systemd | ~69 MB | Core init — pulls elfutils, p11-kit, tpm2-tss, cracklib, lvm2 |
-| podman ecosystem | ~150 MB | podman, netavark, cni-plugins, gvproxy, runc, fuse-overlayfs |
-| perl | ~59 MB | NixOS activation scripts (setup-etc.pl, update-users-groups.pl) |
+| Package                     | Size    | Reason                                                          |
+|-----------------------------|---------|-----------------------------------------------------------------|
+| linux-6.19 kernel + modules | ~308 MB | Kernel build tree + modules                                     |
+| systemd                     | ~69 MB  | Core init — pulls elfutils, p11-kit, tpm2-tss, cracklib, lvm2   |
+| podman ecosystem            | ~150 MB | podman, netavark, cni-plugins, gvproxy, runc, fuse-overlayfs    |
+| perl                        | ~59 MB  | NixOS activation scripts (setup-etc.pl, update-users-groups.pl) |
 
 ## Risks / Trade-offs
 

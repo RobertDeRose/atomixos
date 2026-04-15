@@ -25,11 +25,11 @@ automatic recovery from failed updates.
 
 U-Boot maintains three environment variables for slot selection:
 
-| Variable | Purpose | Example |
-|----------|---------|---------|
-| `BOOT_ORDER` | Slot priority (first = preferred) | `"A B"` |
-| `BOOT_A_LEFT` | Remaining boot attempts for slot A | `3` |
-| `BOOT_B_LEFT` | Remaining boot attempts for slot B | `3` |
+| Variable      | Purpose                            | Example |
+|---------------|------------------------------------|---------|
+| `BOOT_ORDER`  | Slot priority (first = preferred)  | `"A B"` |
+| `BOOT_A_LEFT` | Remaining boot attempts for slot A | `3`     |
+| `BOOT_B_LEFT` | Remaining boot attempts for slot B | `3`     |
 
 On each boot, the `boot.scr` script:
 

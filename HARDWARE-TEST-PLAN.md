@@ -388,23 +388,23 @@ cat /proc/sys/kernel/watchdog         # expect: 1
 
 Mark each task as you complete it. Update `openspec/changes/rock64-ab-image/tasks.md` with results.
 
-| Task | Description | Result |
-|---|---|---|
-| 8.8 | Provisioning boots to multi-user.target | |
-| 16.1 | Full provisioning E2E on hardware | |
-| 2.4 | Kernel detects eMMC, ethernet, USB, watchdog | |
-| 2.5 | WiFi/BT modules load with USB dongles | |
-| 5.6 | Onboard NIC is always eth0 | |
-| 5.7 | Device identity (onboard MAC) | |
-| 6.4 | DHCP serves LAN clients | |
-| 6.5 | NTP serves LAN clients | |
-| 6.6 | LAN isolation (no WAN access) | |
-| 7.7 | Firewall ports correct on all interfaces | |
-| 3.3 | Cockpit pod HTTPS accessible | |
-| 3.4 | OpenVPN creates tun0 | |
-| 17.5 | Cockpit SSH bridge with python3Minimal | |
-| 16.4 | Confirmation with manifest + containers | |
-| 18.4 | Provisioned credentials work | |
-| 10.4 | `rauc status` shows all 4 slots | |
-| 11.4 | Bundle install to inactive slot | |
-| 9.4 | Boot-count rollback after 3 failures | |
+| Task | Description                                  | Result |
+|------|----------------------------------------------|--------|
+| 8.8  | Provisioning boots to multi-user.target      |        |
+| 16.1 | Full provisioning E2E on hardware            |        |
+| 2.4  | Kernel detects eMMC, ethernet, USB, watchdog |        |
+| 2.5  | WiFi/BT modules load with USB dongles        |        |
+| 5.6  | Onboard NIC is always eth0                   |        |
+| 5.7  | Device identity (onboard MAC)                |        |
+| 6.4  | DHCP serves LAN clients                      |        |
+| 6.5  | NTP serves LAN clients                       |        |
+| 6.6  | LAN isolation (no WAN access)                |        |
+| 7.7  | Firewall ports correct on all interfaces     |        |
+| 3.3  | Cockpit pod HTTPS accessible                 |        |
+| 3.4  | OpenVPN creates tun0                         |        |
+| 17.5 | Cockpit SSH bridge with python3Minimal       |        |
+| 16.4 | Confirmation with manifest + containers      |        |
+| 18.4 | Provisioned credentials work                 |        |
+| 10.4 | `rauc status` shows all 4 slots              |        |
+| 11.4 | Bundle install to inactive slot              |        |
+| 9.4  | Boot-count rollback after 3 failures         |        |

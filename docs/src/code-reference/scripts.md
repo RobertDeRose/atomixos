@@ -12,11 +12,11 @@ These scripts run inside Nix derivations. Variables like `@kernel@` are substitu
 
 Builds the squashfs rootfs image from a NixOS closure.
 
-| Input | Description |
-|-------|-------------|
-| `@systemClosure@` | Path to `system.build.toplevel` |
-| `@closureInfo@` | Closure info (contains `store-paths` file) |
-| `@maxSize@` | Maximum image size in bytes |
+| Input             | Description                                |
+|-------------------|--------------------------------------------|
+| `@systemClosure@` | Path to `system.build.toplevel`            |
+| `@closureInfo@`   | Closure info (contains `store-paths` file) |
+| `@maxSize@`       | Maximum image size in bytes                |
 
 **Steps:** Copy store paths to pseudo-root, create init symlinks and mount-point dirs, run `mksquashfs` with zstd/19,
 check size limit.
@@ -27,13 +27,13 @@ check size limit.
 
 Builds a signed RAUC bundle (`.raucb`).
 
-| Input | Description |
-|-------|-------------|
-| `@kernel@` | Kernel package (contains `Image` and `dtbs/`) |
-| `@dtbPath@` | Relative DTB path (e.g., `rockchip/rk3328-rock64.dtb`) |
-| `@squashfs@` | Squashfs image directory |
-| `@signingCert@` / `@signingKey@` | RAUC signing credentials |
-| `@version@` | Bundle version string |
+| Input                            | Description                                            |
+|----------------------------------|--------------------------------------------------------|
+| `@kernel@`                       | Kernel package (contains `Image` and `dtbs/`)          |
+| `@dtbPath@`                      | Relative DTB path (e.g., `rockchip/rk3328-rock64.dtb`) |
+| `@squashfs@`                     | Squashfs image directory                               |
+| `@signingCert@` / `@signingKey@` | RAUC signing credentials                               |
+| `@version@`                      | Bundle version string                                  |
 
 **Steps:** Create 128 MB vfat with kernel + DTB (mtools), generate manifest, sign with `rauc bundle`.
 
@@ -43,13 +43,13 @@ Builds a signed RAUC bundle (`.raucb`).
 
 Assembles the flashable disk image.
 
-| Input | Description |
-|-------|-------------|
-| `@kernel@`, `@initrd@`, `@dtbPath@` | Kernel artifacts |
-| `@squashfs@` | Squashfs image |
-| `@bootScript@` | Compiled boot.scr |
-| `@uboot@` | U-Boot package |
-| `@imageName@` | Output filename |
+| Input                               | Description       |
+|-------------------------------------|-------------------|
+| `@kernel@`, `@initrd@`, `@dtbPath@` | Kernel artifacts  |
+| `@squashfs@`                        | Squashfs image    |
+| `@bootScript@`                      | Compiled boot.scr |
+| `@uboot@`                           | U-Boot package    |
+| `@imageName@`                       | Output filename   |
 
 **Steps:** Create sparse image, write U-Boot at raw offsets, create GPT with sfdisk, create vfat boot partitions
 (mtools), write squashfs to rootfs-a.
@@ -83,9 +83,9 @@ U-Boot boot script implementing A/B slot selection with boot-count rollback. Com
 
 Configuration for `fw_setenv` / `fw_printenv` (userspace U-Boot env tools).
 
-| Entry | Offset | Size |
-|-------|--------|------|
-| Primary env | `0x3F8000` | `0x4000` (16 KB) |
+| Entry         | Offset     | Size             |
+|---------------|------------|------------------|
+| Primary env   | `0x3F8000` | `0x4000` (16 KB) |
 | Redundant env | `0x3FC000` | `0x4000` (16 KB) |
 
 Device: `/dev/mmcblk1`
@@ -165,11 +165,11 @@ These are the `.mise/tasks/` scripts invoked via `mise run`.
 
 Cross-platform disk flasher (macOS + Linux).
 
-| Flag | Description |
-|------|-------------|
-| `<disk>` | Target device (e.g., `/dev/disk4`) |
+| Flag        | Description                                |
+|-------------|--------------------------------------------|
+| `<disk>`    | Target device (e.g., `/dev/disk4`)         |
 | `-i <path>` | Image file (auto-detects if not specified) |
-| `-y` | Skip confirmation |
+| `-y`        | Skip confirmation                          |
 
 **macOS features:** Converts `/dev/diskN` to `/dev/rdiskN` for unbuffered I/O; refuses to write to boot disk; ejects
 after flash.
@@ -180,11 +180,11 @@ after flash.
 
 Serial console capture wrapper.
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `-p` | `/dev/cu.usbserial-DM02496T` | Serial device |
-| `-l` | `/tmp/rock64-serial.log` | Log file |
-| `-t` | `0` (infinite) | Capture timeout |
+| Flag | Default                      | Description     |
+|------|------------------------------|-----------------|
+| `-p` | `/dev/cu.usbserial-DM02496T` | Serial device   |
+| `-l` | `/tmp/rock64-serial.log`     | Log file        |
+| `-t` | `0` (infinite)               | Capture timeout |
 
 Launches `scripts/serial-capture.py` in a `nix-shell` with pyserial.
 
@@ -194,8 +194,8 @@ Launches `scripts/serial-capture.py` in a `nix-shell` with pyserial.
 
 Copies the built disk image to the working directory.
 
-| Flag | Description |
-|------|-------------|
+| Flag        | Description                                    |
+|-------------|------------------------------------------------|
 | `-o <path>` | Output filename (defaults to image's own name) |
 
 Depends on `build:image` task.
@@ -206,13 +206,13 @@ Depends on `build:image` task.
 
 Full factory provisioning of eMMC block device.
 
-| Argument | Description |
-|----------|-------------|
-| `<device>` | eMMC block device |
-| `<uboot-dir>` | U-Boot directory |
-| `<kernel>` | Kernel Image path |
-| `<dtb>` | DTB file path |
-| `<squashfs>` | Squashfs image path |
+| Argument          | Description            |
+|-------------------|------------------------|
+| `<device>`        | eMMC block device      |
+| `<uboot-dir>`     | U-Boot directory       |
+| `<kernel>`        | Kernel Image path      |
+| `<dtb>`           | DTB file path          |
+| `<squashfs>`      | Squashfs image path    |
 | `--ssh-key <key>` | SSH public key or path |
 
 Creates partitions, writes U-Boot, deploys image, formats /persist, provisions credentials (password, SSH key, Traefik
@@ -224,11 +224,11 @@ config, TLS cert, health manifest). Linux + root only.
 
 Updates LAN gateway/DHCP configuration across all files.
 
-| Flag | Default | Description |
-|------|---------|-------------|
+| Flag             | Default          | Description           |
+|------------------|------------------|-----------------------|
 | `--gateway-cidr` | `172.20.30.1/24` | Gateway IP and subnet |
-| `--dhcp-start` | `172.20.30.10` | DHCP pool start |
-| `--dhcp-end` | `172.20.30.254` | DHCP pool end |
+| `--dhcp-start`   | `172.20.30.10`   | DHCP pool start       |
+| `--dhcp-end`     | `172.20.30.254`  | DHCP pool end         |
 
 Modifies: `modules/networking.nix`, `modules/lan-gateway.nix`, `scripts/os-verification.sh`,
 `.mise/tasks/provision/emmc`.

@@ -1,6 +1,6 @@
-# AtomixOS
+<!-- rumdl-disable-file MD041 -->
 
-<p align="center"> <img src="AtomixOS.png" alt="AtomixOS logo" width="300" height="300" /> </p>
+<p align="center"> <img src="docs/src/atomixos.png" alt="AtomixOS logo" width="300" height="300" /> </p>
 
 AtomixOS is a secure, reproducible operating system for single-board computers, built on NixOS with atomic A/B OTA
 updates, automatic rollback, and a container-based application deployment model.
@@ -278,18 +278,18 @@ On macOS, the nix-darwin `linux-builder` builds the NixOS test closures and the 
 Mac host using Apple Virtualization Framework (`apple-virt`) for hardware acceleration. On Linux (e.g. Lima VM), tests
 run under TCG software emulation without KVM. Measured wall-clock times:
 
-| Test | macOS (apple-virt) | Linux (TCG, Lima 4 GB) | Speedup |
-|---|---|---|---|
-| `rauc-slots` | 34s | 132s | 3.9x |
-| `rauc-update` | 25s | 137s | 5.5x |
-| `rauc-rollback` | 22s | 120s | 5.5x |
-| `rauc-confirm` | 95s | 171s | 1.8x |
-| `rauc-power-loss` | 46s | 184s | 4.0x |
-| `rauc-watchdog` | 57s | 315s | 5.5x |
-| `firewall` | 65s | 205s | 3.2x |
-| `network-isolation` | 68s | -- | -- |
-| `ssh-wan-toggle` | 35s | -- | -- |
-| **Total** | **~7.5 min** | **~21 min** (7 tests) | **~3.7x** |
+| Test                | macOS (apple-virt) | Linux (TCG, Lima 4 GB) | Speedup   |
+|---------------------|--------------------|------------------------|-----------|
+| `rauc-slots`        | 34s                | 132s                   | 3.9x      |
+| `rauc-update`       | 25s                | 137s                   | 5.5x      |
+| `rauc-rollback`     | 22s                | 120s                   | 5.5x      |
+| `rauc-confirm`      | 95s                | 171s                   | 1.8x      |
+| `rauc-power-loss`   | 46s                | 184s                   | 4.0x      |
+| `rauc-watchdog`     | 57s                | 315s                   | 5.5x      |
+| `firewall`          | 65s                | 205s                   | 3.2x      |
+| `network-isolation` | 68s                | --                     | --        |
+| `ssh-wan-toggle`    | 35s                | --                     | --        |
+| **Total**           | **~7.5 min**       | **~21 min** (7 tests)  | **~3.7x** |
 
 The `rauc-confirm` test has the smallest speedup because most of its runtime is a fixed 60s sustained health check
 timer. For CPU-bound tests (boot, install, rollback), apple-virt delivers a consistent 4-5x improvement over TCG.
@@ -373,36 +373,36 @@ This partitions the eMMC, writes U-Boot, deploys the first image to slot A, and 
 
 All tasks are run with `mise run <task>`. Run `mise tasks` to list them.
 
-| Task | Description |
-|---|---|
-| `check` | Verify flake evaluates cleanly (`nix flake check`) |
-| **Build** | |
-| `build` | Build all image artifacts (depends on all `build:*` tasks) |
-| `build:squashfs` | Build squashfs rootfs → `result-squashfs/` |
-| `build:rauc-bundle` | Build signed RAUC bundle → `result-rauc-bundle/` |
-| `build:boot-script` | Build U-Boot boot script → `result-boot-script/` |
-| `build:image` | Build flashable disk image → `result-image/` |
-| **E2E Tests** | |
-| `e2e` | Run all 9 integration tests sequentially |
-| `e2e:rauc-slots` | RAUC slot detection after boot |
-| `e2e:rauc-update` | Bundle install + slot switch A→B |
-| `e2e:rauc-rollback` | Install → mark bad → rollback to previous slot |
-| `e2e:rauc-confirm` | os-verification health check → mark-good (~3 min) |
-| `e2e:rauc-power-loss` | Crash mid-install, verify recovery |
-| `e2e:rauc-watchdog` | Watchdog + boot-count rollback |
-| `e2e:firewall` | WAN/LAN/VPN port allow/deny (2-node VLAN) |
-| `e2e:network-isolation` | DHCP/NTP/WAN isolation (2-node VLAN) |
-| `e2e:ssh-wan-toggle` | SSH-on-WAN flag enable/disable |
-| `e2e:debug` | Interactive QEMU VM for debugging (`-t <test>`, `--keep`) |
-| **Provisioning** | |
-| `flash` | Flash image to disk device with dd + progress (macOS/Linux) |
-| `provision:image` | Generate flashable `.img` file (builds all artifacts first) |
-| `provision:emmc` | Flash directly to eMMC block device (Linux + root only) |
-| **Configuration** | |
-| `config:lan-range` | Update LAN gateway/DHCP range across all config files |
-| **Documentation** | |
-| `docs:build` | Build the documentation site (mdBook) → `book/` |
-| `docs:serve` | Serve the documentation site locally with hot-reload |
+| Task                    | Description                                                 |
+|-------------------------|-------------------------------------------------------------|
+| `check`                 | Verify flake evaluates cleanly (`nix flake check`)          |
+| **Build**               |                                                             |
+| `build`                 | Build all image artifacts (depends on all `build:*` tasks)  |
+| `build:squashfs`        | Build squashfs rootfs → `result-squashfs/`                  |
+| `build:rauc-bundle`     | Build signed RAUC bundle → `result-rauc-bundle/`            |
+| `build:boot-script`     | Build U-Boot boot script → `result-boot-script/`            |
+| `build:image`           | Build flashable disk image → `result-image/`                |
+| **E2E Tests**           |                                                             |
+| `e2e`                   | Run all 9 integration tests sequentially                    |
+| `e2e:rauc-slots`        | RAUC slot detection after boot                              |
+| `e2e:rauc-update`       | Bundle install + slot switch A→B                            |
+| `e2e:rauc-rollback`     | Install → mark bad → rollback to previous slot              |
+| `e2e:rauc-confirm`      | os-verification health check → mark-good (~3 min)           |
+| `e2e:rauc-power-loss`   | Crash mid-install, verify recovery                          |
+| `e2e:rauc-watchdog`     | Watchdog + boot-count rollback                              |
+| `e2e:firewall`          | WAN/LAN/VPN port allow/deny (2-node VLAN)                   |
+| `e2e:network-isolation` | DHCP/NTP/WAN isolation (2-node VLAN)                        |
+| `e2e:ssh-wan-toggle`    | SSH-on-WAN flag enable/disable                              |
+| `e2e:debug`             | Interactive QEMU VM for debugging (`-t <test>`, `--keep`)   |
+| **Provisioning**        |                                                             |
+| `flash`                 | Flash image to disk device with dd + progress (macOS/Linux) |
+| `provision:image`       | Generate flashable `.img` file (builds all artifacts first) |
+| `provision:emmc`        | Flash directly to eMMC block device (Linux + root only)     |
+| **Configuration**       |                                                             |
+| `config:lan-range`      | Update LAN gateway/DHCP range across all config files       |
+| **Documentation**       |                                                             |
+| `docs:build`            | Build the documentation site (mdBook) → `book/`             |
+| `docs:serve`            | Serve the documentation site locally with hot-reload        |
 
 ## Flake outputs
 
@@ -415,7 +415,7 @@ All tasks are run with `mise run <task>`. Run `mise tasks` to list them.
 | `packages.aarch64-linux.boot-script` | Compiled U-Boot `boot.scr`                             |
 | `packages.aarch64-linux.image`       | Flashable eMMC disk image (U-Boot + boot-a + rootfs-a) |
 | `apps.aarch64-linux.rock64-qemu-vm`  | QEMU VM runner                                         |
-| `checks.aarch64-linux.*`             | E2E integration tests (9 tests, see `nix/tests/`)     |
+| `checks.aarch64-linux.*`             | E2E integration tests (9 tests, see `nix/tests/`)      |
 | `checks.aarch64-darwin.*`            | Same tests, run natively on macOS via apple-virt       |
 | `devShells.*.default`                | Development shell with mdBook                          |
 

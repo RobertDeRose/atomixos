@@ -80,12 +80,12 @@ chrony acts as both an NTP client (syncing from `pool.ntp.org` via WAN) and an N
 
 The firewall uses nftables with per-interface rules:
 
-| Interface | Allowed Inbound |
-|-----------|----------------|
-| eth0 (WAN) | TCP 443, UDP 1194, established/related |
+| Interface  | Allowed Inbound                                 |
+|------------|-------------------------------------------------|
+| eth0 (WAN) | TCP 443, UDP 1194, established/related          |
 | eth1 (LAN) | UDP 67-68, UDP 123, TCP 22, established/related |
-| tun0 (VPN) | TCP 22, established/related |
-| FORWARD | DROP all |
+| tun0 (VPN) | TCP 22, established/related                     |
+| FORWARD    | DROP all                                        |
 
 SSH on WAN is controlled by a dynamic nftables rule toggled via `/persist/config/ssh-wan-enabled`.
 

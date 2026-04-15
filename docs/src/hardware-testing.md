@@ -326,24 +326,24 @@ kill -STOP 1
 
 ## Task Checklist
 
-| # | Test | Status |
-|---|------|--------|
-| 1.1 | Flash + U-Boot output | |
-| 1.2 | First-boot service | |
-| 2.1 | eMMC + core hardware | |
-| 2.2 | WiFi + Bluetooth modules | |
-| 3.1 | eth0 is onboard | |
-| 3.2 | DHCP server on LAN | |
-| 3.3 | NTP server on LAN | |
-| 3.4 | LAN isolation | |
-| 4.1 | WAN port access | |
-| 4.2 | SSH-on-WAN toggle | |
-| 5.1 | Cockpit pod | |
-| 5.2 | Health manifest confirmation | |
-| 6.1 | SSH key auth | |
-| 6.2 | Cockpit password auth | |
-| 7.1 | RAUC status | |
-| 7.2 | Bundle install | |
-| 7.3 | Boot-count rollback | |
-| 8.1 | Watchdog presence | |
-| 8.2 | Watchdog reboot | |
+| #   | Test                         | Status |
+|-----|------------------------------|--------|
+| 1.1 | Flash + U-Boot output        |        |
+| 1.2 | First-boot service           |        |
+| 2.1 | eMMC + core hardware         |        |
+| 2.2 | WiFi + Bluetooth modules     |        |
+| 3.1 | eth0 is onboard              |        |
+| 3.2 | DHCP server on LAN           |        |
+| 3.3 | NTP server on LAN            |        |
+| 3.4 | LAN isolation                |        |
+| 4.1 | WAN port access              |        |
+| 4.2 | SSH-on-WAN toggle            |        |
+| 5.1 | Cockpit pod                  |        |
+| 5.2 | Health manifest confirmation |        |
+| 6.1 | SSH key auth                 |        |
+| 6.2 | Cockpit password auth        |        |
+| 7.1 | RAUC status                  |        |
+| 7.2 | Bundle install               |        |
+| 7.3 | Boot-count rollback          |        |
+| 8.1 | Watchdog presence            |        |
+| 8.2 | Watchdog reboot              |        |

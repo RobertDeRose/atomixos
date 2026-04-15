@@ -27,34 +27,34 @@ mise run e2e:ssh-wan-toggle      # Flag file enables/disables SSH on WAN via nft
 
 ## Test Descriptions
 
-| Test | Nodes | What it validates |
-|------|-------|------------------|
-| `rauc-slots` | 1 | RAUC detects all 4 A/B slots (boot-a, boot-b, rootfs-a, rootfs-b) |
-| `rauc-update` | 1 | Bundle install writes to inactive slot pair; slot switches from A to B |
-| `rauc-rollback` | 1 | Install to slot B, mark bad, verify automatic rollback to slot A |
-| `rauc-confirm` | 1 | Health checks pass within timeout, slot committed as good |
-| `rauc-power-loss` | 1 | Crash VM mid-install, verify slot A is intact after reboot |
-| `rauc-watchdog` | 1 | Freeze systemd to trigger watchdog reboot, verify boot-count rollback |
-| `firewall` | 2 | WAN node can reach HTTPS (443) and VPN (1194); LAN node can reach SSH, DHCP, NTP; all other ports blocked |
-| `network-isolation` | 2 | LAN node gets DHCP lease and NTP, cannot reach WAN addresses |
-| `ssh-wan-toggle` | 1 | SSH on WAN blocked by default; enabled when flag file created; disabled when removed |
+| Test                | Nodes | What it validates                                                                                         |
+|---------------------|-------|-----------------------------------------------------------------------------------------------------------|
+| `rauc-slots`        | 1     | RAUC detects all 4 A/B slots (boot-a, boot-b, rootfs-a, rootfs-b)                                         |
+| `rauc-update`       | 1     | Bundle install writes to inactive slot pair; slot switches from A to B                                    |
+| `rauc-rollback`     | 1     | Install to slot B, mark bad, verify automatic rollback to slot A                                          |
+| `rauc-confirm`      | 1     | Health checks pass within timeout, slot committed as good                                                 |
+| `rauc-power-loss`   | 1     | Crash VM mid-install, verify slot A is intact after reboot                                                |
+| `rauc-watchdog`     | 1     | Freeze systemd to trigger watchdog reboot, verify boot-count rollback                                     |
+| `firewall`          | 2     | WAN node can reach HTTPS (443) and VPN (1194); LAN node can reach SSH, DHCP, NTP; all other ports blocked |
+| `network-isolation` | 2     | LAN node gets DHCP lease and NTP, cannot reach WAN addresses                                              |
+| `ssh-wan-toggle`    | 1     | SSH on WAN blocked by default; enabled when flag file created; disabled when removed                      |
 
 ## Platform Performance
 
 The mise task wrappers auto-detect the platform and select the correct flake output.
 
-| Test | macOS (apple-virt) | Linux (TCG, Lima) | Speedup |
-|------|-------------------|-------------------|---------|
-| `rauc-slots` | 34s | 132s | 3.9x |
-| `rauc-update` | 25s | 137s | 5.5x |
-| `rauc-rollback` | 22s | 120s | 5.5x |
-| `rauc-confirm` | 95s | 171s | 1.8x |
-| `rauc-power-loss` | 46s | 184s | 4.0x |
-| `rauc-watchdog` | 57s | 315s | 5.5x |
-| `firewall` | 65s | 205s | 3.2x |
-| `network-isolation` | 68s | -- | -- |
-| `ssh-wan-toggle` | 35s | -- | -- |
-| **Total** | **~7.5 min** | **~21 min** | **~3.7x** |
+| Test                | macOS (apple-virt) | Linux (TCG, Lima) | Speedup   |
+|---------------------|--------------------|-------------------|-----------|
+| `rauc-slots`        | 34s                | 132s              | 3.9x      |
+| `rauc-update`       | 25s                | 137s              | 5.5x      |
+| `rauc-rollback`     | 22s                | 120s              | 5.5x      |
+| `rauc-confirm`      | 95s                | 171s              | 1.8x      |
+| `rauc-power-loss`   | 46s                | 184s              | 4.0x      |
+| `rauc-watchdog`     | 57s                | 315s              | 5.5x      |
+| `firewall`          | 65s                | 205s              | 3.2x      |
+| `network-isolation` | 68s                | --                | --        |
+| `ssh-wan-toggle`    | 35s                | --                | --        |
+| **Total**           | **~7.5 min**       | **~21 min**       | **~3.7x** |
 
 The `rauc-confirm` test has the smallest speedup because most of its runtime is a fixed 60-second sustained health check
 timer.

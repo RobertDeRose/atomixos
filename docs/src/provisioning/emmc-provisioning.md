@@ -27,16 +27,16 @@ mise run provision:emmc /dev/mmcblk1 \
 
 ### Provisioned Credentials
 
-| Path | Content |
-|------|---------|
-| `/persist/config/admin-password-hash` | SHA-512 bcrypt hash of the admin password |
-| `/persist/config/ssh-authorized-keys/admin` | Operator's SSH public key (if `--ssh-key` provided) |
-| `/persist/config/traefik/traefik.yaml` | Traefik static config (entrypoints, providers) |
-| `/persist/config/traefik/dynamic/cockpit.yaml` | Cockpit reverse proxy route |
-| `/persist/config/traefik/dynamic/oidc.yaml` | Forward-auth OIDC template (disabled by default) |
-| `/persist/config/traefik/certs/server.crt` | Self-signed TLS certificate (EC P-256, 10 years) |
-| `/persist/config/traefik/certs/server.key` | TLS private key |
-| `/persist/config/health-manifest.yaml` | Container health entries (cockpit-ws, traefik) |
+| Path                                           | Content                                             |
+|------------------------------------------------|-----------------------------------------------------|
+| `/persist/config/admin-password-hash`          | SHA-512 bcrypt hash of the admin password           |
+| `/persist/config/ssh-authorized-keys/admin`    | Operator's SSH public key (if `--ssh-key` provided) |
+| `/persist/config/traefik/traefik.yaml`         | Traefik static config (entrypoints, providers)      |
+| `/persist/config/traefik/dynamic/cockpit.yaml` | Cockpit reverse proxy route                         |
+| `/persist/config/traefik/dynamic/oidc.yaml`    | Forward-auth OIDC template (disabled by default)    |
+| `/persist/config/traefik/certs/server.crt`     | Self-signed TLS certificate (EC P-256, 10 years)    |
+| `/persist/config/traefik/certs/server.key`     | TLS private key                                     |
+| `/persist/config/health-manifest.yaml`         | Container health entries (cockpit-ws, traefik)      |
 
 ## Traefik Configuration
 
@@ -59,7 +59,7 @@ After writing, the script re-mounts `/persist` read-only and verifies:
 
 ## Flags
 
-| Flag | Description |
-|------|-------------|
-| `-y`, `--yes` | Skip confirmation prompt |
+| Flag               | Description                           |
+|--------------------|---------------------------------------|
+| `-y`, `--yes`      | Skip confirmation prompt              |
 | `--ssh-key <path>` | SSH public key or path to `.pub` file |

@@ -23,10 +23,10 @@ squashfs.nix ─────┬──> image.nix
 { stdenv, squashfsTools, closureInfo, nixosConfig, maxSquashfsSize }:
 ```
 
-| Parameter | Source | Description |
-|-----------|--------|-------------|
-| `nixosConfig` | `rock64System.config` | Evaluated NixOS configuration |
-| `maxSquashfsSize` | `flake.nix` (1 GB) | Maximum allowed image size |
+| Parameter         | Source                | Description                   |
+|-------------------|-----------------------|-------------------------------|
+| `nixosConfig`     | `rock64System.config` | Evaluated NixOS configuration |
+| `maxSquashfsSize` | `flake.nix` (1 GB)    | Maximum allowed image size    |
 
 **Delegates to:** `scripts/build-squashfs.sh`
 
@@ -61,13 +61,13 @@ squashfs.nix ─────┬──> image.nix
   nixosConfig, squashfsImage, signingCert, signingKeyPath, caCert }:
 ```
 
-| Parameter | Source | Description |
-|-----------|--------|-------------|
-| `nixosConfig` | `rock64System.config` | Provides kernel and DTB paths |
-| `squashfsImage` | `packages.squashfs` | The squashfs derivation output |
-| `signingCert` | `./certs/dev.signing.cert.pem` | RAUC signing certificate |
-| `signingKeyPath` | `./certs/dev.signing.key.pem` | RAUC signing private key |
-| `caCert` | `./certs/dev.ca.cert.pem` | CA certificate for verification |
+| Parameter        | Source                         | Description                     |
+|------------------|--------------------------------|---------------------------------|
+| `nixosConfig`    | `rock64System.config`          | Provides kernel and DTB paths   |
+| `squashfsImage`  | `packages.squashfs`            | The squashfs derivation output  |
+| `signingCert`    | `./certs/dev.signing.cert.pem` | RAUC signing certificate        |
+| `signingKeyPath` | `./certs/dev.signing.key.pem`  | RAUC signing private key        |
+| `caCert`         | `./certs/dev.ca.cert.pem`      | CA certificate for verification |
 
 **Delegates to:** `scripts/build-rauc-bundle.sh`
 
@@ -130,24 +130,24 @@ mkimage -C none -A arm64 -T script -d boot.cmd boot.scr
   ubootRock64, nixosConfig, squashfsImage, bootScript }:
 ```
 
-| Parameter | Source | Description |
-|-----------|--------|-------------|
-| `ubootRock64` | nixpkgs | U-Boot package for Rock64 |
-| `nixosConfig` | `rock64System.config` | Provides kernel, initrd, DTB |
-| `squashfsImage` | `packages.squashfs` | Squashfs derivation |
-| `bootScript` | `packages.boot-script` | Compiled boot.scr |
+| Parameter       | Source                 | Description                  |
+|-----------------|------------------------|------------------------------|
+| `ubootRock64`   | nixpkgs                | U-Boot package for Rock64    |
+| `nixosConfig`   | `rock64System.config`  | Provides kernel, initrd, DTB |
+| `squashfsImage` | `packages.squashfs`    | Squashfs derivation          |
+| `bootScript`    | `packages.boot-script` | Compiled boot.scr            |
 
 **Delegates to:** `scripts/build-image.sh`
 
 **Image layout (total ~2320 MB sparse):**
 
-| Offset | Size | Content | Filesystem |
-|--------|------|---------|-----------|
-| 0 | 16 MB | U-Boot raw | -- |
-| 16 MB | 128 MB | boot-a | vfat |
-| 144 MB | 128 MB | boot-b | vfat (empty) |
-| 272 MB | 1024 MB | rootfs-a | squashfs |
-| 1296 MB | 1024 MB | rootfs-b | (empty) |
+| Offset  | Size    | Content    | Filesystem   |
+|---------|---------|------------|--------------|
+| 0       | 16 MB   | U-Boot raw | --           |
+| 16 MB   | 128 MB  | boot-a     | vfat         |
+| 144 MB  | 128 MB  | boot-b     | vfat (empty) |
+| 272 MB  | 1024 MB | rootfs-a   | squashfs     |
+| 1296 MB | 1024 MB | rootfs-b   | (empty)      |
 
 **Output:** `$out/atomixos-<series>.img`
 

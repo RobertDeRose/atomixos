@@ -8,12 +8,12 @@ a secure channel (HSM, secrets manager, etc.).
 
 ## Files
 
-| File | Purpose | Committed? |
-|---|---|---|
-| `dev.ca.cert.pem` | Development CA certificate | Yes |
-| `dev.ca.key.pem` | Development CA private key | Yes (dev only) |
-| `dev.signing.cert.pem` | Development signing certificate | Yes |
-| `dev.signing.key.pem` | Development signing private key | Yes (dev only) |
+| File                   | Purpose                         | Committed?     |
+|------------------------|---------------------------------|----------------|
+| `dev.ca.cert.pem`      | Development CA certificate      | Yes            |
+| `dev.ca.key.pem`       | Development CA private key      | Yes (dev only) |
+| `dev.signing.cert.pem` | Development signing certificate | Yes            |
+| `dev.signing.key.pem`  | Development signing private key | Yes (dev only) |
 
 ## Regenerating development certificates
 

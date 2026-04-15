@@ -21,9 +21,9 @@ RAUC manages two slot pairs. Each pair contains a boot partition and a rootfs pa
 atomically:
 
 | Slot | Boot Partition | Rootfs Partition |
-|------|---------------|-----------------|
-| A    | boot-a (p1)   | rootfs-a (p3)   |
-| B    | boot-b (p2)   | rootfs-b (p4)   |
+|------|----------------|------------------|
+| A    | boot-a (p1)    | rootfs-a (p3)    |
+| B    | boot-b (p2)    | rootfs-b (p4)    |
 
 An update writes the new kernel/DTB to the inactive boot partition and the new squashfs to the inactive rootfs
 partition. The active slot pair is never modified during an update.
@@ -33,10 +33,10 @@ partition. The active slot pair is never modified during an update.
 U-Boot occupies the first 16 MB of the eMMC as raw data (no partition). The RK3328 boot ROM loads the initial bootloader
 from fixed sector offsets:
 
-| Component | Sector Offset | Byte Offset | Description |
-|-----------|--------------|-------------|-------------|
-| `idbloader.img` | 64 | 32 KB | First-stage loader (TPL + SPL) |
-| `u-boot.itb` | 16384 | 8 MB | U-Boot proper (FIT image) |
+| Component       | Sector Offset | Byte Offset | Description                    |
+|-----------------|---------------|-------------|--------------------------------|
+| `idbloader.img` | 64            | 32 KB       | First-stage loader (TPL + SPL) |
+| `u-boot.itb`    | 16384         | 8 MB        | U-Boot proper (FIT image)      |
 
 U-Boot environment is stored redundantly at offsets `0x3F8000` and `0x3FC000` (both 16 KB), providing power-loss
 resilience for the boot-count variables.

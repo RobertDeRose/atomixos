@@ -64,13 +64,13 @@ sudo sync
 
 The flashable image contains:
 
-| Region | Content |
-|--------|---------|
-| Raw (0-16 MB) | U-Boot (idbloader + u-boot.itb) |
-| Partition 1 (boot-a) | Kernel Image, initrd, DTB, boot.scr (vfat) |
-| Partition 2 (boot-b) | Empty vfat (populated by first RAUC update) |
-| Partition 3 (rootfs-a) | Squashfs root filesystem |
-| Partition 4 (rootfs-b) | Empty (populated by first RAUC update) |
+| Region                 | Content                                     |
+|------------------------|---------------------------------------------|
+| Raw (0-16 MB)          | U-Boot (idbloader + u-boot.itb)             |
+| Partition 1 (boot-a)   | Kernel Image, initrd, DTB, boot.scr (vfat)  |
+| Partition 2 (boot-b)   | Empty vfat (populated by first RAUC update) |
+| Partition 3 (rootfs-a) | Squashfs root filesystem                    |
+| Partition 4 (rootfs-b) | Empty (populated by first RAUC update)      |
 
 The `/persist` partition is **not** in the image. It is created automatically on first boot by `systemd-repart`.
 

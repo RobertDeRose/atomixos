@@ -7,12 +7,12 @@ provisioned at factory time -- there are no default passwords or shared secrets.
 
 During [eMMC provisioning](../provisioning/emmc-provisioning.md), the operator provides:
 
-| Credential | Storage Path | Format |
-|-----------|-------------|--------|
-| Admin password | `/persist/config/admin-password-hash` | SHA-512 hash |
-| SSH public key | `/persist/config/ssh-authorized-keys/admin` | OpenSSH format |
-| TLS certificate | `/persist/config/traefik/certs/` | Self-signed EC P-256 |
-| OIDC config | `/persist/config/traefik/dynamic/` | Traefik forward-auth middleware |
+| Credential      | Storage Path                                | Format                          |
+|-----------------|---------------------------------------------|---------------------------------|
+| Admin password  | `/persist/config/admin-password-hash`       | SHA-512 hash                    |
+| SSH public key  | `/persist/config/ssh-authorized-keys/admin` | OpenSSH format                  |
+| TLS certificate | `/persist/config/traefik/certs/`            | Self-signed EC P-256            |
+| OIDC config     | `/persist/config/traefik/dynamic/`          | Traefik forward-auth middleware |
 
 ## Authentication Flows
 

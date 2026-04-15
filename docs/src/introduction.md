@@ -1,7 +1,7 @@
-# AtomixOS
+<!-- rumdl-disable-file MD041 -->
 
 <p align="center">
-  <img src="AtomixOS.png" alt="AtomixOS logo" width="300" height="300" />
+  <img src="atomixos.png" alt="AtomixOS logo" width="320" />
 </p>
 
 **NixOS-based firmware image with atomic A/B OTA updates, automatic rollback, and hardware watchdog protection.**
@@ -31,9 +31,9 @@ AtomixOS eliminates this class of failure through:
 
 ## Supported Hardware
 
-| Board | SoC | Architecture | Storage |
-|-------|-----|-------------|---------|
-| Rock64 | RK3328 | aarch64 | 16 GB eMMC |
+| Board  | SoC    | Architecture | Storage    |
+|--------|--------|--------------|------------|
+| Rock64 | RK3328 | aarch64      | 16 GB eMMC |
 
 ## Key Properties
 

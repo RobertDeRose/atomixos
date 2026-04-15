@@ -30,12 +30,12 @@ mise run build
 
 ## Build Artifacts
 
-| Artifact | mise Task | Nix Output | Description |
-|----------|-----------|-----------|-------------|
-| Squashfs rootfs | `build:squashfs` | `packages.aarch64-linux.squashfs` | Compressed root filesystem (~300 MB) |
-| RAUC bundle | `build:rauc-bundle` | `packages.aarch64-linux.rauc-bundle` | Signed `.raucb` for OTA updates |
-| Boot script | `build:boot-script` | `packages.aarch64-linux.boot-script` | Compiled U-Boot `boot.scr` |
-| Disk image | `build:image` | `packages.aarch64-linux.image` | Flashable eMMC image (~2.3 GB) |
+| Artifact        | mise Task           | Nix Output                           | Description                          |
+|-----------------|---------------------|--------------------------------------|--------------------------------------|
+| Squashfs rootfs | `build:squashfs`    | `packages.aarch64-linux.squashfs`    | Compressed root filesystem (~300 MB) |
+| RAUC bundle     | `build:rauc-bundle` | `packages.aarch64-linux.rauc-bundle` | Signed `.raucb` for OTA updates      |
+| Boot script     | `build:boot-script` | `packages.aarch64-linux.boot-script` | Compiled U-Boot `boot.scr`           |
+| Disk image      | `build:image`       | `packages.aarch64-linux.image`       | Flashable eMMC image (~2.3 GB)       |
 
 ## Building with Nix Directly
 
