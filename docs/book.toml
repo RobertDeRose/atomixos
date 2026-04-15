@@ -13,3 +13,4 @@ default-theme = "navy"
 preferred-dark-theme = "navy"
 git-repository-url = "https://github.com/checkpoint/apollo-image"
 edit-url-template = "https://github.com/checkpoint/apollo-image/edit/main/docs/{path}"
+additional-css = ["theme/cobalt.css"]

@@ -1,0 +1,115 @@
+/* AtomixOS cobalt theme overrides for mdBook's navy theme */
+
+.navy {
+    --bg: #06102a;
+    --fg: #d4e6ff;
+
+    --sidebar-bg: #0b1a3a;
+    --sidebar-fg: #c3dbff;
+    --sidebar-non-existent: #5d79a8;
+    --sidebar-active: #4ea3ff;
+    --sidebar-spacer: #1a2f5a;
+
+    --scrollbar: #7cb7ff;
+
+    --icons: #8dbbff;
+    --icons-hover: #e3f1ff;
+
+    --links: #61b3ff;
+
+    --inline-code-color: #c6defe;
+
+    --theme-popup-bg: #0e1f45;
+    --theme-popup-border: #3d66a3;
+    --theme-hover: #19335f;
+
+    --quote-bg: #0d1a38;
+    --quote-border: #1f3d70;
+
+    --warning-border: #73c0ff;
+
+    --table-border-color: #203a66;
+    --table-header-bg: #1b3261;
+    --table-alternate-bg: #0a1632;
+
+    --searchbar-border-color: #5c89c9;
+    --searchbar-bg: #132952;
+    --searchbar-fg: #ecf6ff;
+    --searchbar-shadow-color: #64a9ff;
+    --searchresults-header-fg: #99bdee;
+    --searchresults-border-color: #3d66a3;
+    --searchresults-li-bg: #0d1d3f;
+    --search-mark-bg: #376ec6;
+
+    --copy-button-filter: invert(69%) sepia(20%) saturate(1407%) hue-rotate(185deg) brightness(102%) contrast(101%);
+    --copy-button-filter-hover: invert(91%) sepia(20%) saturate(728%) hue-rotate(175deg) brightness(106%) contrast(101%);
+
+    --footnote-highlight: #438fff;
+
+    --overlay-bg: rgba(6, 16, 42, 0.58);
+}
+
+html.navy,
+html.navy body,
+html.navy .page-wrapper {
+    background:
+        radial-gradient(circle at 16% 8%, rgba(76, 146, 255, 0.2), transparent 36%),
+        radial-gradient(circle at 86% 0%, rgba(50, 107, 206, 0.2), transparent 30%),
+        #06102a;
+}
+
+.navy #menu-bar {
+    border-bottom-color: #1d3e73;
+    box-shadow: 0 1px 0 rgba(124, 183, 255, 0.14);
+}
+
+.navy .menu-title {
+    color: #e7f3ff;
+    letter-spacing: 0.02em;
+}
+
+.navy .chapter li a.active,
+.navy .chapter li a:hover {
+    color: #73c0ff;
+    text-shadow: 0 0 10px rgba(100, 169, 255, 0.35);
+}
+
+.navy .content a {
+    text-underline-offset: 0.14em;
+}
+
+.navy #searchbar:focus,
+.navy #searchbar.active {
+    box-shadow: 0 0 0 2px rgba(100, 169, 255, 0.24);
+}
+
+.navy :not(pre) > .hljs {
+    background-color: rgba(33, 70, 130, 0.34);
+    border: 1px solid rgba(86, 141, 226, 0.32);
+}
+
+.logo-compare {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 24px;
+    margin: 8px 0 20px;
+}
+
+.logo-compare figure {
+    margin: 0;
+    text-align: center;
+}
+
+.logo-compare img {
+    width: min(280px, 100%);
+    height: auto;
+    display: block;
+}
+
+.logo-compare figcaption {
+    margin-top: 8px;
+    color: var(--sidebar-fg);
+    font-size: 1.4rem;
+    letter-spacing: 0.01em;
+}
