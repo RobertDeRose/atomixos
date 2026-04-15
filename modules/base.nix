@@ -98,9 +98,10 @@
   systemd.services.systemd-boot-update.enable = false;
 
   # ── Writable /var directory structure ───────────────────────────────────────
-  # /var is a tmpfs — empty on every boot. systemd services expect their
-  # StateDirectory / CacheDirectory / working dirs to exist under /var.
-  # tmpfiles.d rules create them early in boot (before services start).
+  # /var starts empty on every boot (the squashfs lower layer only has an
+  # empty /var directory; writes go to the tmpfs upper layer of the overlay).
+  # systemd services expect their StateDirectory / CacheDirectory / working
+  # dirs to exist under /var. tmpfiles.d rules create them early in boot.
   systemd.tmpfiles.rules = [
     "d /var/empty 0555 root root -"
     "d /var/lib 0755 root root -"
@@ -119,119 +120,163 @@
     "d /var/run 0755 root root -"
   ];
 
-  # Root filesystem — at runtime U-Boot selects the active slot via kernel cmdline
-  # (root=PARTLABEL=rootfs-a). This declaration satisfies NixOS assertions and provides
-  # the fallback device; the actual root is overridden by the bootloader.
+  # Root filesystem — the squashfs device declared here tells the NixOS initrd
+  # what to mount at /mnt-root during stage 1. Our postMountCommands then wrap
+  # it in an overlayfs before switch_root. At runtime / is the overlay, while
+  # the squashfs is available at /media/root-ro.
+  #
+  # At runtime U-Boot selects the active slot via kernel cmdline
+  # (root=PARTLABEL=rootfs-a). This declaration satisfies NixOS assertions and
+  # provides the fallback device; the actual root is overridden by the bootloader.
+  #
+  # Note: no "ro" in options — the kernel cmdline has "ro" for the initial
+  # squashfs mount, but after the overlay wraps it, the root should be writable.
+  # If we put "ro" here, systemd-remount-fs would read /etc/fstab and remount
+  # the overlay as read-only, defeating the purpose of the writable upper layer.
   fileSystems."/" = {
     device = "/dev/disk/by-partlabel/rootfs-a";
     fsType = "squashfs";
-    options = [ "ro" ];
   };
 
-  # ── Writable tmpfs overlays for read-only squashfs root ─────────────────────
-  # The squashfs root is immutable. NixOS Stage 2 needs writable /etc, /var, /tmp
-  # for runtime state (systemd, /etc/resolv.conf, /var/log, etc.).
-  # These tmpfs mounts are ephemeral — persistent state lives on /persist.
-  fileSystems."/etc" = {
-    device = "tmpfs";
-    fsType = "tmpfs";
-    options = [
-      "mode=0755"
-      "size=50M"
-    ];
-    neededForBoot = true;
-  };
+  # ── OverlayFS: writable root over read-only squashfs ─────────────────────────
+  # The squashfs root is immutable. Instead of mounting individual tmpfs at
+  # /etc, /var, /tmp, etc. (which breaks systemd's mount namespace sandboxing),
+  # we use a single OverlayFS that presents a unified writable root:
+  #   lower = squashfs (read-only, contains the full NixOS system)
+  #   upper = tmpfs (ephemeral, lost on reboot)
+  #
+  # This is set up in the initrd via postMountCommands (after the squashfs root
+  # is mounted at /mnt-root but before switch_root). The overlay makes the
+  # entire root tree writable, so systemd sandboxing (PrivateTmp, ProtectHome,
+  # etc.) works correctly — no mount propagation issues.
+  #
+  # Persistent state lives on /persist (f2fs partition, created on first boot).
+  # The tmpfs upper layer is intentionally ephemeral: every boot starts clean
+  # from the verified squashfs image, which is ideal for A/B OTA updates.
+  boot.initrd.postMountCommands = ''
+    # Move the squashfs root out of /mnt-root so we can overlay it
+    mkdir -p /mnt-lower
+    mount --move /mnt-root /mnt-lower
 
-  fileSystems."/var" = {
-    device = "tmpfs";
-    fsType = "tmpfs";
-    options = [
-      "mode=0755"
-      "size=100M"
-    ];
-    neededForBoot = true;
-  };
+    # Create a tmpfs for the writable upper layer
+    mkdir -p /mnt-upper
+    mount -t tmpfs -o mode=0755,size=256M tmpfs /mnt-upper
+    mkdir -p /mnt-upper/upper /mnt-upper/work
 
-  fileSystems."/tmp" = {
-    device = "tmpfs";
-    fsType = "tmpfs";
-    options = [
-      "mode=1777"
-      "size=50M"
-    ];
-    neededForBoot = true;
-  };
+    # Mount the overlay as the new root
+    mount -t overlay overlay \
+      -o lowerdir=/mnt-lower,upperdir=/mnt-upper/upper,workdir=/mnt-upper/work \
+      /mnt-root
 
-  fileSystems."/root" = {
-    device = "tmpfs";
-    fsType = "tmpfs";
-    options = [
-      "mode=0700"
-      "size=5M"
-    ];
-    neededForBoot = true;
-  };
+    # Make the lower (squashfs) and upper (tmpfs) layers accessible inside
+    # the final root for debugging/inspection
+    mkdir -p /mnt-root/media/root-ro /mnt-root/media/root-rw
+    mount --move /mnt-lower /mnt-root/media/root-ro
+    mount --move /mnt-upper /mnt-root/media/root-rw
+  '';
 
-  fileSystems."/home" = {
-    device = "tmpfs";
-    fsType = "tmpfs";
-    options = [
-      "mode=0755"
-      "size=10M"
-    ];
-    neededForBoot = true;
-  };
-
-  # /bin and /usr/bin — NixOS activation scripts create /bin/sh and /usr/bin/env
-  # symlinks. On a read-only squashfs root these directories must be writable.
-  fileSystems."/bin" = {
-    device = "tmpfs";
-    fsType = "tmpfs";
-    options = [
-      "mode=0755"
-      "size=1M"
-    ];
-    neededForBoot = true;
-  };
-
-  fileSystems."/usr" = {
-    device = "tmpfs";
-    fsType = "tmpfs";
-    options = [
-      "mode=0755"
-      "size=1M"
-    ];
-    neededForBoot = true;
-  };
-
-  # Read-only root filesystem — mutable state lives on /persist.
-  # nofail: on first boot the partition doesn't exist yet (systemd-repart creates
-  # it), and even on subsequent boots it's not essential for basic operation.
-  # x-systemd.device-timeout=10s: don't wait 90s if the partition is missing.
+  # Persistent state — survives reboots, separate from the ephemeral overlay.
+  # nofail: on first boot the partition doesn't exist yet (create-persist.service
+  # creates it), and even on subsequent boots it's not essential for basic operation.
+  # x-systemd.device-timeout=60s: allow time for create-persist.service on first boot.
   fileSystems."/persist" = {
     device = "/dev/disk/by-partlabel/persist";
     fsType = "f2fs";
     neededForBoot = false;
     options = [
       "nofail"
-      "x-systemd.device-timeout=10s"
+      "x-systemd.device-timeout=60s"
     ];
   };
 
   # ── First-boot persist partition creation ───────────────────────────────────
-  # systemd-repart runs Before=sysinit.target on every boot. When the persist
-  # partition already exists it is a no-op. On first boot (freshly flashed
-  # image with no persist partition) it creates the partition, formats it as
-  # f2fs, and pre-creates the required directory structure. Zero additional
-  # closure cost — the binary is compiled into the systemd package.
+  # The upstream systemd-repart.service has DefaultDependencies=no and runs
+  # very early (Before=sysinit.target). On our squashfs+tmpfs setup it silently
+  # exits with code 76 (can't find root block device) because the GPT backup
+  # header is stranded at the image boundary after dd'ing a smaller image onto
+  # a larger eMMC. We disable the upstream unit and use a custom service that:
+  #   1. Fixes the GPT backup header (sfdisk --relocate)
+  #   2. Runs systemd-repart with an explicit device path
+  #   3. Triggers udev so /dev/disk/by-partlabel/persist appears
+  # On subsequent boots the persist partition exists and the service is a no-op.
+
+  # Keep the repart definition files in /etc/repart.d/ (NixOS generates them).
   systemd.repart = {
     enable = true;
     partitions."50-persist" = {
-      Type = "linux-generic";
+      # Custom type UUID so systemd-repart won't match this definition against
+      # existing boot partitions (which are also linux-generic).
+      # Generated deterministically: uuid5(NAMESPACE_URL, "atomixos://persist-partition")
+      Type = "aad64a60-5bcb-5c83-b9c9-5e446f5dba3e";
       Label = "persist";
       Format = "f2fs";
       MakeDirectories = "/config /config/ssh-authorized-keys /containers /logs";
     };
+  };
+
+  # Disable the upstream unit — it can't reliably find our root device.
+  systemd.services.systemd-repart.enable = lib.mkForce false;
+
+  # Custom service that creates the persist partition on first boot.
+  systemd.services.create-persist = {
+    description = "Create persist partition on first boot";
+    wantedBy = [ "local-fs.target" ];
+    before = [ "local-fs.target" ];
+    after = [
+      "systemd-udevd.service" # udev must be running for trigger --settle
+    ];
+    wants = [
+      "modprobe@dm_mod.service"
+      "modprobe@loop.service"
+    ];
+    unitConfig = {
+      DefaultDependencies = false;
+      ConditionPathExists = "!/dev/disk/by-partlabel/persist";
+    };
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+    path = [
+      config.systemd.package
+      pkgs.util-linux
+      pkgs.f2fs-tools
+    ];
+    script = ''
+      set -euo pipefail
+
+      # With overlayfs root, findmnt / shows "overlay" not the block device.
+      # The squashfs lower layer is bind-mounted at /media/root-ro — use that
+      # to find the actual block device, then resolve to the parent disk.
+      root_part=$(findmnt -n -o SOURCE /media/root-ro)
+      disk=$(lsblk -n -o PKNAME "$root_part" | head -1)
+      if [ -z "$disk" ]; then
+        echo "ERROR: cannot determine parent disk for $root_part"
+        exit 1
+      fi
+      disk="/dev/$disk"
+      echo "Root partition: $root_part, disk: $disk"
+
+      # Fix the GPT backup header — after dd'ing a smaller image onto a larger
+      # eMMC the backup header is stranded at the old image boundary.
+      echo "Relocating GPT backup header to end of $disk..."
+      sfdisk --relocate gpt-bak-std "$disk"
+
+      # Re-read the partition table so the kernel sees the updated GPT with
+      # correct backup header location. Without this, systemd-repart can't
+      # see the free space beyond the old image boundary.
+      echo "Re-reading partition table..."
+      partx -u "$disk" || blockdev --rereadpt "$disk" || true
+
+      # Create the persist partition using systemd-repart definitions.
+      echo "Running systemd-repart on $disk..."
+      systemd-repart --definitions=/etc/repart.d --dry-run=no "$disk"
+
+      # Trigger udev so /dev/disk/by-partlabel/persist appears.
+      udevadm trigger --settle "$disk"
+
+      echo "Persist partition created successfully."
+    '';
   };
 
   # ── Users ────────────────────────────────────────────────────────────────────

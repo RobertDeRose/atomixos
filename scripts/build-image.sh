@@ -16,9 +16,13 @@ set -euo pipefail
 # 0          16 MiB     U-Boot (raw, idbloader @ sector 64, u-boot.itb @ sector 16384)
 # 16 MiB     128 MiB    boot slot A (vfat) — kernel + DTB + boot.scr
 # 144 MiB    128 MiB    boot slot B (vfat) — empty
-# 272 MiB    1024 MiB   rootfs slot A (squashfs)
-# 1296 MiB   1024 MiB   rootfs slot B (empty)
+# 272 MiB    1024 MiB   rootfs slot A (squashfs, Linux root aarch64 type)
+# 1296 MiB   1024 MiB   rootfs slot B (empty, Linux root aarch64 type)
 # No persist partition — systemd-repart creates it on first boot.
+#
+# Boot partitions use linux-generic type, rootfs uses Linux root aarch64 type.
+# The persist repart definition uses a custom type UUID so systemd-repart
+# won't match it against any existing partition.
 #
 # NOTE: The first partition MUST start at or after 16 MiB to avoid overwriting
 # u-boot.itb which is written at sector 16384 (byte offset 8 MiB, ~9 MiB end).
@@ -61,8 +65,8 @@ label: gpt
 
 start=${BOOT_A_START_MIB}MiB, size=${BOOT_A_SIZE_MIB}MiB, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, name="boot-a"
 start=${BOOT_B_START_MIB}MiB, size=${BOOT_B_SIZE_MIB}MiB, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, name="boot-b"
-start=${ROOTFS_A_START_MIB}MiB, size=${ROOTFS_A_SIZE_MIB}MiB, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, name="rootfs-a"
-start=${ROOTFS_B_START_MIB}MiB, size=${ROOTFS_B_SIZE_MIB}MiB, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, name="rootfs-b"
+start=${ROOTFS_A_START_MIB}MiB, size=${ROOTFS_A_SIZE_MIB}MiB, type=B921B045-1DF0-41C3-AF44-4C6F280D3FAE, name="rootfs-a"
+start=${ROOTFS_B_START_MIB}MiB, size=${ROOTFS_B_SIZE_MIB}MiB, type=B921B045-1DF0-41C3-AF44-4C6F280D3FAE, name="rootfs-b"
 EOF
 
 # ── Create boot slot A (vfat with kernel + DTB + boot.scr) ────────────────────

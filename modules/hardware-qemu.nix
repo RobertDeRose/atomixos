@@ -25,6 +25,7 @@
     "virtio_scsi"
     "squashfs"
     "f2fs"
+    "overlay"
   ];
 
   # ── Virtual hardware ─────────────────────────────────────────────────────────

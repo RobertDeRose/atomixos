@@ -53,6 +53,7 @@
         SQUASHFS_XZ = lib.mkForce yes;
         SQUASHFS_ZSTD = lib.mkForce yes;
         F2FS_FS = lib.mkForce yes;
+        OVERLAY_FS = lib.mkForce yes;
 
         # ── Modules (optional USB peripherals) ──
         # WiFi
@@ -103,6 +104,7 @@
     "f2fs"
     "mmc_block"
     "dw_mmc_rockchip"
+    "overlay"
   ];
 
   # ── RAUC slot device paths (eMMC) ──────────────────────────────────────────

@@ -101,6 +101,12 @@
         };
       };
 
+      # Expose aarch64-linux packages on aarch64-darwin so `nix build .#image`
+      # works from macOS. Nix delegates the actual build to the linux-builder
+      # (configured in nix-darwin). Without this, `nix build .#image` on macOS
+      # looks for packages.aarch64-darwin.image which doesn't exist.
+      packages."aarch64-darwin" = self.packages.${system};
+
       # ── Tests ────────────────────────────────────────────────────────────
 
       checks =
