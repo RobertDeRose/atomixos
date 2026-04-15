@@ -244,6 +244,10 @@ mise run build:image           # result-image/
 
 # Build everything
 mise run build
+
+# Build via Lima VM (when nix-darwin linux-builder is not available)
+mise run build:image -- --lima
+mise run build:image -- --lima --vm my-builder
 ```
 
 ## Running E2E Tests
@@ -382,6 +386,7 @@ All tasks are run with `mise run <task>`. Run `mise tasks` to list them.
 | `build:rauc-bundle`     | Build signed RAUC bundle → `result-rauc-bundle/`            |
 | `build:boot-script`     | Build U-Boot boot script → `result-boot-script/`            |
 | `build:image`           | Build flashable disk image → `result-image/`                |
+|                         | All `build:*` tasks accept `--lima` and `--vm <name>`       |
 | **E2E Tests**           |                                                             |
 | `e2e`                   | Run all 9 integration tests sequentially                    |
 | `e2e:rauc-slots`        | RAUC slot detection after boot                              |

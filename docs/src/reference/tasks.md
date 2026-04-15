@@ -4,6 +4,8 @@ All tasks are run with `mise run <task>`. Run `mise tasks` to list them.
 
 ## Build Tasks
 
+All `build:*` tasks accept `--lima` to run inside a Lima VM and `--vm <name>` to specify which VM (default: `default`).
+
 | Task                | Description                                                |
 |---------------------|------------------------------------------------------------|
 | `check`             | Verify flake evaluates cleanly (`nix flake check`)         |

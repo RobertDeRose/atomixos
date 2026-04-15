@@ -1,13 +1,13 @@
 # Building
 
-All build outputs target `aarch64-linux`. Builds require either a native aarch64-linux system or a cross-compilation
-environment (e.g., a Lima VM on macOS).
+All build outputs target `aarch64-linux`. Builds require an `aarch64-linux` builder -- either the nix-darwin
+`linux-builder` (recommended on macOS), a Lima VM, or a native Linux system.
 
 ## Prerequisites
 
 - [Nix](https://nixos.org/download.html) with flakes enabled
 - [mise](https://mise.jdx.dev/) for task running (recommended)
-- An `aarch64-linux` builder (native, remote, or Lima VM)
+- An `aarch64-linux` builder (nix-darwin `linux-builder`, Lima VM, or native)
 
 ## Building with mise
 
@@ -28,6 +28,25 @@ mise run build:image           # result-image/
 mise run build
 ```
 
+### Building via Lima VM
+
+All build tasks accept `--lima` to run inside a Lima VM. This is useful when the Lima VM has a warm Nix store cache or
+when the nix-darwin `linux-builder` is not configured.
+
+```sh
+# Build the disk image inside the default Lima VM
+mise run build:image -- --lima
+
+# Use a specific Lima VM
+mise run build:image -- --lima --vm my-builder
+
+# Build everything via Lima
+mise run build -- --lima
+```
+
+The task ensures the Lima VM is started before building. The macOS home directory is mounted at the same path inside
+Lima, so the flake path works unchanged.
+
 ## Build Artifacts
 
 | Artifact        | mise Task           | Nix Output                           | Description                          |
@@ -46,18 +65,6 @@ nix build .#image -o result-image
 # Build only the squashfs
 nix build .#squashfs -o result-squashfs
 ```
-
-## Building in a Lima VM (macOS)
-
-On macOS, use a Lima VM for native aarch64-linux builds:
-
-```sh
-limactl shell default -- bash -c \
-  'cd /Users/<you>/workspace/checkpoint/apollo/apollo-image && \
-   nix build .#image --no-link --print-out-paths'
-```
-
-The macOS home directory is mounted at the same path inside Lima, so the flake path works unchanged.
 
 ## Image Naming
 
