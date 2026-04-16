@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-#MISE description="Interactive serial console to Rock64 (UART2 @ 1.5Mbaud via screen)"
+#MISE description="Interactive serial console to Rock64 (UART2 @ 1.5Mbaud)"
+#MISE raw=true
 #USAGE flag "-p --port <path>" help="Serial device path (default: auto-detect /dev/cu.usbserial-*)"
 set -euo pipefail
 

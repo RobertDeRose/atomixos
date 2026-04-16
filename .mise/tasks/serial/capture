@@ -3,26 +3,66 @@
 #USAGE flag "-p --port <path>" help="Serial device path (default: auto-detect /dev/cu.usbserial-*)"
 #USAGE flag "-l --log <path>" help="Log file path (default: /tmp/rock64-serial.log)"
 #USAGE flag "-t --timeout <secs>" help="Capture timeout in seconds, 0=infinite (default: 0)"
+#USAGE flag "--bg" help="Run in background with auto-reconnect loop (for agent/CI use). Kills any existing capture first. Prints PID to stdout."
 set -euo pipefail
 
+SERIAL_LOG="${usage_log:-/tmp/rock64-serial.log}"
+SERIAL_TIMEOUT="${usage_timeout:-0}"
+
+SCRIPT_DIR="${MISE_PROJECT_ROOT}"
+
 # Auto-detect serial device (cu.* not tty.* — macOS tty.* waits for DCD)
+auto_detect_port() {
+	local port
+	port="$(find /dev -maxdepth 1 -name 'cu.usbserial-*' 2>/dev/null | head -1)"
+	if [ -z "$port" ]; then
+		echo "ERROR: No USB-serial adapter found (/dev/cu.usbserial-*)" >&2
+		echo "" >&2
+		echo "Check that the adapter is plugged in firmly." >&2
+		exit 1
+	fi
+	echo "$port"
+}
+
+if [ "${usage_bg:-false}" = "true" ]; then
+	# Background mode: kill existing capture, truncate log, launch reconnect loop
+	pkill -f serial-capture.py 2>/dev/null || true
+	sleep 1
+	: > "$SERIAL_LOG"
+
+	nohup bash -c "
+		while true; do
+			DEV=\"${usage_port:-}\"
+			if [ -z \"\$DEV\" ]; then
+				DEV=\$(find /dev -maxdepth 1 -name 'cu.usbserial-*' 2>/dev/null | head -1)
+			fi
+			if [ -n \"\$DEV\" ]; then
+				SERIAL_PORT=\"\$DEV\" SERIAL_LOG=\"$SERIAL_LOG\" SERIAL_TIMEOUT=\"$SERIAL_TIMEOUT\" \
+					nix-shell -p python3Packages.pyserial --run \"python3 $SCRIPT_DIR/scripts/serial-capture.py\" 2>&1 || true
+				sleep 2
+			else
+				sleep 1
+			fi
+		done
+	" > /tmp/serial-capture-stdout.log 2>&1 &
+
+	BG_PID=$!
+	echo "Serial capture running in background (PID $BG_PID)"
+	echo "  Log: $SERIAL_LOG"
+	echo "  Stop: pkill -f serial-capture.py"
+	exit 0
+fi
+
+# Foreground mode
 if [ -n "${usage_port:-}" ]; then
 	SERIAL_PORT="$usage_port"
 else
-	SERIAL_PORT="$(find /dev -maxdepth 1 -name 'cu.usbserial-*' 2>/dev/null | head -1)"
-	if [ -z "$SERIAL_PORT" ]; then
-		echo "ERROR: No USB-serial adapter found (/dev/cu.usbserial-*)"
-		echo ""
-		echo "Check that the adapter is plugged in firmly."
-		exit 1
-	fi
+	SERIAL_PORT="$(auto_detect_port)"
 fi
 
 export SERIAL_PORT
-export SERIAL_LOG="${usage_log:-/tmp/rock64-serial.log}"
-export SERIAL_TIMEOUT="${usage_timeout:-0}"
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+export SERIAL_LOG
+export SERIAL_TIMEOUT
 
 echo "=== Rock64 Serial Capture ==="
 echo ""
