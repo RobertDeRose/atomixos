@@ -1,11 +1,24 @@
 #!/usr/bin/env bash
 #MISE description="Capture Rock64 serial console output (UART2 @ 1.5Mbaud)"
-#USAGE flag "-p --port <path>" help="Serial device path (default: /dev/cu.usbserial-DM02496T)"
+#USAGE flag "-p --port <path>" help="Serial device path (default: auto-detect /dev/cu.usbserial-*)"
 #USAGE flag "-l --log <path>" help="Log file path (default: /tmp/rock64-serial.log)"
 #USAGE flag "-t --timeout <secs>" help="Capture timeout in seconds, 0=infinite (default: 0)"
 set -euo pipefail
 
-export SERIAL_PORT="${usage_port:-/dev/cu.usbserial-DM02496T}"
+# Auto-detect serial device (cu.* not tty.* — macOS tty.* waits for DCD)
+if [ -n "${usage_port:-}" ]; then
+	SERIAL_PORT="$usage_port"
+else
+	SERIAL_PORT="$(find /dev -maxdepth 1 -name 'cu.usbserial-*' 2>/dev/null | head -1)"
+	if [ -z "$SERIAL_PORT" ]; then
+		echo "ERROR: No USB-serial adapter found (/dev/cu.usbserial-*)"
+		echo ""
+		echo "Check that the adapter is plugged in firmly."
+		exit 1
+	fi
+fi
+
+export SERIAL_PORT
 export SERIAL_LOG="${usage_log:-/tmp/rock64-serial.log}"
 export SERIAL_TIMEOUT="${usage_timeout:-0}"
 

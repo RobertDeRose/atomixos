@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+#MISE description="Interactive serial console to Rock64 (UART2 @ 1.5Mbaud via screen)"
+#USAGE flag "-p --port <path>" help="Serial device path (default: auto-detect /dev/cu.usbserial-*)"
+set -euo pipefail
+
+# Auto-detect serial device (cu.* not tty.* — macOS tty.* waits for DCD)
+if [ -n "${usage_port:-}" ]; then
+	SERIAL_PORT="$usage_port"
+else
+	SERIAL_PORT="$(find /dev -maxdepth 1 -name 'cu.usbserial-*' 2>/dev/null | head -1)"
+	if [ -z "$SERIAL_PORT" ]; then
+		echo "ERROR: No USB-serial adapter found (/dev/cu.usbserial-*)"
+		echo ""
+		echo "Check that the adapter is plugged in firmly."
+		exit 1
+	fi
+fi
+
+echo "=== Rock64 Serial Console ==="
+echo ""
+echo "  Port: $SERIAL_PORT"
+echo "  Baud: 1500000"
+echo ""
+echo "Exit with Ctrl-A K"
+echo ""
+
+exec screen "$SERIAL_PORT" 1500000
