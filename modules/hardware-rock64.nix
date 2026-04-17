@@ -8,6 +8,16 @@
 }:
 
 {
+  # ── Boot partition ────────────────────────────────────────────────────────────
+  # Mount the active boot slot's FAT partition at /boot.
+  # Used by first-boot.service to write a slot_good flag file that U-Boot
+  # reads on next boot to restore the boot counter (avoiding raw eMMC writes
+  # via fw_setenv which bricks the NCard eMMC module).
+  fileSystems."/boot" = {
+    device = "/dev/mmcblk1p1";
+    fsType = "vfat";
+  };
+
   # ── Boot configuration ───────────────────────────────────────────────────────
 
   # U-Boot handles booting — no bootloader managed by NixOS

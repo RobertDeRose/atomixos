@@ -17,6 +17,14 @@ else
 	fi
 fi
 
+# Resolve minicom binary path via nix, then exec it directly so terminal
+# passthrough works (nix-shell --run wraps in a subshell that eats stdin).
+MINICOM="$(nix build nixpkgs#minicom --no-link --print-out-paths 2>/dev/null)/bin/minicom"
+if [ ! -x "$MINICOM" ]; then
+	echo "ERROR: Failed to resolve minicom via nix. Try: nix build nixpkgs#minicom"
+	exit 1
+fi
+
 echo "=== Rock64 Serial Console ==="
 echo ""
 echo "  Port: $SERIAL_PORT"
@@ -25,4 +33,4 @@ echo ""
 echo "Exit with Ctrl-A X"
 echo ""
 
-exec nix-shell -p minicom --run "minicom -D $SERIAL_PORT -b 1500000 -o -H"
+exec "$MINICOM" -D "$SERIAL_PORT" -b 1500000 -o

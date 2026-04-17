@@ -27,7 +27,7 @@ in
     # Only run if the sentinel does NOT exist (first boot only)
     unitConfig.ConditionPathExists = "!/persist/.completed_first_boot";
 
-    path = [ pkgs.rauc ];
+    # No special path needed — just writes a flag file to /boot
 
     serviceConfig = {
       Type = "oneshot";

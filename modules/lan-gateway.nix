@@ -15,7 +15,7 @@
     settings = {
       # Only listen on LAN interface
       interface = "eth1";
-      bind-interfaces = true;
+      bind-dynamic = true; # Wait for eth1 to appear (unlike bind-interfaces which fails immediately)
 
       # DHCP pool
       dhcp-range = "172.20.30.10,172.20.30.254,255.255.255.0,24h";

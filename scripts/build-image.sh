@@ -59,12 +59,10 @@ dd if="@uboot@/u-boot.itb" of="$IMAGE" seek=16384 conv=notrunc bs=512 status=non
 
 # Zero the U-Boot environment region so a freshly flashed board always starts
 # with compiled-in defaults (BOOT_A_LEFT=3, BOOT_B_LEFT=3, BOOT_ORDER="A B").
-# U-Boot stores its env redundantly at two 16 KiB regions within the raw area:
-#   Primary:   0x3F8000 (sector 8128)
-#   Redundant: 0x3FC000 (sector 8160)
-log "Zeroing U-Boot environment (0x3F8000 + 0x3FC000)..."
-dd if=/dev/zero of="$IMAGE" bs=16384 seek=254 count=1 conv=notrunc status=none
-dd if=/dev/zero of="$IMAGE" bs=16384 seek=255 count=1 conv=notrunc status=none
+# U-Boot env: CONFIG_ENV_OFFSET=0x3F8000, CONFIG_ENV_SIZE=0x8000 (32 KiB).
+# No redundant env (CONFIG_ENV_REDUNDANT is not set in rock64 defconfig).
+log "Zeroing U-Boot environment (0x3F8000, 32 KiB)..."
+dd if=/dev/zero of="$IMAGE" bs=1 seek=$((0x3F8000)) count=$((0x8000)) conv=notrunc status=none
 
 # ── Create GPT partition table ────────────────────────────────────────────────
 

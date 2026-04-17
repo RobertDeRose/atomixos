@@ -133,17 +133,27 @@
     DynamicUser = lib.mkForce false;
   };
 
-  # chronyd: upstream sets PrivateMounts=true which creates a fully private
-  # mount namespace that interacts badly with overlay's mount structure.
+  # chronyd: disable all mount-namespace sandboxing. Upstream sets
+  # PrivateMounts, PrivateTmp, ProtectSystem, ProtectHome, and several
+  # ProtectKernel* options — each creates bind-mounts that fail on overlay.
   systemd.services.chronyd.serviceConfig = {
-    ProtectSystem = lib.mkForce "full";
+    ProtectSystem = lib.mkForce false;
+    ProtectHome = lib.mkForce false;
+    PrivateTmp = lib.mkForce false;
     PrivateMounts = lib.mkForce false;
+    ProtectKernelTunables = lib.mkForce false;
+    ProtectKernelModules = lib.mkForce false;
+    ProtectKernelLogs = lib.mkForce false;
+    ProtectControlGroups = lib.mkForce false;
+    ProtectHostname = lib.mkForce false;
   };
 
-  # dnsmasq: upstream sets ProtectSystem=true and PrivateTmp=true. While
-  # milder than "strict", PrivateTmp still creates bind-mounts that can
-  # fail on overlay. Its preStart also runs chown which needs NSS resolution.
+  # dnsmasq: disable mount-namespace sandboxing. Upstream sets ProtectSystem,
+  # ProtectHome, and PrivateTmp. Its preStart also runs chown which needs
+  # NSS resolution (provided by nsncd).
   systemd.services.dnsmasq.serviceConfig = {
+    ProtectSystem = lib.mkForce false;
+    ProtectHome = lib.mkForce false;
     PrivateTmp = lib.mkForce false;
   };
 
@@ -181,7 +191,7 @@
     "d /var/log 0755 root root -"
     "d /var/log/journal 2755 root systemd-journal -"
     "d /var/db 0755 root root -"
-    "d /var/run 0755 root root -"
+    "d /run/chrony 0750 chrony chrony -"
   ];
 
   # ── OverlayFS: writable root over read-only squashfs ─────────────────────────
