@@ -45,13 +45,15 @@ scripts/
   os-upgrade.sh                    Runtime update polling script
   ssh-wan-toggle.sh                SSH-on-WAN flag check
   ssh-wan-reload.sh                SSH-on-WAN runtime reload
-  first-boot.sh                    First-boot RAUC mark-good + sentinel
+  first-boot.sh                    First-boot FAT flag write + sentinel
   boot.cmd                         U-Boot A/B boot script source
-  fw_env.config                    Redundant U-Boot env storage config
+  fw_env.config                    U-Boot env config (reference only, not installed)
 
 .mise/tasks/
   flash                            Flash image to disk device (macOS/Linux)
-  serial                           Serial console capture (1.5 Mbaud)
+  serial/
+    capture                        Serial console capture (1.5 Mbaud, --bg for background)
+    shell                          Interactive serial console (minicom)
   config/
     lan-range                      Update LAN gateway/DHCP range across all configs
   provision/

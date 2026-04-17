@@ -68,13 +68,15 @@ U-Boot boot script implementing A/B slot selection with boot-count rollback. Com
 
 **Key logic:**
 
-1. Echo build ID to console for identification
+1. Echo build ID (squashfs store hash) to console for identification
 2. Set defaults: `BOOT_ORDER="A B"`, `BOOT_A_LEFT=3`, `BOOT_B_LEFT=3`
 3. Auto-detect boot device number from `devnum`
 4. Override `ramdisk_addr_r=0x08000000` (avoids kernel overlap)
-5. Iterate `BOOT_ORDER`; for each slot with remaining attempts: decrement counter, `saveenv`, load kernel/initrd/DTB
+5. Check for `slot_good` flag file on the active slot's boot FAT partition — if found, restore `BOOT_x_LEFT=3`,
+   `saveenv`, and delete the flag via `fatrm`
+6. Iterate `BOOT_ORDER`; for each slot with remaining attempts: decrement counter, `saveenv`, load kernel/initrd/DTB
    from boot partition, set `root=PARTLABEL=rootfs-x`, `booti`
-6. If no slot bootable: print error and `reset`
+7. If no slot bootable: print error and drop to U-Boot shell (changed from `reset` to allow debugging)
 
 **Console:** `ttyS2,1500000` (Rock64 UART2)
 
@@ -82,14 +84,15 @@ U-Boot boot script implementing A/B slot selection with boot-count rollback. Com
 
 **Location:** `scripts/fw_env.config`
 
-Configuration for `fw_setenv` / `fw_printenv` (userspace U-Boot env tools).
+Configuration for `fw_setenv` / `fw_printenv` (userspace U-Boot env tools). **No longer installed to `/etc/` on the
+device** — kept in the repo for reference and debugging only. Raw eMMC writes from Linux brick NCard eMMC modules;
+the FAT flag file approach is used instead (see boot.cmd).
 
-| Entry         | Offset     | Size             |
-|---------------|------------|------------------|
-| Primary env   | `0x3F8000` | `0x4000` (16 KB) |
-| Redundant env | `0x3FC000` | `0x4000` (16 KB) |
+| Entry       | Offset     | Size             |
+|-------------|------------|------------------|
+| Primary env | `0x3F8000` | `0x8000` (32 KB) |
 
-Device: `/dev/mmcblk1`
+Device: `/dev/mmcblk1` — single copy only (no `CONFIG_ENV_REDUNDANT` in Rock64 U-Boot)
 
 ### os-verification.sh
 
@@ -129,13 +132,13 @@ OTA update polling script. Checks for new RAUC bundles and installs them.
 
 **Location:** `scripts/first-boot.sh`
 
-First-boot initialization. Marks RAUC slot as good and writes sentinel.
+First-boot initialization. Writes boot confirmation flag and sentinel.
 
 **Steps:**
 
-1. Check for `/persist/.completed_first_boot` -- exit if exists
-2. `rauc status mark-good`
-3. Write timestamp to sentinel file
+1. Check for `/persist/.completed_first_boot` — exit if exists
+2. Write `slot_good` flag file to `/boot` (boot FAT partition) — U-Boot will restore boot counter on next power cycle
+3. Write timestamp to sentinel file `/persist/.completed_first_boot`
 
 ### ssh-wan-toggle.sh
 
@@ -175,19 +178,27 @@ Cross-platform disk flasher (macOS + Linux).
 **macOS features:** Converts `/dev/diskN` to `/dev/rdiskN` for unbuffered I/O; refuses to write to boot disk; ejects
 after flash.
 
-### serial
+### serial:capture
 
-**Location:** `.mise/tasks/serial`
+**Location:** `.mise/tasks/serial/capture`
 
-Serial console capture wrapper.
+Serial console capture wrapper with auto-reconnect.
 
-| Flag | Default                      | Description     |
-|------|------------------------------|-----------------|
-| `-p` | `/dev/cu.usbserial-DM02496T` | Serial device   |
-| `-l` | `/tmp/rock64-serial.log`     | Log file        |
-| `-t` | `0` (infinite)               | Capture timeout |
+| Flag   | Default                      | Description       |
+|--------|------------------------------|-------------------|
+| `-p`   | `/dev/cu.usbserial-DM02496T` | Serial device     |
+| `-l`   | `/tmp/rock64-serial.log`     | Log file          |
+| `-t`   | `0` (infinite)               | Capture timeout   |
+| `--bg` | (flag)                       | Run in background |
 
 Launches `scripts/serial-capture.py` in a `nix-shell` with pyserial.
+
+### serial:shell
+
+**Location:** `.mise/tasks/serial/shell`
+
+Interactive serial console via minicom (1.5 Mbaud, no hardware flow control). Uses `nix build nixpkgs#minicom` to
+resolve the minicom binary.
 
 ### config/lan-range
 

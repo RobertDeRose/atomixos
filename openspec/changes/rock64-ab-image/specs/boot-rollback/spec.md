@@ -55,12 +55,44 @@ still be intact and bootable because RAUC only writes to the inactive slot.
 - **WHEN** the device rolls back from slot B to slot A
 - **THEN** slot A's root filesystem is identical to its state before the update was attempted
 
-### Requirement: U-Boot environment uses redundant storage
+### Requirement: Boot confirmation uses FAT flag file (not fw_setenv)
 
-U-Boot environment SHALL be stored in two redundant copies on eMMC so that a power loss during environment write does
-not corrupt the boot configuration.
+**CHANGED**: The original design called for `fw_setenv` from Linux to reset boot counters after successful confirmation.
+Testing revealed that **writing to the raw eMMC user data area from Linux bricks NCard eMMC modules** (the board fails
+to produce any U-Boot output after power cycle). U-Boot's own `saveenv` command works correctly.
 
-#### Scenario: Power loss during env write does not corrupt boot config
+The confirmation flow now uses a FAT flag file approach:
 
-- **WHEN** power is lost while U-Boot is writing environment variables
-- **THEN** U-Boot falls back to the redundant copy and boots with the last known-good environment
+1. `first-boot.service` (or `os-verification.service`) writes a `slot_good` file to the boot FAT partition (`/boot`)
+2. On next boot, U-Boot's `boot.cmd` checks for `slot_good` via `fatload`
+3. If found: U-Boot restores `BOOT_x_LEFT=3` and calls `saveenv` (which works from U-Boot), then deletes the flag file
+4. If not found: normal boot-count decrement continues
+
+This avoids all raw eMMC writes from Linux while preserving the boot-count rollback mechanism.
+
+#### Scenario: First boot confirmation via FAT flag
+
+- **WHEN** `first-boot.service` runs on a freshly provisioned image
+- **THEN** it writes a `slot_good` file to `/boot` (the boot FAT partition)
+- **AND** on the next power cycle, U-Boot detects `slot_good`, restores the boot counter, and deletes the file
+
+#### Scenario: Update confirmation via FAT flag
+
+- **WHEN** `os-verification.service` confirms a successful update
+- **THEN** it writes a `slot_good` file to `/boot`
+- **AND** on the next power cycle, U-Boot commits the slot via `saveenv`
+
+### Requirement: U-Boot environment uses single-copy storage
+
+U-Boot environment is stored as a single 32 KB copy at offset `0x3F8000` on the eMMC. The Rock64's U-Boot build
+(`rk3328_defconfig`) does NOT enable `CONFIG_ENV_REDUNDANT`.
+
+**Note**: The original design called for redundant environment storage. Investigation of the U-Boot source confirmed
+this is not configured for this platform. The FAT flag file approach mitigates the risk — if U-Boot's `saveenv` is
+interrupted by power loss, the `slot_good` file remains on the FAT partition and U-Boot will retry on the next boot.
+
+#### Scenario: Power loss during U-Boot saveenv
+
+- **WHEN** power is lost while U-Boot is writing environment variables via `saveenv`
+- **THEN** the `slot_good` flag file remains on the FAT partition, and U-Boot will re-attempt the counter restore on
+  the next boot

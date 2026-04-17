@@ -108,8 +108,10 @@
   (confirmed: idbloader.img 137 KiB, u-boot.itb 940 KiB, plus u-boot-rockchip.bin combined blob)
 - [x] 9.2 Write U-Boot boot script that reads `BOOT_ORDER` and `BOOT_X_LEFT` variables, decrements the counter, and
   selects the appropriate boot slot and rootfs partition
-- [x] 9.3 Configure redundant U-Boot environment storage (two copies at different eMMC offsets)
+- [x] 9.3 ~~Configure redundant U-Boot environment storage~~ — **CHANGED**: Rock64 U-Boot (`rk3328_defconfig`) does not
+  enable `CONFIG_ENV_REDUNDANT`. Single 32 KB env at `0x3F8000`. FAT flag file approach mitigates power-loss risk.
 - [ ] 9.4 Test boot-count logic: simulate 3 consecutive failed boots on slot B and verify U-Boot falls back to slot A
+  — **BLOCKED**: requires flashing and testing the latest image with FAT flag file support
 
 ## 10. RAUC System Configuration
 
@@ -145,6 +147,8 @@
 - [x] 12.4 Test watchdog: trigger a simulated hang and verify the device reboots within the timeout window — validated
   via `rauc-watchdog` E2E test: `gateway.crash()` simulates watchdog-triggered reboot twice, boot-count decrements
   from 2→1→0, rollback to slot A occurs, slot B marked bad
+- [ ] 12.5 Re-enable hardware watchdog on Rock64 — currently disabled in `modules/watchdog.nix` pending stable boot
+  confirmation on hardware. Restore `RuntimeWatchdogSec = "30s"` and `RebootWatchdogSec = "10min"`.
 
 ## 13. Update Confirmation Service (`os-verification`)
 
@@ -248,8 +252,9 @@
 
 - [x] 17b.1 Create `modules/first-boot.nix` — systemd oneshot service with
   `ConditionPathExists=!/persist/.completed_first_boot` that runs on first boot only
-- [x] 17b.2 Create `scripts/first-boot.sh` — marks RAUC slot good unconditionally and writes
-  `/persist/.completed_first_boot` sentinel
+- [x] 17b.2 Create `scripts/first-boot.sh` — **CHANGED**: writes `slot_good` flag file to `/boot` (boot FAT partition)
+  instead of calling `rauc status mark-good`. U-Boot restores boot counter on next power cycle. Also writes
+  `/persist/.completed_first_boot` sentinel.
 - [x] 17b.3 Add `ConditionPathExists=/persist/.completed_first_boot` to `os-verification.service` so it skips on first
   boot (before sentinel exists)
 - [x] 17b.4 Add `ExecStartPre=podman pull` to `cockpit-ws.service` and `traefik.service` for automatic container image

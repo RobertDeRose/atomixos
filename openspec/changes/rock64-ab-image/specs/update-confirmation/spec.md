@@ -57,15 +57,20 @@ seconds. If any container restarts (restart count increments) or stops during th
 - **WHEN** a container restarts during the 60-second sustained check period
 - **THEN** the service exits with a non-zero status and the slot remains uncommitted
 
-### Requirement: Successful confirmation commits the slot
+### Requirement: Successful confirmation writes FAT flag file
 
-After all health checks pass and the 60-second sustained period completes, the service SHALL call `rauc status
-mark-good` to commit the current slot, preventing rollback.
+**CHANGED**: After all health checks pass and the 60-second sustained period completes, the service SHALL write a
+`slot_good` file to the boot FAT partition (`/boot`). U-Boot will detect this file on the next boot and restore the
+boot counter via its own `saveenv` command.
+
+The original design used `rauc status mark-good` which internally calls `fw_setenv`. This was changed because raw eMMC
+writes from Linux brick NCard eMMC modules (see boot-rollback spec for details).
 
 #### Scenario: Slot is committed after successful checks
 
 - **WHEN** all system and container health checks pass for the sustained period
-- **THEN** the service runs `rauc status mark-good` and the active slot's boot attempt counter is reset to its maximum
+- **THEN** the service writes a `slot_good` file to `/boot`
+- **AND** on the next power cycle, U-Boot reads the flag, restores the boot counter, and deletes the flag
 
 ### Requirement: Failed confirmation leaves slot uncommitted
 

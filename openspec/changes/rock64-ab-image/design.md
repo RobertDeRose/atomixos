@@ -129,15 +129,28 @@ because it's designed for flash storage (wear leveling awareness, power-loss res
 
 - **ext4 for /persist**: Works, but f2fs is purpose-built for eMMC/flash and handles power loss better.
 
-### 5. U-Boot from nixpkgs with boot-count via RAUC integration
+### 5. U-Boot from nixpkgs with boot-count via FAT flag file
 
-**Choice**: Use the `ubootRock64` package from nixpkgs. Use RAUC's built-in U-Boot bootloader backend with environment
-variables for boot-count tracking. Enable redundant U-Boot environment storage.
+**Choice**: Use the `ubootRock64` package from nixpkgs. Use a FAT flag file approach for boot confirmation instead of
+direct U-Boot environment manipulation from Linux.
 
-**Rationale**: Rock64/RK3328 has mainline U-Boot support, and nixpkgs packages it. No custom U-Boot build needed. RAUC
-natively supports U-Boot via environment variable manipulation. On install, RAUC sets the active slot and resets the
-boot attempt counter. U-Boot decrements on each boot attempt; if it reaches zero without the system marking good, U-Boot
-switches to the other slot. Redundant env storage (two copies) protects against power loss during env write.
+**Rationale**: Rock64/RK3328 has mainline U-Boot support, and nixpkgs packages it. No custom U-Boot build needed.
+
+**CHANGED from original design**: The original plan used RAUC's built-in U-Boot bootloader backend, which calls
+`fw_setenv` from Linux to manipulate boot-count variables. Testing revealed that **writing to the raw eMMC user data
+area from Linux bricks NCard eMMC modules** — the board produces no U-Boot output at all after power cycle. This was
+confirmed through systematic testing: even writing 32 bytes of zeros to an already-zeroed area at the env offset via
+`dd` bricks the board. However, U-Boot's own `saveenv` command works correctly.
+
+**Current approach — FAT flag file**:
+
+1. After successful boot confirmation, Linux writes a `slot_good` file to the boot FAT partition (`/boot`)
+2. On next boot, U-Boot's `boot.cmd` checks for `slot_good` via `fatload`
+3. If found: U-Boot restores `BOOT_x_LEFT=3`, calls `saveenv` (which works from U-Boot), and deletes the file
+4. If not found: normal boot-count decrement continues
+
+This avoids all raw eMMC writes from Linux. The U-Boot environment has a single 32 KB copy at offset `0x3F8000`
+(`CONFIG_ENV_REDUNDANT` is not enabled for this platform).
 
 Key U-Boot environment variables:
 
@@ -171,17 +184,18 @@ application containers running?
 **Flow**:
 
 1. Device boots into new slot
-2. If this is the **first boot** (no `/persist/.completed_first_boot` sentinel): `first-boot.service` runs — marks the
-   RAUC slot good unconditionally and writes the sentinel. `os-verification.service` is skipped (its
-   `ConditionPathExists=/persist/.completed_first_boot` is unmet). This ensures the initial provisioned image is always
-   committed without health-check gates — the device has just been flashed and verified by the operator.
+2. If this is the **first boot** (no `/persist/.completed_first_boot` sentinel): `first-boot.service` runs — writes a
+   `slot_good` flag file to `/boot` (the boot FAT partition) and writes the sentinel. `os-verification.service` is
+   skipped (its `ConditionPathExists=/persist/.completed_first_boot` is unmet). U-Boot will detect the flag on the
+   next power cycle, restore the boot counter, and delete the file. This ensures the initial provisioned image is
+   always committed without health-check gates.
 3. On **subsequent boots** (sentinel exists): `os-verification.service` starts after `multi-user.target`
 4. Check system health: eth0 has WAN address, eth1 is 172.20.30.1, dnsmasq running, chronyd running
 5. If `/persist/config/health-manifest.yaml` exists, check each container listed is in "running" state (timeout: 5
    minutes) — this includes the Cockpit pod and Traefik
 6. If no manifest exists (bare/unprovisioned image), skip container checks
 7. Sustain all checks passing for 60 seconds (catch restart loops — check every 5s)
-8. All pass → `rauc status mark-good`
+8. All pass → write `slot_good` flag to `/boot` (U-Boot restores counter on next boot)
 9. Any fail → exit non-zero, slot stays uncommitted, boot-count continues to decrement
 
 The health manifest is placed on `/persist/config/` by the device provisioning process (initial flash or remote
@@ -382,9 +396,10 @@ module additions).
 /persist handles wear leveling for frequent writes; rootfs updates should be infrequent (weekly/monthly, not hourly).
 eMMC controllers have internal wear leveling.
 
-**[Risk] U-Boot environment storage corruption** → U-Boot env is typically stored on eMMC at a fixed offset. Power loss
-during env write could corrupt it. Mitigation: U-Boot supports redundant environment storage (two copies); enable this
-in the U-Boot configuration.
+**[Risk] U-Boot environment storage corruption** → U-Boot env is stored as a single 32 KB copy at offset `0x3F8000` on
+eMMC. **CRITICAL DISCOVERY**: Writing to raw eMMC from Linux bricks NCard eMMC modules. All env writes are now done via
+U-Boot's own `saveenv` command (triggered by the FAT flag file mechanism). Power loss during `saveenv` could still
+corrupt the env, but the `slot_good` flag file on the FAT partition persists and U-Boot will retry on the next boot.
 
 **[Risk] 1 GB slot size insufficient** → If the NixOS system closure grows beyond 1 GB compressed, updates will fail.
 Current image is ~333 MB compressed, leaving significant headroom. The initial 200 MB target proved unrealistic for
