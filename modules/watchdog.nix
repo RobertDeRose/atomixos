@@ -14,8 +14,8 @@
   # If systemd hangs (kernel panic, deadlock, OOM), the hardware watchdog
   # fires and triggers a hard reboot. Combined with U-Boot boot-count,
   # this leads to automatic rollback if the system can't stay up.
-  systemd.settings.Manager = {
-    RuntimeWatchdogSec = "30s";
-    RebootWatchdogSec = "10min";
-  };
+  # TODO: Re-enable once boot completes reliably on hardware.
+  # RuntimeWatchdogSec = "30s";
+  # RebootWatchdogSec = "10min";
+  systemd.settings.Manager = { };
 }

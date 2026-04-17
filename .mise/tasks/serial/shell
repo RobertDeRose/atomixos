@@ -22,7 +22,7 @@ echo ""
 echo "  Port: $SERIAL_PORT"
 echo "  Baud: 1500000"
 echo ""
-echo "Exit with Ctrl-A K"
+echo "Exit with Ctrl-A X"
 echo ""
 
-exec screen "$SERIAL_PORT" 1500000
+exec nix-shell -p minicom --run "minicom -D $SERIAL_PORT -b 1500000 -o -H"

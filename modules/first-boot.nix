@@ -21,9 +21,7 @@ in
     description = "First-boot initialization (mark slot good, write sentinel)";
     after = [
       "multi-user.target"
-      "network-online.target"
     ];
-    wants = [ "network-online.target" ];
     wantedBy = [ "multi-user.target" ];
 
     # Only run if the sentinel does NOT exist (first boot only)

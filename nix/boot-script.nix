@@ -1,5 +1,10 @@
 # Compile the U-Boot boot script for Rock64 A/B slot selection.
-{ stdenv, ubootTools }:
+# buildId is substituted into boot.cmd so it's visible in serial output.
+{
+  stdenv,
+  ubootTools,
+  buildId ? "unknown",
+}:
 
 stdenv.mkDerivation {
   name = "rock64-boot-script";
@@ -13,13 +18,14 @@ stdenv.mkDerivation {
   dontConfigure = true;
 
   buildPhase = ''
-    mkimage -C none -A arm64 -T script -d ${../scripts/boot.cmd} boot.scr
+    substitute ${../scripts/boot.cmd} boot.cmd \
+      --replace-fail "@buildId@" "${buildId}"
+    mkimage -C none -A arm64 -T script -d boot.cmd boot.scr
   '';
 
   installPhase = ''
     mkdir -p $out
     cp boot.scr $out/
-    # Also keep the source for reference
-    cp ${../scripts/boot.cmd} $out/boot.cmd
+    cp boot.cmd $out/boot.cmd
   '';
 }

@@ -57,6 +57,15 @@ dd if="@uboot@/idbloader.img" of="$IMAGE" seek=64 conv=notrunc bs=512 status=non
 log "Writing U-Boot u-boot.itb to sector 16384..."
 dd if="@uboot@/u-boot.itb" of="$IMAGE" seek=16384 conv=notrunc bs=512 status=none
 
+# Zero the U-Boot environment region so a freshly flashed board always starts
+# with compiled-in defaults (BOOT_A_LEFT=3, BOOT_B_LEFT=3, BOOT_ORDER="A B").
+# U-Boot stores its env redundantly at two 16 KiB regions within the raw area:
+#   Primary:   0x3F8000 (sector 8128)
+#   Redundant: 0x3FC000 (sector 8160)
+log "Zeroing U-Boot environment (0x3F8000 + 0x3FC000)..."
+dd if=/dev/zero of="$IMAGE" bs=16384 seek=254 count=1 conv=notrunc status=none
+dd if=/dev/zero of="$IMAGE" bs=16384 seek=255 count=1 conv=notrunc status=none
+
 # ── Create GPT partition table ────────────────────────────────────────────────
 
 log "Creating GPT partition table..."
@@ -65,8 +74,8 @@ label: gpt
 
 start=${BOOT_A_START_MIB}MiB, size=${BOOT_A_SIZE_MIB}MiB, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, name="boot-a"
 start=${BOOT_B_START_MIB}MiB, size=${BOOT_B_SIZE_MIB}MiB, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, name="boot-b"
-start=${ROOTFS_A_START_MIB}MiB, size=${ROOTFS_A_SIZE_MIB}MiB, type=B921B045-1DF0-41C3-AF44-4C6F280D3FAE, name="rootfs-a"
-start=${ROOTFS_B_START_MIB}MiB, size=${ROOTFS_B_SIZE_MIB}MiB, type=B921B045-1DF0-41C3-AF44-4C6F280D3FAE, name="rootfs-b"
+start=${ROOTFS_A_START_MIB}MiB, size=${ROOTFS_A_SIZE_MIB}MiB, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, name="rootfs-a"
+start=${ROOTFS_B_START_MIB}MiB, size=${ROOTFS_B_SIZE_MIB}MiB, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, name="rootfs-b"
 EOF
 
 # ── Create boot slot A (vfat with kernel + DTB + boot.scr) ────────────────────

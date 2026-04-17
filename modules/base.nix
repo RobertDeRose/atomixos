@@ -28,6 +28,18 @@
 
   system.stateVersion = "25.11";
 
+  # Login banner — shows build identity on serial console so we always know
+  # which image is running. Uses git rev when available, dirty rev otherwise.
+  environment.etc.issue.text =
+    let
+      rev = self.shortRev or self.dirtyShortRev or "unknown";
+    in
+    ''
+
+      AtomixOS (NixOS ${config.system.nixos.release}) — build ${rev}
+
+    '';
+
   time.timeZone = "UTC";
   i18n.defaultLocale = "en_US.UTF-8";
 
@@ -97,6 +109,58 @@
   boot.loader.efi.canTouchEfiVariables = false;
   systemd.services.systemd-boot-update.enable = false;
 
+  # ── OverlayFS sandboxing compatibility ─────────────────────────────────────
+  # systemd's mount-namespace sandboxing (ProtectSystem, PrivateTmp, etc.)
+  # creates bind-mounts that can fail on an OverlayFS root. Specifically,
+  # ProtectSystem="strict" tries to remount / read-only inside a mount
+  # namespace, which doesn't work reliably on overlay. Relax sandboxing for
+  # affected services so they start correctly on the overlay root.
+
+  # nsncd: upstream sandboxing (ProtectSystem, ProtectHome, etc.) creates
+  # mount namespaces that fail on an OverlayFS root. Permission denied on
+  # socket bind at /var/run/nscd/socket. Disable all namespace sandboxing
+  # since nsncd is the critical path — its failure cascades to every service
+  # that needs name resolution (chronyd, dnsmasq, sshd login, etc.).
+  systemd.services.nscd.serviceConfig = {
+    ProtectSystem = lib.mkForce false;
+    ProtectHome = lib.mkForce false;
+    PrivateTmp = lib.mkForce false;
+    NoNewPrivileges = lib.mkForce false;
+    RestrictSUIDSGID = lib.mkForce false;
+    # TEMP: run as root to diagnose if "Permission denied" is user-related
+    User = lib.mkForce "root";
+    Group = lib.mkForce "root";
+    DynamicUser = lib.mkForce false;
+  };
+
+  # chronyd: upstream sets PrivateMounts=true which creates a fully private
+  # mount namespace that interacts badly with overlay's mount structure.
+  systemd.services.chronyd.serviceConfig = {
+    ProtectSystem = lib.mkForce "full";
+    PrivateMounts = lib.mkForce false;
+  };
+
+  # dnsmasq: upstream sets ProtectSystem=true and PrivateTmp=true. While
+  # milder than "strict", PrivateTmp still creates bind-mounts that can
+  # fail on overlay. Its preStart also runs chown which needs NSS resolution.
+  systemd.services.dnsmasq.serviceConfig = {
+    PrivateTmp = lib.mkForce false;
+  };
+
+  # systemd-remount-fs is not needed — the overlay root is already writable
+  # and there's no meaningful remount to perform. The fstab entry for / says
+  # "overlay" which systemd-remount-fs handles as a no-op anyway, but we
+  # disable it explicitly to avoid any edge cases.
+  systemd.services.systemd-remount-fs.serviceConfig.ExecStart = lib.mkForce [
+    "" # clear upstream ExecStart
+    "${pkgs.coreutils}/bin/true"
+  ];
+
+  # FUSE filesystem support is not needed on this embedded device. Suppress
+  # the upstream systemd unit that tries to load the fuse kernel module
+  # (which isn't built) and mount /sys/fs/fuse/connections.
+  systemd.suppressedSystemUnits = [ "sys-fs-fuse-connections.mount" ];
+
   # ── Writable /var directory structure ───────────────────────────────────────
   # /var starts empty on every boot (the squashfs lower layer only has an
   # empty /var directory; writes go to the tmpfs upper layer of the overlay).
@@ -120,24 +184,6 @@
     "d /var/run 0755 root root -"
   ];
 
-  # Root filesystem — the squashfs device declared here tells the NixOS initrd
-  # what to mount at /mnt-root during stage 1. Our postMountCommands then wrap
-  # it in an overlayfs before switch_root. At runtime / is the overlay, while
-  # the squashfs is available at /media/root-ro.
-  #
-  # At runtime U-Boot selects the active slot via kernel cmdline
-  # (root=PARTLABEL=rootfs-a). This declaration satisfies NixOS assertions and
-  # provides the fallback device; the actual root is overridden by the bootloader.
-  #
-  # Note: no "ro" in options — the kernel cmdline has "ro" for the initial
-  # squashfs mount, but after the overlay wraps it, the root should be writable.
-  # If we put "ro" here, systemd-remount-fs would read /etc/fstab and remount
-  # the overlay as read-only, defeating the purpose of the writable upper layer.
-  fileSystems."/" = {
-    device = "/dev/disk/by-partlabel/rootfs-a";
-    fsType = "squashfs";
-  };
-
   # ── OverlayFS: writable root over read-only squashfs ─────────────────────────
   # The squashfs root is immutable. Instead of mounting individual tmpfs at
   # /etc, /var, /tmp, etc. (which breaks systemd's mount namespace sandboxing),
@@ -145,14 +191,38 @@
   #   lower = squashfs (read-only, contains the full NixOS system)
   #   upper = tmpfs (ephemeral, lost on reboot)
   #
-  # This is set up in the initrd via postMountCommands (after the squashfs root
-  # is mounted at /mnt-root but before switch_root). The overlay makes the
-  # entire root tree writable, so systemd sandboxing (PrivateTmp, ProtectHome,
-  # etc.) works correctly — no mount propagation issues.
+  # Architecture:
+  #   1. fileSystems."/" declares squashfs so the initrd mounts it at /mnt-root
+  #   2. postMountCommands converts it to overlay before switch_root:
+  #      - Moves squashfs to /mnt-root/media/root-ro
+  #      - Creates tmpfs at /mnt-root/media/root-rw
+  #      - Mounts overlay at /mnt-root (lowerdir=squashfs, upperdir=tmpfs)
+  #   3. /etc/fstab is overridden to say "overlay" for / so systemd sees the
+  #      correct filesystem type at runtime (prevents systemd-remount-fs crash)
+  #
+  # Why not three fileSystems entries (like iso-image.nix)?
+  #   NixOS's toposort (fsBefore) creates a cycle: / depends on /media/root-ro
+  #   (via overlay.depends), but / is a prefix of /media/root-ro (mountPoint
+  #   ordering). The ISO avoids this by using tmpfs for / and overlaying only
+  #   /nix/store. We need an overlay ROOT, so we use postMountCommands instead.
+  #
+  # At runtime U-Boot selects the active slot via kernel cmdline
+  # (root=PARTLABEL=rootfs-a). This declaration provides the fallback device;
+  # the actual root is overridden by the bootloader.
   #
   # Persistent state lives on /persist (f2fs partition, created on first boot).
   # The tmpfs upper layer is intentionally ephemeral: every boot starts clean
   # from the verified squashfs image, which is ideal for A/B OTA updates.
+
+  # Root filesystem — the squashfs device declared here tells the NixOS initrd
+  # what to mount at /mnt-root during stage 1. The postMountCommands then wrap
+  # it in an overlayfs before switch_root.
+  fileSystems."/" = {
+    device = "/dev/disk/by-partlabel/rootfs-a";
+    fsType = "squashfs";
+  };
+
+  # Initrd: convert squashfs root to overlay before switch_root.
   boot.initrd.postMountCommands = ''
     # Move the squashfs root out of /mnt-root so we can overlay it
     mkdir -p /mnt-lower
@@ -173,6 +243,23 @@
     mkdir -p /mnt-root/media/root-ro /mnt-root/media/root-rw
     mount --move /mnt-lower /mnt-root/media/root-ro
     mount --move /mnt-upper /mnt-root/media/root-rw
+  '';
+
+  # Override /etc/fstab so systemd sees the correct filesystem type for /.
+  # Without this, fstab says "squashfs" (from fileSystems."/") but the actual
+  # runtime root is overlay → systemd-remount-fs tries "mount -o remount /
+  # /dev/disk/by-partlabel/rootfs-a" which fails because the root is overlay,
+  # not squashfs. By declaring overlay with x-initrd.mount, systemd knows the
+  # initrd already mounted it and leaves it alone.
+  environment.etc.fstab.text = lib.mkForce ''
+    # This file is generated by NixOS (overridden for OverlayFS root).
+    # See modules/base.nix for details.
+
+    # OverlayFS root (mounted by initrd postMountCommands)
+    overlay / overlay x-initrd.mount,lowerdir=/media/root-ro,upperdir=/media/root-rw/upper,workdir=/media/root-rw/work 0 0
+
+    # Persistent state partition
+    /dev/disk/by-partlabel/persist /persist f2fs nofail,x-systemd.device-timeout=60s 0 0
   '';
 
   # Persistent state — survives reboots, separate from the ephemeral overlay.
@@ -210,6 +297,7 @@
       Type = "aad64a60-5bcb-5c83-b9c9-5e446f5dba3e";
       Label = "persist";
       Format = "f2fs";
+      SizeMinBytes = "128M";
       MakeDirectories = "/config /config/ssh-authorized-keys /containers /logs";
     };
   };
@@ -241,6 +329,7 @@
       config.systemd.package
       pkgs.util-linux
       pkgs.f2fs-tools
+      pkgs.coreutils # head (used in lsblk | head -1)
     ];
     script = ''
       set -euo pipefail

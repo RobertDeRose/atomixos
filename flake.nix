@@ -89,7 +89,10 @@
         };
 
         # U-Boot boot script compiled for Rock64
-        boot-script = pkgs.callPackage ./nix/boot-script.nix { };
+        boot-script = pkgs.callPackage ./nix/boot-script.nix {
+          # Embed squashfs store hash so U-Boot prints a build ID on serial
+          buildId = builtins.substring 0 32 (baseNameOf (toString self.packages.${system}.squashfs));
+        };
 
         # Flashable disk image for eMMC provisioning
         # Flash with: dd if=result-image/atomixos-<nixos-series>.img of=/dev/mmcblkN bs=4M

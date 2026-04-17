@@ -17,6 +17,15 @@
   networking.useNetworkd = true;
   systemd.network.enable = true;
 
+  # Don't let network-online.target block boot indefinitely. The device must
+  # boot and confirm its RAUC slot even without WAN connectivity. "any" means
+  # network-online.target is reached as soon as at least one interface has a
+  # carrier, rather than waiting for all interfaces to be fully configured.
+  systemd.network.wait-online = {
+    anyInterface = true;
+    timeout = 30; # seconds — give DHCP a chance, but don't block forever
+  };
+
   # ── NIC naming via systemd .link files ───────────────────────────────────────
 
   # Onboard RK3328 GMAC → eth0 (WAN)

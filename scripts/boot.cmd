@@ -18,6 +18,9 @@
 #   device numbers, since U-Boot and Linux may assign different mmcblk numbers
 #   to the same physical device.
 
+echo "AtomixOS build: @buildId@"
+echo ""
+
 # Default values if not set
 test -n "${BOOT_ORDER}" || setenv BOOT_ORDER "A B"
 test -n "${BOOT_A_LEFT}" || setenv BOOT_A_LEFT 3

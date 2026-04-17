@@ -23,9 +23,7 @@ in
     description = "OS update verification - local health check";
     after = [
       "multi-user.target"
-      "network-online.target"
     ];
-    wants = [ "network-online.target" ];
     wantedBy = [ "multi-user.target" ];
 
     # Skip on first boot — first-boot.service handles slot confirmation.
