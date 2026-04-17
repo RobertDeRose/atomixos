@@ -24,9 +24,11 @@ mise run build:rauc-bundle     # result-rauc-bundle/
 mise run build:boot-script     # result-boot-script/
 mise run build:image           # result-image/
 
-# Build everything
+# Build everything (single nix build invocation)
 mise run build
 ```
+
+`mise run build` runs a single `nix build .#squashfs .#rauc-bundle .#boot-script .#image --no-link` command. The individual `build:*` tasks are still available for inspecting specific artifacts.
 
 ### Building via Lima VM
 

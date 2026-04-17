@@ -106,8 +106,12 @@ type=raw
 **Function signature:**
 
 ```nix
-{ stdenv, ubootTools }:
+{ stdenv, ubootTools, buildId }:
 ```
+
+| Parameter | Source      | Description                                |
+|-----------|-------------|--------------------------------------------|
+| `buildId` | `flake.nix` | Build identifier echoed during U-Boot boot |
 
 **Build step:**
 

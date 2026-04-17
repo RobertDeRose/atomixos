@@ -28,7 +28,7 @@
 - [x] 3.1 Configure Cockpit to run as a pod (`quay.io/cockpit/ws`) with `python3Minimal` in the rootfs for the SSH-based
   Python bridge
 - [x] 3.2 Enable OpenVPN in the NixOS configuration as a systemd service for VPN recovery access
-- [ ] 3.3 Verify Cockpit pod starts on boot, is accessible via HTTPS, and shows podman container management
+- [!] 3.3 Verify Cockpit pod starts on boot, is accessible via HTTPS, and shows podman container management
 - [ ] 3.4 Verify OpenVPN creates tun0 interface when a VPN connection is established
 
 ## 4. Squashfs Image Build
@@ -68,8 +68,8 @@
 - [x] 6.1 Configure dnsmasq as DHCP server on eth1 only, pool 172.20.30.10-172.20.30.254, gateway 172.20.30.1
 - [x] 6.2 Configure chrony as NTP client (WAN servers via eth0) and NTP server (LAN clients on 172.20.30.0/24 via eth1)
 - [x] 6.3 Explicitly disable IP forwarding (`net.ipv4.ip_forward = 0`)
-- [ ] 6.4 Verify DHCP: connect a device to the LAN switch, confirm it gets an IP in the correct range
-- [ ] 6.5 Verify NTP: query 172.20.30.1 from a LAN device, confirm time response
+- [!] 6.4 Verify DHCP: connect a device to the LAN switch, confirm it gets an IP in the correct range
+- [!] 6.5 Verify NTP: query 172.20.30.1 from a LAN device, confirm time response
 - [ ] 6.6 Verify isolation: confirm a LAN device cannot reach any WAN address
 
 ## 7. Firewall Configuration
@@ -100,7 +100,7 @@
 - [x] 8.6 U-Boot environment defaults handled by boot.cmd script (lines 17-19: `BOOT_ORDER=A B`, `BOOT_A_LEFT=3`,
   `BOOT_B_LEFT=3` when env unset)
 - [x] 8.7 Add idempotency check: detect if eMMC is already provisioned and prompt for confirmation before overwriting
-- [ ] 8.8 Test provisioning script: device boots from eMMC into slot A and reaches multi-user.target
+- [x] 8.8 Test provisioning script: device boots from eMMC into slot A and reaches multi-user.target
 
 ## 9. U-Boot Configuration and Boot-Count Logic
 
@@ -190,7 +190,7 @@
 
 ## 16. End-to-End Integration Testing
 
-- [ ] 16.1 Full provisioning test: run provisioning script on Rock64, verify first boot to multi-user.target with all
+- [~] 16.1 Full provisioning test: run provisioning script on Rock64, verify first boot to multi-user.target with all
   services (Cockpit pod, DHCP, NTP, firewall)
 - [x] 16.2 Update test: build a v2 bundle, serve it from a test HTTP server, verify polling service downloads and
   installs it, device reboots into new slot with new kernel and rootfs — validated via `nix build
@@ -240,7 +240,7 @@
   scheme but still needs SSH credentials for the bridge. Recommended: "OIDC gatekeeper + Cockpit password"
   (two-factor: identity via OIDC + device password). Alternative: custom [bearer] command trusting X-Forwarded-User
   with SSH service key (SSO, future). OIDC template with chain middleware written to provisioning.
-- [ ] 17.5 Verify Cockpit pod can SSH to host using provisioned password and spawn Python bridge via python3Minimal
+- [!] 17.5 Verify Cockpit pod can SSH to host using provisioned password and spawn Python bridge via python3Minimal
 - [x] 17.6 Add Cockpit pod to the health manifest for os-verification service validation — provisioning task creates
   /persist/config/health-manifest.yaml with cockpit-ws and traefik container entries
 

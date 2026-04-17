@@ -6,14 +6,14 @@ All tasks are run with `mise run <task>`. Run `mise tasks` to list them.
 
 All `build:*` tasks accept `--lima` to run inside a Lima VM and `--vm <name>` to specify which VM (default: `default`).
 
-| Task                | Description                                                |
-|---------------------|------------------------------------------------------------|
-| `check`             | Verify flake evaluates cleanly (`nix flake check`)         |
-| `build`             | Build all image artifacts (depends on all `build:*` tasks) |
-| `build:squashfs`    | Build squashfs rootfs &rarr; `result-squashfs/`            |
-| `build:rauc-bundle` | Build signed RAUC bundle &rarr; `result-rauc-bundle/`      |
-| `build:boot-script` | Build U-Boot boot script &rarr; `result-boot-script/`      |
-| `build:image`       | Build flashable disk image, copy `.img` to cwd             |
+| Task                | Description                                                  |
+|---------------------|--------------------------------------------------------------|
+| `check`             | Verify flake evaluates cleanly (`nix flake check`)           |
+| `build`             | Build all image artifacts in a single `nix build` invocation |
+| `build:squashfs`    | Build squashfs rootfs &rarr; `result-squashfs/`              |
+| `build:rauc-bundle` | Build signed RAUC bundle &rarr; `result-rauc-bundle/`        |
+| `build:boot-script` | Build U-Boot boot script &rarr; `result-boot-script/`        |
+| `build:image`       | Build flashable disk image, copy `.img` to cwd               |
 
 `build:image` also accepts `-o <path>` to specify the output filename.
 
@@ -47,6 +47,7 @@ All `build:*` tasks accept `--lima` to run inside a Lima VM and `--vm <name>` to
 
 ## Utility Tasks
 
-| Task     | Description                                               |
-|----------|-----------------------------------------------------------|
-| `serial` | Launch serial console capture (1.5 Mbaud, auto-reconnect) |
+| Task             | Description                                                              |
+|------------------|--------------------------------------------------------------------------|
+| `serial:capture` | Capture serial output (1.5 Mbaud, auto-reconnect). `--bg` for background |
+| `serial:shell`   | Interactive serial shell via minicom (1.5 Mbaud)                         |

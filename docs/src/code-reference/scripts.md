@@ -51,8 +51,8 @@ Assembles the flashable disk image.
 | `@uboot@`                           | U-Boot package    |
 | `@imageName@`                       | Output filename   |
 
-**Steps:** Create sparse image, write U-Boot at raw offsets, create GPT with sfdisk, create vfat boot partitions
-(mtools), write squashfs to rootfs-a.
+**Steps:** Create sparse image, write U-Boot at raw offsets, zero U-Boot environment regions, create GPT with sfdisk,
+create vfat boot partitions (mtools), write squashfs to rootfs-a.
 
 ---
 
@@ -68,12 +68,13 @@ U-Boot boot script implementing A/B slot selection with boot-count rollback. Com
 
 **Key logic:**
 
-1. Set defaults: `BOOT_ORDER="A B"`, `BOOT_A_LEFT=3`, `BOOT_B_LEFT=3`
-2. Auto-detect boot device number from `devnum`
-3. Override `ramdisk_addr_r=0x08000000` (avoids kernel overlap)
-4. Iterate `BOOT_ORDER`; for each slot with remaining attempts: decrement counter, `saveenv`, load kernel/initrd/DTB
+1. Echo build ID to console for identification
+2. Set defaults: `BOOT_ORDER="A B"`, `BOOT_A_LEFT=3`, `BOOT_B_LEFT=3`
+3. Auto-detect boot device number from `devnum`
+4. Override `ramdisk_addr_r=0x08000000` (avoids kernel overlap)
+5. Iterate `BOOT_ORDER`; for each slot with remaining attempts: decrement counter, `saveenv`, load kernel/initrd/DTB
    from boot partition, set `root=PARTLABEL=rootfs-x`, `booti`
-5. If no slot bootable: print error and `reset`
+6. If no slot bootable: print error and `reset`
 
 **Console:** `ttyS2,1500000` (Rock64 UART2)
 

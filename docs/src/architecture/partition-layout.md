@@ -10,7 +10,7 @@ Offset     Size       Content          Filesystem     Notes
 0          16 MB      U-Boot           raw            idbloader @ sector 64, u-boot.itb @ sector 16384
 16 MB      128 MB     boot-a           vfat           kernel Image, initrd, DTB, boot.scr
 144 MB     128 MB     boot-b           vfat           (populated by RAUC on update)
-272 MB     1024 MB    rootfs-a         squashfs       zstd compressed, 1 MB blocks
+272 MB     1024 MB    rootfs-a         squashfs       zstd compressed, 1 MB blocks; used as OverlayFS lower layer
 1296 MB    1024 MB    rootfs-b         squashfs       (populated by RAUC on update)
 2320 MB    ~13.3 GB   persist          f2fs           containers, config, state, logs
 ```
@@ -43,10 +43,10 @@ resilience for the boot-count variables.
 
 ## Persist Partition
 
-The `/persist` partition is **not** included in the flashable image. On first boot, a custom `create-persist.service`
+The `/persist` partition is **not** included in the flashable image. On first boot, `create-persist.service`
 fixes the GPT backup header (stranded at the old image boundary after dd'ing a smaller image onto the larger eMMC), then
-invokes `systemd-repart` with an explicit device path to create and format the partition as f2fs using all remaining
-eMMC space. This partition survives all updates and rollbacks.
+invokes `systemd-repart` with an explicit device path to create and format the partition as f2fs (128 MB minimum) using
+all remaining eMMC space. This partition survives all updates and rollbacks.
 
 Contents created during provisioning:
 

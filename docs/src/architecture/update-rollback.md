@@ -58,8 +58,8 @@ slot.
 ## First Boot Exception
 
 On initial device provisioning, no containers or health manifest exist yet. The `first-boot.service` handles this by
-unconditionally marking the slot as good and writing a sentinel file (`/persist/.completed_first_boot`). After this, all
-subsequent boots use the full health-check path.
+unconditionally marking the slot as good (no network dependency) and writing a sentinel file
+(`/persist/.completed_first_boot`). After this, all subsequent boots use the full health-check path.
 
 ## Watchdog Integration
 

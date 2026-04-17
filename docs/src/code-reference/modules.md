@@ -63,6 +63,14 @@ The overlay is assembled in the initrd after the squashfs root is mounted at `/m
 This approach replaces per-directory tmpfs mounts, which broke systemd's mount namespace sandboxing (PrivateTmp,
 ProtectHome, etc.). The overlay presents a single writable filesystem, so mount propagation works correctly.
 
+`/etc/fstab` is overridden to declare overlay for `/` so systemd sees the correct filesystem type at runtime.
+
+**Sandboxing note:** `nsncd` (the NSS lookup daemon) runs as root due to permission issues on the overlay filesystem.
+
+**Network wait:** `systemd-networkd-wait-online` is configured with a 30s timeout and `anyInterface=true`.
+
+**Build ID:** The NixOS login banner (`/etc/issue`) displays the build ID for easy identification.
+
 **First-boot persist partition:** Created by a custom `create-persist.service` (not upstream `systemd-repart`) that
 fixes the GPT backup header (`sfdisk --relocate`) after the smaller image is dd'd onto the larger eMMC, then invokes
 `systemd-repart` with an explicit device path.
