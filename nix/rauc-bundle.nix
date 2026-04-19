@@ -9,6 +9,7 @@
   squashfsTools,
   nixosConfig,
   squashfsImage,
+  bootScript,
   signingCert,
   signingKeyPath,
   caCert,
@@ -17,7 +18,9 @@
 let
   # Extract kernel and DTB from the NixOS configuration
   kernel = nixosConfig.boot.kernelPackages.kernel;
+  initrd = nixosConfig.system.build.initialRamdisk;
   dtbPath = "rockchip/rk3328-rock64.dtb";
+  version = nixosConfig.system.nixos.version;
 
   buildScript = stdenv.mkDerivation {
     name = "build-rauc-bundle-script";
@@ -27,11 +30,13 @@ let
     installPhase = ''
       substitute $src $out \
         --replace-fail "@kernel@" "${kernel}" \
+        --replace-fail "@initrd@" "${initrd}" \
         --replace-fail "@dtbPath@" "${dtbPath}" \
         --replace-fail "@squashfs@" "${squashfsImage}" \
+        --replace-fail "@bootScript@" "${bootScript}" \
         --replace-fail "@signingCert@" "${signingCert}" \
         --replace-fail "@signingKey@" "${signingKeyPath}" \
-        --replace-fail "@version@" "0.1.0"
+        --replace-fail "@version@" "${version}"
       chmod +x $out
     '';
   };

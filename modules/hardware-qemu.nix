@@ -8,6 +8,40 @@
 }:
 
 {
+  # QEMU VM runner uses a regular writable root disk, not the Rock64
+  # squashfs+overlay layout from base.nix.
+  fileSystems."/" = lib.mkForce {
+    device = "/dev/disk/by-label/nixos";
+    fsType = "ext4";
+  };
+
+  # Boot partition handling in base.nix is Rock64/eMMC-specific.
+  fileSystems."/boot" = lib.mkForce {
+    device = "none";
+    fsType = "tmpfs";
+    options = [ "mode=0755" ];
+  };
+
+  fileSystems."/persist" = lib.mkForce {
+    device = "none";
+    fsType = "tmpfs";
+    options = [ "mode=0755" ];
+    neededForBoot = false;
+  };
+
+  boot.initrd.postMountCommands = lib.mkForce "";
+
+  environment.etc.fstab.text = lib.mkForce ''
+    # QEMU VM layout
+    /dev/disk/by-label/nixos / ext4 defaults 0 1
+    none /boot tmpfs mode=0755 0 0
+    none /persist tmpfs mode=0755 0 0
+  '';
+
+  # Persist partition provisioning is Rock64-specific.
+  systemd.repart.enable = lib.mkForce false;
+  systemd.services.create-persist.enable = lib.mkForce false;
+
   # ── Boot configuration ───────────────────────────────────────────────────────
 
   boot.loader.grub.enable = false;

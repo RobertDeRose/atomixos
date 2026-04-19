@@ -2,14 +2,10 @@
 #MISE description="Capture Rock64 serial console output (UART2 @ 1.5Mbaud)"
 #USAGE flag "-p --port <path>" help="Serial device path (default: auto-detect /dev/cu.usbserial-*)"
 #USAGE flag "-l --log <path>" help="Log file path (default: /tmp/rock64-serial.log)"
-#USAGE flag "-t --timeout <secs>" help="Capture timeout in seconds, 0=infinite (default: 0)"
-#USAGE flag "--bg" help="Run in background with auto-reconnect loop (for agent/CI use). Kills any existing capture first. Prints PID to stdout."
+#USAGE flag "--bg" help="Run in background. Kills any existing capture first. Prints PID to stdout."
 set -euo pipefail
 
 SERIAL_LOG="${usage_log:-/tmp/rock64-serial.log}"
-SERIAL_TIMEOUT="${usage_timeout:-0}"
-
-SCRIPT_DIR="${MISE_PROJECT_ROOT}"
 
 # Auto-detect serial device (cu.* not tty.* — macOS tty.* waits for DCD)
 auto_detect_port() {
@@ -24,56 +20,46 @@ auto_detect_port() {
 	echo "$port"
 }
 
-if [ "${usage_bg:-false}" = "true" ]; then
-	# Background mode: kill existing capture, truncate log, launch reconnect loop
-	pkill -f serial-capture.py 2>/dev/null || true
-	sleep 1
-	: > "$SERIAL_LOG"
-
-	nohup bash -c "
-		while true; do
-			DEV=\"${usage_port:-}\"
-			if [ -z \"\$DEV\" ]; then
-				DEV=\$(find /dev -maxdepth 1 -name 'cu.usbserial-*' 2>/dev/null | head -1)
-			fi
-			if [ -n \"\$DEV\" ]; then
-				SERIAL_PORT=\"\$DEV\" SERIAL_LOG=\"$SERIAL_LOG\" SERIAL_TIMEOUT=\"$SERIAL_TIMEOUT\" \
-					nix-shell -p python3Packages.pyserial --run \"python3 $SCRIPT_DIR/scripts/serial-capture.py\" 2>&1 || true
-				sleep 2
-			else
-				sleep 1
-			fi
-		done
-	" > /tmp/serial-capture-stdout.log 2>&1 &
-
-	BG_PID=$!
-	echo "Serial capture running in background (PID $BG_PID)"
-	echo "  Log: $SERIAL_LOG"
-	echo "  Stop: pkill -f serial-capture.py"
-	exit 0
-fi
-
-# Foreground mode
 if [ -n "${usage_port:-}" ]; then
 	SERIAL_PORT="$usage_port"
 else
 	SERIAL_PORT="$(auto_detect_port)"
 fi
 
-export SERIAL_PORT
-export SERIAL_LOG
-export SERIAL_TIMEOUT
+# Resolve minicom binary via nix (same approach as serial:shell)
+MINICOM="$(nix build nixpkgs#minicom --no-link --print-out-paths 2>/dev/null)/bin/minicom"
+if [ ! -x "$MINICOM" ]; then
+	echo "ERROR: Failed to resolve minicom via nix. Try: nix build nixpkgs#minicom"
+	exit 1
+fi
 
+if [ "${usage_bg:-false}" = "true" ]; then
+	# Background mode: kill existing capture, truncate log, launch minicom headless
+	pkill -f "minicom.*capture" 2>/dev/null || true
+	pkill -f "minicom -D.*cu.usbserial" 2>/dev/null || true
+	sleep 1
+	: > "$SERIAL_LOG"
+
+	# Run minicom in background with capture file.
+	# -C = capture file, -o = skip init, no terminal needed via script -q /dev/null
+	nohup script -q /dev/null "$MINICOM" -D "$SERIAL_PORT" -b 1500000 -o -C "$SERIAL_LOG" \
+		> /dev/null 2>&1 &
+
+	BG_PID=$!
+	echo "Serial capture running in background (PID $BG_PID)"
+	echo "  Log: $SERIAL_LOG"
+	echo "  Stop: pkill -f 'minicom -D'"
+	exit 0
+fi
+
+# Foreground mode: capture to file and show on screen
 echo "=== Rock64 Serial Capture ==="
 echo ""
-echo "  Port:    $SERIAL_PORT"
-echo "  Baud:    1500000"
-echo "  Log:     $SERIAL_LOG"
-if [ "$SERIAL_TIMEOUT" != "0" ]; then
-	echo "  Timeout: ${SERIAL_TIMEOUT}s"
-fi
+echo "  Port: $SERIAL_PORT"
+echo "  Baud: 1500000"
+echo "  Log:  $SERIAL_LOG"
 echo ""
-echo "Auto-reconnects on USB disconnect. Press Ctrl+C to stop."
+echo "Press Ctrl-A X to stop."
 echo ""
 
-exec nix-shell -p python3Packages.pyserial --run "python3 $SCRIPT_DIR/scripts/serial-capture.py"
+exec "$MINICOM" -D "$SERIAL_PORT" -b 1500000 -o -C "$SERIAL_LOG"

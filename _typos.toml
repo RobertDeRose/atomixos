@@ -1,3 +1,6 @@
 [default.extend-words]
 # nftables input interface shorthand — not a typo of "if"
 iif = "iif"
+# Linux kernel config options (Chrome OS, Heterogeneous System Architecture)
+CROS = "CROS"
+HSA = "HSA"

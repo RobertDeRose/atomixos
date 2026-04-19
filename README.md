@@ -40,7 +40,8 @@ updates, automatic rollback, and a container-based application deployment model.
 
 - **Atomic OTA updates** -- installs to the inactive slot pair while the active slot stays online
 - **Automatic rollback** -- uses U-Boot boot-count fallback after repeated failed boots
-- **Hardware watchdog** -- reboots hung systems via systemd watchdog integration (if supported by hardware)
+- **Hardware watchdog (currently disabled)** -- integration is implemented and tested in QEMU;
+  Rock64 runtime enablement is pending boot-stability validation
 - **Local health-check confirmation** -- commits new slots only after service and manifest container checks pass
 - **Signed RAUC bundles** -- builds reproducible, signed `.raucb` artifacts from the flake
 - **Network isolation boundary** -- keeps LAN clients off the internet; only explicit application-layer proxying is
@@ -54,8 +55,8 @@ updates, automatic rollback, and a container-based application deployment model.
 ```text
 Offset     Size       Content          Filesystem
 0          4 MB       U-Boot           raw (idbloader + u-boot.itb)
-4 MB       128 MB     boot slot A      vfat (kernel + DTB)
-132 MB     128 MB     boot slot B      vfat (kernel + DTB)
+4 MB       128 MB     boot slot A      vfat (kernel + initrd + DTB + boot.scr)
+132 MB     128 MB     boot slot B      vfat (kernel + initrd + DTB + boot.scr)
 260 MB     1 GB       rootfs slot A    squashfs (zstd, 1 MB block)
 1284 MB    1 GB       rootfs slot B    squashfs (zstd, 1 MB block)
 2308 MB    ~13.3 GB   /persist         f2fs (containers, state, logs)
@@ -96,7 +97,8 @@ selectively bridges WAN and LAN with authentication.
 8. After 3 failed boots → U-Boot falls back to previous good slot
 ```
 
-The hardware watchdog ensures hung systems reboot within 30s, feeding into the same boot-count rollback path.
+The hardware watchdog integration is implemented, but runtime enforcement is currently disabled
+during development on Rock64 until boot stability is fully validated.
 
 ### Squashfs rootfs
 
@@ -344,7 +346,8 @@ mise run flash -i custom.img /dev/disk4   # specify image explicitly
 mise run flash -y /dev/mmcblk0     # Linux — skip confirmation prompt
 ```
 
-The image includes U-Boot, boot slot A (kernel + DTB), and rootfs slot A (squashfs). On first boot, `systemd-repart`
+The image includes U-Boot, boot slot A (kernel + initrd + DTB + boot.scr), and rootfs slot A
+(squashfs). On first boot, `systemd-repart`
 automatically creates and formats the `/persist` partition (f2fs) using all remaining eMMC space.
 
 ## mise Task Reference

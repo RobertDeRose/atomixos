@@ -28,7 +28,9 @@ mise run build:image           # result-image/
 mise run build
 ```
 
-`mise run build` runs a single `nix build .#squashfs .#rauc-bundle .#boot-script .#image --no-link` command. The individual `build:*` tasks are still available for inspecting specific artifacts.
+`mise run build` runs a single
+`nix build .#squashfs .#rauc-bundle .#boot-script .#image --no-link` command.
+The individual `build:*` tasks are still available for inspecting specific artifacts.
 
 ### Building via Lima VM
 

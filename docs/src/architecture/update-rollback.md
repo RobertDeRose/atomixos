@@ -1,7 +1,7 @@
 # Update & Rollback Flow
 
-AtomixOS uses RAUC for A/B slot management combined with U-Boot boot-count logic and a hardware watchdog to guarantee
-automatic recovery from failed updates.
+AtomixOS uses RAUC for A/B slot management combined with U-Boot boot-count logic and watchdog integration for automatic
+recovery from failed updates.
 
 ## Normal Update Cycle
 
@@ -61,15 +61,16 @@ On initial device provisioning, no containers or health manifest exist yet. The 
 unconditionally marking the slot as good (no network dependency) and writing a sentinel file
 (`/persist/.completed_first_boot`). After this, all subsequent boots use the full health-check path.
 
-## Watchdog Integration
+## Watchdog Integration (currently disabled on Rock64 during development)
 
-The RK3328 hardware watchdog (`dw_wdt`) is configured with:
+The RK3328 hardware watchdog (`dw_wdt`) integration is implemented with these target settings:
 
 - **Runtime watchdog**: 30 seconds -- if systemd hangs, the device reboots
 - **Reboot watchdog**: 10 minutes -- if a reboot hangs, the watchdog forces a hard reset
 
-Both scenarios feed into the boot-count rollback path: the reboot increments the failure count, and after 3 failures the
-previous slot is restored.
+When enabled, both scenarios feed into the boot-count rollback path: the reboot increments
+the failure count, and after 3
+failures the previous slot is restored.
 
 ## Update Polling
 

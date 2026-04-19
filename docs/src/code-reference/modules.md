@@ -264,12 +264,12 @@ files in `/var/lib/rauc/`.
 
 ## watchdog.nix
 
-**Purpose**: systemd hardware watchdog configuration.
+**Purpose**: systemd hardware watchdog configuration (currently disabled on Rock64 during development).
 
 ```nix
 systemd.settings.Manager = {
-  RuntimeWatchdogSec = "30s";
-  RebootWatchdogSec = "10min";
+  # RuntimeWatchdogSec = "30s";
+  # RebootWatchdogSec = "10min";
 };
 ```
 

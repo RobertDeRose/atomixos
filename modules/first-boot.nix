@@ -27,7 +27,8 @@ in
     # Only run if the sentinel does NOT exist (first boot only)
     unitConfig.ConditionPathExists = "!/persist/.completed_first_boot";
 
-    # No special path needed — just writes a flag file to /boot
+    # RAUC needs to be on PATH to call `rauc status mark-good`
+    path = [ pkgs.rauc ];
 
     serviceConfig = {
       Type = "oneshot";

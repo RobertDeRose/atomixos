@@ -52,29 +52,30 @@ squashfs.nix ─────┬──> image.nix
 
 ## rauc-bundle.nix
 
-**Purpose**: Builds a signed RAUC bundle containing boot (kernel + DTB) and rootfs (squashfs) images.
+**Purpose**: Builds a signed RAUC bundle containing boot (kernel + initrd + DTB + boot.scr) and rootfs (squashfs) images.
 
 **Function signature:**
 
 ```nix
 { stdenv, rauc, dosfstools, mtools, squashfsTools,
-  nixosConfig, squashfsImage, signingCert, signingKeyPath, caCert }:
+  nixosConfig, squashfsImage, bootScript, signingCert, signingKeyPath, caCert }:
 ```
 
-| Parameter        | Source                         | Description                     |
-|------------------|--------------------------------|---------------------------------|
-| `nixosConfig`    | `rock64System.config`          | Provides kernel and DTB paths   |
-| `squashfsImage`  | `packages.squashfs`            | The squashfs derivation output  |
-| `signingCert`    | `./certs/dev.signing.cert.pem` | RAUC signing certificate        |
-| `signingKeyPath` | `./certs/dev.signing.key.pem`  | RAUC signing private key        |
-| `caCert`         | `./certs/dev.ca.cert.pem`      | CA certificate for verification |
+| Parameter        | Source                         | Description                      |
+|------------------|--------------------------------|----------------------------------|
+| `nixosConfig`    | `rock64System.config`          | Provides kernel/initrd/DTB paths |
+| `squashfsImage`  | `packages.squashfs`            | The squashfs derivation output   |
+| `bootScript`     | `packages.boot-script`         | Compiled `boot.scr`              |
+| `signingCert`    | `./certs/dev.signing.cert.pem` | RAUC signing certificate         |
+| `signingKeyPath` | `./certs/dev.signing.key.pem`  | RAUC signing private key         |
+| `caCert`         | `./certs/dev.ca.cert.pem`      | CA certificate for verification  |
 
 **Delegates to:** `scripts/build-rauc-bundle.sh`
 
 **Build steps:**
 
 1. Create a 128 MB vfat image (`boot.vfat`)
-2. Copy kernel `Image` and DTB into it using mtools
+2. Copy kernel `Image`, `initrd`, DTB, and `boot.scr` into it using mtools
 3. Copy `rootfs.squashfs` into the bundle directory
 4. Generate `manifest.raucm` with `compatible=rock64` and image definitions
 5. Sign and package with `rauc bundle`
@@ -86,7 +87,7 @@ squashfs.nix ─────┬──> image.nix
 ```ini
 [update]
 compatible=rock64
-version=0.1.0
+version=<nixosConfig.system.nixos.version>
 
 [image.boot]
 filename=boot.vfat

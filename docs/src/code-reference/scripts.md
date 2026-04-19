@@ -30,12 +30,14 @@ Builds a signed RAUC bundle (`.raucb`).
 | Input                            | Description                                            |
 |----------------------------------|--------------------------------------------------------|
 | `@kernel@`                       | Kernel package (contains `Image` and `dtbs/`)          |
+| `@initrd@`                       | Initrd package (contains `initrd`)                     |
 | `@dtbPath@`                      | Relative DTB path (e.g., `rockchip/rk3328-rock64.dtb`) |
 | `@squashfs@`                     | Squashfs image directory                               |
+| `@bootScript@`                   | Compiled U-Boot script (`boot.scr`)                    |
 | `@signingCert@` / `@signingKey@` | RAUC signing credentials                               |
 | `@version@`                      | Bundle version string                                  |
 
-**Steps:** Create 128 MB vfat with kernel + DTB (mtools), generate manifest, sign with `rauc bundle`.
+**Steps:** Create 128 MB vfat with kernel + initrd + DTB + boot.scr (mtools), generate manifest, sign with `rauc bundle`.
 
 ### build-image.sh
 

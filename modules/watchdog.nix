@@ -1,5 +1,6 @@
 # Systemd watchdog configuration.
-# Enables the hardware watchdog (RK3328 dw_wdt) via systemd.
+# Integration is implemented but intentionally disabled during development
+# until Rock64 boot reliability is fully validated.
 {
   config,
   lib,

@@ -70,6 +70,7 @@
       # Sandboxing
       ProtectSystem = "strict";
       ReadWritePaths = [
+        "/persist/containers"
         "/run/podman"
         "/var/lib/containers"
         "/tmp"

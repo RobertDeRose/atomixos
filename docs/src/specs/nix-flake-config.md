@@ -29,7 +29,8 @@ the partition slot size (1 GB).
 
 ### ADDED: Produces signed RAUC bundle
 
-The flake builds a multi-slot RAUC bundle (`.raucb`) containing both boot (kernel + DTB) and rootfs (squashfs) images,
+The flake builds a multi-slot RAUC bundle (`.raucb`) containing both boot
+(kernel + initrd + DTB + boot.scr) and rootfs (squashfs) images,
 signed with the project's CA key.
 
 #### Scenario: RAUC bundle is valid

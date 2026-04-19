@@ -4,6 +4,9 @@
 
 ## Requirements
 
+Current status: implementation is present, but the Rock64 runtime watchdog is intentionally disabled during development.
+The scenarios below describe the target behavior once re-enabled.
+
 ### ADDED: Hardware watchdog via systemd
 
 The RK3328's hardware watchdog (`dw_wdt`) is managed by systemd. If systemd fails to kick the watchdog within the

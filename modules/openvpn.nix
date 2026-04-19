@@ -27,7 +27,7 @@
 
   # Systemd override: only start if config file exists
   systemd.services.openvpn-recovery = {
-    serviceConfig = {
+    unitConfig = {
       ConditionPathExists = "/persist/config/openvpn/client.conf";
     };
   };

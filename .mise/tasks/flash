@@ -105,7 +105,7 @@ if [ "$OS" = "Darwin" ]; then
 else
 	# Linux: unmount any mounted partitions
 	for part in "${DISK}"*; do
-		if mountpoint -q "$part" 2>/dev/null; then
+		if [ -b "$part" ] && grep -q "^$part " /proc/mounts 2>/dev/null; then
 			umount "$part" 2>/dev/null || true
 		fi
 	done

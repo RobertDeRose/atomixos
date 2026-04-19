@@ -4,7 +4,7 @@ AtomixOS combines several architectural patterns to achieve reliable over-the-ai
 
 - **A/B partition scheme** with paired boot and rootfs slots
 - **Read-only squashfs rootfs** with OverlayFS root (squashfs lower + tmpfs upper) for runtime state
-- **U-Boot boot-count rollback** with hardware watchdog integration
+- **U-Boot boot-count rollback** with watchdog integration (currently disabled on Rock64 during development)
 - **Network isolation** with no IP forwarding between WAN and LAN interfaces
 - **EN18031-compliant authentication** with no embedded credentials
 

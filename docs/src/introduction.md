@@ -4,7 +4,8 @@
   <img src="atomixos.png" alt="AtomixOS logo" width="320" />
 </p>
 
-**NixOS-based firmware image with atomic A/B OTA updates, automatic rollback, and hardware watchdog protection.**
+**Secure, reproducible operating system for single-board computers, with atomic A/B OTA updates, automatic rollback, and
+container-based application deployment.**
 
 AtomixOS is a purpose-built firmware platform for Rock64 (RK3328, aarch64) edge gateway devices. Each device serves as
 a network security boundary compliant with EN18031, isolating legacy LAN devices from the internet while providing
@@ -21,8 +22,8 @@ AtomixOS eliminates this class of failure through:
 - **Atomic A/B updates** -- installs to the inactive slot pair while the active slot stays online; no partial state
 - **Automatic rollback** -- U-Boot boot-count logic falls back to the previous working slot after 3 consecutive boot
   failures
-- **Hardware watchdog** -- reboots hung systems within 30 seconds via the RK3328's hardware watchdog, feeding into the
-  same rollback path
+- **Hardware watchdog (currently disabled on Rock64)** -- integration and tests are in place; runtime enablement is pending
+  final boot-stability validation on hardware
 - **Local health-check confirmation** -- commits new slots only after verifying that all services and containers are
   healthy for a sustained 60-second window
 - **Signed RAUC bundles** -- reproducible, CA-signed `.raucb` artifacts built from the Nix flake

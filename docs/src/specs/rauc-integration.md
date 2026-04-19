@@ -53,7 +53,8 @@ RAUC only writes to the slot pair that is not currently booted. The active slot 
 
 ### ADDED: Bundle contains boot and rootfs
 
-Each RAUC bundle contains two images: a vfat boot image (kernel + DTB) and the squashfs rootfs. Both are installed
+Each RAUC bundle contains two images: a vfat boot image (kernel + initrd + DTB + boot.scr)
+and the squashfs rootfs. Both are installed
 atomically to the target slot pair.
 
 #### Scenario: Bundle structure

@@ -71,6 +71,9 @@
       # ── Package outputs ────────────────────────────────────────────────────
 
       packages.${system} = {
+        # Custom U-Boot with SPI flash env + RAUC A/B bootmeth
+        uboot = pkgs.callPackage ./nix/uboot.nix { };
+
         # Squashfs root filesystem image
         squashfs = pkgs.callPackage ./nix/squashfs.nix {
           nixosConfig = rock64Config;
@@ -83,6 +86,7 @@
         rauc-bundle = pkgs.callPackage ./nix/rauc-bundle.nix {
           nixosConfig = rock64Config;
           squashfsImage = self.packages.${system}.squashfs;
+          bootScript = self.packages.${system}.boot-script;
           signingCert = ./certs/dev.signing.cert.pem;
           signingKeyPath = ./certs/dev.signing.key.pem;
           caCert = ./certs/dev.ca.cert.pem;
@@ -101,6 +105,7 @@
           nixosConfig = rock64Config;
           squashfsImage = self.packages.${system}.squashfs;
           bootScript = self.packages.${system}.boot-script;
+          ubootRock64 = self.packages.${system}.uboot;
         };
       };
 

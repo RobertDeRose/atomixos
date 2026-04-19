@@ -2,20 +2,25 @@
 #MISE description="Interactive serial console to Rock64 (UART2 @ 1.5Mbaud)"
 #MISE raw=true
 #USAGE flag "-p --port <path>" help="Serial device path (default: auto-detect /dev/cu.usbserial-*)"
-set -euo pipefail
+#USAGE flag "-l --log <path>" help="Log file path (default: /tmp/rock64-serial-<buildid>-<timestamp>.log)"
+set -uo pipefail
 
-# Auto-detect serial device (cu.* not tty.* — macOS tty.* waits for DCD)
-if [ -n "${usage_port:-}" ]; then
-	SERIAL_PORT="$usage_port"
-else
-	SERIAL_PORT="$(find /dev -maxdepth 1 -name 'cu.usbserial-*' 2>/dev/null | head -1)"
-	if [ -z "$SERIAL_PORT" ]; then
-		echo "ERROR: No USB-serial adapter found (/dev/cu.usbserial-*)"
-		echo ""
-		echo "Check that the adapter is plugged in firmly."
-		exit 1
+# Derive build ID from the latest image in cwd (matches boot banner)
+BUILD_ID="unknown"
+for img in atomixos-*.img; do
+	if [ -f "$img" ]; then
+		# Image mtime as a proxy for build identity
+		BUILD_ID=$(stat -f%m "$img" 2>/dev/null || stat -c%Y "$img" 2>/dev/null || echo "unknown")
+		break
 	fi
-fi
+done
+TIMESTAMP=$(date '+%Y%m%d-%H%M%S')
+
+# Default log includes build ID and timestamp for traceability
+SERIAL_LOG="${usage_log:-/tmp/rock64-serial-${BUILD_ID}-${TIMESTAMP}.log}"
+
+# Always maintain a symlink at the well-known path for easy access
+SERIAL_LOG_LINK="/tmp/rock64-serial.log"
 
 # Resolve minicom binary path via nix, then exec it directly so terminal
 # passthrough works (nix-shell --run wraps in a subshell that eats stdin).
@@ -25,12 +30,45 @@ if [ ! -x "$MINICOM" ]; then
 	exit 1
 fi
 
+# Auto-detect serial device (cu.* not tty.* — macOS tty.* waits for DCD)
+auto_detect_port() {
+	find /dev -maxdepth 1 -name 'cu.usbserial-*' 2>/dev/null | head -1
+}
+
 echo "=== Rock64 Serial Console ==="
 echo ""
-echo "  Port: $SERIAL_PORT"
-echo "  Baud: 1500000"
+echo "  Baud:  1500000"
+echo "  Log:   $SERIAL_LOG"
+echo "  Build: $BUILD_ID"
 echo ""
-echo "Exit with Ctrl-A X"
+echo "Waiting for USB-serial adapter... (Ctrl-C to abort)"
+echo "Exit minicom with Ctrl-A X"
 echo ""
 
-exec "$MINICOM" -D "$SERIAL_PORT" -b 1500000 -o
+: > "$SERIAL_LOG"
+ln -sf "$SERIAL_LOG" "$SERIAL_LOG_LINK"
+
+while true; do
+	if [ -n "${usage_port:-}" ]; then
+		SERIAL_PORT="$usage_port"
+	else
+		SERIAL_PORT="$(auto_detect_port)"
+	fi
+
+	if [ -z "$SERIAL_PORT" ]; then
+		sleep 1
+		continue
+	fi
+
+	echo "[$(date '+%H:%M:%S')] Connecting to $SERIAL_PORT..."
+	"$MINICOM" -D "$SERIAL_PORT" -b 1500000 -o -C "$SERIAL_LOG"
+	rc=$?
+	if [ $rc -eq 0 ]; then
+		echo ""
+		echo "[$(date '+%H:%M:%S')] Minicom exited cleanly."
+		break
+	fi
+	echo ""
+	echo "[$(date '+%H:%M:%S')] Disconnected (exit $rc). Reconnecting in 2s... (Ctrl-C to stop)"
+	sleep 2
+done
