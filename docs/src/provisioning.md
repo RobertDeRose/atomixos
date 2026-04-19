@@ -16,3 +16,9 @@ On first boot:
 6. Services start: dnsmasq, chrony, sshd, os-upgrade timer
 
 The device is then ready to receive OTA updates and serve LAN clients.
+
+## USB Recovery Mode
+
+If the reset button is held from power-on for 10 seconds, U-Boot enters USB
+mass storage mode instead of booting Linux. The
+Rock64 OTG USB port then exposes the full eMMC as a removable disk, allowing the host to write a fresh image directly.

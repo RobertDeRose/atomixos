@@ -357,6 +357,10 @@ The image includes U-Boot, boot slot A (kernel + initrd + DTB + boot.scr), and r
 (squashfs). On first boot, `systemd-repart`
 automatically creates and formats the `/persist` partition (f2fs) using all remaining eMMC space.
 
+Recovery mode: hold the reset button before power-on and keep holding for
+10 seconds. U-Boot will expose the on-board eMMC as
+a USB mass storage device over the Rock64 OTG USB port so you can reflash it directly from a host machine.
+
 ## mise Task Reference
 
 All tasks are run with `mise run <task>`. Run `mise tasks` to list them.

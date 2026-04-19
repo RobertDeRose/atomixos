@@ -12,7 +12,7 @@
   lib,
 }:
 
-pkgs.ubootRock64.override {
+(pkgs.ubootRock64.override {
   extraConfig = ''
     # ── Environment: SPI flash instead of eMMC ────────────────────────────
     # The eMMC raw write bug (confirmed on NCard and other budget modules)
@@ -36,6 +36,25 @@ pkgs.ubootRock64.override {
     # Partition mapping: "boot,root boot,root" — slot A = p1,p3  slot B = p2,p4
     CONFIG_BOOTMETH_RAUC_PARTITIONS="1,3 2,4"
     CONFIG_BOOTMETH_RAUC_BOOT_ORDER="A B"
+    CONFIG_BOOTMETH_RAUC_DEFAULT_TRIES=3
+    CONFIG_BOOTMETH_RAUC_RESET_ALL_ZERO_TRIES=y
+
+    # ── Recovery mode over USB OTG ────────────────────────────────────────
+    # If the reset button is held during boot, boot.cmd drops into `ums`
+    # so the on-board eMMC can be reflashed directly over USB.
+    CONFIG_USB_GADGET=y
+    CONFIG_USB_GADGET_DOWNLOAD=y
+    CONFIG_USB_GADGET_DWC2_OTG=y
+    CONFIG_CMD_USB_MASS_STORAGE=y
+    CONFIG_USB_FUNCTION_MASS_STORAGE=y
+    CONFIG_CMD_UMS_ABORT_KEYED=n
+    CONFIG_CMD_FASTBOOT=n
+    CONFIG_USB_FUNCTION_FASTBOOT=n
+    CONFIG_CMD_USB_SDP=n
+    CONFIG_USB_FUNCTION_SDP=n
+    CONFIG_CMD_THOR_DOWNLOAD=n
+    CONFIG_USB_FUNCTION_THOR=n
+    CONFIG_FASTBOOT_BUF_ADDR=0x0
 
     # ── Disable EFI boot (not used, wastes boot time) ─────────────────────
     CONFIG_EFI_LOADER=n
@@ -43,4 +62,10 @@ pkgs.ubootRock64.override {
     # ── FAT write support (for slot_good flag file from Linux) ────────────
     CONFIG_FAT_WRITE=y
   '';
-}
+}).overrideAttrs
+  (old: {
+    postPatch = (old.postPatch or "") + ''
+      perl -0pi -e 's/&usb20_otg \{\n\s*dr_mode = "host";/&usb20_otg {\n\tdr_mode = "peripheral";/g' \
+        dts/upstream/src/arm64/rockchip/rk3328-rock64.dts
+    '';
+  })

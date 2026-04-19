@@ -19,6 +19,34 @@ echo "AtomixOS build: @buildId@"
 echo ""
 echo "RAUC bootmeth selected: dev=${devnum} boot=${distro_bootpart} root=${distro_rootpart}"
 
+# Hold the reset button at power-on to expose eMMC over the Rock64 OTG port.
+# Linux sees this as gpiochip3 line 4; in U-Boot that is global GPIO 100.
+if test -z "${recovery_button_pin}"; then
+  setenv recovery_button_pin 100
+fi
+if test -z "${recovery_hold_secs}"; then
+  setenv recovery_hold_secs 10
+fi
+if test -z "${recovery_usb_controller}"; then
+  setenv recovery_usb_controller 0
+fi
+if test -z "${recovery_mmc_dev}"; then
+  setenv recovery_mmc_dev ${devnum}
+fi
+
+if gpio input ${recovery_button_pin}; then
+  echo "Recovery button detected on GPIO ${recovery_button_pin}"
+  echo "Hold for ${recovery_hold_secs} seconds to enter USB mass storage mode"
+  sleep ${recovery_hold_secs}
+  if gpio input ${recovery_button_pin}; then
+    echo "Entering USB mass storage mode for mmc ${recovery_mmc_dev}"
+    echo "Write a new image over the OTG USB cable, then unplug to reboot"
+    ums ${recovery_usb_controller} mmc ${recovery_mmc_dev}
+    echo "USB mass storage exited, resetting..."
+    reset
+  fi
+fi
+
 # Fallback: if RAUC bootmeth didn't set distro_rootpart (e.g. env_save failed
 # on first boot with uninitialized SPI flash), derive it from distro_bootpart.
 # Boot partition 1 → rootfs partition 3, boot partition 2 → rootfs partition 4.

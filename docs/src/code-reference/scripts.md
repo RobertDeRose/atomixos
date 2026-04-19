@@ -71,14 +71,16 @@ U-Boot boot script implementing A/B slot selection with boot-count rollback. Com
 **Key logic:**
 
 1. Echo build ID (squashfs store hash) to console for identification
-2. Set defaults: `BOOT_ORDER="A B"`, `BOOT_A_LEFT=3`, `BOOT_B_LEFT=3`
-3. Auto-detect boot device number from `devnum`
-4. Override `ramdisk_addr_r=0x08000000` (avoids kernel overlap)
-5. Check for `slot_good` flag file on the active slot's boot FAT partition — if found, restore `BOOT_x_LEFT=3`,
+2. If the reset button (Linux `gpiochip3` line 4, U-Boot GPIO `100`) is held low for 10 seconds, run `ums 0 mmc 1`
+   so the Rock64 OTG port exposes the full eMMC to a host computer
+3. Set defaults: `BOOT_ORDER="A B"`, `BOOT_A_LEFT=3`, `BOOT_B_LEFT=3`
+4. Auto-detect boot device number from `devnum`
+5. Override `ramdisk_addr_r=0x08000000` (avoids kernel overlap)
+6. Check for `slot_good` flag file on the active slot's boot FAT partition — if found, restore `BOOT_x_LEFT=3`,
    `saveenv`, and delete the flag via `fatrm`
-6. Iterate `BOOT_ORDER`; for each slot with remaining attempts: decrement counter, `saveenv`, load kernel/initrd/DTB
+7. Iterate `BOOT_ORDER`; for each slot with remaining attempts: decrement counter, `saveenv`, load kernel/initrd/DTB
    from boot partition, set `root=PARTLABEL=rootfs-x`, `booti`
-7. If no slot bootable: print error and drop to U-Boot shell (changed from `reset` to allow debugging)
+8. If no slot bootable: print error and drop to U-Boot shell (changed from `reset` to allow debugging)
 
 **Console:** `ttyS2,1500000` (Rock64 UART2)
 
