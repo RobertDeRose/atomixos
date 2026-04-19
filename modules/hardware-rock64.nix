@@ -22,8 +22,8 @@
   environment.etc."fw_env.config".text = ''
     # MTD device for SPI flash env (matches U-Boot CONFIG_ENV_OFFSET/SIZE)
     # Device         Offset    Size      Erase-size
-    /dev/mtd0        0x140000  0x8000    0x2000
-    /dev/mtd0        0x142000  0x8000    0x2000
+    /dev/mtd0        0x140000  0x2000    0x1000
+    /dev/mtd0        0x142000  0x2000    0x1000
   '';
 
   # ── Boot configuration ───────────────────────────────────────────────────────

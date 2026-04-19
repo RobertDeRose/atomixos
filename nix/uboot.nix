@@ -21,10 +21,13 @@
     # that doesn't have this issue.
     CONFIG_ENV_IS_IN_MMC=n
     CONFIG_ENV_IS_IN_SPI_FLASH=y
+    CONFIG_ENV_OFFSET=0x140000
+    CONFIG_ENV_SIZE=0x2000
+    CONFIG_ENV_SECT_SIZE=0x1000
     CONFIG_ENV_SECT_SIZE_AUTO=y
     # Offset 0x140000 = 1.25MB (Rockchip default for SPI, clear of SPL/U-Boot)
-    # Size 0x2000 = 8KB (Rockchip default for SPI)
-    # Redundant copy at 0x142000 for power-loss safety
+    # Size 0x2000 = 8KB using two 4KB erase sectors on this board's SPI NOR.
+    # Redundant copy at 0x142000 for power-loss safety.
     CONFIG_ENV_REDUNDANT=y
     CONFIG_ENV_OFFSET_REDUND=0x142000
 
