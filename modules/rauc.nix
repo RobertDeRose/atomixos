@@ -146,6 +146,13 @@ in
       };
     };
 
+    systemd.services.rauc = {
+      path = lib.optionals (cfg.bootloader == "uboot") [ pkgs.ubootTools ];
+      after = [ "persist.mount" ];
+      unitConfig.RequiresMountsFor = [ "/persist" ];
+      serviceConfig.ExecStartPre = [ "${pkgs.coreutils}/bin/mkdir -p /persist/rauc" ];
+    };
+
     # CA certificate for bundle verification.
     # Uses the development CA by default. Production devices override this
     # with a production CA cert provisioned separately.

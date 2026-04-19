@@ -74,7 +74,7 @@ fatload mmc ${devnum}:${distro_bootpart} ${fdt_addr_r} dtbs/rockchip/rk3328-rock
 fatload mmc ${devnum}:${distro_bootpart} ${ramdisk_addr_r} initrd
 setenv initrd_size ${filesize}
 
-setenv bootargs "${bootargs_base} root=/dev/mmcblk1p${distro_rootpart} rootfstype=squashfs ro"
+setenv bootargs "${bootargs_base} ${raucargs} root=/dev/mmcblk1p${distro_rootpart} rootfstype=squashfs ro"
 booti ${kernel_addr_r} ${ramdisk_addr_r}:${initrd_size} ${fdt_addr_r}
 
 echo "ERROR: booti failed!"
