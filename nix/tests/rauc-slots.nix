@@ -56,23 +56,6 @@ nixos-lib.runTest {
       # Status file directory — the default /persist doesn't exist in
       # the test VM, so override to a path that does.
       atomixos.rauc.statusFile = "/tmp/rauc.status";
-
-      # RAUC D-Bus service — needed so `rauc status` can query slot info.
-      # The upstream NixOS module (services.rauc) pulls in more than we need,
-      # so we define a minimal systemd unit directly.
-      systemd.services.rauc = {
-        description = "RAUC slot management service";
-        after = [ "dbus.service" ];
-        wantedBy = [ "multi-user.target" ];
-        serviceConfig = {
-          Type = "dbus";
-          BusName = "de.pengutronix.rauc";
-          ExecStart = "${pkgs.rauc}/bin/rauc service --conf=/etc/rauc/system.conf";
-        };
-      };
-
-      # D-Bus policy so RAUC can register on the system bus
-      services.dbus.packages = [ pkgs.rauc ];
     };
 
   testScript = ''
@@ -85,11 +68,13 @@ nixos-lib.runTest {
     gateway.succeed("test -b /dev/vdd")  # rootfs slot A
     gateway.succeed("test -b /dev/vde")  # rootfs slot B
 
-    # Verify RAUC system.conf is deployed
-    gateway.succeed("test -f /etc/rauc/system.conf")
-
-    # Check system.conf references our virtio devices
-    conf = gateway.succeed("cat /etc/rauc/system.conf")
+    # Verify RAUC service has a generated config file and inspect it
+    exec_start = gateway.succeed("systemctl show -p ExecStart --value rauc.service")
+    import re
+    match = re.search(r'--conf=([^ ]+)', exec_start)
+    assert match, f"Could not find --conf path in rauc.service ExecStart: {exec_start}"
+    conf_path = match.group(1)
+    conf = gateway.succeed(f"cat {conf_path}")
     assert "/dev/vdb" in conf, f"boot slot A device not in system.conf: {conf}"
     assert "/dev/vdc" in conf, f"boot slot B device not in system.conf: {conf}"
     assert "/dev/vdd" in conf, f"rootfs slot A device not in system.conf: {conf}"

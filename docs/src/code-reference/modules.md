@@ -214,19 +214,21 @@ Flag file: `/persist/config/ssh-wan-enabled`
 
 ## rauc.nix
 
-**Purpose**: RAUC A/B update system configuration. Defines custom NixOS options and generates `/etc/rauc/system.conf`.
+**Purpose**: RAUC A/B update system configuration. Defines project options (`atomixos.rauc.*`) and maps them onto the
+upstream NixOS `services.rauc` module.
 
 **Custom NixOS options (`atomixos.rauc.*`):**
 
-| Option          | Type   | Default                      | Description                  |
-|-----------------|--------|------------------------------|------------------------------|
-| `compatible`    | string | `"rock64"`                   | RAUC compatible string       |
-| `bootloader`    | string | `"uboot"`                    | Backend: `uboot` or `custom` |
-| `statusFile`    | string | `/persist/rauc/status.raucs` | RAUC status file             |
-| `slots.boot0`   | string | (required)                   | Boot slot A device path      |
-| `slots.boot1`   | string | (required)                   | Boot slot B device path      |
-| `slots.rootfs0` | string | (required)                   | Rootfs slot A device path    |
-| `slots.rootfs1` | string | (required)                   | Rootfs slot B device path    |
+| Option          | Type            | Default                      | Description                       |
+|-----------------|-----------------|------------------------------|-----------------------------------|
+| `compatible`    | string          | `"rock64"`                   | RAUC compatible string            |
+| `bootloader`    | enum            | `"uboot"`                    | Backend (`uboot`, `custom`, etc.) |
+| `statusFile`    | string          | `/persist/rauc/status.raucs` | RAUC status file                  |
+| `bundleFormats` | list of strings | `[-plain, +verity]`          | Allowed bundle formats            |
+| `slots.boot0`   | string          | (required)                   | Boot slot A device path           |
+| `slots.boot1`   | string          | (required)                   | Boot slot B device path           |
+| `slots.rootfs0` | string          | (required)                   | Rootfs slot A device path         |
+| `slots.rootfs1` | string          | (required)                   | Rootfs slot B device path         |
 
 When `bootloader = "custom"`, a file-based shell script is generated that simulates U-Boot environment management using
 files in `/var/lib/rauc/`.

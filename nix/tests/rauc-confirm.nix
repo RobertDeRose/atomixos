@@ -61,20 +61,6 @@ nixos-lib.runTest {
       boot.kernelParams = [ "rauc.slot=boot.0" ];
       atomixos.rauc.statusFile = "/tmp/rauc.status";
 
-      # ── RAUC D-Bus service ──
-      systemd.services.rauc = {
-        description = "RAUC slot management service";
-        after = [ "dbus.service" ];
-        wantedBy = [ "multi-user.target" ];
-        serviceConfig = {
-          Type = "dbus";
-          BusName = "de.pengutronix.rauc";
-          ExecStart = "${pkgs.rauc}/bin/rauc service --conf=/etc/rauc/system.conf";
-        };
-      };
-
-      services.dbus.packages = [ pkgs.rauc ];
-
       # ── Network: eth1 dummy created at test time ──
       # eth0 is provided by the NixOS test VLAN (gets DHCP automatically).
       # eth1 is created as a dummy in the test script with the static LAN IP.

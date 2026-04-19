@@ -1,7 +1,6 @@
 # RAUC A/B update system configuration.
-# Defines slot pairs and U-Boot bootloader backend.
-# Slot device paths are configurable via options — each hardware module
-# (Rock64, QEMU) provides its own device paths.
+# Uses the upstream NixOS RAUC module (`services.rauc`) and keeps
+# project-specific options under `atomixos.rauc`.
 {
   config,
   lib,
@@ -14,11 +13,7 @@ let
 
   # Custom bootloader backend script for QEMU/test environments.
   # Simulates U-Boot boot selection using plain files instead of
-  # fw_setenv/fw_printenv. Modelled after the upstream NixOS RAUC test.
-  #
-  # RAUC calls this with: get-primary, set-primary <bootname>,
-  # get-state <bootname>, set-state <bootname> <state>, get-current.
-  # Bootnames are "A" and "B" (matching bootname= in system.conf).
+  # fw_setenv/fw_printenv.
   customBackendScript = pkgs.writeShellScript "rauc-custom-backend" ''
     STATE_DIR="/var/lib/rauc"
     mkdir -p "$STATE_DIR"
@@ -44,34 +39,42 @@ let
         ;;
     esac
   '';
-
-  # Build the optional [handlers] section
-  handlersSection = lib.optionalString (cfg.bootloader == "custom") ''
-
-    [handlers]
-    bootloader-custom-backend=${customBackendScript}
-  '';
 in
 {
-  # ── Options ─────────────────────────────────────────────────────────────────
-
   options.atomixos.rauc = {
     compatible = lib.mkOption {
       type = lib.types.str;
       default = "rock64";
-      description = "RAUC compatible string — must match the bundle manifest.";
+      description = "RAUC compatible string. Must match the bundle manifest.";
     };
 
     bootloader = lib.mkOption {
-      type = lib.types.str;
+      type = lib.types.enum [
+        "barebox"
+        "grub"
+        "uboot"
+        "efi"
+        "custom"
+        "noop"
+      ];
       default = "uboot";
-      description = "RAUC bootloader backend (uboot, custom, etc).";
+      description = "RAUC bootloader backend.";
     };
 
+    # Keep this as a string because tests override it with /tmp paths.
     statusFile = lib.mkOption {
       type = lib.types.str;
       default = "/persist/rauc/status.raucs";
       description = "Path to the RAUC status file.";
+    };
+
+    bundleFormats = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [
+        "-plain"
+        "+verity"
+      ];
+      description = "Allowed RAUC bundle formats.";
     };
 
     slots = {
@@ -94,44 +97,56 @@ in
     };
   };
 
-  # ── Configuration ───────────────────────────────────────────────────────────
-
   config = {
-    environment.systemPackages = [ pkgs.rauc ];
+    services.rauc = {
+      enable = true;
+      client.enable = true;
+      compatible = cfg.compatible;
+      bootloader = cfg.bootloader;
+      bundleFormats = cfg.bundleFormats;
 
-    # RAUC system configuration
-    # This defines the slot layout and bootloader integration
-    environment.etc."rauc/system.conf".text = ''
-      [system]
-      compatible=${cfg.compatible}
-      bootloader=${cfg.bootloader}
-      statusfile=${cfg.statusFile}
+      slots = {
+        boot = [
+          {
+            enable = true;
+            device = cfg.slots.boot0;
+            type = "vfat";
+            settings.bootname = "A";
+          }
+          {
+            enable = true;
+            device = cfg.slots.boot1;
+            type = "vfat";
+            settings.bootname = "B";
+          }
+        ];
 
-      [keyring]
-      path=/etc/rauc/ca.cert.pem
-      ${handlersSection}
-      [slot.boot.0]
-      device=${cfg.slots.boot0}
-      type=vfat
-      bootname=A
+        rootfs = [
+          {
+            enable = true;
+            device = cfg.slots.rootfs0;
+            type = "raw";
+            settings.parent = "boot.0";
+          }
+          {
+            enable = true;
+            device = cfg.slots.rootfs1;
+            type = "raw";
+            settings.parent = "boot.1";
+          }
+        ];
+      };
 
-      [slot.rootfs.0]
-      device=${cfg.slots.rootfs0}
-      type=raw
-      parent=boot.0
+      settings = {
+        system.statusfile = cfg.statusFile;
+        keyring.path = "/etc/rauc/ca.cert.pem";
+      }
+      // lib.optionalAttrs (cfg.bootloader == "custom") {
+        handlers.bootloader-custom-backend = toString customBackendScript;
+      };
+    };
 
-      [slot.boot.1]
-      device=${cfg.slots.boot1}
-      type=vfat
-      bootname=B
-
-      [slot.rootfs.1]
-      device=${cfg.slots.rootfs1}
-      type=raw
-      parent=boot.1
-    '';
-
-    # CA certificate for bundle verification
+    # CA certificate for bundle verification.
     # Uses the development CA by default. Production devices override this
     # with a production CA cert provisioned separately.
     environment.etc."rauc/ca.cert.pem".source = ../certs/dev.ca.cert.pem;

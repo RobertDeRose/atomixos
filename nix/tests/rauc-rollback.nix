@@ -100,19 +100,10 @@ nixos-lib.runTest {
 
       boot.kernelParams = [ "rauc.slot=boot.0" ];
       atomixos.rauc.statusFile = "/tmp/rauc.status";
-
-      systemd.services.rauc = {
-        description = "RAUC slot management service";
-        after = [ "dbus.service" ];
-        wantedBy = [ "multi-user.target" ];
-        serviceConfig = {
-          Type = "dbus";
-          BusName = "de.pengutronix.rauc";
-          ExecStart = "${pkgs.rauc}/bin/rauc service --conf=/etc/rauc/system.conf";
-        };
-      };
-
-      services.dbus.packages = [ pkgs.rauc ];
+      atomixos.rauc.bundleFormats = [
+        "+plain"
+        "-verity"
+      ];
     };
 
   testScript = ''

@@ -43,7 +43,7 @@ let
 in
 stdenv.mkDerivation {
   name = "rock64-rauc-bundle";
-  version = "0.1.0";
+  inherit version;
 
   nativeBuildInputs = [
     rauc

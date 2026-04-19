@@ -67,6 +67,9 @@ mise run flash /dev/disk4
 
 # Run all E2E tests
 mise run e2e
+
+# Run all E2E tests inside a Lima VM
+mise run e2e --lima
 ```
 
 See [Building](./building.md) and [Provisioning](./provisioning.md) for detailed instructions.

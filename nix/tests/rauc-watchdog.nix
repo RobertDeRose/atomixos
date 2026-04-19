@@ -113,6 +113,10 @@ nixos-lib.runTest {
       boot.kernelParams = [ "rauc.slot=boot.0" ];
       boot.kernelModules = [ "i6300esb" ];
       atomixos.rauc.statusFile = "/tmp/rauc.status";
+      atomixos.rauc.bundleFormats = [
+        "+plain"
+        "-verity"
+      ];
 
       # Use a short watchdog timeout to speed up the test.
       # 10s runtime means systemd kicks every ~5s; if frozen, the
@@ -121,19 +125,6 @@ nixos-lib.runTest {
         RuntimeWatchdogSec = lib.mkForce "10s";
         RebootWatchdogSec = lib.mkForce "1min";
       };
-
-      systemd.services.rauc = {
-        description = "RAUC slot management service";
-        after = [ "dbus.service" ];
-        wantedBy = [ "multi-user.target" ];
-        serviceConfig = {
-          Type = "dbus";
-          BusName = "de.pengutronix.rauc";
-          ExecStart = "${pkgs.rauc}/bin/rauc service --conf=/etc/rauc/system.conf";
-        };
-      };
-
-      services.dbus.packages = [ pkgs.rauc ];
 
       # Boot-count decrement service — simulates U-Boot's BOOT_B_LEFT logic.
       # On each boot: if a boot-count file exists for the current primary,

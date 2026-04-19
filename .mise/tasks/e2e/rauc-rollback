@@ -1,15 +1,29 @@
 #!/usr/bin/env bash
 #MISE description="Run RAUC rollback E2E test"
 #MISE alias="rollback"
+#USAGE flag "--lima" help="Run inside a Lima VM"
+#USAGE flag "--vm <name>" help="Lima VM instance name" default="default"
 set -euo pipefail
 
+cmd=()
+if [ "${usage_lima:-false}" = "true" ]; then
+	if ! command -v limactl >/dev/null 2>&1; then
+		echo "ERROR: limactl not found. Install Lima: https://lima-vm.io/"
+		exit 1
+	fi
+	limactl start "${usage_vm}" 2>/dev/null || true
+	cmd+=(limactl shell "${usage_vm}" --)
+fi
+
 ARCH="aarch64-linux"
-[[ "$(uname -s)" == "Darwin" ]] && ARCH="aarch64-darwin"
+if [ "${usage_lima:-false}" != "true" ] && [[ "$(uname -s)" == "Darwin" ]]; then
+	ARCH="aarch64-darwin"
+fi
 
 echo "Running E2E test: rauc-rollback ($ARCH)"
 echo "  Installs to slot B, marks B bad, verifies rollback to A"
 echo ""
-nix build ".#checks.${ARCH}.rauc-rollback" --no-link --print-build-logs \
+"${cmd[@]}" nix build ".#checks.${ARCH}.rauc-rollback" --no-link --print-build-logs \
 	2> >(grep -v 'SQLite database.*is busy' >&2)
 echo ""
 echo "PASS: rauc-rollback"

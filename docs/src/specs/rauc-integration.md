@@ -90,12 +90,12 @@ is disabled by default.
 
 ### ADDED: NixOS RAUC module
 
-RAUC is enabled via a NixOS module that generates `/etc/rauc/system.conf` from the `atomixos.rauc.*` options. The
-`rauc` package is included in system packages.
+RAUC is enabled via the upstream NixOS `services.rauc` module and wired from `atomixos.rauc.*` options. The `rauc`
+client is available in the system environment.
 
 #### Scenario: RAUC is available
 
 - Given the device has booted
 - When `rauc --version` is run
 - Then a valid version string is returned
-- And `/etc/rauc/system.conf` exists
+- And `rauc.service` is active

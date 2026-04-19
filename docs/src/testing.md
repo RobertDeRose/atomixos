@@ -9,6 +9,10 @@ run on both Linux (TCG software emulation) and macOS (Apple Virtualization Frame
 
 ```sh
 mise run e2e
+
+# Run all tests inside a Lima VM
+mise run e2e --lima
+mise run e2e --lima --vm my-builder
 ```
 
 ### Individual tests
@@ -23,6 +27,9 @@ mise run e2e:rauc-watchdog       # Freeze systemd to trigger watchdog, verify bo
 mise run e2e:firewall            # 2-node test: WAN allows HTTPS/VPN, LAN allows SSH/DHCP/NTP
 mise run e2e:network-isolation   # 2-node test: LAN gets DHCP/NTP, cannot reach WAN
 mise run e2e:ssh-wan-toggle      # Flag file enables/disables SSH on WAN via nftables reload
+
+# Run an individual test inside Lima
+mise run e2e:rauc-slots --lima
 ```
 
 ## Test Descriptions
