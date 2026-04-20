@@ -24,12 +24,11 @@
     CONFIG_ENV_OFFSET=0x140000
     CONFIG_ENV_SIZE=0x2000
     CONFIG_ENV_SECT_SIZE=0x1000
-    CONFIG_ENV_SECT_SIZE_AUTO=y
     # Offset 0x140000 = 1.25MB (Rockchip default for SPI, clear of SPL/U-Boot)
     # Size 0x2000 = 8KB using two 4KB erase sectors on this board's SPI NOR.
-    # Redundant copy at 0x142000 for power-loss safety.
-    CONFIG_ENV_REDUNDANT=y
-    CONFIG_ENV_OFFSET_REDUND=0x142000
+    # Use a single environment copy first; redundancy can be re-enabled once
+    # the basic SPI env load/save path is proven stable on hardware.
+    CONFIG_ENV_REDUNDANT=n
 
     # ── RAUC A/B boot method ──────────────────────────────────────────────
     # Native U-Boot support for A/B slot selection with boot counters.
