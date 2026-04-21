@@ -10,6 +10,7 @@
 
 let
   cfg = config.atomixos.rauc;
+  statusDir = builtins.dirOf cfg.statusFile;
 
   # Custom bootloader backend script for QEMU/test environments.
   # Simulates U-Boot boot selection using plain files instead of
@@ -148,9 +149,9 @@ in
 
     systemd.services.rauc = {
       path = lib.optionals (cfg.bootloader == "uboot") [ pkgs.ubootTools ];
-      after = [ "persist.mount" ];
-      unitConfig.RequiresMountsFor = [ "/persist" ];
-      serviceConfig.ExecStartPre = [ "${pkgs.coreutils}/bin/mkdir -p /persist/rauc" ];
+      after = [ ];
+      unitConfig.RequiresMountsFor = [ statusDir ];
+      serviceConfig.ExecStartPre = [ "${pkgs.coreutils}/bin/mkdir -p ${statusDir}" ];
     };
 
     # CA certificate for bundle verification.

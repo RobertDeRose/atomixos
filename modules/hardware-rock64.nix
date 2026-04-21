@@ -7,6 +7,17 @@
   ...
 }:
 
+let
+  bootToUms = pkgs.writeShellScriptBin "boot_to_ums" ''
+    set -euo pipefail
+
+    echo "Setting START_UMS=1 in SPI U-Boot environment"
+    ${pkgs.ubootTools}/bin/fw_setenv START_UMS 1
+
+    echo "Rebooting so U-Boot enters USB mass storage mode"
+    exec ${pkgs.systemd}/bin/systemctl reboot
+  '';
+in
 {
   # ── Boot partition ────────────────────────────────────────────────────────────
   # Mount the active boot slot's FAT partition at /boot (slot A).
@@ -18,7 +29,10 @@
   # ── U-Boot environment tools (fw_setenv / fw_printenv) ─────────────────────
   # Environment is stored on SPI flash (not eMMC) to avoid the eMMC raw write
   # bug. first-boot.service uses fw_setenv to confirm the boot slot.
-  environment.systemPackages = [ pkgs.ubootTools ];
+  environment.systemPackages = [
+    pkgs.ubootTools
+    bootToUms
+  ];
   environment.etc."fw_env.config".text = ''
     # MTD device for SPI flash env (matches U-Boot CONFIG_ENV_OFFSET/SIZE)
     # Device         Offset    Size      Erase-size
@@ -343,6 +357,9 @@
     rootfs1 = "/dev/mmcblk1p4";
   };
 
+  # Diagnostic image: keep RAUC manually usable even when /persist is absent.
+  atomixos.rauc.statusFile = lib.mkForce "/run/rauc/status.raucs";
+
   # ── Serial console (UART2) ─────────────────────────────────────────────────
   # Enable login prompt on the debug serial console (ttyS2 @ 1.5Mbaud).
   # This is the 3-pin header on the Rock64 board.
@@ -351,4 +368,10 @@
     wantedBy = [ "getty.target" ];
     serviceConfig.Restart = "always";
   };
+
+  # Diagnostic image behavior: keep the RAUC service activatable over D-Bus,
+  # but stop the automatic units from starting at boot so mutations only happen
+  # when triggered manually from the serial console.
+  systemd.services.first-boot.wantedBy = lib.mkForce [ ];
+  systemd.services.create-persist.wantedBy = lib.mkForce [ ];
 }

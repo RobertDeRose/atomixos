@@ -21,6 +21,7 @@
     ./first-boot.nix
     ./os-verification.nix
     ./os-upgrade.nix
+    ./boot-storage-debug.nix
     ./watchdog.nix
   ];
 

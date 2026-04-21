@@ -19,16 +19,15 @@
     # causes saveenv from both U-Boot and Linux to corrupt the eMMC,
     # bricking the board. SPI flash (16MB, mtd0) is a separate device
     # that doesn't have this issue.
+    # Expose the interactive/script save command as `env save` so boot.cmd
+    # can persist one-shot flags like START_UMS after clearing them.
+    CONFIG_CMD_SAVEENV=y
+    CONFIG_ENV_IS_NOWHERE=n
     CONFIG_ENV_IS_IN_MMC=n
     CONFIG_ENV_IS_IN_SPI_FLASH=y
     CONFIG_ENV_OFFSET=0x140000
     CONFIG_ENV_SIZE=0x2000
     CONFIG_ENV_SECT_SIZE=0x1000
-    # Offset 0x140000 = 1.25MB (Rockchip default for SPI, clear of SPL/U-Boot)
-    # Size 0x2000 = 8KB using two 4KB erase sectors on this board's SPI NOR.
-    # Use a single environment copy first; redundancy can be re-enabled once
-    # the basic SPI env load/save path is proven stable on hardware.
-    CONFIG_ENV_REDUNDANT=n
 
     # ── RAUC A/B boot method ──────────────────────────────────────────────
     # Native U-Boot support for A/B slot selection with boot counters.

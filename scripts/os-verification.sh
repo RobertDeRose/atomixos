@@ -13,13 +13,31 @@ CHECK_INTERVAL=5      # check every 5s during sustain
 
 log() { echo "[os-verification] $*"; }
 
+current_boot_slot() {
+	local arg
+	for arg in $(</proc/cmdline); do
+		case "$arg" in
+		rauc.slot=boot.*)
+			printf '%s\n' "${arg#rauc.slot=}"
+			return 0
+			;;
+		esac
+	done
+	return 1
+}
+
 # ── Step 1: Check if slot is already committed ──
 SLOT_STATUS=$(rauc status --output-format=json 2>/dev/null | jq -r '.booted // empty')
 if [ -z "$SLOT_STATUS" ]; then
 	log "Could not determine RAUC slot status"
-	# On first boot or non-RAUC system, mark good and exit
-	log "Assuming first boot, marking good"
-	rauc status mark-good || true
+	# On first boot or non-RAUC system, fall back to the explicit boot slot.
+	BOOT_SLOT="$(current_boot_slot || true)"
+	if [ -z "$BOOT_SLOT" ]; then
+		log "Could not determine boot slot from /proc/cmdline"
+		exit 1
+	fi
+	log "Assuming first boot, marking good: $BOOT_SLOT"
+	rauc status mark-good "$BOOT_SLOT" || true
 	exit 0
 fi
 
@@ -164,6 +182,12 @@ done
 log "Sustained health check passed (${SUSTAIN_DURATION}s)"
 
 # ── Step 5: Commit the slot ──
-log "All checks passed, marking slot as good..."
-rauc status mark-good
+BOOT_SLOT="$(current_boot_slot || true)"
+if [ -z "$BOOT_SLOT" ]; then
+	log "Could not determine boot slot from /proc/cmdline"
+	exit 1
+fi
+
+log "All checks passed, marking slot as good: $BOOT_SLOT"
+rauc status mark-good "$BOOT_SLOT"
 log "Slot committed successfully"

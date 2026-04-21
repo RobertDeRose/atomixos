@@ -35,9 +35,10 @@ ROOTFS_A_START_MIB=272
 ROOTFS_A_SIZE_MIB=1024
 ROOTFS_B_START_MIB=1296
 ROOTFS_B_SIZE_MIB=1024
+GPT_TAIL_SLACK_MIB=2
 
-# Total image size: end of rootfs-b
-IMAGE_SIZE_MIB=$((ROOTFS_B_START_MIB + ROOTFS_B_SIZE_MIB))
+# Total image size: end of rootfs-b plus slack for the backup GPT header/table.
+IMAGE_SIZE_MIB=$((ROOTFS_B_START_MIB + ROOTFS_B_SIZE_MIB + GPT_TAIL_SLACK_MIB))
 
 log() { echo "[build-image] $*"; }
 

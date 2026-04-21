@@ -17,7 +17,13 @@
 
 echo "AtomixOS build: @buildId@"
 echo ""
-echo "RAUC bootmeth selected: dev=${devnum} boot=${distro_bootpart} root=${distro_rootpart}"
+
+if test -z "${devnum}"; then
+  setenv devnum 0
+fi
+if test -z "${distro_bootpart}"; then
+  setenv distro_bootpart 1
+fi
 
 # Hold the reset button at power-on to expose eMMC over the Rock64 OTG port.
 # Linux sees this as gpiochip3 line 4; in U-Boot that is global GPIO 100.
@@ -25,13 +31,23 @@ if test -z "${recovery_button_pin}"; then
   setenv recovery_button_pin 100
 fi
 if test -z "${recovery_hold_secs}"; then
-  setenv recovery_hold_secs 10
+  setenv recovery_hold_secs 5
 fi
 if test -z "${recovery_usb_controller}"; then
   setenv recovery_usb_controller 0
 fi
 if test -z "${recovery_mmc_dev}"; then
   setenv recovery_mmc_dev ${devnum}
+fi
+
+if test "${START_UMS}" = "1"; then
+  echo "START_UMS=1 requested, entering USB mass storage mode"
+  setenv START_UMS
+  saveenv
+  echo "Write a new image over the OTG USB cable, then unplug to reboot"
+  ums ${recovery_usb_controller} mmc ${recovery_mmc_dev}
+  echo "USB mass storage exited, resetting..."
+  reset
 fi
 
 if gpio input ${recovery_button_pin}; then
@@ -61,6 +77,18 @@ if test -z "${distro_rootpart}"; then
   echo "WARNING: distro_rootpart was empty, defaulted to ${distro_rootpart}"
 fi
 
+# RAUC's U-Boot backend needs the boot slot identity (boot.0 / boot.1), not the
+# rootfs slot, so mark-good can target BOOT_A_LEFT / BOOT_B_LEFT correctly.
+if test "${distro_bootpart}" = "1"; then
+  setenv rauc_slot boot.0
+elif test "${distro_bootpart}" = "2"; then
+  setenv rauc_slot boot.1
+else
+  setenv rauc_slot boot.0
+fi
+
+echo "Recovery boot selection: dev=${devnum} boot=${distro_bootpart} root=${distro_rootpart}"
+
 setenv bootargs_base "console=ttyS2,1500000 earlycon=uart8250,mmio32,0xff130000 loglevel=7 rootwait"
 
 # Override ramdisk address to avoid overlap with relocated kernel.
@@ -74,7 +102,7 @@ fatload mmc ${devnum}:${distro_bootpart} ${fdt_addr_r} dtbs/rockchip/rk3328-rock
 fatload mmc ${devnum}:${distro_bootpart} ${ramdisk_addr_r} initrd
 setenv initrd_size ${filesize}
 
-setenv bootargs "${bootargs_base} ${raucargs} root=/dev/mmcblk1p${distro_rootpart} rootfstype=squashfs ro"
+setenv bootargs "${bootargs_base} root=/dev/mmcblk1p${distro_rootpart} rootfstype=squashfs ro rauc.slot=${rauc_slot}"
 booti ${kernel_addr_r} ${ramdisk_addr_r}:${initrd_size} ${fdt_addr_r}
 
 echo "ERROR: booti failed!"

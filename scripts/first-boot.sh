@@ -9,6 +9,19 @@ set -euo pipefail
 
 log() { echo "[first-boot] $*"; }
 
+current_boot_slot() {
+	local arg
+	for arg in $(</proc/cmdline); do
+		case "$arg" in
+		rauc.slot=boot.*)
+			printf '%s\n' "${arg#rauc.slot=}"
+			return 0
+			;;
+		esac
+	done
+	return 1
+}
+
 SENTINEL="/persist/.completed_first_boot"
 
 # Guard (belt-and-suspenders alongside systemd ConditionPathExists)
@@ -18,8 +31,14 @@ if [ -f "$SENTINEL" ]; then
 fi
 
 # ── Confirm the boot slot via RAUC ──
-log "Marking current slot as good via RAUC"
-rauc status mark-good
+BOOT_SLOT="$(current_boot_slot || true)"
+if [ -z "$BOOT_SLOT" ]; then
+	log "ERROR: could not determine boot slot from /proc/cmdline"
+	exit 1
+fi
+
+log "Marking current slot as good via RAUC: $BOOT_SLOT"
+rauc status mark-good "$BOOT_SLOT"
 
 # ── Write sentinel ──
 log "Writing first-boot sentinel: $SENTINEL"
