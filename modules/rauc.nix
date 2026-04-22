@@ -5,11 +5,13 @@
   config,
   lib,
   pkgs,
+  self,
   ...
 }:
 
 let
   cfg = config.atomixos.rauc;
+  ubootEnvTools = self.packages.${pkgs.system}.uboot-env-tools;
   statusDir = builtins.dirOf cfg.statusFile;
 
   # Custom bootloader backend script for QEMU/test environments.
@@ -148,7 +150,7 @@ in
     };
 
     systemd.services.rauc = {
-      path = lib.optionals (cfg.bootloader == "uboot") [ pkgs.ubootTools ];
+      path = lib.optionals (cfg.bootloader == "uboot") [ ubootEnvTools ];
       after = [ ];
       unitConfig.RequiresMountsFor = [ statusDir ];
       serviceConfig.ExecStartPre = [ "${pkgs.coreutils}/bin/mkdir -p ${statusDir}" ];

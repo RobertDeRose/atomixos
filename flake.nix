@@ -74,6 +74,33 @@
         # Custom U-Boot with SPI flash env + RAUC A/B bootmeth
         uboot = pkgs.callPackage ./nix/uboot.nix { };
 
+        # Userspace U-Boot env tools built from the same U-Boot source/version
+        # as the Rock64 bootloader, to avoid env format mismatches.
+        uboot-env-tools = pkgs.buildUBoot {
+          defconfig = "rock64-rk3328_defconfig";
+          src = self.packages.${system}.uboot.src;
+          version = self.packages.${system}.uboot.version;
+          extraConfig = self.packages.${system}.uboot.extraConfig;
+          extraPatches = self.packages.${system}.uboot.patches or [ ];
+          installDir = "$out/bin";
+          hardeningDisable = [ ];
+          dontStrip = false;
+          crossTools = true;
+          BL31 = "${pkgs.armTrustedFirmwareRK3328}/bl31.elf";
+          extraMakeFlags = [
+            "HOST_TOOLS_ALL=y"
+            "NO_SDL=1"
+            "cross_tools"
+            "envtools"
+          ];
+          filesToInstall = [
+            "tools/env/fw_printenv"
+          ];
+          postInstall = ''
+            ln -s "$out/bin/fw_printenv" "$out/bin/fw_setenv"
+          '';
+        };
+
         # Squashfs root filesystem image
         squashfs = pkgs.callPackage ./nix/squashfs.nix {
           nixosConfig = rock64Config;

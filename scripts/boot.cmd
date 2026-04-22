@@ -18,6 +18,52 @@
 echo "AtomixOS build: @buildId@"
 echo ""
 
+# Self-heal blank or stale SPI environments before the rest of the boot flow.
+# We only touch values that must match this board build and only persist when
+# a critical variable is missing or obviously wrong.
+setenv needs_env_save 0
+
+if test "${bootcmd}" != "bootflow scan"; then
+  echo "Repairing bootcmd in SPI environment"
+  setenv bootcmd "bootflow scan"
+  setenv needs_env_save 1
+fi
+
+if test "${baudrate}" != "1500000"; then
+  echo "Repairing baudrate in SPI environment"
+  setenv baudrate 1500000
+  setenv needs_env_save 1
+fi
+
+if test -z "${BOOT_ORDER}"; then
+  echo "Seeding BOOT_ORDER default"
+  setenv BOOT_ORDER "A B"
+  setenv needs_env_save 1
+fi
+
+if test -z "${BOOT_A_LEFT}"; then
+  echo "Seeding BOOT_A_LEFT default"
+  setenv BOOT_A_LEFT 3
+  setenv needs_env_save 1
+fi
+
+if test -z "${BOOT_B_LEFT}"; then
+  echo "Seeding BOOT_B_LEFT default"
+  setenv BOOT_B_LEFT 3
+  setenv needs_env_save 1
+fi
+
+if test "${needs_env_save}" = "1"; then
+  echo "Saving repaired SPI environment"
+  if env save; then
+    echo "SPI environment updated"
+  else
+    echo "WARNING: env save failed, continuing with in-memory defaults"
+  fi
+fi
+
+setenv needs_env_save
+
 if test -z "${devnum}"; then
   setenv devnum 0
 fi

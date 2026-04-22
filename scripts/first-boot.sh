@@ -9,6 +9,17 @@ set -euo pipefail
 
 log() { echo "[first-boot] $*"; }
 
+ensure_rauc_env() {
+	if fw_printenv BOOT_ORDER >/dev/null 2>&1; then
+		return 0
+	fi
+
+	log "Seeding missing SPI boot environment for RAUC"
+	fw_setenv BOOT_ORDER "A B"
+	fw_setenv BOOT_A_LEFT 3
+	fw_setenv BOOT_B_LEFT 3
+}
+
 current_boot_slot() {
 	local arg
 	for arg in $(</proc/cmdline); do
@@ -36,6 +47,8 @@ if [ -z "$BOOT_SLOT" ]; then
 	log "ERROR: could not determine boot slot from /proc/cmdline"
 	exit 1
 fi
+
+ensure_rauc_env
 
 log "Marking current slot as good via RAUC: $BOOT_SLOT"
 rauc status mark-good "$BOOT_SLOT"

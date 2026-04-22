@@ -10,11 +10,13 @@
   config,
   lib,
   pkgs,
+  self,
   ...
 }:
 
 let
   firstBootScript = pkgs.writeShellScript "first-boot" (builtins.readFile ../scripts/first-boot.sh);
+  ubootEnvTools = self.packages.${pkgs.system}.uboot-env-tools;
 in
 {
   systemd.services.first-boot = {
@@ -28,7 +30,10 @@ in
     unitConfig.ConditionPathExists = "!/persist/.completed_first_boot";
 
     # RAUC needs to be on PATH to call `rauc status mark-good`
-    path = [ pkgs.rauc ];
+    path = [
+      pkgs.rauc
+      ubootEnvTools
+    ];
 
     serviceConfig = {
       Type = "oneshot";

@@ -1,9 +1,11 @@
 {
   pkgs,
+  self,
   ...
 }:
 
 let
+  ubootEnvTools = self.packages.${pkgs.system}.uboot-env-tools;
   debugScript = pkgs.writeShellScript "boot-storage-debug" (
     builtins.readFile ../scripts/boot-storage-debug.sh
   );
@@ -14,7 +16,7 @@ in
     pkgs.util-linux
     pkgs.systemd
     pkgs.gnugrep
-    pkgs.ubootTools
+    ubootEnvTools
     pkgs.rauc
   ];
 
@@ -30,7 +32,7 @@ in
       pkgs.util-linux
       pkgs.systemd
       pkgs.gnugrep
-      pkgs.ubootTools
+      ubootEnvTools
       pkgs.rauc
     ];
 
