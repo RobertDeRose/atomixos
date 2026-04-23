@@ -1,12 +1,12 @@
 # Build a flashable disk image for the Rock64 eMMC.
 # Contains: GPT partition table, U-Boot, boot slot A (kernel + DTB + initrd + boot.scr),
-# empty boot slot B, rootfs slot A (squashfs), empty rootfs slot B.
-# The /persist partition is NOT included — systemd-repart creates and formats
-# it as f2fs on first boot, filling remaining eMMC space.
+# empty boot slot B, rootfs slot A (squashfs), empty rootfs slot B,
+# and a small built-in /persist partition.
 {
   lib,
   stdenv,
   dosfstools,
+  f2fs-tools,
   mtools,
   util-linux,
   ubootRock64,
@@ -51,6 +51,7 @@ stdenv.mkDerivation {
 
   nativeBuildInputs = [
     dosfstools
+    f2fs-tools
     mtools
     util-linux # sfdisk
   ];

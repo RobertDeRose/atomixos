@@ -12,7 +12,7 @@ and a persistent data partition using all remaining space.
 #### Scenario: Partition table matches specification
 
 - Given a provisioned eMMC
-- Then `sfdisk -d` shows 4 GPT partitions (boot-a, boot-b, rootfs-a, rootfs-b)
+- Then `sfdisk -d` shows 5 GPT partitions (boot-a, boot-b, rootfs-a, rootfs-b, persist)
 - And the raw region (0-16 MB) contains U-Boot
 - And `/persist` (f2fs) uses remaining space
 
@@ -29,9 +29,8 @@ and rootfs are always consistent for a given slot.
 
 ### ADDED: Flashable disk image
 
-The `build:image` task produces a flashable `.img` file containing U-Boot, boot slot A, and rootfs slot A. The
-`/persist` partition is created on first boot by `create-persist.service` (a custom service that fixes the GPT backup
-header and invokes `systemd-repart`).
+The `build:image` task produces a flashable `.img` file containing U-Boot, boot slots A/B, rootfs slots A/B, and a
+small `persist` partition formatted as f2fs.
 
 ### ADDED: U-Boot at RK3328 offsets
 
@@ -40,7 +39,7 @@ U-Boot is written as raw data (no partition) at the offsets expected by the RK33
 - `idbloader.img` at sector 64 (byte offset 32 KB)
 - `u-boot.itb` at sector 16384 (byte offset 8 MB)
 
-Both come from the nixpkgs `ubootRock64` package.
+Both come from the custom Rock64 U-Boot package built by this flake.
 
 #### Scenario: U-Boot loads from eMMC
 
@@ -63,10 +62,10 @@ credentials persist across all updates and rollbacks.
 ### ADDED: U-Boot env for slot selection
 
 U-Boot environment variables (`BOOT_ORDER`, `BOOT_A_LEFT`, `BOOT_B_LEFT`) control which slot boots and how many attempts
-remain. These are stored redundantly at known eMMC offsets for power-loss resilience.
+remain. On Rock64 these are stored in SPI flash and are seeded safely from Linux on first boot when missing.
 
 #### Scenario: Environment survives power loss
 
 - Given `BOOT_ORDER` is set to `"B A"`
 - When power is lost during env write
-- Then the redundant copy preserves the previous valid state
+- Then U-Boot falls back to its compiled defaults or a previously valid SPI environment

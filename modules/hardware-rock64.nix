@@ -471,8 +471,22 @@ in
           MACVLAN = lib.mkForce module;
           MACVTAP = lib.mkForce module;
           IPV6 = lib.mkForce module;
+
           NETFILTER = lib.mkForce yes;
+          NFNETLINK = lib.mkForce yes;
           NF_CONNTRACK = lib.mkForce module;
+          NF_NAT = lib.mkForce module;
+          NF_TABLES = lib.mkForce yes;
+          NF_TABLES_INET = lib.mkForce yes;
+          NF_TABLES_IPV4 = lib.mkForce yes;
+          NF_TABLES_IPV6 = lib.mkForce yes;
+          NFT_CT = lib.mkForce module;
+          NFT_COUNTER = lib.mkForce yes;
+          NFT_LIMIT = lib.mkForce module;
+          NFT_LOG = lib.mkForce module;
+          NFT_MASQ = lib.mkForce module;
+          NFT_NAT = lib.mkForce module;
+          NFT_REJECT = lib.mkForce yes;
 
           # No CAN bus (~70 options)
           CAN = lib.mkForce no;

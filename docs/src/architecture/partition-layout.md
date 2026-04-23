@@ -43,10 +43,8 @@ resilience for the boot-count variables.
 
 ## Persist Partition
 
-The `/persist` partition is **not** included in the flashable image. On first boot, `create-persist.service`
-fixes the GPT backup header (stranded at the old image boundary after dd'ing a smaller image onto the larger eMMC), then
-invokes `systemd-repart` with an explicit device path to create and format the partition as f2fs (128 MB minimum) using
-all remaining eMMC space. This partition survives all updates and rollbacks.
+The `/persist` partition is included directly in the flashable image as a small `f2fs` partition. The Rock64 runtime does
+not repartition the live eMMC from Linux. This partition survives all updates and rollbacks.
 
 Contents created during provisioning:
 

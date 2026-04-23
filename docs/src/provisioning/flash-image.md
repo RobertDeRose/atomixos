@@ -72,7 +72,7 @@ The flashable image contains:
 | Partition 3 (rootfs-a) | Squashfs root filesystem                    |
 | Partition 4 (rootfs-b) | Empty (populated by first RAUC update)      |
 
-The `/persist` partition is **not** in the image. It is created automatically on first boot by `systemd-repart`.
+The `/persist` partition is included in the image as a small `f2fs` partition.
 
 ## Limitations
 

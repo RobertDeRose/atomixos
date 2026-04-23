@@ -353,9 +353,8 @@ mise run flash -i custom.img /dev/disk4   # specify image explicitly
 mise run flash -y /dev/mmcblk0     # Linux — skip confirmation prompt
 ```
 
-The image includes U-Boot, boot slot A (kernel + initrd + DTB + boot.scr), and rootfs slot A
-(squashfs). On first boot, `systemd-repart`
-automatically creates and formats the `/persist` partition (f2fs) using all remaining eMMC space.
+The image includes U-Boot, A/B boot and rootfs slots, and a small built-in `/persist` partition (f2fs).
+The Rock64 runtime does not repartition the live eMMC from Linux.
 
 Recovery mode: hold the reset button before power-on and keep holding for
 10 seconds. U-Boot will expose the on-board eMMC as

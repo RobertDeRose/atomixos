@@ -275,9 +275,8 @@
   '';
 
   # Persistent state — survives reboots, separate from the ephemeral overlay.
-  # nofail: on first boot the partition doesn't exist yet (create-persist.service
-  # creates it), and even on subsequent boots it's not essential for basic operation.
-  # x-systemd.device-timeout=60s: allow time for create-persist.service on first boot.
+  # The image ships with a small built-in persist partition and does not
+  # repartition the live eMMC from Linux.
   fileSystems."/persist" = {
     device = "/dev/disk/by-partlabel/persist";
     fsType = "f2fs";
@@ -288,97 +287,9 @@
     ];
   };
 
-  # ── First-boot persist partition creation ───────────────────────────────────
-  # The upstream systemd-repart.service has DefaultDependencies=no and runs
-  # very early (Before=sysinit.target). On our squashfs+tmpfs setup it silently
-  # exits with code 76 (can't find root block device) because the GPT backup
-  # header is stranded at the image boundary after dd'ing a smaller image onto
-  # a larger eMMC. We disable the upstream unit and use a custom service that:
-  #   1. Fixes the GPT backup header (sfdisk --relocate)
-  #   2. Runs systemd-repart with an explicit device path
-  #   3. Triggers udev so /dev/disk/by-partlabel/persist appears
-  # On subsequent boots the persist partition exists and the service is a no-op.
-
-  # Keep the repart definition files in /etc/repart.d/ (NixOS generates them).
-  systemd.repart = {
-    enable = true;
-    partitions."50-persist" = {
-      # Custom type UUID so systemd-repart won't match this definition against
-      # existing boot partitions (which are also linux-generic).
-      # Generated deterministically: uuid5(NAMESPACE_URL, "atomixos://persist-partition")
-      Type = "aad64a60-5bcb-5c83-b9c9-5e446f5dba3e";
-      Label = "persist";
-      Format = "f2fs";
-      SizeMinBytes = "128M";
-      MakeDirectories = "/config /config/ssh-authorized-keys /containers /logs";
-    };
-  };
-
-  # Disable the upstream unit — it can't reliably find our root device.
-  systemd.services.systemd-repart.enable = lib.mkForce false;
-
-  # Custom service that creates the persist partition on first boot.
-  systemd.services.create-persist = {
-    description = "Create persist partition on first boot";
-    wantedBy = [ "local-fs.target" ];
-    before = [ "local-fs.target" ];
-    after = [
-      "systemd-udevd.service" # udev must be running for trigger --settle
-    ];
-    wants = [
-      "modprobe@dm_mod.service"
-      "modprobe@loop.service"
-    ];
-    unitConfig = {
-      DefaultDependencies = false;
-      ConditionPathExists = "!/dev/disk/by-partlabel/persist";
-    };
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-    };
-    path = [
-      config.systemd.package
-      pkgs.util-linux
-      pkgs.f2fs-tools
-      pkgs.coreutils # head (used in lsblk | head -1)
-    ];
-    script = ''
-      set -euo pipefail
-
-      # With overlayfs root, findmnt / shows "overlay" not the block device.
-      # The squashfs lower layer is bind-mounted at /media/root-ro — use that
-      # to find the actual block device, then resolve to the parent disk.
-      root_part=$(findmnt -n -o SOURCE /media/root-ro)
-      disk=$(lsblk -n -o PKNAME "$root_part" | head -1)
-      if [ -z "$disk" ]; then
-        echo "ERROR: cannot determine parent disk for $root_part"
-        exit 1
-      fi
-      disk="/dev/$disk"
-      echo "Root partition: $root_part, disk: $disk"
-
-      # Fix the GPT backup header — after dd'ing a smaller image onto a larger
-      # eMMC the backup header is stranded at the old image boundary.
-      echo "Relocating GPT backup header to end of $disk..."
-      sfdisk --relocate gpt-bak-std "$disk"
-
-      # Re-read the partition table so the kernel sees the updated GPT with
-      # correct backup header location. Without this, systemd-repart can't
-      # see the free space beyond the old image boundary.
-      echo "Re-reading partition table..."
-      partx -u "$disk" || blockdev --rereadpt "$disk" || true
-
-      # Create the persist partition using systemd-repart definitions.
-      echo "Running systemd-repart on $disk..."
-      systemd-repart --definitions=/etc/repart.d --dry-run=no "$disk"
-
-      # Trigger udev so /dev/disk/by-partlabel/persist appears.
-      udevadm trigger --settle "$disk"
-
-      echo "Persist partition created successfully."
-    '';
-  };
+  # The image now includes a persist partition at build time. Do not mutate the
+  # live eMMC partition table from Linux; this board has shown unsafe behavior
+  # when repartitioning on-target.
 
   # ── Users ────────────────────────────────────────────────────────────────────
 

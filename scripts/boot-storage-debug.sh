@@ -56,11 +56,9 @@ capture "fw_printenv" fw_printenv
 capture "rauc status" rauc status
 capture "systemctl status rauc" systemctl status rauc --no-pager
 capture "systemctl status first-boot" systemctl status first-boot --no-pager
-capture "systemctl status create-persist" systemctl status create-persist --no-pager
 capture "systemctl status os-verification" systemctl status os-verification --no-pager
 capture "journalctl -b -u rauc" journalctl -b -u rauc --no-pager
 capture "journalctl -b -u first-boot" journalctl -b -u first-boot --no-pager
-capture "journalctl -b -u create-persist" journalctl -b -u create-persist --no-pager
 capture "journalctl -b -u os-verification" journalctl -b -u os-verification --no-pager
 capture "journalctl -b -k watchdog" journalctl -b -k --grep watchdog --no-pager
 capture "sfdisk -d /dev/mmcblk1" sfdisk -d /dev/mmcblk1

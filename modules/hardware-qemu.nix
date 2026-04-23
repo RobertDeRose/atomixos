@@ -40,7 +40,6 @@
 
   # Persist partition provisioning is Rock64-specific.
   systemd.repart.enable = lib.mkForce false;
-  systemd.services.create-persist.enable = lib.mkForce false;
 
   # ── Boot configuration ───────────────────────────────────────────────────────
 

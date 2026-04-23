@@ -42,7 +42,7 @@ systemctl is-system-running          # expect: running or degraded
 systemctl list-units --failed        # note any failures
 ```
 
-**Pass criteria**: Device reaches `multi-user.target`. `systemd-repart` creates `/persist` (f2fs) on first boot.
+**Pass criteria**: Device reaches `multi-user.target`. `/persist` mounts successfully from the flashed image.
 `first-boot.service` runs and creates `/persist/.completed_first_boot`.
 
 ### Task 16.1 -- Full provisioning end-to-end

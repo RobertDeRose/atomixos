@@ -51,7 +51,7 @@ The root filesystem uses a single OverlayFS set up in the initrd (via `boot.init
 | overlay (combined) | `/`              | overlay    | --     | Unified writable root presented to userspace   |
 | lower (read-only)  | `/media/root-ro` | squashfs   | --     | Immutable NixOS system (`PARTLABEL=rootfs-a`)  |
 | upper (writable)   | `/media/root-rw` | tmpfs      | 256 MB | Ephemeral writes, lost on reboot               |
-| persistent state   | `/persist`       | f2fs       | ~13 GB | Survives reboots (`PARTLABEL=persist`, nofail) |
+| persistent state   | `/persist`       | f2fs       | 128 MB | Survives reboots (`PARTLABEL=persist`, nofail) |
 
 The overlay is assembled in the initrd after the squashfs root is mounted at `/mnt-root` but before `switch_root`:
 
@@ -71,9 +71,8 @@ ProtectHome, etc.). The overlay presents a single writable filesystem, so mount 
 
 **Build ID:** The NixOS login banner (`/etc/issue`) displays the build ID for easy identification.
 
-**First-boot persist partition:** Created by a custom `create-persist.service` (not upstream `systemd-repart`) that
-fixes the GPT backup header (`sfdisk --relocate`) after the smaller image is dd'd onto the larger eMMC, then invokes
-`systemd-repart` with an explicit device path.
+**Persist partition:** Included directly in the flashable image as a fixed-size `f2fs` partition. The Rock64 target does
+not repartition the live eMMC from Linux.
 
 **tmpfiles.d rules** (created on boot):
 

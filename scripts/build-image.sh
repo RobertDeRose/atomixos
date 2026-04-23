@@ -18,11 +18,10 @@ set -euo pipefail
 # 144 MiB    128 MiB    boot slot B (vfat) — empty
 # 272 MiB    1024 MiB   rootfs slot A (squashfs, Linux root aarch64 type)
 # 1296 MiB   1024 MiB   rootfs slot B (empty, Linux root aarch64 type)
-# No persist partition — systemd-repart creates it on first boot.
+# 2320 MiB   128 MiB    persist (f2fs)
 #
-# Boot partitions use linux-generic type, rootfs uses Linux root aarch64 type.
-# The persist repart definition uses a custom type UUID so systemd-repart
-# won't match it against any existing partition.
+# Boot partitions use linux-generic type, rootfs uses Linux root aarch64 type,
+# and persist uses linux-generic so the image is fully provisioned at flash time.
 #
 # NOTE: The first partition MUST start at or after 16 MiB to avoid overwriting
 # u-boot.itb which is written at sector 16384 (byte offset 8 MiB, ~9 MiB end).
@@ -35,10 +34,12 @@ ROOTFS_A_START_MIB=272
 ROOTFS_A_SIZE_MIB=1024
 ROOTFS_B_START_MIB=1296
 ROOTFS_B_SIZE_MIB=1024
+PERSIST_START_MIB=2320
+PERSIST_SIZE_MIB=128
 GPT_TAIL_SLACK_MIB=2
 
-# Total image size: end of rootfs-b plus slack for the backup GPT header/table.
-IMAGE_SIZE_MIB=$((ROOTFS_B_START_MIB + ROOTFS_B_SIZE_MIB + GPT_TAIL_SLACK_MIB))
+# Total image size: end of persist plus slack for the backup GPT header/table.
+IMAGE_SIZE_MIB=$((PERSIST_START_MIB + PERSIST_SIZE_MIB + GPT_TAIL_SLACK_MIB))
 
 log() { echo "[build-image] $*"; }
 
@@ -68,6 +69,7 @@ start=${BOOT_A_START_MIB}MiB, size=${BOOT_A_SIZE_MIB}MiB, type=0FC63DAF-8483-477
 start=${BOOT_B_START_MIB}MiB, size=${BOOT_B_SIZE_MIB}MiB, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, name="boot-b"
 start=${ROOTFS_A_START_MIB}MiB, size=${ROOTFS_A_SIZE_MIB}MiB, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, name="rootfs-a"
 start=${ROOTFS_B_START_MIB}MiB, size=${ROOTFS_B_SIZE_MIB}MiB, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, name="rootfs-b"
+start=${PERSIST_START_MIB}MiB, size=${PERSIST_SIZE_MIB}MiB, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4, name="persist"
 EOF
 
 # ── Create boot slot A (vfat with kernel + DTB + boot.scr) ────────────────────
@@ -103,6 +105,15 @@ rm -f "$BOOT_B_VFAT"
 log "Writing squashfs to rootfs slot A..."
 dd if="@squashfs@/rootfs.squashfs" of="$IMAGE" bs=1M seek="${ROOTFS_A_START_MIB}" conv=notrunc status=none
 
+# ── Create persist partition (f2fs) ──────────────────────────────────────────
+
+log "Creating persist partition (f2fs)..."
+PERSIST_IMG=$(mktemp)
+dd if=/dev/zero of="$PERSIST_IMG" bs=1M count="${PERSIST_SIZE_MIB}" status=none
+mkfs.f2fs -f -l persist "$PERSIST_IMG" >/dev/null
+dd if="$PERSIST_IMG" of="$IMAGE" bs=1M seek="${PERSIST_START_MIB}" conv=notrunc status=none
+rm -f "$PERSIST_IMG"
+
 # ── Summary ──────────────────────────────────────────────────────────────────
 
 ACTUAL_SIZE=$(stat -c%s "$IMAGE" 2>/dev/null || stat -f%z "$IMAGE")
@@ -117,7 +128,7 @@ log "  boot-a   (vfat, ${BOOT_A_SIZE_MIB} MiB)  — kernel + DTB + boot.scr"
 log "  boot-b   (vfat, ${BOOT_B_SIZE_MIB} MiB)  — empty (for future updates)"
 log "  rootfs-a (${ROOTFS_A_SIZE_MIB} MiB)       — squashfs deployed"
 log "  rootfs-b (${ROOTFS_B_SIZE_MIB} MiB)       — empty (for future updates)"
-log "  persist  — created on first boot by systemd-repart"
+log "  persist  (${PERSIST_SIZE_MIB} MiB, f2fs) — built into the image"
 log ""
 log "Flash with: dd if=$IMAGE of=/dev/mmcblkN bs=4M status=progress"
 log "Or use a tool like Etcher."
