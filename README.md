@@ -152,6 +152,7 @@ mise.toml                          Tool versions, build tasks, hooks
 
 modules/
   base.nix                         Shared NixOS config (systemd, podman, ssh, auth, closure opts)
+  kernel-config.nix                Shared stripped kernel baseline used by Rock64 and QEMU
   hardware-rock64.nix              RK3328 kernel, DTB, eMMC/watchdog drivers
   hardware-qemu.nix                QEMU aarch64-virt target for testing
   networking.nix                   NIC naming (.link files), eth0/eth1 config
@@ -178,6 +179,7 @@ nix/
     rauc-confirm.nix               os-verification health check → mark-good
     rauc-power-loss.nix            Crash mid-install, verify recovery
     rauc-watchdog.nix              Watchdog + boot-count rollback
+    rauc-qemu-config.nix           Shared QEMU RAUC slot mapping (/dev/vdb-vde, custom backend)
     firewall.nix                   2-node WAN/LAN port allow/deny
     network-isolation.nix          2-node DHCP/NTP/WAN isolation
     ssh-wan-toggle.nix             SSH-on-WAN flag enable/disable
@@ -338,6 +340,10 @@ nix build .#checks.aarch64-linux.rauc-slots --no-link -L
 
 # macOS (requires nix-darwin with linux-builder enabled)
 nix build .#checks.aarch64-darwin.rauc-slots --no-link -L
+
+# When evaluating local Darwin checks that depend on nix/tests/rauc-qemu-config.nix,
+# prefer a path flake ref so local files are visible even if they are untracked.
+nix build "path:$PWD#checks.aarch64-darwin.rauc-slots" --no-link -L
 ```
 
 ## Provisioning

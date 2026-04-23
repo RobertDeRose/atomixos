@@ -486,7 +486,7 @@ in
           NFT_LOG = lib.mkForce module;
           NFT_MASQ = lib.mkForce module;
           NFT_NAT = lib.mkForce module;
-          NFT_REJECT = lib.mkForce yes;
+          NFT_REJECT = lib.mkForce module;
 
           # No CAN bus (~70 options)
           CAN = lib.mkForce no;

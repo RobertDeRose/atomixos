@@ -163,6 +163,7 @@
           # Common args for firewall/network tests (no RAUC modules needed)
           netTestArgs = {
             inherit pkgs self;
+            qemuModule = ./modules/hardware-qemu.nix;
           };
 
           # All test derivations (system-independent — hostPkgs assigned below)

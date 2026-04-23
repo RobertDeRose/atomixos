@@ -85,6 +85,7 @@ nixos-lib.runTest {
       imports = [
         raucModule
         qemuModule
+        ./rauc-qemu-config.nix
       ];
 
       virtualisation = {

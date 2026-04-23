@@ -6,6 +6,8 @@ hardware-specific modules (`hardware-rock64.nix`, `hardware-qemu.nix`).
 ## Module Dependency Graph
 
 ```text
+kernel-config.nix ──> shared stripped kernel baseline
+
 hardware-rock64.nix ──┐
                       ├──> base.nix ──> imports 11 service modules
 hardware-qemu.nix  ───┘
@@ -125,6 +127,21 @@ atomixos.rauc.slots = {
 
 ---
 
+## kernel-config.nix
+
+**Purpose**: Shared stripped kernel baseline used by both Rock64 and QEMU so the VM target stays close to the real
+device kernel.
+
+**Contents:**
+
+- `baseKernelConfig`: the common stripped ARM64 gateway kernel baseline
+- `optionalKernelConfig`: isolated optional USB serial support
+
+`hardware-qemu.nix` imports this file and layers only the minimal `aarch64-virt`, virtio, and test-harness-specific
+requirements on top.
+
+---
+
 ## hardware-qemu.nix
 
 **Purpose**: QEMU aarch64-virt configuration for development and testing.
@@ -137,6 +154,20 @@ atomixos.rauc.slots = {
 | Block devices  | `/dev/mmcblk1pN`  | `/dev/vdN` (virtio)              |
 | RAUC backend   | `uboot`           | `custom` (file-based)            |
 | Kernel modules | Hardware-specific | `virtio_pci`, `virtio_blk`, etc. |
+
+The QEMU RAUC tests share their slot mapping through `nix/tests/rauc-qemu-config.nix`:
+
+```nix
+atomixos.rauc = {
+  slots = {
+    boot0 = "/dev/vdb";
+    boot1 = "/dev/vdc";
+    rootfs0 = "/dev/vdd";
+    rootfs1 = "/dev/vde";
+  };
+  bootloader = "custom";
+};
+```
 
 ---
 

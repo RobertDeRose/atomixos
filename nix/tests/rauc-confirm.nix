@@ -39,6 +39,7 @@ nixos-lib.runTest {
       imports = [
         raucModule
         qemuModule
+        ./rauc-qemu-config.nix
       ];
 
       virtualisation = {
@@ -152,7 +153,7 @@ nixos-lib.runTest {
 
     # 4. Verify network interfaces have correct IPs
     #    eth0 gets DHCP from test VLAN; eth1 has static 172.20.30.1
-    gateway.succeed("ip -4 addr show eth0 | grep 'inet '")
+    gateway.wait_until_succeeds("ip -4 addr show eth0 | grep 'inet '", timeout=60)
     gateway.succeed("ip -4 addr show eth1 | grep '172.20.30.1'")
 
     # 5. Inspect initial RAUC state — fresh boot, no statusfile.

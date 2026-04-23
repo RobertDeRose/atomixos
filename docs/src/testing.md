@@ -105,6 +105,18 @@ nix build .#checks.aarch64-linux.rauc-slots --no-link -L
 
 # macOS (requires nix-darwin with linux-builder enabled)
 nix build .#checks.aarch64-darwin.rauc-slots --no-link -L
+
+# Local Darwin eval/builds that depend on nix/tests/rauc-qemu-config.nix should
+# use a path flake ref so local files remain visible even if they are untracked.
+nix build "path:$PWD#checks.aarch64-darwin.rauc-slots" --no-link -L
+```
+
+When iterating on a single Darwin check locally, evaluate and build the exact
+derivation with the same `path:` flake ref:
+
+```sh
+drv=$(nix eval --raw "path:$PWD#checks.aarch64-darwin.rauc-slots.drvPath")
+nix-store -r "$drv"
 ```
 
 ## Test Architecture
@@ -117,4 +129,5 @@ Tests use the NixOS test framework (`nixos-lib.runTest`). Each test:
 3. Asserts on command output, service states, and network behavior
 
 The QEMU target uses a custom RAUC backend that simulates U-Boot's slot selection using files instead of environment
-variables, allowing the full A/B update lifecycle to be tested without real hardware.
+variables, allowing the full A/B update lifecycle to be tested without real hardware. The shared slot mapping for the
+RAUC tests lives in `nix/tests/rauc-qemu-config.nix`.
