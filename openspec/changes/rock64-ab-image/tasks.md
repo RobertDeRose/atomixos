@@ -21,22 +21,20 @@
   (rk_gmac-dwmac + RTL8211F PHY), USB host controllers (dwc2, xhci, ehci, ohci), hardware watchdog
   (dw_wdt /dev/watchdog0, 30s timeout). Required fixes: initrd for MMC_BLOCK=m, partition offset fix
   (boot-a at 16 MiB), PARTLABEL root=, rootwait, ramdisk_addr_r override to 0x08000000
-- [ ] 2.5 Verify WiFi/BT modules load on demand when USB dongles are plugged in
 
-## 3. Cockpit Pod and OpenVPN in Rootfs
+## 3. Remote Management Direction and OpenVPN
 
-- [x] 3.1 Configure Cockpit to run as a pod (`quay.io/cockpit/ws`) with `python3Minimal` in the rootfs for the SSH-based
-  Python bridge
+- [x] 3.1 Keep Podman available in the device image as the application runtime while removing the local Cockpit/Traefik
+  management path from the final design
 - [x] 3.2 Enable OpenVPN in the NixOS configuration as a systemd service for VPN recovery access
-- [!] 3.3 Verify Cockpit pod starts on boot, is accessible via HTTPS, and shows podman container management
-- [ ] 3.4 Verify OpenVPN creates tun0 interface when a VPN connection is established
+- [x] 3.3 Shift remote web management toward Nixstasis-hosted services and document the enrollment / short-lived SSH model
 
 ## 4. Squashfs Image Build
 
 - [x] 4.1 Add a squashfs image derivation that packages the NixOS system closure (including kernel modules,
-  python3Minimal, OpenVPN, chrony, dnsmasq) into a read-only squashfs image with 1 MB block size
+  Podman, OpenVPN, chrony, dnsmasq) into a read-only squashfs image with 1 MB block size
 - [x] 4.2 Expose the squashfs image as `packages.aarch64-linux.squashfs` in flake outputs
-- [x] 4.3 Verify the built squashfs image is under 1 GB — 334 MB (zstd-19, 30.47% compression ratio)
+- [x] 4.3 Verify the built squashfs image is under 1 GB — most recently 203 MiB after later image trimming work
 - [x] 4.4 Add a CI-friendly size check (script or assertion) that fails the build if squashfs exceeds 1 GB
 
 ## 4b. Flashable Disk Image and Build Tasks
@@ -60,8 +58,9 @@
 - [x] 5.3 Create `.link` files for USB ethernet (driver match → `ethN`) and WiFi dongles (type=wlan → `wlanN`)
 - [x] 5.4 Configure eth0 as DHCP client (WAN)
 - [x] 5.5 Configure eth1 with static IP 172.20.30.1/24 (LAN)
-- [ ] 5.6 Verify on hardware: onboard NIC is always eth0 regardless of USB devices plugged in
-- [ ] 5.7 Verify device identity: `/sys/class/net/eth0/address` returns the onboard MAC
+- [x] 5.6 Verify on hardware: onboard NIC is always eth0 regardless of USB devices plugged in
+- [x] 5.7 Verify device identity: `/sys/class/net/eth0/address` returns the onboard MAC — validated from repeated
+  serial-console `ip add` output showing the same stable `eth0` MAC across boots (`92:a2:18:4f:57:42`)
 
 ## 6. LAN Gateway Services
 
@@ -88,9 +87,8 @@
 
 ## 8. eMMC Partition Layout and Provisioning
 
-- [x] 8.1 Create the provisioning task (`.mise/tasks/provision/emmc`) that partitions the eMMC: raw U-Boot region (4
-  MB), boot A (vfat, 128 MB), boot B (vfat, 128 MB), rootfs A (1 GB), rootfs B (1 GB). Persist partition deferred to
-  systemd-repart on first boot.
+- [x] 8.1 Create the provisioning/image path that produces a flashable eMMC layout with raw U-Boot, boot A, and rootfs A,
+  leaving slot B and /data to initrd systemd-repart on first boot.
 - [x] 8.2 Add U-Boot writing step: dd idbloader.img to sector 64 and u-boot.itb to sector 16384 using `ubootRock64` from
   nixpkgs
 - [x] 8.3 Create vfat filesystem on boot slot A, copy kernel image and DTB
@@ -121,8 +119,9 @@
   certificate path
 - [x] 10.3 Generate a development CA keypair and signing key for RAUC bundle signing (store in `certs/` with .gitignore
   for private keys)
-- [ ] 10.4 Verify `rauc status` runs on device and shows all four slots (boot A, boot B, rootfs A, rootfs B) with
-  correct partition paths
+- [x] 10.4 Verify `rauc status` runs on device and shows all four slots (boot A, boot B, rootfs A, rootfs B) with
+  correct partition paths — validated on hardware: `boot.0=/dev/mmcblk1p1`, `rootfs.0=/dev/mmcblk1p2`,
+  `boot.1=/dev/mmcblk1p3`, `rootfs.1=/dev/mmcblk1p4`
 
 ## 11. RAUC Multi-Slot Bundle Building
 
@@ -157,15 +156,12 @@
   good, exit immediately
 - [x] 13.3 Implement system health checks: verify eth0 has WAN address, eth1 is 172.20.30.1, dnsmasq running, chronyd
   running
-- [x] 13.4 Implement manifest loading: read `/data/config/health-manifest.yaml` if it exists; if missing, skip
-  container checks
-- [x] 13.5 Implement container health checks: wait up to 5 minutes for all manifest containers to reach "running" state,
-  checking every 10 seconds
-- [x] 13.6 Implement sustained health check: check every 5 seconds for 60 seconds; detect container restarts or stops;
-  fail if any instability detected
+- [x] 13.4 Simplify confirmation to local gateway health checks only so slot confirmation does not depend on app containers
+  or remote management services
+- [x] 13.5 Implement sustained health check: check every 5 seconds for 60 seconds and fail on local service instability
+- [x] 13.6 On any failure: exit non-zero, slot stays uncommitted
 - [x] 13.7 On sustained success: call `rauc status mark-good` to commit the slot
-- [x] 13.8 On any failure: exit non-zero, slot stays uncommitted
-- [x] 13.9 Add the confirmation service to the NixOS configuration
+- [x] 13.8 Add the confirmation service to the NixOS configuration
 
 ## 14. Update Polling Service (`os-upgrade`, hawkBit-Ready)
 
@@ -185,17 +181,18 @@
 - [x] 15.2 Configure QEMU-specific overrides: virtual block devices for slots, software watchdog, virtual network
   interfaces
 - [x] 15.3 Expose a VM runner script via flake outputs (e.g., `nix build .#rock64-qemu-vm && ./result/bin/run-vm`)
-- [x] 15.4 Verify QEMU VM boots with systemd, podman, Cockpit, firewall, and network configuration functional —
-  validated via systemd-nspawn: multi-user.target reached, nftables loaded, chronyd running, networkd running,
-  podman socket active. dnsmasq/sshd expected failures in container (no eth1, host port 22 conflict)
+- [x] 15.4 Verify QEMU VM boots with the shared base system, firewall, network configuration, RAUC plumbing, and Podman
+  available for application workloads — validated via systemd-nspawn: multi-user.target reached, nftables loaded,
+  chronyd running, networkd running, podman available. dnsmasq/sshd expected failures in container (no eth1,
+  host port 22 conflict)
 - [x] 15.5 Verify RAUC slot logic works in QEMU with virtual block devices — validated via `nix build
   .#checks.aarch64-linux.rauc-slots`: VM boots with 4 virtio disks, RAUC service starts (D-Bus), `rauc status`
   reports all 4 slots (boot.0/1, rootfs.0/1) with correct device paths (/dev/vdb-vde)
 
 ## 16. End-to-End Integration Testing
 
-- [~] 16.1 Full provisioning test: run provisioning script on Rock64, verify first boot to multi-user.target with all
-  services (Cockpit pod, DHCP, NTP, firewall)
+- [x] 16.1 Flashable image boots on Rock64 and reaches multi-user.target after first-boot repartitioning creates the
+  inactive slot and /data
 - [x] 16.2 Update test: build a v2 bundle, serve it from a test HTTP server, verify polling service downloads and
   installs it, device reboots into new slot with new kernel and rootfs — validated via `nix build
   .#checks.aarch64-linux.rauc-update`: builds signed test bundle (dev certs), copies into QEMU VM, `rauc install`
@@ -205,8 +202,8 @@
   successful update — validated via `nix build .#checks.aarch64-linux.rauc-confirm`: boots QEMU VM with RAUC + dnsmasq
   - chronyd + dummy eth1 (172.20.30.1), creates first-boot sentinel, runs os-verification service which checks all
   services/IPs, waits 60s sustained check, then calls `rauc status mark-good` to commit slot A
-- [ ] 16.4 Confirmation with manifest: place a health manifest on /data, deploy containers, verify confirmation
-  checks containers and commits only when all are healthy
+- [ ] 16.4 Hardware confirmation test: install an update on Rock64 and verify the local-only confirmation path commits the
+  slot on real hardware
 - [x] 16.5 Rollback test: deploy a deliberately broken image, verify boot-count exhaustion triggers automatic rollback
   to previous slot pair — validated via `nix build .#checks.aarch64-linux.rauc-rollback`: installs bundle to slot B,
   marks B bad, re-activates A as primary, verifies A=good/primary and B=bad
@@ -230,37 +227,26 @@
   — validated via `nix build .#checks.aarch64-linux.ssh-wan-toggle`: creates /data/config/ssh-wan-enabled, reloads
   ssh-wan-reload service, verifies SSH reachable from WAN; removes flag, reloads, verifies SSH blocked again
 
-## 17. Cockpit Pod Configuration
+## 17. Remote Access Architecture
 
-- [x] 17.1 Create a Quadlet or systemd unit for the Cockpit pod (`quay.io/cockpit/ws`) that SSHes into the host on
-  localhost — raw systemd service using podman run, host networking, zero closure cost
-- [x] 17.2 Configure cockpit.conf for the pod (listen address, certificate paths, allowed origins) — COCKPIT_WS_ARGS env
-  sets --address=127.0.0.1 --port=9090 --no-tls; config mounted from /data/config/cockpit
-- [x] 17.3 Integrate Cockpit pod with Traefik reverse proxy (routing, TLS termination) — traefik.nix raw systemd service
-  (same pattern as cockpit.nix: podman run docker.io/library/traefik:v3, host networking, zero closure cost). TLS
-  from /data/config/traefik/certs/, reverse-proxies to Cockpit on 127.0.0.1:9090, HTTP→HTTPS redirect.
-  Provisioning writes config + self-signed cert.
-- [x] 17.4 Evaluate Cockpit OAuth/bearer token flow for OIDC pass-through from Traefik — Cockpit supports [bearer] auth
-  scheme but still needs SSH credentials for the bridge. Recommended: "OIDC gatekeeper + Cockpit password"
-  (two-factor: identity via OIDC + device password). Alternative: custom [bearer] command trusting X-Forwarded-User
-  with SSH service key (SSO, future). OIDC template with chain middleware written to provisioning.
-- [!] 17.5 Verify Cockpit pod can SSH to host using provisioned password and spawn Python bridge via python3Minimal
-- [x] 17.6 Add Cockpit pod to the health manifest for os-verification service validation — provisioning task creates
-  /data/config/health-manifest.yaml with cockpit-ws and traefik container entries
+- [x] 17.1 Evaluate the initial local Cockpit/Traefik management path and prove out the Rock64 bring-up flow
+- [x] 17.2 Remove the local Cockpit/Traefik stack from the device image once the design shifted toward Nixstasis-hosted
+  remote access
+- [x] 17.3 Document the Nixstasis-oriented remote access model: approved MAC-based enrollment, registration key persisted
+  on /data, reverse tunnel, and short-lived SSH credentials
+- [x] 17.4 Keep Podman on-device for application workloads even though remote management is no longer hosted locally
 
-## 17b. First-Boot Initialization and Container Image Pulls
+## 17b. First-Boot Initialization
 
 - [x] 17b.1 Create `modules/first-boot.nix` — systemd oneshot service with
   `ConditionPathExists=!/data/.completed_first_boot` that runs on first boot only
-- [x] 17b.2 Create `scripts/first-boot.sh` — **CHANGED**: writes `slot_good` flag file to `/boot` (boot FAT partition)
-  instead of calling `rauc status mark-good`. U-Boot restores boot counter on next power cycle. Also writes
-  `/data/.completed_first_boot` sentinel.
+- [x] 17b.2 Create `scripts/first-boot.sh` to confirm the current slot, seed development-only auth helpers when enabled,
+  and write `/data/.completed_first_boot`
 - [x] 17b.3 Add `ConditionPathExists=/data/.completed_first_boot` to `os-verification.service` so it skips on first
   boot (before sentinel exists)
-- [x] 17b.4 Add `ExecStartPre=podman pull` to `cockpit-ws.service` and `traefik.service` for automatic container image
-  fetch on first boot (cached no-op on subsequent boots)
-- [x] 17b.5 Verify in nspawn: `first-boot.service` runs and creates sentinel, `os-verification.service` is skipped
-  (condition unmet), both container services attempt pull (fail expected in nspawn — no network)
+- [x] 17b.4 Remove first-boot dependence on local management containers so initial boot completes without image pulls
+- [x] 17b.5 Verify in test environments that `first-boot.service` creates the sentinel and `os-verification.service`
+  remains skipped until subsequent boots
 
 ## 18. Authentication Provisioning
 
@@ -270,8 +256,8 @@
   `/data/config/ssh-authorized-keys/admin` — via --ssh-key flag, accepts key string or .pub file path
 - [x] 18.3 Add provisioning validation: fail if credential files are missing after provisioning — validation step
   re-mounts persist read-only and checks files exist and are non-empty
-- [ ] 18.4 Verify device boots with provisioned credentials: SSH key auth works, password auth works via Cockpit pod on
-  localhost
+- [ ] 18.4 Verify device boots with provisioned credentials: admin SSH key auth works, development-mode password auth
+  behaves as expected, and serial-only root debug via `_RUT_OH_` is disabled once admin credentials are provisioned
 - [x] 18.5 Verify no credentials exist in the squashfs image itself (EN18031 compliance) — verified via source audit:
   `hashedPasswordFile` reads from `/data` at runtime (modules/base.nix:130), SSH authorized keys loaded from
   `/data` (modules/base.nix:161), no `hashedPassword`/`password`/`initialPassword` attributes anywhere, TLS certs

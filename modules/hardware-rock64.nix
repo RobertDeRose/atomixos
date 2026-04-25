@@ -79,8 +79,29 @@ let
     USB_SERIAL_XR = lib.mkForce no;
     USB_SERIAL_DEBUG = lib.mkForce no;
   };
+
+  serialRootDebugScript = pkgs.writeShellScript "rock64-serial-root-debug" ''
+    set -euo pipefail
+
+    admin_password_hash="/data/config/admin-password-hash"
+    admin_authorized_key="/data/config/ssh-authorized-keys/admin"
+
+    env_value="$(${ubootEnvTools}/bin/fw_printenv -n _RUT_OH_ 2>/dev/null || true)"
+    if [ "$env_value" != "1" ]; then
+      exit 0
+    fi
+
+    if [ -s "$admin_password_hash" ] || [ -s "$admin_authorized_key" ]; then
+      exit 0
+    fi
+
+    ${pkgs.systemd}/bin/systemctl start serial-root-debug@ttyS2.service
+    ${ubootEnvTools}/bin/fw_setenv _RUT_OH_
+  '';
 in
 {
+  atomixos.serialRootDebug.enable = true;
+
   # ── Boot partition ────────────────────────────────────────────────────────────
   # Mount the active boot slot's FAT partition at /boot (slot A).
   fileSystems."/boot" = {
@@ -913,6 +934,44 @@ in
     enable = true;
     wantedBy = [ "getty.target" ];
     serviceConfig.Restart = "always";
+  };
+
+  systemd.services."serial-root-debug@" = lib.mkIf config.atomixos.serialRootDebug.enable {
+    description = "Serial root debug autologin on %I";
+    after = [ "systemd-user-sessions.service" ];
+    unitConfig.ConditionPathExists = "!/data/config/admin-password-hash";
+    serviceConfig = {
+      Type = "idle";
+      ExecStart = "${pkgs.util-linux}/sbin/agetty --autologin root --keep-baud 1500000,115200,57600,38400 -8 -L %I vt220";
+      Restart = "always";
+      RestartSec = "0";
+      TTYPath = "/dev/%I";
+      TTYReset = true;
+      TTYVHangup = true;
+      IgnoreSIGPIPE = false;
+      SendSIGHUP = true;
+    };
+  };
+
+  systemd.services.serial-root-debug-gate = lib.mkIf config.atomixos.serialRootDebug.enable {
+    description = "Enable serial root debug when _RUT_OH_=1";
+    after = [
+      "data.mount"
+      "serial-getty@ttyS2.service"
+    ];
+    wants = [ "data.mount" ];
+    wantedBy = [ "multi-user.target" ];
+    unitConfig.RequiresMountsFor = [ "/data" ];
+    path = [
+      pkgs.coreutils
+      pkgs.systemd
+      ubootEnvTools
+    ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      ExecStart = serialRootDebugScript;
+    };
   };
 
   # Disable the storage debug capture by default on normal images.
