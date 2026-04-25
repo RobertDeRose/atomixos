@@ -4,15 +4,18 @@
 
 ### Requirement: eMMC partition layout supports A/B boot and root filesystem slots
 
-The eMMC SHALL be partitioned with the following layout: raw U-Boot region (~4 MB), two vfat boot partitions (slot A and
-slot B, ~32 MB each) containing kernel and DTB, two squashfs root filesystem partitions (slot A and slot B, ~200 MB
-each), and an f2fs /persist partition consuming the remaining space (~15 GB on a 16 GB eMMC).
+The eMMC SHALL be partitioned with the following layout: a raw U-Boot region in the first 16 MB, two vfat boot
+partitions (slot A and slot B, 128 MB each), two squashfs root filesystem partitions (slot A and slot B, 1 GB each),
+and an f2fs `/data` partition consuming the remaining space. The flashable image contains slot A only (`boot-a` and
+`rootfs-a`); slot B and `/data` are created on first boot by initrd `systemd-repart`.
 
 #### Scenario: Partition table matches specification
 
-- **WHEN** the eMMC is inspected with `fdisk -l` or `parted print` after provisioning
-- **THEN** the partition table contains two vfat boot partitions (A and B), two rootfs partitions (A and B), and an f2fs
-  /persist partition, with U-Boot written at the RK3328 boot ROM expected offset
+- **WHEN** the flashable image is inspected before first boot
+- **THEN** the GPT contains `boot-a` and `rootfs-a`, with U-Boot written at the RK3328 boot ROM expected offset in the raw
+  pre-partition region
+- **AND WHEN** the device completes its first boot
+- **THEN** initrd `systemd-repart` creates `boot-b`, `rootfs-b`, and an f2fs `/data` partition in the remaining space
 
 ### Requirement: Per-slot boot partitions contain kernel and DTB
 
@@ -31,9 +34,10 @@ RAUC SHALL update the boot partition and rootfs partition atomically as part of 
 
 ### Requirement: Initial provisioning script partitions and deploys first image
 
-An initial provisioning script SHALL partition the eMMC, write U-Boot to the correct raw offset, create filesystems on
-each partition, deploy the first kernel+DTB to boot slot A, deploy the first squashfs image to rootfs slot A, configure
-U-Boot environment for booting, and format /persist as f2fs.
+An initial provisioning script SHALL partition the eMMC, write U-Boot to the correct raw offset, create the boot slot A
+filesystem, deploy the first kernel+DTB to boot slot A, deploy the first squashfs image to rootfs slot A, and leave the
+remaining eMMC space unallocated so initrd `systemd-repart` can create boot slot B, rootfs slot B, and `/data` on first
+boot.
 
 #### Scenario: First boot after provisioning
 
@@ -58,15 +62,15 @@ RK3328 boot ROM (sector 64 for idbloader, sector 16384 for u-boot.itb). U-Boot S
 - **WHEN** the Rock64 powers on with the provisioned eMMC
 - **THEN** the RK3328 boot ROM finds and executes U-Boot from the expected eMMC offsets
 
-### Requirement: /persist partition survives updates
+### Requirement: /data partition survives updates
 
-The /persist partition SHALL NOT be modified by RAUC updates or rootfs slot switches. It SHALL persist across all
+The /data partition SHALL NOT be modified by RAUC updates or rootfs slot switches. It SHALL persist across all
 updates and rollbacks.
 
 #### Scenario: Data survives an A/B slot switch
 
-- **WHEN** a file is written to /persist, then an update switches the active slot from A to B
-- **THEN** the file is still present and unmodified on /persist after the slot switch
+- **WHEN** a file is written to /data, then an update switches the active slot from A to B
+- **THEN** the file is still present and unmodified on /data after the slot switch
 
 ### Requirement: Boot configuration uses U-Boot environment for slot selection
 

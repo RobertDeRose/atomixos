@@ -12,7 +12,7 @@ if [ -n "$HANDLE" ]; then
 fi
 
 # Re-add if flag exists
-if [ -f /persist/config/ssh-wan-enabled ]; then
+if [ -f /data/config/ssh-wan-enabled ]; then
 	echo "Re-adding SSH-on-WAN rule"
 	nft add rule inet filter input iifname "eth0" tcp dport 22 accept comment \"SSH-WAN-dynamic\"
 else

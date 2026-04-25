@@ -8,10 +8,11 @@ to eMMC with `dd` (or `mise run flash`).
 On first boot:
 
 1. U-Boot loads `boot.scr` from boot-a, echoes build ID, boots the kernel with initrd
-2. The initrd mounts the squashfs rootfs, then `postMountCommands` converts it to an
-   OverlayFS root (squashfs lower + tmpfs upper) before `switch_root`
-3. The image boots with a built-in `/persist` partition (f2fs, currently fixed-size)
-4. `first-boot.service` unconditionally marks the RAUC slot as good (no network dependency) and writes the sentinel file
+2. The initrd mounts the selected squashfs slot at `/run/rootfs-base`, then `sysroot.mount`
+   assembles `/` as OverlayFS with a tmpfs-backed upper/work directory under `/run/overlay-root`
+3. Initrd `systemd-repart` creates the `/data` partition (f2fs) on first boot using the remaining eMMC space
+4. `first-boot.service` unconditionally marks the RAUC slot as good, seeds a minimal Cockpit/Traefik test config on
+   `/data`, and writes the sentinel file
 5. Network interfaces come up (eth0 via DHCP, eth1 static); `systemd-networkd-wait-online` uses 30s timeout with `anyInterface=true`
 6. Services start: dnsmasq, chrony, sshd, os-upgrade timer
 

@@ -23,7 +23,7 @@
 - Run Cockpit as a pod (`quay.io/cockpit/ws`) that SSHes into the host, with `python3Minimal` in the rootfs to support
   the Cockpit Python bridge
 - Include OpenVPN in the rootfs as a recovery management path
-- Configure EN18031-compliant user authentication: no default passwords, per-device credentials from `/persist/config/`,
+- Configure EN18031-compliant user authentication: no default passwords, per-device credentials from `/data/config/`,
   OIDC (Microsoft Entra) as primary auth with provisioned password as LAN/offline fallback
 - Configure the Rock64 as a LAN gateway: DHCP server, NTP server, and network isolation boundary (no IP forwarding, no
   NAT) for EN18031 compliance of legacy downstream devices
@@ -45,7 +45,7 @@
 - `nix-flake-config`: NixOS flake defining the Rock64 host configuration (stripped kernel with WiFi/BT modules, DTB,
   systemd, podman, python3Minimal, OpenVPN, openssh, chrony, squashfs output, QEMU testing target, NIC naming, closure
   size optimizations)
-- `partition-layout`: eMMC partition scheme (U-Boot raw, per-slot boot A/B vfat, rootfs A/B squashfs 1 GB each, /persist
+- `partition-layout`: eMMC partition scheme (U-Boot raw, per-slot boot A/B vfat, rootfs A/B squashfs 1 GB each, /data
   f2fs) and initial provisioning script with credential creation
 - `rauc-integration`: RAUC system configuration, multi-slot bundle building, slot definitions, U-Boot bootloader
   backend, update polling service, and hawkBit-ready architecture
@@ -55,8 +55,8 @@
   manifest-defined containers before committing the slot
 - `lan-gateway`: Network isolation boundary with DHCP server, NTP server, nftables firewall, NIC naming (eth0 WAN, eth1
   LAN), and manual SSH-on-WAN toggle for EN18031 compliance
-- `user-auth`: EN18031-compliant authentication — no default passwords, hashedPasswordFile from /persist, SSH authorized
-  keys from /persist, OIDC primary with password fallback, localhost-only SSH password auth for Cockpit pod
+- `user-auth`: EN18031-compliant authentication — no default passwords, hashedPasswordFile from /data, SSH authorized
+  keys from /data, OIDC primary with password fallback, localhost-only SSH password auth for Cockpit pod
 
 ### Modified Capabilities
 

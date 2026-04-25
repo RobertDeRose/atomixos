@@ -1,7 +1,7 @@
 # Build a flashable disk image for the Rock64 eMMC.
-# Contains: GPT partition table, U-Boot, boot slot A (kernel + DTB + initrd + boot.scr),
-# empty boot slot B, rootfs slot A (squashfs), empty rootfs slot B,
-# and a small built-in /persist partition.
+# Contains: GPT partition table, U-Boot, boot slot A (kernel + DTB + initrd +
+# boot.scr), rootfs slot A (squashfs), and first-boot-created slot B + /data
+# partitions.
 {
   lib,
   stdenv,

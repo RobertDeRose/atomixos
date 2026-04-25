@@ -111,11 +111,10 @@ Post-update health check. Runs after every boot (except first).
 3. `chronyd.service` is active
 4. `eth0` has a WAN IP
 5. `eth1` has `172.20.30.1`
-6. Containers from health manifest are `running` (5 min timeout)
-7. Sustained 60s check (every 5s): dnsmasq still active, no container restarts
-8. On success: `rauc status mark-good`
+6. Sustained 60s check (every 5s): dnsmasq still active
+7. On success: `rauc status mark-good`
 
-**Dependencies:** `rauc`, `podman`, `jq`, `systemctl`, `ip`
+**Dependencies:** `rauc`, `jq`, `systemctl`, `ip`
 
 ### os-upgrade.sh
 
@@ -129,7 +128,7 @@ OTA update polling script. Checks for new RAUC bundles and installs them.
 
 1. Get current version from `rauc status` and device ID from eth0 MAC
 2. Query `$URL/api/v1/updates/latest` with version and device headers
-3. If newer version found: download to `/persist/config/bundles/`, `rauc install`, reboot
+3. If newer version found: download to `/data/config/bundles/`, `rauc install`, reboot
 4. Non-fatal on network errors (timer retries later)
 
 ### first-boot.sh
@@ -140,9 +139,9 @@ First-boot initialization. Writes boot confirmation flag and sentinel.
 
 **Steps:**
 
-1. Check for `/persist/.completed_first_boot` — exit if exists
+1. Check for `/data/.completed_first_boot` — exit if exists
 2. Write `slot_good` flag file to `/boot` (boot FAT partition) — U-Boot will restore boot counter on next power cycle
-3. Write timestamp to sentinel file `/persist/.completed_first_boot`
+3. Write timestamp to sentinel file `/data/.completed_first_boot`
 
 ### ssh-wan-toggle.sh
 
@@ -150,7 +149,7 @@ First-boot initialization. Writes boot confirmation flag and sentinel.
 
 Boot-time SSH-on-WAN rule application.
 
-**Logic:** If `/persist/config/ssh-wan-enabled` exists, add nftables rule `iifname "eth0" tcp dport 22 accept` with
+**Logic:** If `/data/config/ssh-wan-enabled` exists, add nftables rule `iifname "eth0" tcp dport 22 accept` with
 comment `SSH-WAN-dynamic`.
 
 ### ssh-wan-reload.sh

@@ -42,8 +42,8 @@ systemctl is-system-running          # expect: running or degraded
 systemctl list-units --failed        # note any failures
 ```
 
-**Pass criteria**: Device reaches `multi-user.target`. `/persist` mounts successfully from the flashed image.
-`first-boot.service` runs and creates `/persist/.completed_first_boot`.
+**Pass criteria**: Device reaches `multi-user.target`. `/data` is created and mounts successfully on first boot.
+`first-boot.service` runs and creates `/data/.completed_first_boot`.
 
 ### Task 16.1 -- Full provisioning end-to-end
 
@@ -179,14 +179,14 @@ Test SSH-on-WAN toggle:
 
 ```sh
 # On the gateway
-touch /persist/config/ssh-wan-enabled
+touch /data/config/ssh-wan-enabled
 systemctl start ssh-wan-reload
 
 # From WAN
 ssh admin@<gateway-wan-ip>           # expect: NOW works
 
 # Disable again
-rm /persist/config/ssh-wan-enabled
+rm /data/config/ssh-wan-enabled
 systemctl start ssh-wan-reload
 
 # From WAN
@@ -204,28 +204,15 @@ traceroute 8.8.8.8                   # expect: no hops beyond gateway, timeout
 
 ---
 
-## Phase 5: Containers and Services
-
-### Task 3.3 -- Cockpit pod starts and is accessible via HTTPS
-
-```sh
-# On the gateway
-systemctl status cockpit-ws          # expect: active (running)
-podman ps                            # expect: cockpit-ws container running
-curl -sk https://localhost:443       # expect: Cockpit login page (via Traefik)
-```
-
-From a LAN client browser: navigate to `https://172.20.30.1`. Expect Cockpit login page with container management.
-
-**Pass criteria**: Cockpit pod running, HTTPS accessible via Traefik on port 443.
+## Phase 5: Services
 
 ### Task 3.4 -- OpenVPN creates tun0
 
-This requires a VPN server and a provisioned client config at `/persist/config/openvpn/client.conf`.
+This requires a VPN server and a provisioned client config at `/data/config/openvpn/client.conf`.
 
 ```sh
 # Provision the VPN config
-cat > /persist/config/openvpn/client.conf << 'EOF'
+cat > /data/config/openvpn/client.conf << 'EOF'
 # Your OpenVPN client config here
 EOF
 
@@ -236,42 +223,17 @@ ip addr show tun0                    # expect: VPN IP assigned
 
 **Pass criteria**: `tun0` interface created with assigned VPN IP.
 
-### Task 17.5 -- Cockpit SSH bridge with python3Minimal
+### Task 16.4 -- Confirmation with local service health checks
 
 ```sh
 # On the gateway
-which python3                        # expect: path to python3Minimal
-python3 --version                    # expect: 3.x (minimal)
-
-# From a browser, log into Cockpit at https://172.20.30.1
-# Use admin username + provisioned password
-# Navigate to Terminal tab
-# Verify you get a working root shell
-```
-
-**Pass criteria**: Cockpit pod SSHes to localhost, spawns Python bridge via python3Minimal, interactive terminal works.
-
-### Task 16.4 -- Confirmation with health manifest and containers
-
-This requires both cockpit-ws and traefik containers running:
-
-```sh
-# On the gateway -- verify health manifest
-cat /persist/config/health-manifest.yaml
-# expect: cockpit-ws and traefik entries
-
-# Verify both containers are running
-podman ps                            # expect: cockpit-ws AND traefik running
-
-# Simulate an update confirmation cycle
-# (after installing a RAUC bundle to slot B and rebooting into it)
 systemctl status os-verification     # expect: ran and succeeded
 journalctl -u os-verification       # expect: all checks passed, slot marked good
 rauc status                          # expect: booted slot marked "good"
 ```
 
-**Pass criteria**: `os-verification` reads the health manifest, waits for both containers, runs 60s sustained check,
-and marks the slot good.
+**Pass criteria**: `os-verification` validates local gateway services, completes the sustained check, and marks the slot
+good.
 
 ---
 
@@ -301,8 +263,8 @@ rauc status
 # expect:
 #   Compatible: rock64
 #   Boot slot: boot.0 (booted, good)
-#   Slots: boot.0 (/dev/mmcblk1p1), boot.1 (/dev/mmcblk1p2),
-#          rootfs.0 (/dev/mmcblk1p3), rootfs.1 (/dev/mmcblk1p4)
+#   Slots: boot.0 (/dev/mmcblk1p1), boot.1 (/dev/mmcblk1p3),
+#          rootfs.0 (/dev/mmcblk1p2), rootfs.1 (/dev/mmcblk1p4)
 ```
 
 **Pass criteria**: `rauc status` shows all 4 slots with correct device paths.
@@ -399,10 +361,8 @@ Mark each task as you complete it. Update `openspec/changes/rock64-ab-image/task
 | 6.5  | NTP serves LAN clients                       |        |
 | 6.6  | LAN isolation (no WAN access)                |        |
 | 7.7  | Firewall ports correct on all interfaces     |        |
-| 3.3  | Cockpit pod HTTPS accessible                 |        |
 | 3.4  | OpenVPN creates tun0                         |        |
-| 17.5 | Cockpit SSH bridge with python3Minimal       |        |
-| 16.4 | Confirmation with manifest + containers      |        |
+| 16.4 | Confirmation with local service health       |        |
 | 18.4 | Provisioned credentials work                 |        |
 | 10.4 | `rauc status` shows all 4 slots              |        |
 | 11.4 | Bundle install to inactive slot              |        |

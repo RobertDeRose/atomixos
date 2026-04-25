@@ -84,6 +84,9 @@
       Address = "172.20.30.1/24";
       DHCPServer = false; # dnsmasq handles DHCP
       IPv6AcceptRA = false;
+      # The LAN USB NIC may be unplugged at boot. Still assign the gateway IP so
+      # dnsmasq/chrony can bind and the interface is ready when a client appears.
+      ConfigureWithoutCarrier = true;
     };
   };
 

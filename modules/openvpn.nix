@@ -11,16 +11,16 @@
   # ── OpenVPN ──────────────────────────────────────────────────────────────────
   #
   # OpenVPN is configured but the actual VPN config (server address, keys, certs)
-  # is expected to be provisioned to /persist/config/openvpn/ during device setup.
+  # is expected to be provisioned to /data/config/openvpn/ during device setup.
   # This module just ensures the OpenVPN package and service infrastructure is
   # available in the rootfs.
 
   environment.systemPackages = [ pkgs.openvpn ];
 
-  # If a client config exists on /persist, use it
+  # If a client config exists on /data, use it
   services.openvpn.servers.recovery = {
     config = ''
-      config /persist/config/openvpn/client.conf
+      config /data/config/openvpn/client.conf
     '';
     autoStart = false; # Only start when explicitly enabled or config exists
   };
@@ -28,7 +28,7 @@
   # Systemd override: only start if config file exists
   systemd.services.openvpn-recovery = {
     unitConfig = {
-      ConditionPathExists = "/persist/config/openvpn/client.conf";
+      ConditionPathExists = "/data/config/openvpn/client.conf";
     };
   };
 }

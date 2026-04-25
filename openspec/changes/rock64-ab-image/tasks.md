@@ -76,7 +76,7 @@
 
 - [x] 7.1 Configure nftables with WAN inbound rules: ALLOW tcp/443, ALLOW udp/1194 (OpenVPN), ALLOW established/related,
   DROP all else
-- [x] 7.2 Add conditional SSH rule for WAN: ALLOW tcp/22 only if `/persist/config/ssh-wan-enabled` exists
+- [x] 7.2 Add conditional SSH rule for WAN: ALLOW tcp/22 only if `/data/config/ssh-wan-enabled` exists
 - [x] 7.3 Configure LAN inbound rules: ALLOW udp/67-68 (DHCP), ALLOW udp/123 (NTP), ALLOW tcp/22 (SSH), ALLOW
   established/related, DROP all else
 - [x] 7.4 Configure VPN (tun0) inbound rules: ALLOW tcp/22, ALLOW established/related, DROP all else
@@ -95,7 +95,7 @@
   nixpkgs
 - [x] 8.3 Create vfat filesystem on boot slot A, copy kernel image and DTB
 - [x] 8.4 Write the initial squashfs image to rootfs slot A partition
-- [x] 8.5 Configure systemd-repart to create f2fs /persist partition on first boot (zero closure cost — binary already
+- [x] 8.5 Configure systemd-repart to create f2fs /data partition on first boot (zero closure cost — binary already
   in systemd)
 - [x] 8.6 U-Boot environment defaults handled by boot.cmd script (lines 17-19: `BOOT_ORDER=A B`, `BOOT_A_LEFT=3`,
   `BOOT_B_LEFT=3` when env unset)
@@ -157,7 +157,7 @@
   good, exit immediately
 - [x] 13.3 Implement system health checks: verify eth0 has WAN address, eth1 is 172.20.30.1, dnsmasq running, chronyd
   running
-- [x] 13.4 Implement manifest loading: read `/persist/config/health-manifest.yaml` if it exists; if missing, skip
+- [x] 13.4 Implement manifest loading: read `/data/config/health-manifest.yaml` if it exists; if missing, skip
   container checks
 - [x] 13.5 Implement container health checks: wait up to 5 minutes for all manifest containers to reach "running" state,
   checking every 10 seconds
@@ -172,7 +172,7 @@
 - [x] 14.1 Create `os-upgrade.timer` and `os-upgrade.service` systemd units for periodic update polling
 - [x] 14.2 Implement polling logic: query update server for latest bundle version, compare against currently installed
   version
-- [x] 14.3 On new version available: download the `.raucb` bundle to a temp location on /persist, invoke `rauc install`
+- [x] 14.3 On new version available: download the `.raucb` bundle to a temp location on /data, invoke `rauc install`
 - [x] 14.4 Handle download failures gracefully: log error, clean up partial downloads, wait for next timer interval
 - [x] 14.5 Add `rauc-hawkbit-updater` as a disabled service in the NixOS configuration
 - [x] 14.6 Create a NixOS configuration option to toggle between simple polling and hawkBit client (mutually exclusive)
@@ -205,7 +205,7 @@
   successful update — validated via `nix build .#checks.aarch64-linux.rauc-confirm`: boots QEMU VM with RAUC + dnsmasq
   - chronyd + dummy eth1 (172.20.30.1), creates first-boot sentinel, runs os-verification service which checks all
   services/IPs, waits 60s sustained check, then calls `rauc status mark-good` to commit slot A
-- [ ] 16.4 Confirmation with manifest: place a health manifest on /persist, deploy containers, verify confirmation
+- [ ] 16.4 Confirmation with manifest: place a health manifest on /data, deploy containers, verify confirmation
   checks containers and commits only when all are healthy
 - [x] 16.5 Rollback test: deploy a deliberately broken image, verify boot-count exhaustion triggers automatic rollback
   to previous slot pair — validated via `nix build .#checks.aarch64-linux.rauc-rollback`: installs bundle to slot B,
@@ -227,7 +227,7 @@
   vlans=[1,2], redesigned from 3-node to avoid OOM under TCG). Uses inline nftables rules (eth1=WAN, eth2=LAN) with
   eth0 backdoor passthrough. Verifies port-level allow/deny from both WAN and LAN sides using ncat listeners
 - [x] 16.10 SSH-on-WAN toggle test: create/remove flag file, verify SSH access on WAN is enabled/disabled accordingly
-  — validated via `nix build .#checks.aarch64-linux.ssh-wan-toggle`: creates /persist/config/ssh-wan-enabled, reloads
+  — validated via `nix build .#checks.aarch64-linux.ssh-wan-toggle`: creates /data/config/ssh-wan-enabled, reloads
   ssh-wan-reload service, verifies SSH reachable from WAN; removes flag, reloads, verifies SSH blocked again
 
 ## 17. Cockpit Pod Configuration
@@ -235,10 +235,10 @@
 - [x] 17.1 Create a Quadlet or systemd unit for the Cockpit pod (`quay.io/cockpit/ws`) that SSHes into the host on
   localhost — raw systemd service using podman run, host networking, zero closure cost
 - [x] 17.2 Configure cockpit.conf for the pod (listen address, certificate paths, allowed origins) — COCKPIT_WS_ARGS env
-  sets --address=127.0.0.1 --port=9090 --no-tls; config mounted from /persist/config/cockpit
+  sets --address=127.0.0.1 --port=9090 --no-tls; config mounted from /data/config/cockpit
 - [x] 17.3 Integrate Cockpit pod with Traefik reverse proxy (routing, TLS termination) — traefik.nix raw systemd service
   (same pattern as cockpit.nix: podman run docker.io/library/traefik:v3, host networking, zero closure cost). TLS
-  from /persist/config/traefik/certs/, reverse-proxies to Cockpit on 127.0.0.1:9090, HTTP→HTTPS redirect.
+  from /data/config/traefik/certs/, reverse-proxies to Cockpit on 127.0.0.1:9090, HTTP→HTTPS redirect.
   Provisioning writes config + self-signed cert.
 - [x] 17.4 Evaluate Cockpit OAuth/bearer token flow for OIDC pass-through from Traefik — Cockpit supports [bearer] auth
   scheme but still needs SSH credentials for the bridge. Recommended: "OIDC gatekeeper + Cockpit password"
@@ -246,16 +246,16 @@
   with SSH service key (SSO, future). OIDC template with chain middleware written to provisioning.
 - [!] 17.5 Verify Cockpit pod can SSH to host using provisioned password and spawn Python bridge via python3Minimal
 - [x] 17.6 Add Cockpit pod to the health manifest for os-verification service validation — provisioning task creates
-  /persist/config/health-manifest.yaml with cockpit-ws and traefik container entries
+  /data/config/health-manifest.yaml with cockpit-ws and traefik container entries
 
 ## 17b. First-Boot Initialization and Container Image Pulls
 
 - [x] 17b.1 Create `modules/first-boot.nix` — systemd oneshot service with
-  `ConditionPathExists=!/persist/.completed_first_boot` that runs on first boot only
+  `ConditionPathExists=!/data/.completed_first_boot` that runs on first boot only
 - [x] 17b.2 Create `scripts/first-boot.sh` — **CHANGED**: writes `slot_good` flag file to `/boot` (boot FAT partition)
   instead of calling `rauc status mark-good`. U-Boot restores boot counter on next power cycle. Also writes
-  `/persist/.completed_first_boot` sentinel.
-- [x] 17b.3 Add `ConditionPathExists=/persist/.completed_first_boot` to `os-verification.service` so it skips on first
+  `/data/.completed_first_boot` sentinel.
+- [x] 17b.3 Add `ConditionPathExists=/data/.completed_first_boot` to `os-verification.service` so it skips on first
   boot (before sentinel exists)
 - [x] 17b.4 Add `ExecStartPre=podman pull` to `cockpit-ws.service` and `traefik.service` for automatic container image
   fetch on first boot (cached no-op on subsequent boots)
@@ -264,17 +264,17 @@
 
 ## 18. Authentication Provisioning
 
-- [x] 18.1 Update `.mise/tasks/provision/emmc` to prompt for and create `/persist/config/admin-password-hash` (sha-512
+- [x] 18.1 Update `.mise/tasks/provision/emmc` to prompt for and create `/data/config/admin-password-hash` (sha-512
   via mkpasswd) — interactive password prompt with confirmation, min 8 chars
 - [x] 18.2 Update `.mise/tasks/provision/emmc` to accept and deploy SSH public key to
-  `/persist/config/ssh-authorized-keys/admin` — via --ssh-key flag, accepts key string or .pub file path
+  `/data/config/ssh-authorized-keys/admin` — via --ssh-key flag, accepts key string or .pub file path
 - [x] 18.3 Add provisioning validation: fail if credential files are missing after provisioning — validation step
   re-mounts persist read-only and checks files exist and are non-empty
 - [ ] 18.4 Verify device boots with provisioned credentials: SSH key auth works, password auth works via Cockpit pod on
   localhost
 - [x] 18.5 Verify no credentials exist in the squashfs image itself (EN18031 compliance) — verified via source audit:
-  `hashedPasswordFile` reads from `/persist` at runtime (modules/base.nix:130), SSH authorized keys loaded from
-  `/persist` (modules/base.nix:161), no `hashedPassword`/`password`/`initialPassword` attributes anywhere, TLS certs
-  and OpenVPN configs all reference `/persist`, squashfs derivation (nix/squashfs.nix) packs only the NixOS system
+  `hashedPasswordFile` reads from `/data` at runtime (modules/base.nix:130), SSH authorized keys loaded from
+  `/data` (modules/base.nix:161), no `hashedPassword`/`password`/`initialPassword` attributes anywhere, TLS certs
+  and OpenVPN configs all reference `/data`, squashfs derivation (nix/squashfs.nix) packs only the NixOS system
   closure via `closureInfo`. The only crypto material in the image is the RAUC CA public certificate (required for
   bundle verification). RAUC signing private keys are build-time-only derivations, never in the system closure.

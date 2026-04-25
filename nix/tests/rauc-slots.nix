@@ -54,7 +54,7 @@ nixos-lib.runTest {
       # Without this, `rauc service` cannot determine slot states.
       boot.kernelParams = [ "rauc.slot=boot.0" ];
 
-      # Status file directory — the default /persist doesn't exist in
+      # Status file directory — the default /data doesn't exist in
       # the test VM, so override to a path that does.
       atomixos.rauc.statusFile = "/tmp/rauc.status";
     };

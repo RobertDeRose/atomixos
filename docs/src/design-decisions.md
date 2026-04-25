@@ -28,9 +28,9 @@ the current use case.
 **Rationale**: Squashfs eliminates runtime drift -- every boot starts from a known-good state. It compresses well (zstd,
 1 MB blocks), fitting the NixOS closure into the 1 GB slot with room to spare. A single OverlayFS (squashfs lower +
 tmpfs upper) set up in the initrd provides a unified writable root, which is required for systemd's mount namespace
-sandboxing (PrivateTmp, ProtectHome, etc.) to work correctly. Writable state lives on `/persist` (f2fs).
+sandboxing (PrivateTmp, ProtectHome, etc.) to work correctly. Writable state lives on `/data` (f2fs).
 
-**Trade-off**: Any runtime state not explicitly persisted to `/persist` is lost on reboot. This is intentional for an
+**Trade-off**: Any runtime state not explicitly persisted to `/data` is lost on reboot. This is intentional for an
 appliance but requires careful placement of writable directories.
 
 ## Decision 3: Per-slot boot partitions
@@ -45,13 +45,13 @@ of failure and complicates the U-Boot boot script.
 
 ## Decision 4: eMMC partition layout
 
-**Choice**: Fixed layout: 16 MB raw U-Boot, 128 MB boot A/B, 1 GB rootfs A/B, remaining space for `/persist`.
+**Choice**: Fixed layout: 16 MB raw U-Boot, 128 MB boot A/B, 1 GB rootfs A/B, remaining space for `/data`.
 
 **Rationale**: 128 MB per boot slot provides ample space for the kernel (~25 MB compressed), initrd, DTB, and boot
-script. 1 GB per rootfs slot gives 2-3x headroom over the current squashfs size (~300-400 MB). The `/persist` partition
+script. 1 GB per rootfs slot gives 2-3x headroom over the current squashfs size (~300-400 MB). The `/data` partition
 (~13.3 GB) holds containers, logs, and configuration.
 
-**Risk**: If the NixOS closure grows beyond 1 GB, the rootfs slot size must be increased, which reduces `/persist` space
+**Risk**: If the NixOS closure grows beyond 1 GB, the rootfs slot size must be increased, which reduces `/data` space
 and requires re-provisioning all devices.
 
 ## Decision 5: U-Boot from nixpkgs
@@ -83,15 +83,16 @@ automatically rolls back within ~90 seconds (3 watchdog cycles).
 to commit the slot (or roll back) based on local service health. Phoning home would create a dependency on network
 availability during the critical confirmation window.
 
-## Decision 8: Cockpit as a pod
+## Decision 8: Optional Nixstasis-based remote management
 
-**Choice**: Run Cockpit as a podman container (`quay.io/cockpit/ws`) rather than as a native NixOS service.
+**Choice**: Move remote web management out of the device image and support Nixstasis as an optional control plane.
 
-**Rationale**: Cockpit requires a Python bridge for SSH-based host management. Running it as a container isolates its
-dependencies from the read-only rootfs. `python3Minimal` is included in the rootfs solely for the Cockpit SSH bridge.
+**Rationale**: The Nixstasis client already establishes reverse tunnels and receives short-lived SSH credentials from the
+server. Hosting Cockpit and the auth layer in Nixstasis removes first-boot registry pulls, reduces device complexity,
+and keeps the device focused on local gateway and update responsibilities.
 
-**Trade-off**: Container startup adds latency. The Cockpit pod must be pulled from a registry on first boot (or
-pre-loaded onto `/persist`). If the container runtime fails, Cockpit is unavailable.
+**Trade-off**: Remote management now depends on successful Nixstasis enrollment and tunnel establishment. Local recovery
+falls back to SSH rather than an on-device HTTPS UI.
 
 ## Decision 9: OpenVPN in rootfs
 
@@ -165,7 +166,7 @@ the device is offline or on the LAN. SSH key-only prevents brute-force attacks o
 
 | Risk                              | Mitigation                                                                                            |
 |-----------------------------------|-------------------------------------------------------------------------------------------------------|
-| eMMC wear from frequent writes    | `/persist` uses f2fs (wear-leveling aware); squashfs slots are written only during updates            |
+| eMMC wear from frequent writes    | `/data` uses f2fs (wear-leveling aware); squashfs slots are written only during updates               |
 | U-Boot env corruption             | Redundant environment storage at two offsets; power-loss safe                                         |
 | 1 GB rootfs slot too small        | Current closure is ~300-400 MB; aggressive optimization keeps headroom                                |
 | Missing health manifest           | `first-boot.service` unconditionally commits; `os-verification` skips container checks if no manifest |

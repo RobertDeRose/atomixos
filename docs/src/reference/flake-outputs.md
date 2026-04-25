@@ -22,7 +22,7 @@ from macOS when a linux-builder is available (the alias points to the same `aarc
 | `packages.aarch64-linux.squashfs`    | Compressed squashfs root filesystem (~300-400 MB)               |
 | `packages.aarch64-linux.rauc-bundle` | Signed multi-slot `.raucb` bundle for OTA updates               |
 | `packages.aarch64-linux.boot-script` | Compiled U-Boot `boot.scr`                                      |
-| `packages.aarch64-linux.image`       | Flashable eMMC disk image (U-Boot + boot-a + rootfs-a, ~2.3 GB) |
+| `packages.aarch64-linux.image`       | Flashable eMMC disk image (U-Boot + boot-a + rootfs-a, ~1.2 GB) |
 
 ## Apps
 

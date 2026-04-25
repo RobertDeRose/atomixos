@@ -9,7 +9,7 @@
 }:
 
 let
-  ubootEnvTools = self.packages.${pkgs.system}.uboot-env-tools;
+  ubootEnvTools = self.packages.${pkgs.stdenv.hostPlatform.system}.uboot-env-tools;
   bootToUms = pkgs.writeShellScriptBin "boot_to_ums" ''
     set -euo pipefail
 
@@ -87,6 +87,14 @@ in
     device = "/dev/mmcblk1p1";
     fsType = "vfat";
   };
+
+  # Initrd repart cannot infer the backing disk from our overlay root, so point
+  # it at the Rock64 eMMC device explicitly when creating the data partition.
+  boot.initrd.systemd.repart.device = "/dev/mmcblk1";
+  # The Rock64 stores U-Boot in the raw gap before the first GPT partition.
+  # systemd-repart's default discard pass trims that gap, which destroys the
+  # bootloader payload and breaks subsequent soft reboots.
+  boot.initrd.systemd.repart.discard = false;
 
   # ── U-Boot environment tools (fw_setenv / fw_printenv) ─────────────────────
   # Environment is stored on SPI flash (not eMMC) to avoid the eMMC raw write
@@ -611,12 +619,18 @@ in
           SND_SOC_SAMSUNG = lib.mkForce unset;
           SND_SOC_TEGRA = lib.mkForce unset;
 
+          # USB Ethernet adapters for the LAN-side dongle. Keep only the small
+          # set of chipsets our networking config names explicitly.
+          USB_NET_DRIVERS = lib.mkForce yes;
+          USB_USBNET = lib.mkForce module;
+          USB_NET_AX88179_178A = lib.mkForce module;
+          USB_NET_CDCETHER = lib.mkForce module;
+          USB_RTL8152 = lib.mkForce module;
+
           # No USB gadget mode (we're host only)
           USB_EHCI_TEGRA = lib.mkForce unset; # option disappears with Tegra off
           USB_GADGET = lib.mkForce no;
           USB_STORAGE = lib.mkForce no;
-          USB_NET_DRIVERS = lib.mkForce no;
-          USB_USBNET = lib.mkForce no;
           USB_NET_AX8817X = lib.mkForce no;
           USB_LAN78XX = lib.mkForce no;
           USB_NET_SMSC95XX = lib.mkForce no;
@@ -874,13 +888,21 @@ in
     "dm_mod"
   ];
 
+  # The systemd initrd only pulls mkfs/fsck helpers for filesystems listed in
+  # boot.initrd.supportedFilesystems. We need vfat there so systemd-repart can
+  # find mkfs.vfat when creating boot-b, and f2fs for /data on first boot.
+  boot.initrd.supportedFilesystems = [
+    "vfat"
+    "f2fs"
+  ];
+
   # ── RAUC slot device paths (eMMC) ──────────────────────────────────────────
-  # These map to the GPT partition layout created by the provisioning script:
-  #   p1 = boot A (vfat), p2 = boot B (vfat), p3 = rootfs A, p4 = rootfs B
+  # These map to the GPT partition layout after initrd repartitioning:
+  #   p1 = boot A (vfat), p2 = rootfs A, p3 = boot B (vfat), p4 = rootfs B
   atomixos.rauc.slots = {
     boot0 = "/dev/mmcblk1p1";
-    boot1 = "/dev/mmcblk1p2";
-    rootfs0 = "/dev/mmcblk1p3";
+    boot1 = "/dev/mmcblk1p3";
+    rootfs0 = "/dev/mmcblk1p2";
     rootfs1 = "/dev/mmcblk1p4";
   };
 

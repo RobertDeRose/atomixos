@@ -54,12 +54,12 @@ updates, automatic rollback, and a container-based application deployment model.
 
 ```text
 Offset     Size       Content          Filesystem
-0          4 MB       U-Boot           raw (idbloader + u-boot.itb)
-4 MB       128 MB     boot slot A      vfat (kernel + initrd + DTB + boot.scr)
-132 MB     128 MB     boot slot B      vfat (kernel + initrd + DTB + boot.scr)
-260 MB     1 GB       rootfs slot A    squashfs (zstd, 1 MB block)
-1284 MB    1 GB       rootfs slot B    squashfs (zstd, 1 MB block)
-2308 MB    ~13.3 GB   /persist         f2fs (containers, state, logs)
+0          16 MB      U-Boot           raw (idbloader + u-boot.itb)
+16 MB      128 MB     boot slot A      vfat (kernel + initrd + DTB + boot.scr)
+144 MB     1 GB       rootfs slot A    squashfs (zstd, 1 MB block)
+1168 MB    128 MB     boot slot B      vfat (created on first boot)
+1296 MB    1 GB       rootfs slot B    squashfs (created on first boot)
+2308 MB    ~13.3 GB   /data            f2fs (created on first boot; containers, state, logs)
 ```
 
 ### Network topology
@@ -90,7 +90,6 @@ selectively bridges WAN and LAN with authentication.
 6. os-verification.service runs health checks:
    - eth0 has WAN address, eth1 has the configured LAN gateway IP
    - dnsmasq, chronyd running
-   - containers from /persist/config/health-manifest.yaml are healthy
    - sustained 60s stability check
 7a. All pass  → rauc status mark-good (slot committed)
 7b. Any fail  → exit non-zero, boot-count continues to decrement
@@ -106,21 +105,17 @@ The read-only root filesystem contains the full NixOS system closure:
 
 - Stripped Linux 6.19 kernel (RK3328 drivers built-in, WiFi/BT as modules)
 - systemd, podman, OpenVPN, openssh, chrony, dnsmasq, nftables, RAUC
-- python3Minimal for Cockpit's SSH-based Python bridge
-- Cockpit itself runs as a pod (`quay.io/cockpit/ws`), not in the rootfs
 
 ### Authentication (EN18031)
 
 The image ships with no embedded credentials. During provisioning:
 
-- `/persist/config/admin-password-hash` -- unique sha-512 password hash per device
-- `/persist/config/ssh-authorized-keys/admin` -- operator's SSH public key
-- `/persist/config/traefik/` -- Traefik static/dynamic config and self-signed TLS certificate
-- `/persist/config/health-manifest.yaml` -- container health entries for os-verification
+- `/data/config/admin-password-hash` -- unique sha-512 password hash per device
+- `/data/config/ssh-authorized-keys/admin` -- operator's SSH public key
+- `/data/config/nixstasis/` -- planned persistent state for Nixstasis enrollment and agent credentials
 
-Remote SSH is key-only. Localhost SSH allows password auth so the Cockpit pod can connect to the host. OIDC (Microsoft
-Entra via Traefik forward-auth) is the primary web auth when internet is available; the provisioned password is the
-LAN/offline fallback.
+Remote management is intended to flow through Nixstasis using device-approved enrollment, reverse tunnels, and short-lived
+SSH credentials. The device itself keeps SSH-based LAN recovery and local gateway services.
 
 ## LAN Range Configuration
 
@@ -159,8 +154,6 @@ modules/
   firewall.nix                     nftables rules (WAN/LAN/VPN/FORWARD)
   lan-gateway.nix                  dnsmasq DHCP, chrony NTP, IP forwarding off
   rauc.nix                         RAUC system.conf, slot definitions
-  cockpit.nix                      Cockpit pod (quay.io/cockpit/ws) systemd service
-  traefik.nix                      Traefik reverse proxy pod systemd service
   watchdog.nix                     systemd watchdog config
   os-verification.nix              Post-update health check service
   os-upgrade.nix                   Update polling + hawkBit toggle
@@ -359,8 +352,8 @@ mise run flash -i custom.img /dev/disk4   # specify image explicitly
 mise run flash -y /dev/mmcblk0     # Linux — skip confirmation prompt
 ```
 
-The image includes U-Boot, A/B boot and rootfs slots, and a small built-in `/persist` partition (f2fs).
-The Rock64 runtime does not repartition the live eMMC from Linux.
+The image includes U-Boot plus slot A (`boot-a` + `rootfs-a`). It leaves the remaining eMMC space unallocated so initrd
+`systemd-repart` can create slot B (`boot-b` + `rootfs-b`) and `/data` on first boot before the live system mounts it.
 
 Recovery mode: hold the reset button before power-on and keep holding for
 10 seconds. U-Boot will expose the on-board eMMC as

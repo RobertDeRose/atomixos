@@ -4,6 +4,7 @@
   stdenv,
   ubootTools,
   buildId ? "unknown",
+  systemClosure,
 }:
 
 stdenv.mkDerivation {
@@ -19,7 +20,8 @@ stdenv.mkDerivation {
 
   buildPhase = ''
     substitute ${../scripts/boot.cmd} boot.cmd \
-      --replace-fail "@buildId@" "${buildId}"
+      --replace-fail "@buildId@" "${buildId}" \
+      --replace-fail "@systemClosure@" "${systemClosure}"
     mkimage -C none -A arm64 -T script -d boot.cmd boot.scr
   '';
 

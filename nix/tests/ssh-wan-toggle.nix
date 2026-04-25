@@ -2,7 +2,7 @@
 #
 # This test:
 # 1. Boots gateway with firewall — SSH on WAN is blocked by default
-# 2. Creates /persist/config/ssh-wan-enabled flag file
+# 2. Creates /data/config/ssh-wan-enabled flag file
 # 3. Runs ssh-wan-reload service, verifies SSH now reachable on WAN
 # 4. Removes the flag file, reloads again, verifies SSH blocked again
 #
@@ -28,9 +28,9 @@ let
   # inside the test VM) instead of eth0 (production WAN interface).
   sshWanToggle = pkgs.writeShellScript "ssh-wan-toggle-test" ''
     set -euo pipefail
-    if [ -f /persist/config/ssh-wan-enabled ]; then
+    if [ -f /data/config/ssh-wan-enabled ]; then
       echo "SSH-on-WAN flag detected, adding firewall rule"
-      nft add rule inet filter input iifname "eth1" tcp dport 22 accept comment \"SSH-WAN-dynamic\"
+      ${pkgs.nftables}/bin/nft add rule inet filter input iifname "eth1" tcp dport 22 accept comment \"SSH-WAN-dynamic\"
     else
       echo "SSH-on-WAN flag not present, SSH on WAN remains blocked"
     fi
@@ -39,15 +39,15 @@ let
   sshWanReload = pkgs.writeShellScript "ssh-wan-reload-test" ''
     set -euo pipefail
     # Remove any existing dynamic SSH rule (grep may find nothing — that's OK)
-    HANDLE=$(nft -a list chain inet filter input 2>/dev/null \
-      | grep 'SSH-WAN-dynamic' | awk '{print $NF}' || true)
+    HANDLE=$(${pkgs.nftables}/bin/nft -a list chain inet filter input 2>/dev/null \
+      | ${pkgs.gnugrep}/bin/grep 'SSH-WAN-dynamic' | ${pkgs.gawk}/bin/awk '{print $NF}' || true)
     if [ -n "$HANDLE" ]; then
-      nft delete rule inet filter input handle "$HANDLE"
+      ${pkgs.nftables}/bin/nft delete rule inet filter input handle "$HANDLE"
     fi
     # Re-add if flag exists
-    if [ -f /persist/config/ssh-wan-enabled ]; then
+    if [ -f /data/config/ssh-wan-enabled ]; then
       echo "Re-adding SSH-on-WAN rule"
-      nft add rule inet filter input iifname "eth1" tcp dport 22 accept comment \"SSH-WAN-dynamic\"
+      ${pkgs.nftables}/bin/nft add rule inet filter input iifname "eth1" tcp dport 22 accept comment \"SSH-WAN-dynamic\"
     else
       echo "SSH-on-WAN disabled"
     fi
@@ -111,10 +111,10 @@ nixos-lib.runTest {
         '';
       };
 
-      # -- /persist for flag file --------------------------------------------
+      # -- /data for flag file -----------------------------------------------
       systemd.tmpfiles.rules = [
-        "d /persist 0755 root root -"
-        "d /persist/config 0755 root root -"
+        "d /data 0755 root root -"
+        "d /data/config 0755 root root -"
       ];
 
       # -- SSH-WAN toggle services (test-local, using eth1) ------------------
@@ -129,7 +129,6 @@ nixos-lib.runTest {
           "network-online.target"
         ];
         wantedBy = [ "multi-user.target" ];
-        path = [ pkgs.nftables ];
         serviceConfig = {
           Type = "oneshot";
           RemainAfterExit = true;
@@ -140,10 +139,6 @@ nixos-lib.runTest {
       systemd.services.ssh-wan-reload = {
         description = "Reload SSH-on-WAN firewall rule";
         after = [ "ssh-wan-toggle.service" ];
-        path = [
-          pkgs.nftables
-          pkgs.gawk
-        ];
         serviceConfig = {
           Type = "oneshot";
           ExecStart = sshWanReload;
@@ -199,7 +194,7 @@ nixos-lib.runTest {
     # ── Phase 2: Enable SSH on WAN ──
     gateway.log("Phase 2: Enabling SSH on WAN via flag file")
 
-    gateway.succeed("touch /persist/config/ssh-wan-enabled")
+    gateway.succeed("touch /data/config/ssh-wan-enabled")
     gateway.succeed("systemctl start ssh-wan-reload.service")
 
     # Verify the dynamic rule was added
@@ -213,7 +208,7 @@ nixos-lib.runTest {
     # ── Phase 3: Disable SSH on WAN ──
     gateway.log("Phase 3: Disabling SSH on WAN by removing flag file")
 
-    gateway.succeed("rm /persist/config/ssh-wan-enabled")
+    gateway.succeed("rm /data/config/ssh-wan-enabled")
     gateway.succeed("systemctl start ssh-wan-reload.service")
 
     # Verify the dynamic rule was removed

@@ -11,27 +11,10 @@ system is healthy before committing the RAUC slot. No external network dependenc
 
 #### Scenario: Health check runs on update boot
 
-- Given `/persist/.completed_first_boot` exists (not first boot)
+- Given `/data/.completed_first_boot` exists (not first boot)
 - When the device reaches `multi-user.target`
 - Then `os-verification.service` starts
-- And it checks service health and container status
-
-### ADDED: Manifest-driven container checks
-
-The health manifest at `/persist/config/health-manifest.yaml` lists container names that must be running. The service
-waits up to 5 minutes for all listed containers to reach `running` state via `podman inspect`.
-
-#### Scenario: Container check passes
-
-- Given the health manifest lists `cockpit-ws` and `traefik`
-- And both containers start within 5 minutes
-- Then the container health check passes
-
-#### Scenario: No manifest file
-
-- Given `/persist/config/health-manifest.yaml` does not exist
-- Then the container health check is skipped
-- And only service checks are performed
+- And it checks service health
 
 ### ADDED: Sustained health check
 
@@ -47,7 +30,7 @@ transient failures.
 
 ### ADDED: Successful confirmation commits slot
 
-When all checks pass (services, containers, sustained), the service runs `rauc status mark-good` to commit the current
+When all checks pass (services and sustained), the service runs `rauc status mark-good` to commit the current
 slot. This resets the boot counter and prevents further rollback.
 
 #### Scenario: Slot committed on success
@@ -67,8 +50,3 @@ decrement on each subsequent boot until rollback occurs.
 - Given health checks fail on every boot of slot B
 - Then each boot decrements `BOOT_B_LEFT`
 - And after 3 boots, U-Boot rolls back to slot A
-
-### ADDED: Health manifest provided by provisioning
-
-The health manifest is not shipped in the image. It is written to `/persist/config/health-manifest.yaml` during
-provisioning. This allows different devices to have different container configurations.

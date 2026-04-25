@@ -3,6 +3,7 @@
 # Hardware-specific settings (kernel, DTB, device paths) are in separate modules.
 {
   config,
+  developmentMode ? false,
   lib,
   pkgs,
   self,
@@ -16,8 +17,6 @@
     ./lan-gateway.nix
     ./openvpn.nix
     ./rauc.nix
-    ./cockpit.nix
-    ./traefik.nix
     ./first-boot.nix
     ./os-verification.nix
     ./os-upgrade.nix
@@ -82,10 +81,14 @@
   # from system-path. No graphical output on this device.
   fonts.fontconfig.enable = false;
 
-  # Override filesystem support packages — NixOS unconditionally adds dosfstools
-  # and (with legacy initrd) e2fsprogs. We only use squashfs + f2fs, and
-  # f2fs-tools is already in environment.systemPackages.
-  system.fsPackages = lib.mkForce [ ];
+  # Keep only the filesystem tooling we actually need. In particular, the
+  # systemd initrd uses system.fsPackages to populate mkfs/fsck helpers, and
+  # initrd systemd-repart now needs mkfs.vfat for boot-b and mkfs.f2fs for
+  # /data on first boot.
+  system.fsPackages = lib.mkForce [
+    pkgs.dosfstools
+    pkgs.f2fs-tools
+  ];
 
   # Disable storage/boot subsystems we don't use — each defaults to true and
   # adds its tools to environment.systemPackages.
@@ -195,90 +198,85 @@
     "d /run/chrony 0750 chrony chrony -"
   ];
 
-  # ── OverlayFS: writable root over read-only squashfs ─────────────────────────
-  # The squashfs root is immutable. Instead of mounting individual tmpfs at
-  # /etc, /var, /tmp, etc. (which breaks systemd's mount namespace sandboxing),
-  # we use a single OverlayFS that presents a unified writable root:
-  #   lower = squashfs (read-only, contains the full NixOS system)
-  #   upper = tmpfs (ephemeral, lost on reboot)
+  # ── OverlayFS root over read-only squashfs ──────────────────────────────────
+  # U-Boot selects the active rootfs slot and passes it on the kernel command
+  # line. Initrd systemd mounts the real root from fileSystems."/", which is an
+  # overlay composed from:
+  #   lower = selected squashfs slot mounted at /run/rootfs-base
+  #   upper = tmpfs-backed /run/overlay-root/upper
+  #   work  = tmpfs-backed /run/overlay-root/work
   #
-  # Architecture:
-  #   1. fileSystems."/" declares squashfs so the initrd mounts it at /mnt-root
-  #   2. postMountCommands converts it to overlay before switch_root:
-  #      - Moves squashfs to /mnt-root/media/root-ro
-  #      - Creates tmpfs at /mnt-root/media/root-rw
-  #      - Mounts overlay at /mnt-root (lowerdir=squashfs, upperdir=tmpfs)
-  #   3. /etc/fstab is overridden to say "overlay" for / so systemd sees the
-  #      correct filesystem type at runtime (prevents systemd-remount-fs crash)
-  #
-  # Why not three fileSystems entries (like iso-image.nix)?
-  #   NixOS's toposort (fsBefore) creates a cycle: / depends on /media/root-ro
-  #   (via overlay.depends), but / is a prefix of /media/root-ro (mountPoint
-  #   ordering). The ISO avoids this by using tmpfs for / and overlaying only
-  #   /nix/store. We need an overlay ROOT, so we use postMountCommands instead.
-  #
-  # At runtime U-Boot selects the active slot via kernel cmdline
-  # (root=PARTLABEL=rootfs-a). This declaration provides the fallback device;
-  # the actual root is overridden by the bootloader.
-  #
-  # Persistent state lives on /persist (f2fs partition, created on first boot).
-  # The tmpfs upper layer is intentionally ephemeral: every boot starts clean
-  # from the verified squashfs image, which is ideal for A/B OTA updates.
-
-  # Root filesystem — the squashfs device declared here tells the NixOS initrd
-  # what to mount at /mnt-root during stage 1. The postMountCommands then wrap
-  # it in an overlayfs before switch_root.
+  # Keeping the lower and upper/work directories under /run matches the NixOS
+  # overlayfs initrd support and avoids mutating /sysroot after other initrd
+  # units have started depending on it.
   fileSystems."/" = {
-    device = "/dev/mmcblk1p3";
-    fsType = "squashfs";
+    overlay = {
+      lowerdir = [ "/run/rootfs-base" ];
+      upperdir = "/run/overlay-root/upper";
+      workdir = "/run/overlay-root/work";
+      useStage1BaseDirectories = false;
+    };
+    # The overlay backing paths are prepared explicitly by initrd services.
+    # Leaving NixOS's auto-generated overlay depends list enabled for / causes
+    # sysroot.mount -> sysroot-run.mount -> sysroot.mount cycles in initrd.
+    depends = lib.mkForce [ ];
   };
 
-  # Initrd: convert squashfs root to overlay before switch_root.
-  boot.initrd.postMountCommands = ''
-    # Move the squashfs root out of /mnt-root so we can overlay it
-    mkdir -p /mnt-lower
-    mount --move /mnt-root /mnt-lower
+  # Mount the selected squashfs slot before sysroot.mount composes the overlay.
+  # The boot script passes the slot device as atomixos.lowerdev=... so initrd
+  # systemd can keep using fstab-driven root mounting.
+  boot.initrd.systemd.services.initrd-prepare-overlay-lower = {
+    description = "Prepare overlay lower squashfs";
+    requiredBy = [ "sysroot.mount" ];
+    before = [ "sysroot.mount" ];
+    after = [ "initrd-root-device.target" ];
+    wants = [ "initrd-root-device.target" ];
+    unitConfig.DefaultDependencies = false;
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+    path = [
+      pkgs.coreutils
+      pkgs.util-linux
+    ];
+    script = ''
+      set -euo pipefail
 
-    # Create a tmpfs for the writable upper layer
-    mkdir -p /mnt-upper
-    mount -t tmpfs -o mode=0755,size=256M tmpfs /mnt-upper
-    mkdir -p /mnt-upper/upper /mnt-upper/work
+      lower_device=
+      lower_fstype=squashfs
 
-    # Mount the overlay as the new root
-    mount -t overlay overlay \
-      -o lowerdir=/mnt-lower,upperdir=/mnt-upper/upper,workdir=/mnt-upper/work \
-      /mnt-root
+      for arg in $(</proc/cmdline); do
+        case "$arg" in
+          atomixos.lowerdev=*)
+            lower_device=''${arg#atomixos.lowerdev=}
+            ;;
+          atomixos.lowerfstype=*)
+            lower_fstype=''${arg#atomixos.lowerfstype=}
+            ;;
+        esac
+      done
 
-    # Make the lower (squashfs) and upper (tmpfs) layers accessible inside
-    # the final root for debugging/inspection
-    mkdir -p /mnt-root/media/root-ro /mnt-root/media/root-rw
-    mount --move /mnt-lower /mnt-root/media/root-ro
-    mount --move /mnt-upper /mnt-root/media/root-rw
-  '';
+      if [ -z "$lower_device" ]; then
+        echo "initrd-prepare-overlay-lower: missing atomixos.lowerdev= kernel parameter" >&2
+        exit 1
+      fi
 
-  # Override /etc/fstab so systemd sees the correct filesystem type for /.
-  # Without this, fstab says "squashfs" (from fileSystems."/") but the actual
-  # runtime root is overlay. By declaring overlay with x-initrd.mount, systemd
-  # knows the initrd already mounted it and leaves it alone.
-  environment.etc.fstab.text = lib.mkForce ''
-    # This file is generated by NixOS (overridden for OverlayFS root).
-    # See modules/base.nix for details.
+      /bin/mkdir -p /run/rootfs-base
+      /bin/mount -t "$lower_fstype" -o ro "$lower_device" /run/rootfs-base
+    '';
+  };
 
-    # OverlayFS root (mounted by initrd postMountCommands)
-    overlay / overlay x-initrd.mount,lowerdir=/media/root-ro,upperdir=/media/root-rw/upper,workdir=/media/root-rw/work 0 0
+  # NixOS already exports SYSTEMD_SYSROOT_FSTAB via the initrd manager
+  # environment. Avoid also embedding the generated initrd-fstab store path in
+  # the initrd-parse-etc unit.
+  boot.initrd.systemd.services.initrd-parse-etc.environment = lib.mkForce { };
 
-    # Boot partition (FAT, active slot)
-    /dev/mmcblk1p1 /boot vfat defaults 0 0
-
-    # Persistent state partition
-    /dev/disk/by-partlabel/persist /persist f2fs nofail,x-systemd.device-timeout=60s 0 0
-  '';
-
-  # Persistent state — survives reboots, separate from the ephemeral overlay.
-  # The image ships with a small built-in persist partition and does not
-  # repartition the live eMMC from Linux.
-  fileSystems."/persist" = {
-    device = "/dev/disk/by-partlabel/persist";
+  # Persistent state lives on /data (f2fs partition, created on first boot).
+  # The tmpfs upper layer is intentionally ephemeral: every boot starts clean
+  # from the verified squashfs image, which is ideal for A/B OTA updates.
+  fileSystems."/data" = {
+    device = "/dev/disk/by-partlabel/data";
     fsType = "f2fs";
     neededForBoot = false;
     options = [
@@ -287,16 +285,70 @@
     ];
   };
 
-  # The image now includes a persist partition at build time. Do not mutate the
-  # live eMMC partition table from Linux; this board has shown unsafe behavior
-  # when repartitioning on-target.
+  # Create slot B and /data in the initrd so GPT changes happen before
+  # switch_root and before any live mounts are active. The flash image only
+  # carries slot A; initrd systemd-repart provisions the inactive A/B slot and
+  # the persistent data partition from the remaining eMMC space on first boot.
+  boot.initrd.systemd.enable = true;
+  # Keep initrd emergency mode usable on the serial console while we are
+  # validating early-boot storage changes on hardware.
+  boot.initrd.systemd.emergencyAccess = true;
+  boot.initrd.systemd.repart = {
+    enable = true;
+    empty = "allow";
+  };
+
+  # systemd-repart matches existing partitions by GPT type, not by label.
+  # Declare the slot-A partitions too so the later slot-B entries become the
+  # second xbootldr/root-arm64 partitions instead of matching p1/p2.
+  systemd.repart.partitions."10-boot-a" = {
+    Type = "xbootldr";
+    Label = "boot-a";
+    SizeMinBytes = "128M";
+    SizeMaxBytes = "128M";
+  };
+
+  systemd.repart.partitions."20-rootfs-a" = {
+    Type = "root-arm64";
+    Label = "rootfs-a";
+    SizeMinBytes = "1024M";
+    SizeMaxBytes = "1024M";
+  };
+
+  systemd.repart.partitions."30-boot-b" = {
+    Type = "xbootldr";
+    Label = "boot-b";
+    Format = "vfat";
+    SizeMinBytes = "128M";
+    SizeMaxBytes = "128M";
+  };
+
+  systemd.repart.partitions."40-rootfs-b" = {
+    Type = "root-arm64";
+    Label = "rootfs-b";
+    SizeMinBytes = "1024M";
+    SizeMaxBytes = "1024M";
+  };
+
+  systemd.repart.partitions."50-data" = {
+    Type = "linux-generic";
+    Label = "data";
+    Format = "f2fs";
+    SizeMinBytes = "64M";
+    MakeDirectories = [
+      "/config"
+      "/config/ssh-authorized-keys"
+      "/containers"
+      "/logs"
+    ];
+  };
 
   # ── Users ────────────────────────────────────────────────────────────────────
 
   users.mutableUsers = false;
 
   # Root login for serial console debugging — allows emergency access when
-  # /persist is not yet provisioned. Set an empty password for initial boot
+  # /data is not yet provisioned. Set an empty password for initial boot
   # testing; the serial console is physically secured.
   users.users.root = {
     hashedPassword = "";
@@ -309,11 +361,11 @@
       "podman"
     ];
 
-    # Password hash read from /persist at boot. The image ships with no
+    # Password hash read from /data at boot. The image ships with no
     # credentials — the hash is written during device provisioning (unique
     # per device, EN18031 compliant). The file must contain a single line
     # with a hash suitable for chpasswd -e (e.g. mkpasswd -m sha-512).
-    hashedPasswordFile = "/persist/config/admin-password-hash";
+    hashedPasswordFile = "/data/config/admin-password-hash";
   };
 
   # Disable sudo and doas — use systemd's run0 for privilege escalation instead.
@@ -328,18 +380,18 @@
 
   # ── Core services ────────────────────────────────────────────────────────────
 
-  # Podman for container workloads
+  # Podman remains the device application runtime even though the local
+  # Cockpit/Traefik management path has been removed.
   virtualisation.podman = {
     enable = true;
     dockerCompat = true; # Provides `docker` CLI alias
     defaultNetwork.settings.dns_enabled = true;
   };
 
-  # Persist podman image/layer storage on /persist so container pulls survive
-  # reboots and cold boots without WAN access.
+  # Persist container image/layer storage on /data for application workloads.
   virtualisation.containers.storage.settings = {
     storage = {
-      graphroot = "/persist/containers/storage";
+      graphroot = "/data/containers/storage";
       runroot = "/run/containers/storage";
     };
   };
@@ -348,19 +400,12 @@
   services.openssh = {
     enable = true;
     settings = {
-      PasswordAuthentication = false;
+      PasswordAuthentication = lib.mkForce developmentMode;
       PermitRootLogin = "no";
     };
-    # Load SSH public keys from /persist — written during device provisioning.
+    # Load SSH public keys from /data — written during device provisioning.
     # Uses %u (username) so each user gets their own key file.
-    authorizedKeysFiles = [ "/persist/config/ssh-authorized-keys/%u" ];
-    # Allow password auth from localhost only — the Cockpit pod (running on
-    # the host network) SSHes to 127.0.0.1 using the provisioned password.
-    # Remote/WAN SSH remains key-only.
-    extraConfig = ''
-      Match Address 127.0.0.1,::1
-        PasswordAuthentication yes
-    '';
+    authorizedKeysFiles = [ "/data/config/ssh-authorized-keys/%u" ];
   };
 
   # Mask systemd-ssh-generator outputs — systemd 258+ auto-creates sshd
@@ -378,6 +423,5 @@
     jq
     f2fs-tools
     kmod # modprobe — systemd needs this for loading kernel modules
-    python3Minimal # Required by Cockpit (pod) for systemd D-Bus interaction
   ];
 }

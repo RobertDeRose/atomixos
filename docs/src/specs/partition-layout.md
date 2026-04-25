@@ -7,14 +7,17 @@
 ### ADDED: eMMC A/B layout
 
 The 16 GB eMMC uses a fixed partition layout with raw U-Boot at the beginning, two pairs of A/B slots (boot + rootfs),
-and a persistent data partition using all remaining space.
+and a persistent data partition using all remaining space. The flash image contains slot A only; initrd
+`systemd-repart` creates slot B and `/data` on first boot.
 
 #### Scenario: Partition table matches specification
 
 - Given a provisioned eMMC
-- Then `sfdisk -d` shows 5 GPT partitions (boot-a, boot-b, rootfs-a, rootfs-b, persist)
+- Then `sfdisk -d` shows 2 GPT partitions in the flashable image (boot-a, rootfs-a)
 - And the raw region (0-16 MB) contains U-Boot
-- And `/persist` (f2fs) uses remaining space
+- And after the first successful boot, initrd `systemd-repart` has created three
+  additional GPT partitions labeled `boot-b`, `rootfs-b`, and `data`
+- And `/data` (f2fs) uses the remaining space
 
 ### ADDED: Per-slot boot partitions
 
@@ -25,12 +28,13 @@ and rootfs are always consistent for a given slot.
 
 - Given slot A is active
 - Then boot-a contains `Image`, `initrd`, `rk3328-rock64.dtb`, and `boot.scr`
-- And boot-b is either empty or contains the other slot's kernel
+- And boot-b is absent before first boot or contains the other slot's kernel afterward
 
 ### ADDED: Flashable disk image
 
-The `build:image` task produces a flashable `.img` file containing U-Boot, boot slots A/B, rootfs slots A/B, and a
-small `persist` partition formatted as f2fs.
+The `build:image` task produces a flashable `.img` file containing U-Boot, boot slot A, rootfs slot A, and a
+remaining-space region reserved for first-boot creation of boot slot B, rootfs slot B, and `/data` by initrd
+`systemd-repart`.
 
 ### ADDED: U-Boot at RK3328 offsets
 
@@ -48,16 +52,16 @@ Both come from the custom Rock64 U-Boot package built by this flake.
 - Then the serial console shows U-Boot initialization
 - And `bootflow scan` finds `boot.scr` on boot-a
 
-### ADDED: /persist survives updates
+### ADDED: /data survives updates
 
-The `/persist` partition is never modified by RAUC slot writes or slot switches. Container data, configuration, and
+The `/data` partition is never modified by RAUC slot writes or slot switches. Container data, configuration, and
 credentials persist across all updates and rollbacks.
 
 #### Scenario: Persist data survives update
 
-- Given a file exists at `/persist/config/test-file`
+- Given a file exists at `/data/config/test-file`
 - When a RAUC update installs a new image and the device reboots
-- Then `/persist/config/test-file` still exists with the same content
+- Then `/data/config/test-file` still exists with the same content
 
 ### ADDED: U-Boot env for slot selection
 

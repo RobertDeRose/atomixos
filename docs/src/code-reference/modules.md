@@ -9,7 +9,7 @@ hardware-specific modules (`hardware-rock64.nix`, `hardware-qemu.nix`).
 kernel-config.nix ──> shared stripped kernel baseline
 
 hardware-rock64.nix ──┐
-                      ├──> base.nix ──> imports 11 service modules
+                      ├──> base.nix ──> imports 9 service modules
 hardware-qemu.nix  ───┘
 
 base.nix imports:
@@ -18,8 +18,6 @@ base.nix imports:
   ├── lan-gateway.nix
   ├── openvpn.nix
   ├── rauc.nix
-  ├── cockpit.nix
-  ├── traefik.nix
   ├── first-boot.nix
   ├── os-verification.nix
   ├── os-upgrade.nix
@@ -35,37 +33,37 @@ mounts, user accounts, and system packages.
 
 **Key configuration:**
 
-| Setting                        | Value       | Notes                             |
-|--------------------------------|-------------|-----------------------------------|
-| `system.stateVersion`          | `"25.11"`   | NixOS release                     |
-| `networking.hostName`          | `"gateway"` |                                   |
-| `nix.enable`                   | `false`     | No Nix daemon on read-only rootfs |
-| `documentation.enable`         | `false`     | Saves closure space               |
-| `security.sudo.enable`         | `false`     | Uses `run0` instead               |
-| `virtualisation.podman.enable` | `true`      | Container runtime                 |
+| Setting                | Value       | Notes                             |
+|------------------------|-------------|-----------------------------------|
+| `system.stateVersion`  | `"25.11"`   | NixOS release                     |
+| `networking.hostName`  | `"gateway"` |                                   |
+| `nix.enable`           | `false`     | No Nix daemon on read-only rootfs |
+| `documentation.enable` | `false`     | Saves closure space               |
+| `security.sudo.enable` | `false`     | Uses `run0` instead               |
 
 **Filesystem layout (OverlayFS root):**
 
-The root filesystem uses a single OverlayFS set up in the initrd (via `boot.initrd.postMountCommands`):
+The root filesystem uses a single OverlayFS assembled in the initrd from the selected squashfs slot and tmpfs-backed
+upper/work directories:
 
-| Layer              | Mount            | Filesystem | Size   | Description                                    |
-|--------------------|------------------|------------|--------|------------------------------------------------|
-| overlay (combined) | `/`              | overlay    | --     | Unified writable root presented to userspace   |
-| lower (read-only)  | `/media/root-ro` | squashfs   | --     | Immutable NixOS system (`PARTLABEL=rootfs-a`)  |
-| upper (writable)   | `/media/root-rw` | tmpfs      | 256 MB | Ephemeral writes, lost on reboot               |
-| persistent state   | `/persist`       | f2fs       | 128 MB | Survives reboots (`PARTLABEL=persist`, nofail) |
+| Layer              | Mount                 | Filesystem | Size    | Description                                               |
+|--------------------|-----------------------|------------|---------|-----------------------------------------------------------|
+| overlay (combined) | `/`                   | overlay    | --      | Unified writable root presented to userspace              |
+| lower (read-only)  | `/run/rootfs-base`    | squashfs   | --      | Immutable NixOS system from the selected RAUC rootfs slot |
+| upper (writable)   | `/run/overlay-root/*` | tmpfs      | runtime | Ephemeral writes, lost on reboot                          |
+| persistent state   | `/data`               | f2fs       | dynamic | Created on first boot (`PARTLABEL=data`, nofail)          |
 
-The overlay is assembled in the initrd after the squashfs root is mounted at `/mnt-root` but before `switch_root`:
+The overlay is assembled in the initrd before `switch_root`:
 
-1. Move squashfs from `/mnt-root` to `/mnt-lower`
-2. Mount tmpfs (256 MB) at `/mnt-upper`, create `upper/` and `work/` dirs
-3. Mount overlay at `/mnt-root` with `lowerdir=/mnt-lower,upperdir=/mnt-upper/upper,workdir=/mnt-upper/work`
-4. Move layers into final root at `/mnt-root/media/root-ro` and `/mnt-root/media/root-rw`
+1. `boot.scr` passes `root=fstab` and `atomixos.lowerdev=/dev/...` for the selected squashfs slot
+2. `initrd-prepare-overlay-lower.service` mounts that slot read-only at `/run/rootfs-base`
+3. `sysroot.mount` mounts `/` as overlay with `lowerdir=/run/rootfs-base`, `upperdir=/run/overlay-root/upper`, and `workdir=/run/overlay-root/work`
+4. `sysroot-run.mount` bind-mounts `/run` into the switched root
 
-This approach replaces per-directory tmpfs mounts, which broke systemd's mount namespace sandboxing (PrivateTmp,
-ProtectHome, etc.). The overlay presents a single writable filesystem, so mount propagation works correctly.
+This approach replaces the older `/sysroot` mutation logic and keeps the root mount fstab-driven, which fits systemd's
+initrd model more cleanly.
 
-`/etc/fstab` is overridden to declare overlay for `/` so systemd sees the correct filesystem type at runtime.
+The lower squashfs is selected by U-Boot/RAUC, while `/data` remains outside the A/B slots and survives updates.
 
 **Sandboxing note:** `nsncd` (the NSS lookup daemon) runs as root due to permission issues on the overlay filesystem.
 
@@ -73,8 +71,8 @@ ProtectHome, etc.). The overlay presents a single writable filesystem, so mount 
 
 **Build ID:** The NixOS login banner (`/etc/issue`) displays the build ID for easy identification.
 
-**Persist partition:** Included directly in the flashable image as a fixed-size `f2fs` partition. The Rock64 target does
-not repartition the live eMMC from Linux.
+**Data partition:** Not included in the flashable image. Initrd `systemd-repart` creates it from the remaining eMMC space
+on first boot.
 
 **tmpfiles.d rules** (created on boot):
 
@@ -86,12 +84,12 @@ not repartition the live eMMC from Linux.
 
 **User accounts:**
 
-| User    | Groups            | Authentication                                                                                                |
-|---------|-------------------|---------------------------------------------------------------------------------------------------------------|
-| `root`  | --                | Empty password (development)                                                                                  |
-| `admin` | `wheel`, `podman` | Password from `/persist/config/admin-password-hash`; SSH key from `/persist/config/ssh-authorized-keys/admin` |
+| User    | Groups  | Authentication                                                                                          |
+|---------|---------|---------------------------------------------------------------------------------------------------------|
+| `root`  | --      | Empty password (development)                                                                            |
+| `admin` | `wheel` | Password from `/data/config/admin-password-hash`; SSH key from `/data/config/ssh-authorized-keys/admin` |
 
-**System packages:** `nano`, `htop`, `curl`, `jq`, `f2fs-tools`, `kmod`, `python3Minimal`
+**System packages:** `nano`, `htop`, `curl`, `jq`, `f2fs-tools`, `kmod`
 
 ---
 
@@ -117,8 +115,8 @@ not repartition the live eMMC from Linux.
 ```nix
 atomixos.rauc.slots = {
   boot0 = "/dev/mmcblk1p1";     # boot-a
-  boot1 = "/dev/mmcblk1p2";     # boot-b
-  rootfs0 = "/dev/mmcblk1p3";   # rootfs-a
+  boot1 = "/dev/mmcblk1p3";     # boot-b
+  rootfs0 = "/dev/mmcblk1p2";   # rootfs-a
   rootfs1 = "/dev/mmcblk1p4";   # rootfs-b
 };
 ```
@@ -177,11 +175,11 @@ atomixos.rauc = {
 
 **Link files:**
 
-| Priority         | Match                                        | Result         |
-|------------------|----------------------------------------------|----------------|
-| `10-onboard-eth` | Platform `platform-ff540000.ethernet`        | Name = `eth0`  |
-| `20-usb-eth`     | Drivers `r8152`, `ax88179_178a`, `cdc_ether` | Kernel default |
-| `30-wifi`        | WiFi drivers                                 | Kernel default |
+| Priority         | Match                                        | Result                                     |
+|------------------|----------------------------------------------|--------------------------------------------|
+| `10-onboard-eth` | Platform `platform-ff540000.ethernet`        | Name = `eth0`                              |
+| `20-usb-eth`     | Drivers `r8152`, `ax88179_178a`, `cdc_ether` | Enabled as modules in Rock64 kernel config |
+| `30-wifi`        | WiFi drivers                                 | Kernel default                             |
 
 **Network files:**
 
@@ -213,7 +211,7 @@ atomixos.rauc = {
 | `ssh-wan-toggle` | Boot (after nftables) | Reads flag file, adds SSH rule if present     |
 | `ssh-wan-reload` | On demand             | Removes old rule, re-adds if flag file exists |
 
-Flag file: `/persist/config/ssh-wan-enabled`
+Flag file: `/data/config/ssh-wan-enabled`
 
 ---
 
@@ -249,48 +247,19 @@ upstream NixOS `services.rauc` module.
 
 **Custom NixOS options (`atomixos.rauc.*`):**
 
-| Option          | Type            | Default                      | Description                       |
-|-----------------|-----------------|------------------------------|-----------------------------------|
-| `compatible`    | string          | `"rock64"`                   | RAUC compatible string            |
-| `bootloader`    | enum            | `"uboot"`                    | Backend (`uboot`, `custom`, etc.) |
-| `statusFile`    | string          | `/persist/rauc/status.raucs` | RAUC status file                  |
-| `bundleFormats` | list of strings | `[-plain, +verity]`          | Allowed bundle formats            |
-| `slots.boot0`   | string          | (required)                   | Boot slot A device path           |
-| `slots.boot1`   | string          | (required)                   | Boot slot B device path           |
-| `slots.rootfs0` | string          | (required)                   | Rootfs slot A device path         |
-| `slots.rootfs1` | string          | (required)                   | Rootfs slot B device path         |
+| Option          | Type            | Default                   | Description                       |
+|-----------------|-----------------|---------------------------|-----------------------------------|
+| `compatible`    | string          | `"rock64"`                | RAUC compatible string            |
+| `bootloader`    | enum            | `"uboot"`                 | Backend (`uboot`, `custom`, etc.) |
+| `statusFile`    | string          | `/data/rauc/status.raucs` | RAUC status file                  |
+| `bundleFormats` | list of strings | `[-plain, +verity]`       | Allowed bundle formats            |
+| `slots.boot0`   | string          | (required)                | Boot slot A device path           |
+| `slots.boot1`   | string          | (required)                | Boot slot B device path           |
+| `slots.rootfs0` | string          | (required)                | Rootfs slot A device path         |
+| `slots.rootfs1` | string          | (required)                | Rootfs slot B device path         |
 
 When `bootloader = "custom"`, a file-based shell script is generated that simulates U-Boot environment management using
 files in `/var/lib/rauc/`.
-
----
-
-## cockpit.nix
-
-**Purpose**: Cockpit web UI as a podman container.
-
-| Setting         | Value                                          |
-|-----------------|------------------------------------------------|
-| Image           | `quay.io/cockpit/ws`                           |
-| Network         | Host networking                                |
-| Listen          | `127.0.0.1:9090` (loopback, no TLS)            |
-| TLS termination | Traefik (port 443)                             |
-| Volumes         | `/persist/config/cockpit:/etc/cockpit:ro`      |
-| Ordering        | After `network-online.target`, `podman.socket` |
-
----
-
-## traefik.nix
-
-**Purpose**: Traefik v3 reverse proxy as a podman container.
-
-| Setting  | Value                                                                    |
-|----------|--------------------------------------------------------------------------|
-| Image    | `docker.io/library/traefik:v3`                                           |
-| Network  | Host networking                                                          |
-| Listen   | `0.0.0.0:443` (TLS), `0.0.0.0:80` (redirect)                             |
-| Volumes  | Static config, dynamic config, TLS certs from `/persist/config/traefik/` |
-| Ordering | After `cockpit-ws.service`; requires `cockpit-ws.service`                |
 
 ---
 
@@ -311,13 +280,13 @@ systemd.settings.Manager = {
 
 **Purpose**: Post-update health-check service.
 
-| Setting   | Value                                                |
-|-----------|------------------------------------------------------|
-| Type      | oneshot                                              |
-| Condition | `ConditionPathExists=/persist/.completed_first_boot` |
-| Timeout   | 600s (10 min)                                        |
-| Script    | `scripts/os-verification.sh`                         |
-| PATH      | `rauc`, `podman`, `jq`, `systemd`, `iproute2`        |
+| Setting   | Value                                             |
+|-----------|---------------------------------------------------|
+| Type      | oneshot                                           |
+| Condition | `ConditionPathExists=/data/.completed_first_boot` |
+| Timeout   | 180s                                              |
+| Script    | `scripts/os-verification.sh`                      |
+| PATH      | `rauc`, `jq`, `systemd`, `iproute2`               |
 
 ---
 
@@ -341,12 +310,12 @@ systemd.settings.Manager = {
 
 **Purpose**: One-time first-boot slot confirmation.
 
-| Setting   | Value                                                 |
-|-----------|-------------------------------------------------------|
-| Type      | oneshot                                               |
-| Condition | `ConditionPathExists=!/persist/.completed_first_boot` |
-| Script    | `scripts/first-boot.sh`                               |
-| Effect    | `rauc status mark-good` + write sentinel              |
+| Setting   | Value                                              |
+|-----------|----------------------------------------------------|
+| Type      | oneshot                                            |
+| Condition | `ConditionPathExists=!/data/.completed_first_boot` |
+| Script    | `scripts/first-boot.sh`                            |
+| Effect    | `rauc status mark-good` + write sentinel           |
 
 Mutually exclusive with `os-verification.service` via the sentinel file.
 
@@ -356,8 +325,8 @@ Mutually exclusive with `os-verification.service` via the sentinel file.
 
 **Purpose**: OpenVPN recovery tunnel.
 
-| Setting     | Value                                                     |
-|-------------|-----------------------------------------------------------|
-| Config path | `/persist/config/openvpn/client.conf`                     |
-| Auto-start  | `false`                                                   |
-| Condition   | `ConditionPathExists=/persist/config/openvpn/client.conf` |
+| Setting     | Value                                                  |
+|-------------|--------------------------------------------------------|
+| Config path | `/data/config/openvpn/client.conf`                     |
+| Auto-start  | `false`                                                |
+| Condition   | `ConditionPathExists=/data/config/openvpn/client.conf` |

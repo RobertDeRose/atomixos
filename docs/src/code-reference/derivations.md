@@ -144,23 +144,23 @@ mkimage -C none -A arm64 -T script -d boot.cmd boot.scr
 
 **Delegates to:** `scripts/build-image.sh`
 
-**Image layout (total ~2320 MB sparse):**
+**Image layout (total ~1170 MiB sparse):**
 
-| Offset  | Size    | Content    | Filesystem   |
-|---------|---------|------------|--------------|
-| 0       | 16 MB   | U-Boot raw | --           |
-| 16 MB   | 128 MB  | boot-a     | vfat         |
-| 144 MB  | 128 MB  | boot-b     | vfat (empty) |
-| 272 MB  | 1024 MB | rootfs-a   | squashfs     |
-| 1296 MB | 1024 MB | rootfs-b   | (empty)      |
+| Offset  | Size      | Content     | Filesystem |
+|---------|-----------|-------------|------------|
+| 0       | 16 MB     | U-Boot raw  | --         |
+| 16 MB   | 128 MB    | boot-a      | vfat       |
+| 144 MB  | 1024 MB   | rootfs-a    | squashfs   |
+| 1168 MB | remaining | unallocated | --         |
 
 **Output:** `$out/atomixos-<series>.img`
 
-The image name is derived from the pinned NixOS release series (e.g., `atomixos-25.11.img`). The persist partition is
-included directly in the image as a small `f2fs` partition.
+The image name is derived from the pinned NixOS release series (e.g., `atomixos-25.11.img`). The image leaves the
+remaining eMMC space unallocated so initrd `systemd-repart` can create `boot-b`, `rootfs-b`, and `/data` on first
+boot.
 
-**GPT partition types:** Boot partitions use the Linux filesystem GUID (`0FC63DAF-...`). Rootfs partitions use the Linux
-root aarch64 GUID (`B921B045-...`), which is the architecturally correct type for aarch64 root filesystems.
+**GPT partition types:** Boot partitions use the xbootldr GUID (`BC13C2FF-...`). Rootfs partitions use the Linux root
+aarch64 GUID (`B921B045-...`), which is the architecturally correct type for aarch64 root filesystems.
 
 **U-Boot raw writes:**
 

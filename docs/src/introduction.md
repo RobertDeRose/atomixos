@@ -40,7 +40,7 @@ AtomixOS eliminates this class of failure through:
 
 - **Reproducible** -- the entire system image is built from a single Nix flake with pinned inputs; same flake, same
   image
-- **Immutable** -- the squashfs root filesystem is read-only; writable state lives on a dedicated `/persist` partition
+- **Immutable** -- the squashfs root filesystem is read-only; writable state lives on a dedicated `/data` partition
 - **Testable** -- 9 NixOS VM integration tests validate the full update lifecycle, network security, and rollback
   behavior without physical hardware
 - **EN18031 compliant** -- ships without default credentials; per-device credentials are provisioned at factory time; IP

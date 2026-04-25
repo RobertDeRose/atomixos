@@ -36,7 +36,7 @@ mise run e2e:rauc-slots --lima
 
 | Test                | Nodes | What it validates                                                                                         |
 |---------------------|-------|-----------------------------------------------------------------------------------------------------------|
-| `rauc-slots`        | 1     | RAUC detects all 4 A/B slots (boot-a, boot-b, rootfs-a, rootfs-b)                                         |
+| `rauc-slots`        | 1     | RAUC detects all 4 A/B slots after first-boot repartitioning creates boot-b/rootfs-b                      |
 | `rauc-update`       | 1     | Bundle install writes to inactive slot pair; slot switches from A to B                                    |
 | `rauc-rollback`     | 1     | Install to slot B, mark bad, verify automatic rollback to slot A                                          |
 | `rauc-confirm`      | 1     | Health checks pass within timeout, slot committed as good                                                 |

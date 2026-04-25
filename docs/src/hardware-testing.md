@@ -43,14 +43,14 @@ screen /dev/tty.usbserial-DM02496T 1500000
 
 ```sh
 systemctl status first-boot
-cat /persist/.completed_first_boot
+cat /data/.completed_first_boot
 rauc status
 ```
 
 **Pass criteria**:
 
 - `first-boot.service` completed successfully
-- Sentinel file exists at `/persist/.completed_first_boot`
+- Sentinel file exists at `/data/.completed_first_boot`
 - RAUC shows the booted slot as "good"
 
 ## Phase 2: Kernel & Hardware Detection
@@ -176,14 +176,14 @@ ssh <wan-ip>
 
 ```sh
 # Enable SSH on WAN
-touch /persist/config/ssh-wan-enabled
+touch /data/config/ssh-wan-enabled
 systemctl start ssh-wan-reload
 
 # Test from WAN side
 ssh admin@<wan-ip>    # should now work
 
 # Disable SSH on WAN
-rm /persist/config/ssh-wan-enabled
+rm /data/config/ssh-wan-enabled
 systemctl start ssh-wan-reload
 
 # Test from WAN side
@@ -196,32 +196,18 @@ ssh admin@<wan-ip>    # should fail again
 - Creating the flag file and reloading enables SSH
 - Removing the flag file and reloading disables SSH
 
-## Phase 5: Containers & Services
+## Phase 5: Services
 
-### Test 5.1: Cockpit pod
-
-```sh
-systemctl status cockpit-ws
-podman ps
-curl -k https://localhost:443/cockpit/
-```
-
-**Pass criteria**:
-
-- `cockpit-ws` container is running
-- HTTPS connection via Traefik returns Cockpit login page
-
-### Test 5.2: Health manifest confirmation
+### Test 5.1: Update confirmation
 
 ```sh
-# After containers are running, force a re-verification
 systemctl restart os-verification
 journalctl -u os-verification -f
 ```
 
 **Pass criteria**:
 
-- Health checks pass for all containers listed in the manifest
+- Local service and network checks pass
 - 60-second sustained check completes
 - Slot is marked as "good"
 
@@ -237,16 +223,7 @@ ssh -i ~/.ssh/id_ed25519 admin@172.20.30.1
 **Pass criteria**:
 
 - Key-based authentication succeeds
-- Password authentication is rejected (unless from localhost)
-
-### Test 6.2: Cockpit password authentication
-
-Access `https://<wan-ip>/cockpit/` in a browser and log in with the provisioned admin password.
-
-**Pass criteria**:
-
-- Login succeeds with the correct password
-- Login fails with an incorrect password
+- Password authentication is rejected by default
 
 ## Phase 7: RAUC Update Lifecycle
 
@@ -265,10 +242,10 @@ rauc status
 
 ```sh
 # Copy bundle to device
-scp rock64.raucb admin@172.20.30.1:/persist/
+scp rock64.raucb admin@172.20.30.1:/data/
 
 # Install
-rauc install /persist/rock64.raucb
+rauc install /data/rock64.raucb
 ```
 
 **Pass criteria**:

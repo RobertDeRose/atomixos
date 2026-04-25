@@ -11,7 +11,7 @@
 
 let
   cfg = config.atomixos.rauc;
-  ubootEnvTools = self.packages.${pkgs.system}.uboot-env-tools;
+  ubootEnvTools = self.packages.${pkgs.stdenv.hostPlatform.system}.uboot-env-tools;
   statusDir = builtins.dirOf cfg.statusFile;
 
   # Custom bootloader backend script for QEMU/test environments.
@@ -45,6 +45,12 @@ let
 in
 {
   options.atomixos.rauc = {
+    enable = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "Whether to configure the RAUC service and slot metadata.";
+    };
+
     compatible = lib.mkOption {
       type = lib.types.str;
       default = "rock64";
@@ -67,7 +73,7 @@ in
     # Keep this as a string because tests override it with /tmp paths.
     statusFile = lib.mkOption {
       type = lib.types.str;
-      default = "/persist/rauc/status.raucs";
+      default = "/data/rauc/status.raucs";
       description = "Path to the RAUC status file.";
     };
 
@@ -100,7 +106,7 @@ in
     };
   };
 
-  config = {
+  config = lib.mkIf cfg.enable {
     services.rauc = {
       enable = true;
       client.enable = true;

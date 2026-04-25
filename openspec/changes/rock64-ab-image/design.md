@@ -45,7 +45,7 @@ state, and logs.
 - Delta/differential updates — first version uses full squashfs images; delta optimization is a future concern
 - Multi-board support — this targets Rock64 (RK3328) only; other boards are future work
 - Traefik configuration — The image defines the Traefik systemd service (same raw-podman pattern as Cockpit), but the
-  container image lives on `/persist` and configuration files on `/persist/config/traefik/`. The provisioning task
+  container image lives on `/data` and configuration files on `/data/config/traefik/`. The provisioning task
   writes default config and a self-signed TLS certificate.
 - Container orchestration — the image provides podman + Cockpit; what containers run is determined by the application
   layer and health manifest
@@ -68,11 +68,11 @@ weaker NixOS ecosystem support. Custom scripts are brittle and would reimplement
 
 ### 2. Read-only squashfs root filesystem
 
-**Choice**: squashfs for rootfs with a separate writable /persist partition.
+**Choice**: squashfs for rootfs with a separate writable /data partition.
 
 **Rationale**: squashfs provides excellent compression (current image: ~333 MB compressed with zstd at 1 MB block size),
 integrity (immutable), and simplicity (no fsck needed). The A/B design requires two copies of the rootfs — compression
-is essential to fit within the 16 GB eMMC budget. Mutable state lives on the /persist partition (f2fs), mounted at boot.
+is essential to fit within the 16 GB eMMC budget. Mutable state lives on the /data partition (f2fs), mounted at boot.
 
 The build uses `mksquashfs` with `-b 1048576` (1 MB block size, the maximum) which gives zstd more context for pattern
 matching and reduces the compressed size by ~9% compared to the default 128 KB block size. Runtime impact is negligible
@@ -106,7 +106,7 @@ included in the squashfs. They compress to nearly nothing and only consume RAM w
 
 ### 4. eMMC partition layout
 
-**Choice**: Fixed partition table with raw U-Boot, per-slot vfat boot partitions, two squashfs slots, and f2fs /persist.
+**Choice**: Fixed partition table with raw U-Boot, per-slot vfat boot partitions, two squashfs slots, and f2fs /data.
 
 ```text
 Offset     Size       Content          Filesystem
@@ -115,19 +115,19 @@ Offset     Size       Content          Filesystem
 132 MB     128 MB     boot slot B      vfat (kernel + DTB for slot B)
 260 MB     1 GB       rootfs slot A    squashfs (NixOS system + kernel modules)
 1284 MB    1 GB       rootfs slot B    squashfs (NixOS system + kernel modules)
-2308 MB    ~13.3 GB   /persist         f2fs (containers, state, logs, health manifest)
+2308 MB    ~13.3 GB   /data         f2fs (containers, state, logs, health manifest)
 ```
 
 **Rationale**: Per-slot boot partitions eliminate the shared /boot single point of failure. 128 MB per boot partition
 accommodates the uncompressed aarch64 kernel Image (~63 MB) plus DTB and boot.scr with room for growth. The 1 GB rootfs
 slots accommodate the NixOS system closure (currently ~333 MB compressed) with room for growth. The initial design
-targeted 200 MB slots but this proved unrealistic for NixOS + Podman + networking stack. f2fs is chosen for /persist
+targeted 200 MB slots but this proved unrealistic for NixOS + Podman + networking stack. f2fs is chosen for /data
 because it's designed for flash storage (wear leveling awareness, power-loss resilience). The layout leaves ~13.3 GB for
-/persist, which holds container images, application data, and logs.
+/data, which holds container images, application data, and logs.
 
 **Alternatives considered**:
 
-- **ext4 for /persist**: Works, but f2fs is purpose-built for eMMC/flash and handles power loss better.
+- **ext4 for /data**: Works, but f2fs is purpose-built for eMMC/flash and handles power loss better.
 
 ### 5. U-Boot from nixpkgs with boot-count via FAT flag file
 
@@ -184,21 +184,21 @@ application containers running?
 **Flow**:
 
 1. Device boots into new slot
-2. If this is the **first boot** (no `/persist/.completed_first_boot` sentinel): `first-boot.service` runs — writes a
+2. If this is the **first boot** (no `/data/.completed_first_boot` sentinel): `first-boot.service` runs — writes a
    `slot_good` flag file to `/boot` (the boot FAT partition) and writes the sentinel. `os-verification.service` is
-   skipped (its `ConditionPathExists=/persist/.completed_first_boot` is unmet). U-Boot will detect the flag on the
+   skipped (its `ConditionPathExists=/data/.completed_first_boot` is unmet). U-Boot will detect the flag on the
    next power cycle, restore the boot counter, and delete the file. This ensures the initial provisioned image is
    always committed without health-check gates.
 3. On **subsequent boots** (sentinel exists): `os-verification.service` starts after `multi-user.target`
 4. Check system health: eth0 has WAN address, eth1 is 172.20.30.1, dnsmasq running, chronyd running
-5. If `/persist/config/health-manifest.yaml` exists, check each container listed is in "running" state (timeout: 5
+5. If `/data/config/health-manifest.yaml` exists, check each container listed is in "running" state (timeout: 5
    minutes) — this includes the Cockpit pod and Traefik
 6. If no manifest exists (bare/unprovisioned image), skip container checks
 7. Sustain all checks passing for 60 seconds (catch restart loops — check every 5s)
 8. All pass → write `slot_good` flag to `/boot` (U-Boot restores counter on next boot)
 9. Any fail → exit non-zero, slot stays uncommitted, boot-count continues to decrement
 
-The health manifest is placed on `/persist/config/` by the device provisioning process (initial flash or remote
+The health manifest is placed on `/data/config/` by the device provisioning process (initial flash or remote
 provisioning service), not shipped in the image. This allows different deployments to define different health criteria.
 
 **Alternatives considered**:
@@ -222,7 +222,7 @@ into the host on localhost and spawns a Python bridge process. This requires Pyt
 readline, and no external dependencies. Its `allowedReferences` guard ensures its closure contains only glibc and bash
 (both already in the image). No SSL is acceptable because the transport is SSH.
 
-Cockpit runs on `/persist` as a pod managed by podman (via Quadlet or systemd unit). Container images are pulled during
+Cockpit runs on `/data` as a pod managed by podman (via Quadlet or systemd unit). Container images are pulled during
 provisioning or first boot. The health-check confirmation service validates that the Cockpit pod is running before
 committing a slot.
 
@@ -278,13 +278,13 @@ Device identity: `eth0` MAC address = device ID (existing convention, read from 
 Rules:
 
 - eth0 (WAN) inbound: ALLOW tcp/443 (HTTPS), ALLOW udp/1194 (OpenVPN), ALLOW established/related, DROP all else. SSH
-  (tcp/22) allowed only if `/persist/config/ssh-wan-enabled` flag file exists.
+  (tcp/22) allowed only if `/data/config/ssh-wan-enabled` flag file exists.
 - eth1 (LAN) inbound: ALLOW udp/67-68 (DHCP), ALLOW udp/123 (NTP), ALLOW tcp/22 (SSH), ALLOW established/related, DROP
   all else.
 - tun0 (VPN) inbound: ALLOW tcp/22 (SSH), ALLOW established/related, DROP all else.
 - FORWARD chain: DROP all (no inter-interface routing).
 
-The SSH-on-WAN flag is a persistent file on `/persist/config/`. Toggled manually via Cockpit, API, or SSH. No automated
+The SSH-on-WAN flag is a persistent file on `/data/config/`. Toggled manually via Cockpit, API, or SSH. No automated
 opening — eliminates the security risk of an attacker forcing the flag.
 
 ### 13. hawkBit-ready architecture
@@ -325,9 +325,9 @@ via Traefik forward-auth) is the primary auth when internet is available; provis
 fallback.
 
 **Rationale**: EN18031 prohibits default passwords. The image ships with no embedded credentials —
-`users.users.admin.hashedPasswordFile` points to `/persist/config/admin-password-hash`, which is created during
+`users.users.admin.hashedPasswordFile` points to `/data/config/admin-password-hash`, which is created during
 provisioning with a unique sha-512 hash (from `mkpasswd`). SSH authorized keys are loaded at runtime from
-`/persist/config/ssh-authorized-keys/%u` (per-user key files), not baked into the image.
+`/data/config/ssh-authorized-keys/%u` (per-user key files), not baked into the image.
 
 **Authentication flows**:
 
@@ -347,13 +347,13 @@ Cockpit pod to authenticate with the provisioned password. Remote SSH remains ke
 
 **Provisioning creates**:
 
-- `/persist/config/admin-password-hash` — sha-512 password hash
-- `/persist/config/ssh-authorized-keys/admin` — operator's SSH public key
-- `/persist/config/traefik/traefik.yaml` — Traefik static config (entrypoints, providers)
-- `/persist/config/traefik/dynamic/cockpit.yaml` — Cockpit reverse proxy route + TLS cert paths
-- `/persist/config/traefik/dynamic/oidc.yaml.disabled` — OIDC forward-auth template (rename to enable)
-- `/persist/config/traefik/certs/server.{crt,key}` — self-signed TLS certificate (EC P-256, 10-year)
-- `/persist/config/health-manifest.yaml` — container health entries (cockpit-ws, traefik)
+- `/data/config/admin-password-hash` — sha-512 password hash
+- `/data/config/ssh-authorized-keys/admin` — operator's SSH public key
+- `/data/config/traefik/traefik.yaml` — Traefik static config (entrypoints, providers)
+- `/data/config/traefik/dynamic/cockpit.yaml` — Cockpit reverse proxy route + TLS cert paths
+- `/data/config/traefik/dynamic/oidc.yaml.disabled` — OIDC forward-auth template (rename to enable)
+- `/data/config/traefik/certs/server.{crt,key}` — self-signed TLS certificate (EC P-256, 10-year)
+- `/data/config/health-manifest.yaml` — container health entries (cockpit-ws, traefik)
 
 **Alternatives considered**:
 
@@ -393,7 +393,7 @@ module additions).
 ## Risks / Trade-offs
 
 **[Risk] eMMC wear from frequent updates** → squashfs writes to raw partitions on each update. Mitigation: f2fs on
-/persist handles wear leveling for frequent writes; rootfs updates should be infrequent (weekly/monthly, not hourly).
+/data handles wear leveling for frequent writes; rootfs updates should be infrequent (weekly/monthly, not hourly).
 eMMC controllers have internal wear leveling.
 
 **[Risk] U-Boot environment storage corruption** → U-Boot env is stored as a single 32 KB copy at offset `0x3F8000` on
@@ -423,7 +423,7 @@ modules. If a future Cockpit version requires these, the bridge will fail. Mitig
 must be reconsidered.
 
 **[Risk] Provisioning credential management** → EN18031 requires unique per-device passwords. The provisioning script
-must create `/persist/config/admin-password-hash`, `/persist/config/ssh-authorized-keys/admin`, Traefik configuration,
+must create `/data/config/admin-password-hash`, `/data/config/ssh-authorized-keys/admin`, Traefik configuration,
 and the health manifest. If these are missing, the device has no usable credentials or web access and requires
 re-provisioning. Mitigation: provisioning script validates all credential and config files exist before completing.
 
@@ -437,6 +437,6 @@ Cockpit from being committed in a broken state, making runtime failures rare.
 **[Trade-off] hawkBit deferred** → No staged rollouts, fleet visibility, or campaign management initially. Acceptable
 because the device-side architecture supports hawkBit with a flag flip when ready.
 
-**[Trade-off] Reduced /persist space** → Moving from 200 MB to 1 GB rootfs slots and 32 MB to 128 MB boot slots reduces
-/persist from ~15 GB to ~13.3 GB. This is acceptable — 13.3 GB is still ample for container images, application data,
+**[Trade-off] Reduced /data space** → Moving from 200 MB to 1 GB rootfs slots and 32 MB to 128 MB boot slots reduces
+/data from ~15 GB to ~13.3 GB. This is acceptable — 13.3 GB is still ample for container images, application data,
 and logs. The boot partition increase was necessary because the uncompressed aarch64 kernel Image is ~63 MB.

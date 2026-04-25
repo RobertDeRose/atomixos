@@ -112,10 +112,10 @@ nixos-lib.runTest {
         '';
       };
 
-      # /persist for ssh-wan-toggle flag file
+      # /data for ssh-wan-toggle flag file
       systemd.tmpfiles.rules = [
-        "d /persist 0755 root root -"
-        "d /persist/config 0755 root root -"
+        "d /data 0755 root root -"
+        "d /data/config 0755 root root -"
       ];
 
       # Listener services for port probing

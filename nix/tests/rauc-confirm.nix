@@ -3,7 +3,7 @@
 #
 # This test:
 # 1. Boots a QEMU VM with RAUC + dnsmasq + chronyd + two network interfaces
-# 2. Creates /persist/.completed_first_boot so the service condition is met
+# 2. Creates /data/.completed_first_boot so the service condition is met
 # 3. Starts the os-verification service (slot is pending on fresh boot)
 # 4. Verifies the slot transitions to "good" after health checks pass
 #
@@ -24,9 +24,9 @@ let
   nixos-lib = import (pkgs.path + "/nixos/lib") { };
 
   # The os-verification script — same source as modules/os-verification.nix
-  verificationScript = pkgs.writeShellScript "os-verification" (
-    builtins.readFile ../../scripts/os-verification.sh
-  );
+  verificationScript = pkgs.writeShellScript "os-verification" ''
+    ${builtins.readFile ../../scripts/os-verification.sh}
+  '';
 in
 nixos-lib.runTest {
   name = "rauc-confirm";
@@ -104,15 +104,7 @@ nixos-lib.runTest {
         # Do NOT add wantedBy — we start it manually in the test script
         # so we can set up preconditions first.
 
-        unitConfig.ConditionPathExists = "/persist/.completed_first_boot";
-
-        path = [
-          pkgs.rauc
-          pkgs.jq
-          pkgs.systemd
-          pkgs.iproute2
-          pkgs.gnugrep
-        ];
+        unitConfig.ConditionPathExists = "/data/.completed_first_boot";
 
         serviceConfig = {
           Type = "oneshot";
@@ -122,10 +114,10 @@ nixos-lib.runTest {
         };
       };
 
-      # ── /persist tmpfs ──
-      # The real device has /persist on f2fs. For the test, a tmpfs suffices.
+      # ── /data tmpfs ──
+      # The real device has /data on f2fs. For the test, a tmpfs suffices.
       systemd.tmpfiles.rules = [
-        "d /persist 0755 root root -"
+        "d /data 0755 root root -"
       ];
     };
 
@@ -137,7 +129,7 @@ nixos-lib.runTest {
     # ── Preconditions ──
 
     # 1. Create the first-boot sentinel so os-verification's condition passes
-    gateway.succeed("date -Iseconds > /persist/.completed_first_boot")
+    gateway.succeed("date -Iseconds > /data/.completed_first_boot")
 
     # 2. Set up eth1 with the LAN IP the os-verification script expects.
     #    eth1 exists from the NixOS test infra but has no IP.

@@ -7,8 +7,7 @@
 ### ADDED: Flake defines Rock64 NixOS configuration
 
 The flake provides `nixosConfigurations.rock64` targeting `aarch64-linux` (RK3328). The configuration includes all
-service modules: systemd, podman, openssh, chrony, dnsmasq, RAUC, nftables, watchdog, and the health-check/update
-services.
+service modules: systemd, openssh, chrony, dnsmasq, RAUC, nftables, watchdog, and the health-check/update services.
 
 #### Scenario: Rock64 system evaluates cleanly
 
@@ -57,27 +56,16 @@ f2fs) and loadable modules for USB peripherals (WiFi, Bluetooth, USB-serial).
 - When the `ftdi_sio` or `cp210x` module is loaded
 - Then `/dev/ttyUSB0` appears
 
-### ADDED: Cockpit as system service
-
-Cockpit runs as a podman container (`quay.io/cockpit/ws`) via a raw systemd unit. It listens on loopback
-(127.0.0.1:9090) and is reverse-proxied by Traefik on port 443.
-
-#### Scenario: Cockpit service is defined
-
-- Given the NixOS configuration is evaluated
-- Then `systemd.services.cockpit-ws` exists
-- And it runs after `podman.socket` and `network-online.target`
-
 ### ADDED: OpenVPN as system service
 
 OpenVPN is included in the rootfs for recovery tunnel access. It does not auto-start; it requires a config file at
-`/persist/config/openvpn/client.conf`.
+`/data/config/openvpn/client.conf`.
 
 #### Scenario: OpenVPN service is conditional
 
-- Given no OpenVPN config file exists on `/persist`
+- Given no OpenVPN config file exists on `/data`
 - Then `openvpn-recovery.service` does not start
-- When a config file is placed at `/persist/config/openvpn/client.conf`
+- When a config file is placed at `/data/config/openvpn/client.conf`
 - And the service is started manually
 - Then a `tun0` interface appears
 

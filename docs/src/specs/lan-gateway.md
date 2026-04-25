@@ -87,17 +87,17 @@ The firewall uses nftables with per-interface rules:
 | tun0 (VPN) | TCP 22, established/related                     |
 | FORWARD    | DROP all                                        |
 
-SSH on WAN is controlled by a dynamic nftables rule toggled via `/persist/config/ssh-wan-enabled`.
+SSH on WAN is controlled by a dynamic nftables rule toggled via `/data/config/ssh-wan-enabled`.
 
 #### Scenario: WAN SSH blocked by default
 
-- Given no flag file exists at `/persist/config/ssh-wan-enabled`
+- Given no flag file exists at `/data/config/ssh-wan-enabled`
 - When an SSH connection is attempted from the WAN
 - Then the connection is rejected
 
 #### Scenario: WAN SSH enabled with flag
 
-- Given `/persist/config/ssh-wan-enabled` is created
+- Given `/data/config/ssh-wan-enabled` is created
 - And `ssh-wan-reload.service` is triggered
 - Then SSH connections from the WAN are accepted
 

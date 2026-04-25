@@ -29,6 +29,9 @@
         overlays = [ embeddedOverlay ];
       };
 
+      developmentMode = builtins.getEnv "DEVELOPMENT" == "1";
+      developmentAdminPasswordHashFile = builtins.getEnv "ADMIN_PASSWORD_HASH_FILE";
+
       # Shared module that applies the overlay to NixOS configurations
       overlayModule =
         { ... }:
@@ -55,7 +58,9 @@
           ./modules/base.nix
           ./modules/hardware-rock64.nix
         ];
-        specialArgs = { inherit self; };
+        specialArgs = {
+          inherit self developmentMode developmentAdminPasswordHashFile;
+        };
       };
 
       nixosConfigurations.rock64-qemu = nixpkgs.lib.nixosSystem {
@@ -65,7 +70,9 @@
           ./modules/base.nix
           ./modules/hardware-qemu.nix
         ];
-        specialArgs = { inherit self; };
+        specialArgs = {
+          inherit self developmentMode developmentAdminPasswordHashFile;
+        };
       };
 
       # ── Package outputs ────────────────────────────────────────────────────
@@ -123,6 +130,7 @@
         boot-script = pkgs.callPackage ./nix/boot-script.nix {
           # Embed squashfs store hash so U-Boot prints a build ID on serial
           buildId = builtins.substring 0 32 (baseNameOf (toString self.packages.${system}.squashfs));
+          systemClosure = rock64Config.system.build.toplevel;
         };
 
         # Flashable disk image for eMMC provisioning

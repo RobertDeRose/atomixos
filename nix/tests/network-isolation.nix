@@ -97,10 +97,10 @@ nixos-lib.runTest {
         '';
       };
 
-      # /persist directory
+      # /data directory
       systemd.tmpfiles.rules = [
-        "d /persist 0755 root root -"
-        "d /persist/config 0755 root root -"
+        "d /data 0755 root root -"
+        "d /data/config 0755 root root -"
       ];
 
       # dnsmasq — DHCP server on eth2 (LAN / VLAN 2)

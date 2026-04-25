@@ -92,7 +92,7 @@ to LAN devices on eth1). NTP service SHALL only accept clients from the 172.20.3
 nftables SHALL be configured with the following rules:
 
 **eth0 (WAN) inbound**: ALLOW tcp/443 (HTTPS), ALLOW udp/1194 (OpenVPN), ALLOW established/related, DROP all else.
-tcp/22 (SSH) is allowed only if the flag file `/persist/apollo/ssh-wan-enabled` exists.
+tcp/22 (SSH) is allowed only if the flag file `/data/apollo/ssh-wan-enabled` exists.
 
 **eth1 (LAN) inbound**: ALLOW udp/67-68 (DHCP), ALLOW udp/123 (NTP), ALLOW tcp/22 (SSH), ALLOW established/related, DROP
 all else.
@@ -108,12 +108,12 @@ all else.
 
 #### Scenario: SSH is blocked on WAN by default
 
-- **WHEN** an SSH connection is attempted to eth0 on port 22 and `/persist/apollo/ssh-wan-enabled` does not exist
+- **WHEN** an SSH connection is attempted to eth0 on port 22 and `/data/apollo/ssh-wan-enabled` does not exist
 - **THEN** the connection is dropped
 
 #### Scenario: SSH is allowed on WAN when flag is set
 
-- **WHEN** an SSH connection is attempted to eth0 on port 22 and `/persist/apollo/ssh-wan-enabled` exists
+- **WHEN** an SSH connection is attempted to eth0 on port 22 and `/data/apollo/ssh-wan-enabled` exists
 - **THEN** the connection is accepted
 
 #### Scenario: SSH is always allowed on LAN
@@ -133,18 +133,18 @@ all else.
 
 ### Requirement: WAN SSH toggle is manual only
 
-SSH access on eth0 (WAN) SHALL be controlled by the presence of the flag file `/persist/apollo/ssh-wan-enabled`. This
+SSH access on eth0 (WAN) SHALL be controlled by the presence of the flag file `/data/apollo/ssh-wan-enabled`. This
 flag SHALL only be set or removed by manual action (via Cockpit, API, or SSH over LAN/VPN). There SHALL be no automated
 mechanism to create or remove this flag.
 
 #### Scenario: Flag file enables WAN SSH
 
-- **WHEN** `/persist/apollo/ssh-wan-enabled` is created
+- **WHEN** `/data/apollo/ssh-wan-enabled` is created
 - **THEN** the nftables rule for SSH on eth0 becomes active on the next firewall reload or reboot
 
 #### Scenario: Flag file removal disables WAN SSH
 
-- **WHEN** `/persist/apollo/ssh-wan-enabled` is removed
+- **WHEN** `/data/apollo/ssh-wan-enabled` is removed
 - **THEN** SSH connections to eth0 are dropped on the next firewall reload or reboot
 
 ### Requirement: Device identity uses eth0 MAC address

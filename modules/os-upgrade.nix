@@ -81,7 +81,7 @@ in
     # ── hawkBit client (optional) ────────────────────────────────────────────
 
     # rauc-hawkbit-updater is available as a package but only enabled when
-    # useHawkbit is true. Configuration is expected at /persist/config/hawkbit/
+    # useHawkbit is true. Configuration is expected at /data/config/hawkbit/
     environment.systemPackages = lib.mkIf cfg.useHawkbit [
       pkgs.rauc-hawkbit-updater
     ];

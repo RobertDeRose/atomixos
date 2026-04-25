@@ -10,7 +10,7 @@ set -euo pipefail
 
 UPDATE_URL="${OS_UPGRADE_URL:-http://localhost/updates}"
 DEVICE_ID=$(cat /sys/class/net/eth0/address 2>/dev/null | tr -d ':' || echo "unknown")
-BUNDLE_DIR="/persist/config/bundles"
+BUNDLE_DIR="/data/config/bundles"
 CURRENT_VERSION=$(rauc status --output-format=json 2>/dev/null | jq -r '.slots[] | select(.state.booted == "booted") | .slot_status.bundle.version // "unknown"' || echo "unknown")
 
 log() { echo "[os-upgrade] $*"; }

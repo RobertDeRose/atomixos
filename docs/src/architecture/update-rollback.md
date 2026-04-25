@@ -14,7 +14,6 @@ recovery from failed updates.
 6. os-verification.service runs health checks:
    - eth0 has WAN address, eth1 has the configured LAN gateway IP
    - dnsmasq, chronyd running
-   - containers from /persist/config/health-manifest.yaml are healthy
    - sustained 60s stability check
 7a. All pass  -> rauc status mark-good (slot committed)
 7b. Any fail  -> exit non-zero, boot-count continues to decrement
@@ -48,18 +47,16 @@ The `os-verification.service` performs these checks before committing a slot:
 
 1. **Service checks**: dnsmasq and chronyd must be active
 2. **Network checks**: eth0 must have a WAN IP; eth1 must have the expected LAN gateway IP
-3. **Container checks**: all containers listed in `/persist/config/health-manifest.yaml` must reach `running` state
-   (5-minute timeout)
-4. **Sustained check**: all above conditions must hold for 60 seconds (checked every 5 seconds) to catch restart loops
+3. **Sustained check**: all above conditions must hold for 60 seconds (checked every 5 seconds) to catch restart loops
 
 Only after all checks pass does the service run `rauc status mark-good`, which resets the boot counter and commits the
 slot.
 
 ## First Boot Exception
 
-On initial device provisioning, no containers or health manifest exist yet. The `first-boot.service` handles this by
+On initial device provisioning, the `first-boot.service` handles this by
 unconditionally marking the slot as good (no network dependency) and writing a sentinel file
-(`/persist/.completed_first_boot`). After this, all subsequent boots use the full health-check path.
+(`/data/.completed_first_boot`). After this, all subsequent boots use the full health-check path.
 
 ## Watchdog Integration (currently disabled on Rock64 during development)
 
@@ -81,5 +78,5 @@ The `os-upgrade.service` runs on a systemd timer:
 - Random delay: up to 10 minutes (prevents thundering herd across fleet)
 
 The service queries the update server with the device's MAC address and current version. If a newer bundle is available,
-it downloads to `/persist`, installs via `rauc install`, and reboots. The architecture is designed to be swappable with
+it downloads to `/data`, installs via `rauc install`, and reboots. The architecture is designed to be swappable with
 hawkBit for server-push updates.

@@ -9,6 +9,32 @@ set -euo pipefail
 
 log() { echo "[first-boot] $*"; }
 
+write_dev_admin_password_hash() {
+	local hash_file="/data/config/admin-password-hash"
+	local hash_value="${ATOMIXOS_DEV_ADMIN_PASSWORD_HASH:-}"
+
+	if [ -z "$hash_value" ] || [ -f "$hash_file" ]; then
+		return 0
+	fi
+
+	mkdir -p "$(dirname "$hash_file")"
+	log "Writing development admin password hash"
+	printf '%s\n' "$hash_value" >"$hash_file"
+	chmod 600 "$hash_file"
+}
+
+enable_dev_ssh_on_wan() {
+	local flag_file="/data/config/ssh-wan-enabled"
+
+	if [ "${ATOMIXOS_DEV_ENABLE_SSH_WAN:-}" != "1" ] || [ -f "$flag_file" ]; then
+		return 0
+	fi
+
+	mkdir -p "$(dirname "$flag_file")"
+	log "Enabling SSH on WAN for development image"
+	: >"$flag_file"
+}
+
 ensure_rauc_env() {
 	if fw_printenv BOOT_ORDER >/dev/null 2>&1; then
 		return 0
@@ -33,7 +59,7 @@ current_boot_slot() {
 	return 1
 }
 
-SENTINEL="/persist/.completed_first_boot"
+SENTINEL="/data/.completed_first_boot"
 
 # Guard (belt-and-suspenders alongside systemd ConditionPathExists)
 if [ -f "$SENTINEL" ]; then
@@ -52,6 +78,9 @@ ensure_rauc_env
 
 log "Marking current slot as good via RAUC: $BOOT_SLOT"
 rauc status mark-good "$BOOT_SLOT"
+
+write_dev_admin_password_hash
+enable_dev_ssh_on_wan
 
 # ── Write sentinel ──
 log "Writing first-boot sentinel: $SENTINEL"

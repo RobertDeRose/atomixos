@@ -55,11 +55,11 @@ access. Application-layer proxying through Traefik is the only path between WAN 
 
 Deterministic interface naming uses systemd `.link` files rather than udev rules:
 
-| Link File        | Match                                            | Name           |
-|------------------|--------------------------------------------------|----------------|
-| `10-onboard-eth` | Platform path `platform-ff540000.ethernet`       | `eth0`         |
-| `20-usb-eth`     | USB Ethernet drivers (r8152, ax88179, cdc_ether) | kernel default |
-| `30-wifi`        | WiFi drivers                                     | kernel default |
+| Link File        | Match                                            | Name                                       |
+|------------------|--------------------------------------------------|--------------------------------------------|
+| `10-onboard-eth` | Platform path `platform-ff540000.ethernet`       | `eth0`                                     |
+| `20-usb-eth`     | USB Ethernet drivers (r8152, ax88179, cdc_ether) | enabled as modules in Rock64 kernel config |
+| `30-wifi`        | WiFi drivers                                     | kernel default                             |
 
 The onboard Ethernet is always `eth0` regardless of USB device enumeration order. USB Ethernet adapters receive
 kernel-assigned names (e.g., `eth1`, `eth2`).
@@ -74,5 +74,5 @@ kernel-assigned names (e.g., `eth1`, `eth2`).
 | tun0 (VPN) | Inbound   | TCP 22 (SSH)                                  |
 | any        | Forward   | DROP (no exceptions)                          |
 
-SSH on WAN is controlled by the presence of `/persist/config/ssh-wan-enabled`. See the [Firewall
+SSH on WAN is controlled by the presence of `/data/config/ssh-wan-enabled`. See the [Firewall
 module](../code-reference/modules.md#firewallnix) for implementation details.

@@ -5,7 +5,7 @@
 }:
 
 let
-  ubootEnvTools = self.packages.${pkgs.system}.uboot-env-tools;
+  ubootEnvTools = self.packages.${pkgs.stdenv.hostPlatform.system}.uboot-env-tools;
   debugScript = pkgs.writeShellScript "boot-storage-debug" (
     builtins.readFile ../scripts/boot-storage-debug.sh
   );

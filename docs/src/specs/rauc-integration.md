@@ -73,7 +73,7 @@ designed to be replaced with `rauc-hawkbit-updater` for server-push updates.
 
 - Given the update server has a newer bundle
 - When the timer fires
-- Then the bundle is downloaded to `/persist`
+- Then the bundle is downloaded to `/data`
 - And `rauc install` is run
 - And the device reboots into the new slot
 

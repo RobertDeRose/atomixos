@@ -6,15 +6,13 @@ flake.lock                         Pinned nixpkgs
 mise.toml                          Tool versions, build tasks, hooks
 
 modules/
-  base.nix                         Shared NixOS config (systemd, podman, ssh, auth, closure opts)
+  base.nix                         Shared NixOS config (systemd, ssh, auth, closure opts)
   hardware-rock64.nix              RK3328 kernel, DTB, eMMC/watchdog drivers
   hardware-qemu.nix                QEMU aarch64-virt target for testing
   networking.nix                   NIC naming (.link files), eth0/eth1 config
   firewall.nix                     nftables rules (WAN/LAN/VPN/FORWARD)
   lan-gateway.nix                  dnsmasq DHCP, chrony NTP, IP forwarding off
   rauc.nix                         RAUC system.conf, slot definitions
-  cockpit.nix                      Cockpit pod (quay.io/cockpit/ws) systemd service
-  traefik.nix                      Traefik reverse proxy pod systemd service
   watchdog.nix                     systemd watchdog config
   os-verification.nix              Post-update health check service
   os-upgrade.nix                   Update polling + hawkBit toggle

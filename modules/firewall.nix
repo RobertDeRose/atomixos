@@ -62,7 +62,7 @@ in
 
   # ── Dynamic SSH-on-WAN toggle ────────────────────────────────────────────────
   #
-  # SSH on eth0 is controlled by the presence of /persist/config/ssh-wan-enabled
+  # SSH on eth0 is controlled by the presence of /data/config/ssh-wan-enabled
   # A systemd service checks this flag and adds/removes the nftables rule.
 
   systemd.services.ssh-wan-toggle = {

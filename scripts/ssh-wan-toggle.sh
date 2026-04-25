@@ -5,7 +5,7 @@
 # Dependencies (must be on PATH): nft
 set -euo pipefail
 
-if [ -f /persist/config/ssh-wan-enabled ]; then
+if [ -f /data/config/ssh-wan-enabled ]; then
 	echo "SSH-on-WAN flag detected, adding firewall rule"
 	nft add rule inet filter input iifname "eth0" tcp dport 22 accept comment \"SSH-WAN-dynamic\"
 else

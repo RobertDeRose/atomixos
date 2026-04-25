@@ -22,7 +22,7 @@ an external server.
 
 ### Requirement: Manifest-driven container health checks
 
-If `/persist/apollo/health-manifest.yaml` exists, the confirmation service SHALL read it and verify that each listed
+If `/data/apollo/health-manifest.yaml` exists, the confirmation service SHALL read it and verify that each listed
 container is in "running" state via podman. The service SHALL wait up to 5 minutes for all containers to reach running
 state, checking every 10 seconds.
 
@@ -38,7 +38,7 @@ state, checking every 10 seconds.
 
 #### Scenario: No manifest exists
 
-- **WHEN** `/persist/apollo/health-manifest.yaml` does not exist (unprovisioned or development image)
+- **WHEN** `/data/apollo/health-manifest.yaml` does not exist (unprovisioned or development image)
 - **THEN** the service skips container health checks and proceeds directly to system health checks and the sustained
   check phase
 
@@ -84,7 +84,7 @@ meaning the boot attempt counter continues to decrement on subsequent reboots, e
 
 ### Requirement: Health manifest is provided by provisioning
 
-The health manifest file (`/persist/apollo/health-manifest.yaml`) SHALL be placed on the /persist partition by the
+The health manifest file (`/data/apollo/health-manifest.yaml`) SHALL be placed on the /data partition by the
 device provisioning process (initial flash or remote provisioning service). The image SHALL NOT include a default
 manifest.
 

@@ -4,8 +4,8 @@
 # decrement, and saveenv BEFORE loading this script. By the time this runs:
 #
 #   devnum           - MMC device number (1 for eMMC)
-#   distro_bootpart  - Boot partition of selected slot (1=A, 2=B)
-#   distro_rootpart  - Root partition of selected slot (3=A, 4=B)
+#   distro_bootpart  - Boot partition of selected slot (1=A, 3=B)
+#   distro_rootpart  - Root partition of selected slot (2=A, 4=B)
 #
 # This script only needs to load kernel/DTB/initrd and set bootargs.
 #
@@ -83,14 +83,14 @@ fi
 
 # Fallback: if RAUC bootmeth didn't set distro_rootpart (e.g. env_save failed
 # on first boot with uninitialized SPI flash), derive it from distro_bootpart.
-# Boot partition 1 → rootfs partition 3, boot partition 2 → rootfs partition 4.
+# Boot partition 1 → rootfs partition 2, boot partition 3 → rootfs partition 4.
 if test -z "${distro_rootpart}"; then
   if test "${distro_bootpart}" = "1"; then
-    setenv distro_rootpart 3
-  elif test "${distro_bootpart}" = "2"; then
+    setenv distro_rootpart 2
+  elif test "${distro_bootpart}" = "3"; then
     setenv distro_rootpart 4
   else
-    setenv distro_rootpart 3
+    setenv distro_rootpart 2
   fi
   echo "WARNING: distro_rootpart was empty, defaulted to ${distro_rootpart}"
 fi
@@ -99,7 +99,7 @@ fi
 # rootfs slot, so mark-good can target BOOT_A_LEFT / BOOT_B_LEFT correctly.
 if test "${distro_bootpart}" = "1"; then
   setenv rauc_slot boot.0
-elif test "${distro_bootpart}" = "2"; then
+elif test "${distro_bootpart}" = "3"; then
   setenv rauc_slot boot.1
 else
   setenv rauc_slot boot.0
@@ -120,7 +120,7 @@ fatload mmc ${devnum}:${distro_bootpart} ${fdt_addr_r} dtbs/rockchip/rk3328-rock
 fatload mmc ${devnum}:${distro_bootpart} ${ramdisk_addr_r} initrd
 setenv initrd_size ${filesize}
 
-setenv bootargs "${bootargs_base} root=/dev/mmcblk1p${distro_rootpart} rootfstype=squashfs ro rauc.slot=${rauc_slot}"
+setenv bootargs "${bootargs_base} root=fstab rw atomixos.lowerdev=/dev/mmcblk1p${distro_rootpart} atomixos.lowerfstype=squashfs init=@systemClosure@/init rauc.slot=${rauc_slot}"
 booti ${kernel_addr_r} ${ramdisk_addr_r}:${initrd_size} ${fdt_addr_r}
 
 echo "ERROR: booti failed!"

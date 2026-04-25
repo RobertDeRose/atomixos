@@ -32,10 +32,11 @@
     # ── RAUC A/B boot method ──────────────────────────────────────────────
     # Native U-Boot support for A/B slot selection with boot counters.
     # Handles slot selection, try-count decrement, and rollback automatically.
-    # Partition layout: boot=1,2 rootfs=3,4 (matches our GPT layout)
+    # Partition layout: slot A = p1,p2  slot B = p3,p4 (matches our GPT layout
+    # after initrd systemd-repart creates the inactive slot).
     CONFIG_BOOTMETH_RAUC=y
-    # Partition mapping: "boot,root boot,root" — slot A = p1,p3  slot B = p2,p4
-    CONFIG_BOOTMETH_RAUC_PARTITIONS="1,3 2,4"
+    # Partition mapping: "boot,root boot,root" — slot A = p1,p2  slot B = p3,p4
+    CONFIG_BOOTMETH_RAUC_PARTITIONS="1,2 3,4"
     CONFIG_BOOTMETH_RAUC_BOOT_ORDER="A B"
     CONFIG_BOOTMETH_RAUC_DEFAULT_TRIES=3
     CONFIG_BOOTMETH_RAUC_RESET_ALL_ZERO_TRIES=y
