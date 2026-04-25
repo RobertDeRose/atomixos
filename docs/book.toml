@@ -8,9 +8,13 @@ src = "src"
 [build]
 build-dir = "../book"
 
+[preprocessor.mermaid]
+command = "mdbook-mermaid"
+
 [output.html]
 default-theme = "navy"
 preferred-dark-theme = "navy"
-git-repository-url = "https://github.com/checkpoint/apollo-image"
-edit-url-template = "https://github.com/checkpoint/apollo-image/edit/main/docs/{path}"
+git-repository-url = "https://github.com/RobertDeRose/AtomicNIx"
+edit-url-template = "https://github.com/RobertDeRose/AtomicNIx/edit/main/docs/{path}"
 additional-css = ["theme/cobalt.css"]
+additional-js = ["mermaid.min.js", "mermaid-init.js"]
