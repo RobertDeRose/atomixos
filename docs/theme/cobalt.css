@@ -113,3 +113,116 @@ html.navy .page-wrapper {
     font-size: 1.4rem;
     letter-spacing: 0.01em;
 }
+
+.content pre.mermaid {
+    position: relative;
+    overflow-x: auto;
+    padding: 12px 48px 12px 12px;
+    border: 1px solid rgba(86, 141, 226, 0.32);
+    border-radius: 10px;
+    background-color: rgba(10, 22, 50, 0.72);
+}
+
+.content pre.mermaid svg {
+    display: block;
+    margin: 0 auto;
+}
+
+.mermaid-modal-open {
+    overflow: hidden;
+}
+
+.mermaid-modal[hidden] {
+    display: none;
+}
+
+.mermaid-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+}
+
+.mermaid-modal__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(6, 16, 42, 0.86);
+}
+
+.mermaid-modal__panel {
+    position: relative;
+    margin: min(4vh, 24px) auto;
+    width: min(96vw, 1600px);
+    max-height: 92vh;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid rgba(86, 141, 226, 0.4);
+    border-radius: 14px;
+    background: #081631;
+    box-shadow: 0 18px 54px rgba(0, 0, 0, 0.45);
+}
+
+.mermaid-modal__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px 18px;
+    border-bottom: 1px solid rgba(86, 141, 226, 0.24);
+}
+
+.mermaid-modal__title {
+    color: #e7f3ff;
+}
+
+.mermaid-modal__close {
+    border: 1px solid rgba(124, 183, 255, 0.45);
+    border-radius: 999px;
+    background: rgba(14, 31, 69, 0.92);
+    color: #e7f3ff;
+    cursor: pointer;
+    font: inherit;
+    line-height: 1;
+    padding: 8px 12px;
+}
+
+.mermaid-expand-button {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 30px;
+    height: 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(124, 183, 255, 0.45);
+    border-radius: 8px;
+    background: rgba(14, 31, 69, 0.92);
+    color: #e7f3ff;
+    cursor: pointer;
+    padding: 0;
+}
+
+.mermaid-expand-button:hover,
+.mermaid-expand-button:focus-visible,
+.mermaid-modal__close:hover,
+.mermaid-modal__close:focus-visible {
+    background: rgba(25, 51, 95, 0.96);
+    border-color: rgba(124, 183, 255, 0.7);
+}
+
+.mermaid-expand-button svg {
+    width: 14px;
+    height: 14px;
+}
+
+.mermaid-modal__content {
+    overflow: auto;
+    padding: 20px;
+}
+
+.mermaid-modal__content svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-width: none;
+}
