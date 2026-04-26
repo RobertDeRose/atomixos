@@ -5,9 +5,18 @@
   config,
   lib,
   pkgs,
+  self,
   ...
 }:
 
+let
+  forensicCli = pkgs.writeShellScriptBin "forensic-log" (
+    builtins.readFile ../scripts/forensic-log.sh
+  );
+  watchdogBootCountCli = pkgs.writeShellScriptBin "watchdog-boot-count" (
+    builtins.readFile ../scripts/watchdog-boot-count.sh
+  );
+in
 {
   # ── Watchdog ─────────────────────────────────────────────────────────────────
 
@@ -19,4 +28,31 @@
   # RuntimeWatchdogSec = "30s";
   # RebootWatchdogSec = "10min";
   systemd.settings.Manager = { };
+
+  environment.systemPackages = [
+    forensicCli
+    watchdogBootCountCli
+  ];
+
+  systemd.services.watchdog-boot-count = {
+    description = "Record watchdog boot-count and rollback state";
+    wantedBy = [ "multi-user.target" ];
+    before = [ "rauc.service" ];
+    after = [ "local-fs.target" ];
+    path = [
+      forensicCli
+      watchdogBootCountCli
+    ]
+    ++ lib.optionals (config.atomixos.rauc.bootloader == "uboot") [
+      self.packages.${pkgs.stdenv.hostPlatform.system}.uboot-env-tools
+    ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${watchdogBootCountCli}/bin/watchdog-boot-count";
+    };
+    environment = {
+      ATOMIXOS_RAUC_BOOTLOADER = config.atomixos.rauc.bootloader;
+      ATOMIXOS_RAUC_STATE_DIR = "/var/lib/rauc";
+    };
+  };
 }

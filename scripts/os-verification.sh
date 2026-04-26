@@ -7,6 +7,7 @@ set -euo pipefail
 
 SUSTAIN_DURATION="${ATOMIXOS_VERIFICATION_SUSTAIN_DURATION:-60}"
 CHECK_INTERVAL="${ATOMIXOS_VERIFICATION_CHECK_INTERVAL:-5}"
+FORENSICS_STATE_DIR="${ATOMIXOS_FORENSICS_RAUC_STATE_DIR:-/data/rauc/forensics}"
 
 log() { echo "[os-verification] $*"; }
 
@@ -14,6 +15,14 @@ forensic() {
 	if command -v forensic-log >/dev/null 2>&1; then
 		forensic-log "$@" || true
 	fi
+}
+
+clear_pending_slot_state() {
+	rm -f \
+		"$FORENSICS_STATE_DIR/pending-source-slot" \
+		"$FORENSICS_STATE_DIR/pending-target-slot" \
+		"$FORENSICS_STATE_DIR/pending-target-version" \
+		"$FORENSICS_STATE_DIR/pending-target-booted"
 }
 
 current_boot_slot() {
@@ -46,6 +55,7 @@ if [ -z "$SLOT_STATUS" ]; then
 	forensic --stage rauc --event mark-good-start --slot "$BOOT_SLOT"
 	if rauc status mark-good "$BOOT_SLOT"; then
 		forensic --stage rauc --event mark-good-complete --slot "$BOOT_SLOT" --result ok
+		clear_pending_slot_state
 		forensic --stage verify --event complete --slot "$BOOT_SLOT" --result ok
 		exit 0
 	fi
@@ -149,6 +159,7 @@ log "All checks passed, marking slot as good: $BOOT_SLOT"
 forensic --stage rauc --event mark-good-start --slot "$BOOT_SLOT"
 if rauc status mark-good "$BOOT_SLOT"; then
 	forensic --stage rauc --event mark-good-complete --slot "$BOOT_SLOT" --result ok
+	clear_pending_slot_state
 	forensic --stage verify --event complete --slot "$BOOT_SLOT" --result ok
 	log "Slot committed successfully"
 	exit 0

@@ -32,10 +32,10 @@ The system SHALL use a RAM-queued batching layer behind volatile journald so
 general host log data is appended to persistent storage under `/data/logs` in
 large, infrequent, sequential writes rather than in many small direct writes.
 
-#### Scenario: Buffered host logs are appended in batches
+#### Scenario: Buffered host logs are appended during runtime buffering flushes
 
-- **WHEN** the device continues normal runtime logging and the in-memory batch
-  queue reaches its configured write threshold
+- **WHEN** the device continues normal runtime logging and the buffering layer
+  reaches its configured write threshold or flush interval
 - **THEN** buffered general host journal data is appended to persistent storage
   under `/data/logs` in a large sequential write
 

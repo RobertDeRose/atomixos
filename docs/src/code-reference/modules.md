@@ -74,7 +74,7 @@ upper/work directories:
 | overlay (combined) | `/`                   | overlay    | --      | Unified writable root presented to userspace              |
 | lower (read-only)  | `/run/rootfs-base`    | squashfs   | --      | Immutable NixOS system from the selected RAUC rootfs slot |
 | upper (writable)   | `/run/overlay-root/*` | tmpfs      | runtime | Ephemeral writes, lost on reboot                          |
-| persistent state   | `/data`               | f2fs       | dynamic | Created on first boot (`PARTLABEL=data`, nofail)          |
+| persistent state   | `/data`               | f2fs       | dynamic | Created on first boot (`PARTLABEL=data`, nofail, noatime) |
 
 The overlay is assembled in the initrd before `switch_root`:
 
@@ -118,27 +118,29 @@ on first boot.
 
 ## forensics.nix
 
-**Purpose**: Tier 0 forensic logging and the buffered journald boundary.
+**Purpose**: Tier 0 forensic logging plus the volatile `journald` to buffered `rsyslog` boundary for general runtime logs.
 
 **Key configuration:**
 
 | Setting           | Value                                            | Notes                                                      |
 |-------------------|--------------------------------------------------|------------------------------------------------------------|
 | journald storage  | `Storage=volatile`                               | Keeps general runtime logs in tmpfs-backed journal storage |
-| journald cap      | `RuntimeMaxUse=64M`                              | Bounds memory use for runtime logs                         |
+| journald cap      | `RuntimeMaxUse=32M`                              | Bounds memory use for runtime logs                         |
+| rsyslog output    | buffered `omfile` appends to `/data/logs/*.log`  | Uses async buffered writes instead of direct per-line sync |
 | Podman log driver | `journald`                                       | Routes container stdout/stderr into the same journald path |
 | slot mounts       | `/run/forensics/boot.0`, `/run/forensics/boot.1` | Mounts both boot partitions for slot-local forensic access |
 
 **Services:**
 
-| Service                                    | Purpose                               |
-|--------------------------------------------|---------------------------------------|
-| `forensics-boot-start.service`             | Records `boot userspace-start`        |
-| `forensics-boot-complete.service`          | Records `boot boot-complete`          |
-| `forensics-data-mount-outcome.service`     | Records `/data` mount success/failure |
-| `forensics-shutdown-flush.service`         | Records shutdown Tier 0 flush markers |
-| `forensics-initrd-start.service`           | Records early initrd `boot-start`     |
-| `forensics-initrd-rootfs-selected.service` | Records initrd `lowerdev-selected`    |
+| Service                                    | Purpose                                  |
+|--------------------------------------------|------------------------------------------|
+| `forensics-boot-start.service`             | Records `boot userspace-start`           |
+| `forensics-boot-complete.service`          | Records `boot boot-complete`             |
+| `forensics-slot-transition.service`        | Records slot switch and fallback markers |
+| `forensics-data-mount-outcome.service`     | Records `/data` mount success/failure    |
+| `forensics-shutdown-flush.service`         | Records shutdown Tier 0 flush markers    |
+| `forensics-initrd-start.service`           | Records early initrd `boot-start`        |
+| `forensics-initrd-rootfs-selected.service` | Records initrd `lowerdev-selected`       |
 
 The module also installs the `forensic-log` CLI and the helper used to choose
 the currently relevant boot-partition forensic mount.
@@ -317,7 +319,7 @@ files in `/var/lib/rauc/`.
 
 ## watchdog.nix
 
-**Purpose**: systemd hardware watchdog configuration (currently disabled on Rock64 during development).
+**Purpose**: systemd hardware watchdog integration plus forensic boot-count and rollback markers.
 
 ```nix
 systemd.settings.Manager = {
@@ -325,6 +327,10 @@ systemd.settings.Manager = {
   # RebootWatchdogSec = "10min";
 };
 ```
+
+The hardware watchdog manager settings remain disabled during development, but
+`watchdog-boot-count.service` is installed so the real boot-count and rollback
+path records watchdog lifecycle markers through `forensic-log`.
 
 ---
 

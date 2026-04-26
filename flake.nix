@@ -104,6 +104,7 @@
         [
           mdbook
           mdbook-mermaid
+          pkgsFor.nixfmt
         ];
 
       # Shared module that applies the overlay to NixOS configurations
@@ -263,9 +264,14 @@
             forensics-boot-markers = import ./nix/tests/forensics-boot-markers.nix netTestArgs;
             forensics-mount-selection = import ./nix/tests/forensics-mount-selection.nix netTestArgs;
             forensics-ordering = import ./nix/tests/forensics-ordering.nix netTestArgs;
+            forensics-podman-log-path = import ./nix/tests/forensics-podman-log-path.nix netTestArgs;
             forensics-persistence = import ./nix/tests/forensics-persistence.nix netTestArgs;
             forensics-readback = import ./nix/tests/forensics-readback.nix netTestArgs;
+            forensics-rsyslog-path = import ./nix/tests/forensics-rsyslog-path.nix netTestArgs;
+            forensics-rsyslog-buffering = import ./nix/tests/forensics-rsyslog-buffering.nix netTestArgs;
+            forensics-shutdown-flush = import ./nix/tests/forensics-shutdown-flush.nix netTestArgs;
             forensics-rollover = import ./nix/tests/forensics-rollover.nix netTestArgs;
+            forensics-slot-transition = import ./nix/tests/forensics-slot-transition.nix netTestArgs;
             network-isolation = import ./nix/tests/network-isolation.nix netTestArgs;
             ssh-wan-toggle = import ./nix/tests/ssh-wan-toggle.nix netTestArgs;
           };
@@ -298,9 +304,14 @@
             forensics-boot-markers = import ./nix/tests/forensics-boot-markers.nix darwinNetTestArgs;
             forensics-mount-selection = import ./nix/tests/forensics-mount-selection.nix darwinNetTestArgs;
             forensics-ordering = import ./nix/tests/forensics-ordering.nix darwinNetTestArgs;
+            forensics-podman-log-path = import ./nix/tests/forensics-podman-log-path.nix darwinNetTestArgs;
             forensics-persistence = import ./nix/tests/forensics-persistence.nix darwinNetTestArgs;
             forensics-readback = import ./nix/tests/forensics-readback.nix darwinNetTestArgs;
+            forensics-rsyslog-path = import ./nix/tests/forensics-rsyslog-path.nix darwinNetTestArgs;
+            forensics-rsyslog-buffering = import ./nix/tests/forensics-rsyslog-buffering.nix darwinNetTestArgs;
+            forensics-shutdown-flush = import ./nix/tests/forensics-shutdown-flush.nix darwinNetTestArgs;
             forensics-rollover = import ./nix/tests/forensics-rollover.nix darwinNetTestArgs;
+            forensics-slot-transition = import ./nix/tests/forensics-slot-transition.nix darwinNetTestArgs;
             network-isolation = import ./nix/tests/network-isolation.nix darwinNetTestArgs;
             ssh-wan-toggle = import ./nix/tests/ssh-wan-toggle.nix darwinNetTestArgs;
           };

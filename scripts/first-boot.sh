@@ -8,6 +8,7 @@
 set -euo pipefail
 
 log() { echo "[first-boot] $*"; }
+FORENSICS_STATE_DIR="${ATOMIXOS_FORENSICS_RAUC_STATE_DIR:-/data/rauc/forensics}"
 
 forensic() {
 	if command -v forensic-log >/dev/null 2>&1; then
@@ -84,6 +85,8 @@ fi
 
 forensic --stage firstboot --event start --slot "$BOOT_SLOT"
 
+mkdir -p "$FORENSICS_STATE_DIR"
+
 ensure_rauc_env
 
 log "Marking current slot as good via RAUC: $BOOT_SLOT"
@@ -92,6 +95,11 @@ if ! rauc status mark-good "$BOOT_SLOT"; then
 	exit 1
 fi
 forensic --stage rauc --event mark-good-complete --slot "$BOOT_SLOT" --result ok
+rm -f \
+	"$FORENSICS_STATE_DIR/pending-source-slot" \
+	"$FORENSICS_STATE_DIR/pending-target-slot" \
+	"$FORENSICS_STATE_DIR/pending-target-version" \
+	"$FORENSICS_STATE_DIR/pending-target-booted"
 
 write_dev_admin_password_hash
 enable_dev_ssh_on_wan

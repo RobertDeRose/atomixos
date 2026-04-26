@@ -165,15 +165,15 @@ the device is offline or on the LAN. SSH key-only prevents brute-force attacks o
 ## Decision 17: Three-tier logging model
 
 **Choice**: Use a three-tier logging model: a slot-local forensic ring on each boot partition for critical lifecycle
-events, tmpfs-first journald during runtime for general host and container logs, and bounded journal export to `/data`
-for richer diagnostics.
+events, tmpfs-first journald during runtime for general host and container logs, and an `rsyslog` RAM queue that appends
+buffered logs to `/data/logs` for richer diagnostics.
 
 **Rationale**: Making the full journal always persistent would increase steady-state eMMC wear and still would not tie
 forensics to the exact boot slot involved in an update or rollback. A dedicated Tier 0 ring under `/boot/forensics`
 keeps the most important records with the slot they describe, survives reboot and slot changes, and remains bounded to
 `28 MiB` per boot slot. The rest of the system stays memory-first during runtime: journald uses volatile storage with a
-runtime cap, Podman logs to journald by default, and the broader journal is intended to be checkpointed to `/data`
-periodically and on orderly shutdown.
+runtime cap, Podman logs to journald by default, and `rsyslog` drains journald into a RAM-backed queue before appending
+larger batches to `/data/logs` during runtime and orderly shutdown.
 
 **Trade-off**: Tier 0 is intentionally not a complete journal. Operators get durable markers for boot progression,
 update/install/confirm flows, rollback triggers, and shutdown, while the richer general journal follows a bounded-loss

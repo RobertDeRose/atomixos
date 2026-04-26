@@ -293,6 +293,7 @@
       neededForBoot = false;
       options = [
         "nofail"
+        "noatime"
         "x-systemd.device-timeout=60s"
       ];
     };

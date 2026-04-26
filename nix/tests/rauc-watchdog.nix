@@ -30,37 +30,9 @@
 
 let
   nixos-lib = import (pkgs.path + "/nixos/lib") { };
-  forensicStub = pkgs.writeShellScriptBin "forensic-log" ''
-    set -euo pipefail
-    segment_dir=/boot/forensics
-    mkdir -p "$segment_dir"
-    if [ ! -f "$segment_dir/meta" ]; then
-      printf '%s\n' "format=v1" > "$segment_dir/meta"
-    fi
-    if [ ! -f "$segment_dir/segment-0.log" ]; then
-      : > "$segment_dir/segment-0.log"
-    fi
-
-    record=""
-    while [ $# -gt 0 ]; do
-      case "$1" in
-        --stage|--event|--slot|--result|--reason|--target-slot|--version|--device|--service|--attempt|--detail)
-          key=$(printf '%s' "$1" | sed 's/^--//' | tr '-' '_')
-          value="$2"
-          if [ -n "$record" ]; then
-            record="$record "
-          fi
-          record="$record$key=$value"
-          shift 2
-          ;;
-        *)
-          shift
-          ;;
-      esac
-    done
-
-    printf '%s\n' "$record" >> "$segment_dir/segment-0.log"
-  '';
+  forensicCli = pkgs.writeShellScriptBin "forensic-log" (
+    builtins.readFile ../../scripts/forensic-log.sh
+  );
 
   signingCert = ../../certs/dev.signing.cert.pem;
   signingKey = ../../certs/dev.signing.key.pem;
@@ -120,6 +92,7 @@ nixos-lib.runTest {
     {
       imports = [
         raucModule
+        ../../modules/watchdog.nix
         qemuModule
         ./rauc-qemu-config.nix
       ];
@@ -142,8 +115,13 @@ nixos-lib.runTest {
       system.stateVersion = "25.11";
       environment.systemPackages = [
         pkgs.rauc
-        forensicStub
+        forensicCli
       ];
+
+      environment.etc."atomixos/current-boot-forensics-mount".source =
+        pkgs.writeShellScript "current-boot-forensics-mount" ''
+          printf '%s\n' /boot
+        '';
 
       boot.kernelParams = [ "rauc.slot=boot.0" ];
       boot.kernelModules = [ "i6300esb" ];
@@ -163,63 +141,6 @@ nixos-lib.runTest {
         RebootWatchdogSec = lib.mkForce "1min";
       };
 
-      # Boot-count decrement service — simulates U-Boot's BOOT_B_LEFT logic.
-      # On each boot: if a boot-count file exists for the current primary,
-      # decrement it. If it reaches 0, roll back to the other slot and mark
-      # the failed slot as bad.
-      systemd.services.boot-count-decrement = {
-        description = "Decrement RAUC boot count (simulates U-Boot)";
-        wantedBy = [ "multi-user.target" ];
-        before = [ "rauc.service" ];
-        path = [
-          pkgs.coreutils
-          forensicStub
-        ];
-        serviceConfig.Type = "oneshot";
-        script = ''
-          STATE_DIR="/var/lib/rauc"
-          mkdir -p "$STATE_DIR"
-
-          PRIMARY=$(cat "$STATE_DIR/primary" 2>/dev/null || echo "A")
-          COUNT_FILE="$STATE_DIR/boot-count.$PRIMARY"
-
-          if [ ! -f "$COUNT_FILE" ]; then
-            echo "boot-count-decrement: no boot count for $PRIMARY, skipping"
-            exit 0
-          fi
-
-          COUNT=$(cat "$COUNT_FILE")
-          echo "boot-count-decrement: $PRIMARY count=$COUNT"
-
-          NEW_COUNT=$((COUNT - 1))
-          forensic-log --stage watchdog --event boot-count-decrement --detail "$PRIMARY:$NEW_COUNT"
-
-          if [ "$NEW_COUNT" -le 0 ]; then
-            echo "boot-count-decrement: count exhausted, rolling back from $PRIMARY"
-            if [ "$PRIMARY" = "B" ]; then
-              FAILED_SLOT="boot.1"
-              TARGET_SLOT="boot.0"
-            else
-              FAILED_SLOT="boot.0"
-              TARGET_SLOT="boot.1"
-            fi
-            forensic-log --stage watchdog --event rollback-triggered --slot "$FAILED_SLOT" --target-slot "$TARGET_SLOT" --reason boot-count-exhausted
-            # Roll back to the other slot
-            if [ "$PRIMARY" = "B" ]; then
-              echo "A" > "$STATE_DIR/primary"
-            else
-              echo "B" > "$STATE_DIR/primary"
-            fi
-            echo "bad" > "$STATE_DIR/state.$PRIMARY"
-            rm -f "$COUNT_FILE"
-            forensic-log --stage rauc --event rollback-complete --slot "$FAILED_SLOT" --target-slot "$TARGET_SLOT" --result ok
-            echo "boot-count-decrement: rollback complete"
-          else
-            echo "$NEW_COUNT" > "$COUNT_FILE"
-            echo "boot-count-decrement: decremented to $NEW_COUNT"
-          fi
-        '';
-      };
     };
 
   testScript = ''
@@ -227,6 +148,7 @@ nixos-lib.runTest {
     gateway.start()
     gateway.wait_for_unit("multi-user.target")
     gateway.wait_for_unit("rauc.service")
+    gateway.wait_until_succeeds("systemctl show -p Result --value watchdog-boot-count.service | grep -qx success")
 
     # Verify i6300esb watchdog device is present and the kernel module loaded
     gateway.succeed("test -c /dev/watchdog")
@@ -279,7 +201,7 @@ nixos-lib.runTest {
     assert count == "1", f"Expected boot-count.B=1 after first reboot, got: {count}"
     primary = gateway.succeed("cat /var/lib/rauc/primary").strip()
     assert primary == "B", f"Expected primary still B after first reboot, got: {primary}"
-    gateway.succeed("grep 'stage=watchdog event=boot-count-decrement detail=B:1' /boot/forensics/segment-0.log")
+    gateway.succeed("grep 'slot=boot.0 stage=watchdog event=boot-count-decrement detail=B:1' /boot/forensics/segment-0.log")
     gateway.log(f"After reboot 1: primary={primary}, boot-count.B={count}")
 
     # Phase 4: Second simulated watchdog reboot — this exhausts the count.
@@ -305,8 +227,8 @@ nixos-lib.runTest {
     state_a = gateway.succeed("cat /var/lib/rauc/state.A").strip()
     assert state_a == "good", f"Expected state.A=good, got: {state_a}"
 
-    gateway.succeed("grep 'stage=watchdog event=rollback-triggered slot=boot.1 target_slot=boot.0 reason=boot-count-exhausted' /boot/forensics/segment-0.log")
-    gateway.succeed("grep 'stage=rauc event=rollback-complete slot=boot.1 target_slot=boot.0 result=ok' /boot/forensics/segment-0.log")
+    gateway.succeed("grep 'slot=boot.1 stage=watchdog event=rollback-triggered target_slot=boot.0 reason=boot-count-exhausted' /boot/forensics/segment-0.log")
+    gateway.succeed("grep 'slot=boot.1 stage=rauc event=rollback-complete result=ok target_slot=boot.0' /boot/forensics/segment-0.log")
 
     gateway.log("Watchdog rollback test passed — B exhausted boot count, rolled back to A")
   '';
