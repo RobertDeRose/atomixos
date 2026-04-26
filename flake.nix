@@ -46,7 +46,9 @@
             pkgsFor.stdenvNoCC.mkDerivation {
               inherit pname version;
               src = pkgsFor.fetchurl {
-                url = "https://github.com/${repo}/releases/download/v${version}/${platforms.${pkgsFor.stdenv.hostPlatform.system}.asset}";
+                url = "https://github.com/${repo}/releases/download/v${version}/${
+                  platforms.${pkgsFor.stdenv.hostPlatform.system}.asset
+                }";
                 hash = platforms.${pkgsFor.stdenv.hostPlatform.system}.hash;
               };
               dontUnpack = true;
@@ -99,7 +101,10 @@
             };
           };
         in
-        [ mdbook mdbook-mermaid ];
+        [
+          mdbook
+          mdbook-mermaid
+        ];
 
       # Shared module that applies the overlay to NixOS configurations
       overlayModule =
@@ -255,6 +260,12 @@
 
           netTests = {
             firewall = import ./nix/tests/firewall.nix netTestArgs;
+            forensics-boot-markers = import ./nix/tests/forensics-boot-markers.nix netTestArgs;
+            forensics-mount-selection = import ./nix/tests/forensics-mount-selection.nix netTestArgs;
+            forensics-ordering = import ./nix/tests/forensics-ordering.nix netTestArgs;
+            forensics-persistence = import ./nix/tests/forensics-persistence.nix netTestArgs;
+            forensics-readback = import ./nix/tests/forensics-readback.nix netTestArgs;
+            forensics-rollover = import ./nix/tests/forensics-rollover.nix netTestArgs;
             network-isolation = import ./nix/tests/network-isolation.nix netTestArgs;
             ssh-wan-toggle = import ./nix/tests/ssh-wan-toggle.nix netTestArgs;
           };
@@ -284,6 +295,12 @@
             rauc-power-loss = import ./nix/tests/rauc-power-loss.nix darwinRaucTestArgs;
             rauc-watchdog = import ./nix/tests/rauc-watchdog.nix darwinRaucTestArgs;
             firewall = import ./nix/tests/firewall.nix darwinNetTestArgs;
+            forensics-boot-markers = import ./nix/tests/forensics-boot-markers.nix darwinNetTestArgs;
+            forensics-mount-selection = import ./nix/tests/forensics-mount-selection.nix darwinNetTestArgs;
+            forensics-ordering = import ./nix/tests/forensics-ordering.nix darwinNetTestArgs;
+            forensics-persistence = import ./nix/tests/forensics-persistence.nix darwinNetTestArgs;
+            forensics-readback = import ./nix/tests/forensics-readback.nix darwinNetTestArgs;
+            forensics-rollover = import ./nix/tests/forensics-rollover.nix darwinNetTestArgs;
             network-isolation = import ./nix/tests/network-isolation.nix darwinNetTestArgs;
             ssh-wan-toggle = import ./nix/tests/ssh-wan-toggle.nix darwinNetTestArgs;
           };

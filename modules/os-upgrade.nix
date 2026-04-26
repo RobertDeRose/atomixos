@@ -51,6 +51,7 @@ in
         pkgs.curl
         pkgs.jq
         pkgs.systemd
+        pkgs.coreutils
       ];
 
       environment = {

@@ -30,6 +30,37 @@
 
 let
   nixos-lib = import (pkgs.path + "/nixos/lib") { };
+  forensicStub = pkgs.writeShellScriptBin "forensic-log" ''
+    set -euo pipefail
+    segment_dir=/boot/forensics
+    mkdir -p "$segment_dir"
+    if [ ! -f "$segment_dir/meta" ]; then
+      printf '%s\n' "format=v1" > "$segment_dir/meta"
+    fi
+    if [ ! -f "$segment_dir/segment-0.log" ]; then
+      : > "$segment_dir/segment-0.log"
+    fi
+
+    record=""
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --stage|--event|--slot|--result|--reason|--target-slot|--version|--device|--service|--attempt|--detail)
+          key=$(printf '%s' "$1" | sed 's/^--//' | tr '-' '_')
+          value="$2"
+          if [ -n "$record" ]; then
+            record="$record "
+          fi
+          record="$record$key=$value"
+          shift 2
+          ;;
+        *)
+          shift
+          ;;
+      esac
+    done
+
+    printf '%s\n' "$record" >> "$segment_dir/segment-0.log"
+  '';
 
   signingCert = ../../certs/dev.signing.cert.pem;
   signingKey = ../../certs/dev.signing.key.pem;
@@ -109,7 +140,10 @@ nixos-lib.runTest {
       };
 
       system.stateVersion = "25.11";
-      environment.systemPackages = [ pkgs.rauc ];
+      environment.systemPackages = [
+        pkgs.rauc
+        forensicStub
+      ];
 
       boot.kernelParams = [ "rauc.slot=boot.0" ];
       boot.kernelModules = [ "i6300esb" ];
@@ -118,6 +152,8 @@ nixos-lib.runTest {
         "+plain"
         "-verity"
       ];
+
+      systemd.tmpfiles.rules = [ "d /boot/forensics 0755 root root -" ];
 
       # Use a short watchdog timeout to speed up the test.
       # 10s runtime means systemd kicks every ~5s; if frozen, the
@@ -135,6 +171,10 @@ nixos-lib.runTest {
         description = "Decrement RAUC boot count (simulates U-Boot)";
         wantedBy = [ "multi-user.target" ];
         before = [ "rauc.service" ];
+        path = [
+          pkgs.coreutils
+          forensicStub
+        ];
         serviceConfig.Type = "oneshot";
         script = ''
           STATE_DIR="/var/lib/rauc"
@@ -152,9 +192,18 @@ nixos-lib.runTest {
           echo "boot-count-decrement: $PRIMARY count=$COUNT"
 
           NEW_COUNT=$((COUNT - 1))
+          forensic-log --stage watchdog --event boot-count-decrement --detail "$PRIMARY:$NEW_COUNT"
 
           if [ "$NEW_COUNT" -le 0 ]; then
             echo "boot-count-decrement: count exhausted, rolling back from $PRIMARY"
+            if [ "$PRIMARY" = "B" ]; then
+              FAILED_SLOT="boot.1"
+              TARGET_SLOT="boot.0"
+            else
+              FAILED_SLOT="boot.0"
+              TARGET_SLOT="boot.1"
+            fi
+            forensic-log --stage watchdog --event rollback-triggered --slot "$FAILED_SLOT" --target-slot "$TARGET_SLOT" --reason boot-count-exhausted
             # Roll back to the other slot
             if [ "$PRIMARY" = "B" ]; then
               echo "A" > "$STATE_DIR/primary"
@@ -163,6 +212,7 @@ nixos-lib.runTest {
             fi
             echo "bad" > "$STATE_DIR/state.$PRIMARY"
             rm -f "$COUNT_FILE"
+            forensic-log --stage rauc --event rollback-complete --slot "$FAILED_SLOT" --target-slot "$TARGET_SLOT" --result ok
             echo "boot-count-decrement: rollback complete"
           else
             echo "$NEW_COUNT" > "$COUNT_FILE"
@@ -198,7 +248,9 @@ nixos-lib.runTest {
         "${testBundle}/test-watchdog.raucb",
         "/tmp/bundles/test-watchdog.raucb",
     )
+    gateway.succeed("forensic-log --stage rauc --event install-start --target-slot boot.1 --version 2.0.0")
     gateway.succeed("rauc install /tmp/bundles/test-watchdog.raucb")
+    gateway.succeed("forensic-log --stage rauc --event install-complete --slot boot.1 --version 2.0.0 --result ok")
 
     primary = gateway.succeed("cat /var/lib/rauc/primary").strip()
     assert primary == "B", f"Expected primary=B after install, got: {primary}"
@@ -227,6 +279,7 @@ nixos-lib.runTest {
     assert count == "1", f"Expected boot-count.B=1 after first reboot, got: {count}"
     primary = gateway.succeed("cat /var/lib/rauc/primary").strip()
     assert primary == "B", f"Expected primary still B after first reboot, got: {primary}"
+    gateway.succeed("grep 'stage=watchdog event=boot-count-decrement detail=B:1' /boot/forensics/segment-0.log")
     gateway.log(f"After reboot 1: primary={primary}, boot-count.B={count}")
 
     # Phase 4: Second simulated watchdog reboot — this exhausts the count.
@@ -251,6 +304,9 @@ nixos-lib.runTest {
     # Slot A should still be good
     state_a = gateway.succeed("cat /var/lib/rauc/state.A").strip()
     assert state_a == "good", f"Expected state.A=good, got: {state_a}"
+
+    gateway.succeed("grep 'stage=watchdog event=rollback-triggered slot=boot.1 target_slot=boot.0 reason=boot-count-exhausted' /boot/forensics/segment-0.log")
+    gateway.succeed("grep 'stage=rauc event=rollback-complete slot=boot.1 target_slot=boot.0 result=ok' /boot/forensics/segment-0.log")
 
     gateway.log("Watchdog rollback test passed — B exhausted boot count, rolled back to A")
   '';

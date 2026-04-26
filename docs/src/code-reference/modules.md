@@ -6,20 +6,40 @@ hardware-specific modules (`hardware-rock64.nix`, `hardware-qemu.nix`).
 ## Module Dependency Graph
 
 ```mermaid
-flowchart LR
+flowchart TD
     KERNEL["kernel-config.nix<br/>shared stripped kernel baseline"]
-    ROCK64["hardware-rock64.nix"] --> BASE["base.nix"]
-    QEMU["hardware-qemu.nix"] --> BASE
 
-    BASE --> NETWORKING["networking.nix"]
-    BASE --> FIREWALL["firewall.nix"]
-    BASE --> LAN["lan-gateway.nix"]
-    BASE --> OPENVPN["openvpn.nix"]
-    BASE --> RAUC["rauc.nix"]
-    BASE --> FIRSTBOOT["first-boot.nix"]
-    BASE --> VERIFY["os-verification.nix"]
-    BASE --> UPGRADE["os-upgrade.nix"]
-    BASE --> WATCHDOG["watchdog.nix"]
+    subgraph HARDWARE["hardware targets"]
+        direction LR
+        ROCK64["hardware-rock64.nix"]
+        QEMU["hardware-qemu.nix"]
+    end
+
+    ROCK64 --> BASE["base.nix"]
+    QEMU --> BASE
+
+    subgraph IMPORTS["base.nix imports"]
+        direction LR
+        NETWORKING["networking.nix"]
+        FIREWALL["firewall.nix"]
+        LAN["lan-gateway.nix"]
+        OPENVPN["openvpn.nix"]
+        RAUC["rauc.nix"]
+        FIRSTBOOT["first-boot.nix"]
+        VERIFY["os-verification.nix"]
+        UPGRADE["os-upgrade.nix"]
+        WATCHDOG["watchdog.nix"]
+    end
+
+    BASE --> NETWORKING
+    BASE --> FIREWALL
+    BASE --> LAN
+    BASE --> OPENVPN
+    BASE --> RAUC
+    BASE --> FIRSTBOOT
+    BASE --> VERIFY
+    BASE --> UPGRADE
+    BASE --> WATCHDOG
 
     KERNEL -. shared baseline .-> ROCK64
     KERNEL -. shared baseline .-> QEMU

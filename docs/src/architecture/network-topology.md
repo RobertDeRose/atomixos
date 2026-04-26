@@ -7,14 +7,19 @@ application ingress.
 
 ```mermaid
 flowchart LR
-    WAN["WAN<br/>internet"] --> ETH0["eth0<br/>DHCP client<br/>Accepts: HTTPS 443, OpenVPN 1194"]
-    LAN["LAN<br/>isolated"] --> ETH1["eth1<br/>Static: 172.20.30.1/24<br/>DHCP server: dnsmasq<br/>NTP server: chrony"]
+    WAN["WAN<br/>internet"] --> ETH0["eth0<br/>DHCP client<br/>Accepts HTTPS 443 and OpenVPN 1194"]
+    LAN["LAN<br/>isolated devices"] --> ETH1["eth1<br/>Static 172.20.30.1/24<br/>DHCP: dnsmasq<br/>NTP: chrony"]
 
     subgraph DEVICE["AtomixOS device"]
+        direction TB
         ETH0
-        CORE["ip_forward = OFF<br/>FORWARD chain: DROP all"]
+        CORE["No IP forwarding<br/>FORWARD chain: DROP all"]
         ETH1
+        PROXY["Application proxy path<br/>Traefik with authentication"]
     end
+
+    ETH0 -. application-layer only .-> PROXY
+    PROXY -.-> ETH1
 ```
 
 ## WAN Interface (eth0)

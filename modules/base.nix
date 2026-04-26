@@ -21,6 +21,7 @@
   };
 
   imports = [
+    ./forensics.nix
     ./networking.nix
     ./firewall.nix
     ./lan-gateway.nix

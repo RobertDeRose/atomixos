@@ -57,6 +57,7 @@ in
       pkgs.coreutils
       pkgs.systemd
       ubootEnvTools
+      pkgs.util-linux
     ];
     environment = firstBootEnv;
 

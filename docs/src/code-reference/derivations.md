@@ -7,9 +7,16 @@ The `nix/` directory contains four derivations that produce the build artifacts.
 
 ```mermaid
 flowchart LR
-    BOOTSCRIPT["boot-script.nix"] --> IMAGE["image.nix<br/>flashable .img"]
-    SQUASHFS["squashfs.nix"] --> IMAGE
-    SQUASHFS --> RAUCBUNDLE["rauc-bundle.nix<br/>signed .raucb for OTA"]
+    SQUASHFS["squashfs.nix"] --> ROOTFS["rootfs.squashfs"]
+    BOOTSCRIPT["boot-script.nix"] --> BOOTSCR["boot.scr"]
+
+    ROOTFS --> IMAGE["image.nix"]
+    BOOTSCR --> IMAGE
+    IMAGE --> IMGOUT["flashable .img"]
+
+    ROOTFS --> RAUCBUNDLE["rauc-bundle.nix"]
+    BOOTSCR --> RAUCBUNDLE
+    RAUCBUNDLE --> BUNDLEOUT["signed .raucb for OTA"]
 ```
 
 ---

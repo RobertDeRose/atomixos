@@ -9,6 +9,12 @@ set -euo pipefail
 
 log() { echo "[first-boot] $*"; }
 
+forensic() {
+	if command -v forensic-log >/dev/null 2>&1; then
+		forensic-log "$@" || true
+	fi
+}
+
 write_dev_admin_password_hash() {
 	local hash_file="/data/config/admin-password-hash"
 	local hash_value="${ATOMIXOS_DEV_ADMIN_PASSWORD_HASH:-}"
@@ -64,6 +70,7 @@ SENTINEL="/data/.completed_first_boot"
 # Guard (belt-and-suspenders alongside systemd ConditionPathExists)
 if [ -f "$SENTINEL" ]; then
 	log "Sentinel exists, skipping (not first boot)"
+	forensic --stage firstboot --event failed --reason sentinel-exists
 	exit 0
 fi
 
@@ -71,13 +78,20 @@ fi
 BOOT_SLOT="$(current_boot_slot || true)"
 if [ -z "$BOOT_SLOT" ]; then
 	log "ERROR: could not determine boot slot from /proc/cmdline"
+	forensic --stage firstboot --event failed --reason missing-boot-slot
 	exit 1
 fi
+
+forensic --stage firstboot --event start --slot "$BOOT_SLOT"
 
 ensure_rauc_env
 
 log "Marking current slot as good via RAUC: $BOOT_SLOT"
-rauc status mark-good "$BOOT_SLOT"
+if ! rauc status mark-good "$BOOT_SLOT"; then
+	forensic --stage rauc --event mark-good-failed --slot "$BOOT_SLOT" --reason first-boot
+	exit 1
+fi
+forensic --stage rauc --event mark-good-complete --slot "$BOOT_SLOT" --result ok
 
 write_dev_admin_password_hash
 enable_dev_ssh_on_wan
@@ -87,3 +101,4 @@ log "Writing first-boot sentinel: $SENTINEL"
 date -Iseconds >"$SENTINEL"
 
 log "First boot initialization complete"
+forensic --stage firstboot --event complete --slot "$BOOT_SLOT" --result ok

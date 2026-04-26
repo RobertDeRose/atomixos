@@ -37,6 +37,8 @@ in
       pkgs.jq
       pkgs.systemd
       pkgs.iproute2
+      pkgs.coreutils
+      pkgs.gnugrep
     ];
 
     serviceConfig = {

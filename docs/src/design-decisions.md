@@ -162,6 +162,21 @@ the device is offline or on the LAN. SSH key-only prevents brute-force attacks o
 
 **Result**: Approximately 27% reduction in closure size compared to a default NixOS system with the same services.
 
+## Decision 17: Three-tier logging model
+
+**Choice**: Keep general host and application logging volatile, but store a small bounded set of critical lifecycle and
+update events in a slot-local forensic ring on each boot partition.
+
+**Rationale**: Making the full journal persistent would increase steady-state eMMC wear and still would not tie
+forensics to the exact boot slot involved in an update or rollback. A dedicated Tier 0 ring under `/boot/forensics`
+keeps the most important records with the slot they describe, survives reboot and slot changes, and remains bounded to
+`28 MiB` per boot slot. The rest of the system stays memory-first: journald uses volatile storage with a runtime cap,
+and Podman logs to journald by default.
+
+**Trade-off**: Tier 0 is intentionally not a complete journal. Operators get durable markers for boot progression,
+update/install/confirm flows, rollback triggers, and shutdown, but detailed service logs still need to be collected
+externally or inspected before reboot.
+
 ## Risks and Trade-offs
 
 | Risk                              | Mitigation                                                                                            |

@@ -6,17 +6,26 @@ recovery from failed updates.
 ## Normal Update Cycle
 
 ```mermaid
-flowchart TD
-    POLL["os-upgrade.service polls for a new bundle"]
-        --> INSTALL["rauc install writes boot + rootfs to the inactive slot pair"]
-    INSTALL --> ENV["RAUC sets BOOT_ORDER=B A and BOOT_B_LEFT=3"]
-    ENV --> REBOOT["Device reboots into the updated slot"]
-    REBOOT --> BOOTCOUNT["U-Boot decrements BOOT_B_LEFT on each boot attempt"]
-    BOOTCOUNT --> VERIFY["os-verification.service checks network, services, and 60s stability"]
-    VERIFY --> DECISION{"All checks pass?"}
-    DECISION -->|Yes| COMMIT["rauc status mark-good<br/>slot committed"]
-    DECISION -->|No| RETRY["Exit non-zero<br/>boot-count continues to decrement"]
-    RETRY --> FALLBACK["After 3 failed boots<br/>U-Boot falls back to the previous good slot"]
+sequenceDiagram
+    participant Upgrade as os-upgrade.service
+    participant RAUC
+    participant Boot as U-Boot
+    participant Verify as os-verification.service
+
+    Upgrade->>RAUC: Poll update server and install new bundle
+    RAUC->>RAUC: Write boot + rootfs to the inactive slot pair
+    RAUC->>Boot: Set BOOT_ORDER=B A and BOOT_B_LEFT=3
+    Boot->>Boot: Reboot into updated slot and decrement BOOT_B_LEFT
+    Boot->>Verify: Start updated system
+    Verify->>Verify: Check network, services, and 60s stability
+    alt Checks pass
+        Verify->>RAUC: rauc status mark-good
+        RAUC->>Boot: Commit updated slot
+    else Checks fail across 3 boots
+        Verify-->>Boot: Exit non-zero
+        Boot->>Boot: Keep decrementing boot counter
+        Boot->>Boot: Fall back to previous good slot
+    end
 ```
 
 ## Boot-Count Mechanism

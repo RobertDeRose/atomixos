@@ -5,10 +5,16 @@ set -euo pipefail
 
 # Dependencies (must be on PATH): rauc, jq, systemctl, ip
 
-SUSTAIN_DURATION=60 # 60 seconds
-CHECK_INTERVAL=5    # check every 5s during sustain
+SUSTAIN_DURATION="${ATOMIXOS_VERIFICATION_SUSTAIN_DURATION:-60}"
+CHECK_INTERVAL="${ATOMIXOS_VERIFICATION_CHECK_INTERVAL:-5}"
 
 log() { echo "[os-verification] $*"; }
+
+forensic() {
+	if command -v forensic-log >/dev/null 2>&1; then
+		forensic-log "$@" || true
+	fi
+}
 
 current_boot_slot() {
 	local arg
@@ -32,20 +38,42 @@ if [ -z "$SLOT_STATUS" ]; then
 	BOOT_SLOT="$(current_boot_slot || true)"
 	if [ -z "$BOOT_SLOT" ]; then
 		log "Could not determine boot slot from /proc/cmdline"
+		forensic --stage verify --event failed --reason missing-boot-slot
 		exit 1
 	fi
 	log "Assuming first boot, marking good: $BOOT_SLOT"
-	rauc status mark-good "$BOOT_SLOT" || true
-	exit 0
+	forensic --stage verify --event start --slot "$BOOT_SLOT"
+	forensic --stage rauc --event mark-good-start --slot "$BOOT_SLOT"
+	if rauc status mark-good "$BOOT_SLOT"; then
+		forensic --stage rauc --event mark-good-complete --slot "$BOOT_SLOT" --result ok
+		forensic --stage verify --event complete --slot "$BOOT_SLOT" --result ok
+		exit 0
+	fi
+	forensic --stage rauc --event mark-good-failed --slot "$BOOT_SLOT" --reason initial-boot
+	forensic --stage verify --event failed --slot "$BOOT_SLOT" --reason mark-good-failed
+	exit 1
 fi
 
-BOOT_GOOD=$(printf '%s\n' "$RAUC_STATUS_JSON" | jq -r '.slots[] | select(.state.booted == "booted") | .state.boot_status // "unknown"' 2>/dev/null || true)
+BOOT_GOOD=$(printf '%s\n' "$RAUC_STATUS_JSON" | jq -r '
+	.booted as $booted
+	| .slots[]
+	| to_entries[]
+	| select(.key == $booted)
+	| .value.boot_status // "unknown"
+' 2>/dev/null || true)
 if [ "$BOOT_GOOD" = "good" ]; then
 	log "Slot already marked good, nothing to do"
+	forensic --stage verify --event complete --result already-good
 	exit 0
 fi
 
 log "Slot is pending confirmation, running health checks..."
+BOOT_SLOT="$(current_boot_slot || true)"
+if [ -z "$BOOT_SLOT" ]; then
+	forensic --stage verify --event failed --reason missing-boot-slot
+	exit 1
+fi
+forensic --stage verify --event start --slot "$BOOT_SLOT"
 
 # ── Step 2: System health checks ──
 check_service() {
@@ -85,6 +113,7 @@ fi
 
 if [ "$SYSTEM_OK" != "true" ]; then
 	log "FAIL: System health checks failed"
+	forensic --stage verify --event failed --slot "$BOOT_SLOT" --reason system-health
 	exit 1
 fi
 
@@ -94,13 +123,14 @@ log "System health checks passed"
 log "Starting sustained health check (${SUSTAIN_DURATION}s)..."
 
 ELAPSED=0
-while [ $ELAPSED -lt $SUSTAIN_DURATION ]; do
-	sleep $CHECK_INTERVAL
+while [ "$ELAPSED" -lt "$SUSTAIN_DURATION" ]; do
+	sleep "$CHECK_INTERVAL"
 	ELAPSED=$((ELAPSED + CHECK_INTERVAL))
 
 	# Check system services still up
 	if ! systemctl is-active --quiet "dnsmasq.service" 2>/dev/null; then
 		log "FAIL: dnsmasq stopped during sustained check"
+		forensic --stage verify --event failed --slot "$BOOT_SLOT" --reason sustained-check
 		exit 1
 	fi
 done
@@ -111,9 +141,19 @@ log "Sustained health check passed (${SUSTAIN_DURATION}s)"
 BOOT_SLOT="$(current_boot_slot || true)"
 if [ -z "$BOOT_SLOT" ]; then
 	log "Could not determine boot slot from /proc/cmdline"
+	forensic --stage verify --event failed --reason missing-boot-slot
 	exit 1
 fi
 
 log "All checks passed, marking slot as good: $BOOT_SLOT"
-rauc status mark-good "$BOOT_SLOT"
-log "Slot committed successfully"
+forensic --stage rauc --event mark-good-start --slot "$BOOT_SLOT"
+if rauc status mark-good "$BOOT_SLOT"; then
+	forensic --stage rauc --event mark-good-complete --slot "$BOOT_SLOT" --result ok
+	forensic --stage verify --event complete --slot "$BOOT_SLOT" --result ok
+	log "Slot committed successfully"
+	exit 0
+fi
+
+forensic --stage rauc --event mark-good-failed --slot "$BOOT_SLOT" --reason health-check
+forensic --stage verify --event failed --slot "$BOOT_SLOT" --reason mark-good-failed
+exit 1

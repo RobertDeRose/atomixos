@@ -4,8 +4,8 @@
 # This test:
 # 1. Boots a QEMU VM with RAUC + dnsmasq + chronyd + two network interfaces
 # 2. Creates /data/.completed_first_boot so the service condition is met
-# 3. Starts the os-verification service (slot is pending on fresh boot)
-# 4. Verifies the slot transitions to "good" after health checks pass
+# 3. Seeds the booted slot as pending in the custom backend
+# 4. Starts the os-verification service and verifies it marks the slot good
 #
 # No health manifest is provided, so container checks are skipped.
 # Only imports rauc.nix + hardware-qemu.nix — no podman/cockpit/traefik.
@@ -22,6 +22,48 @@
 
 let
   nixos-lib = import (pkgs.path + "/nixos/lib") { };
+  raucStub = pkgs.writeShellScriptBin "rauc" ''
+    set -euo pipefail
+
+    if [ "''${1:-}" = "status" ] && [ "''${2:-}" = "mark-good" ]; then
+      if [ "''${ATOMIXOS_TEST_FAIL_MARK_GOOD:-0}" = "1" ]; then
+        exit 1
+      fi
+    fi
+
+    exec ${pkgs.rauc}/bin/rauc "$@"
+  '';
+  forensicStub = pkgs.writeShellScriptBin "forensic-log" ''
+    set -euo pipefail
+    segment_dir=/boot/forensics
+    mkdir -p "$segment_dir"
+    if [ ! -f "$segment_dir/meta" ]; then
+      printf '%s\n' "format=v1" > "$segment_dir/meta"
+    fi
+    if [ ! -f "$segment_dir/segment-0.log" ]; then
+      : > "$segment_dir/segment-0.log"
+    fi
+
+    record=""
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --stage|--event|--slot|--result|--reason|--target-slot|--version|--device|--service|--attempt|--detail)
+          key=$(printf '%s' "$1" | sed 's/^--//' | tr '-' '_')
+          value="$2"
+          if [ -n "$record" ]; then
+            record="$record "
+          fi
+          record="$record$key=$value"
+          shift 2
+          ;;
+        *)
+          shift
+          ;;
+      esac
+    done
+
+    printf '%s\n' "$record" >> "$segment_dir/segment-0.log"
+  '';
 
   # The os-verification script — same source as modules/os-verification.nix
   verificationScript = pkgs.writeShellScript "os-verification" ''
@@ -55,8 +97,9 @@ nixos-lib.runTest {
 
       system.stateVersion = "25.11";
       environment.systemPackages = [
-        pkgs.rauc
+        raucStub
         pkgs.jq
+        forensicStub
       ];
 
       boot.kernelParams = [ "rauc.slot=boot.0" ];
@@ -105,10 +148,23 @@ nixos-lib.runTest {
         # so we can set up preconditions first.
 
         unitConfig.ConditionPathExists = "/data/.completed_first_boot";
+        path = [
+          raucStub
+          pkgs.jq
+          pkgs.systemd
+          pkgs.iproute2
+          pkgs.coreutils
+          pkgs.gnugrep
+          forensicStub
+        ];
 
         serviceConfig = {
           Type = "oneshot";
           ExecStart = verificationScript;
+          Environment = [
+            "ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=1"
+            "ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1"
+          ];
           RemainAfterExit = true;
           TimeoutStartSec = 600;
         };
@@ -118,6 +174,7 @@ nixos-lib.runTest {
       # The real device has /data on f2fs. For the test, a tmpfs suffices.
       systemd.tmpfiles.rules = [
         "d /data 0755 root root -"
+        "d /boot/forensics 0755 root root -"
       ];
     };
 
@@ -148,7 +205,10 @@ nixos-lib.runTest {
     gateway.wait_until_succeeds("ip -4 addr show eth0 | grep 'inet '", timeout=60)
     gateway.succeed("ip -4 addr show eth1 | grep '172.20.30.1'")
 
-    # 5. Inspect initial RAUC state — fresh boot, no statusfile.
+    # 5. Seed the booted slot as pending so os-verification must confirm it.
+    gateway.succeed("printf 'pending\n' > /var/lib/rauc/state.A")
+
+    # 6. Inspect initial RAUC state.
     status_json = gateway.succeed("rauc status --output-format=json 2>&1")
     gateway.log(f"Initial RAUC status: {status_json[:2000]}")
 
@@ -164,9 +224,28 @@ nixos-lib.runTest {
     # Verify the service completed successfully (RemainAfterExit=true)
     gateway.succeed("systemctl is-active os-verification.service")
 
+    # Verify forensic records were written
+    gateway.succeed("test -s /boot/forensics/segment-0.log")
+    gateway.succeed("grep 'stage=verify event=complete' /boot/forensics/segment-0.log")
+    gateway.succeed("grep 'stage=rauc event=mark-good-complete slot=boot.0 result=ok' /boot/forensics/segment-0.log")
+
     # Verify RAUC now reports the slot as good
     status_after = gateway.succeed("rauc status --output-format=json 2>&1")
     gateway.log(f"Final RAUC status: {status_after[:2000]}")
+
+    gateway.succeed("rm -f /boot/forensics/segment-0.log")
+    gateway.succeed("printf 'pending\n' > /var/lib/rauc/state.A")
+    gateway.succeed("ip addr flush dev eth1")
+    gateway.succeed("ip addr add 172.20.30.1/24 dev eth1")
+    gateway.succeed("ip link set eth1 up")
+    gateway.succeed("rm -f /tmp/rauc.status")
+    gateway.succeed("systemctl restart rauc.service")
+    gateway.wait_for_unit("rauc.service")
+    gateway.fail("PATH=${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:${forensicStub}/bin:$PATH ATOMIXOS_TEST_FAIL_MARK_GOOD=1 ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=1 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ${verificationScript} >/tmp/os-verification-fail.log 2>&1")
+    gateway.succeed("grep 'stage=rauc event=mark-good-start slot=boot.0' /boot/forensics/segment-0.log")
+    gateway.succeed("grep 'stage=rauc event=mark-good-failed slot=boot.0 reason=health-check' /boot/forensics/segment-0.log")
+    gateway.succeed("grep 'stage=verify event=failed slot=boot.0 reason=mark-good-failed' /boot/forensics/segment-0.log")
+    gateway.fail("grep 'stage=rauc event=mark-good-complete slot=boot.0 result=ok' /boot/forensics/segment-0.log")
 
     gateway.log("os-verification confirmation test passed — slot marked good after health checks")
   '';

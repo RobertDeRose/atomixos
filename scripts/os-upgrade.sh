@@ -11,9 +11,21 @@ set -euo pipefail
 UPDATE_URL="${OS_UPGRADE_URL:-http://localhost/updates}"
 DEVICE_ID=$(cat /sys/class/net/eth0/address 2>/dev/null | tr -d ':' || echo "unknown")
 BUNDLE_DIR="/data/config/bundles"
-CURRENT_VERSION=$(rauc status --output-format=json 2>/dev/null | jq -r '.slots[] | select(.state.booted == "booted") | .slot_status.bundle.version // "unknown"' || echo "unknown")
+CURRENT_VERSION=$(rauc status --output-format=json 2>/dev/null | jq -r '
+  .booted as $booted
+  | .slots[]
+  | to_entries[]
+  | select(.key == $booted)
+  | .value.slot_status.bundle.version // "unknown"
+' || echo "unknown")
 
 log() { echo "[os-upgrade] $*"; }
+
+forensic() {
+	if command -v forensic-log >/dev/null 2>&1; then
+		forensic-log "$@" || true
+	fi
+}
 
 log "Checking for updates (current version: $CURRENT_VERSION, device: $DEVICE_ID)..."
 
@@ -40,6 +52,7 @@ if [ "$LATEST_VERSION" = "$CURRENT_VERSION" ]; then
 fi
 
 log "New version available: $LATEST_VERSION (current: $CURRENT_VERSION)"
+forensic --stage rauc --event install-start --target-slot unknown --version "$LATEST_VERSION"
 
 # Download the bundle
 mkdir -p "$BUNDLE_DIR"
@@ -48,6 +61,7 @@ BUNDLE_PATH="$BUNDLE_DIR/update-$LATEST_VERSION.raucb"
 log "Downloading bundle to $BUNDLE_PATH..."
 if ! curl -f -m 600 -o "$BUNDLE_PATH.tmp" "$BUNDLE_URL"; then
 	log "Download failed, cleaning up"
+	forensic --stage rauc --event install-failed --version "$LATEST_VERSION" --reason download-failed
 	rm -f "$BUNDLE_PATH.tmp"
 	exit 0 # Will retry next interval
 fi
@@ -59,11 +73,14 @@ log "Download complete"
 log "Installing bundle..."
 if rauc install "$BUNDLE_PATH"; then
 	log "Bundle installed successfully, cleaning up"
+	forensic --stage rauc --event install-complete --version "$LATEST_VERSION" --result ok
 	rm -f "$BUNDLE_PATH"
 	log "Rebooting into new slot..."
+	forensic --stage shutdown --event reboot-requested --result ok --detail os-upgrade
 	systemctl reboot
 else
 	log "Bundle installation failed"
+	forensic --stage rauc --event install-failed --version "$LATEST_VERSION" --reason install-failed
 	rm -f "$BUNDLE_PATH"
 	exit 1
 fi
