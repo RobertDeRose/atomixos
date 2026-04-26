@@ -62,6 +62,35 @@ create vfat boot partitions (mtools), write squashfs to rootfs-a.
 
 These scripts run on the device at runtime, invoked by systemd services.
 
+### forensic-log.sh
+
+**Location:** `scripts/forensic-log.sh`
+
+Tier 0 forensic writer and reader for the slot-local `/boot/forensics` ring.
+
+**Responsibilities:**
+
+1. Resolve the active slot and target forensic mount
+2. Ensure `meta` plus seven `4 MiB` segment files exist
+3. Encode records as single-line `key=value` entries
+4. Maintain `boot_id + seq` ordering, resetting `seq` on a new boot
+5. Rotate to the next segment when the current one fills
+6. Read back only complete lines so a torn final record is ignored
+
+### forensics-initrd-log.sh
+
+**Location:** `scripts/forensics-initrd-log.sh`
+
+Initrd-safe helper that mounts the active boot partition early and writes Tier 0
+initrd markers through `forensic-log`.
+
+**Key behavior:**
+
+1. Resolve slot and lower device from the environment or kernel command line
+2. Mount the appropriate boot FAT partition in initrd
+3. Fail explicitly if required mount or device prerequisites are missing
+4. Emit initrd lifecycle events such as `boot-start` and `lowerdev-selected`
+
 ### boot.cmd
 
 **Location:** `scripts/boot.cmd`
@@ -114,6 +143,9 @@ Post-update health check. Runs after every boot (except first).
 6. Sustained 60s check (every 5s): dnsmasq still active
 7. On success: `rauc status mark-good`
 
+**Forensics:** Emits Tier 0 verification and `mark-good` lifecycle markers,
+including explicit failure markers when confirmation fails.
+
 **Dependencies:** `rauc`, `jq`, `systemctl`, `ip`
 
 ### os-upgrade.sh
@@ -130,6 +162,9 @@ OTA update polling script. Checks for new RAUC bundles and installs them.
 2. Query `$URL/api/v1/updates/latest` with version and device headers
 3. If newer version found: download to `/data/config/bundles/`, `rauc install`, reboot
 4. Non-fatal on network errors (timer retries later)
+
+**Forensics:** Emits Tier 0 install and managed reboot markers, but avoids noisy
+polling or "no update" chatter in the durable forensic log.
 
 ### first-boot.sh
 

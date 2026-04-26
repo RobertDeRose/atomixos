@@ -20,6 +20,7 @@ flowchart TD
 
     subgraph IMPORTS["base.nix imports"]
         direction LR
+        FORENSICS["forensics.nix"]
         NETWORKING["networking.nix"]
         FIREWALL["firewall.nix"]
         LAN["lan-gateway.nix"]
@@ -32,6 +33,7 @@ flowchart TD
     end
 
     BASE --> NETWORKING
+    BASE --> FORENSICS
     BASE --> FIREWALL
     BASE --> LAN
     BASE --> OPENVPN
@@ -111,6 +113,35 @@ on first boot.
 | `admin` | `wheel` | Password from `/data/config/admin-password-hash`; SSH key from `/data/config/ssh-authorized-keys/admin` |
 
 **System packages:** `nano`, `htop`, `curl`, `jq`, `f2fs-tools`, `kmod`
+
+---
+
+## forensics.nix
+
+**Purpose**: Tier 0 forensic logging and the buffered journald boundary.
+
+**Key configuration:**
+
+| Setting           | Value                                            | Notes                                                      |
+|-------------------|--------------------------------------------------|------------------------------------------------------------|
+| journald storage  | `Storage=volatile`                               | Keeps general runtime logs in tmpfs-backed journal storage |
+| journald cap      | `RuntimeMaxUse=64M`                              | Bounds memory use for runtime logs                         |
+| Podman log driver | `journald`                                       | Routes container stdout/stderr into the same journald path |
+| slot mounts       | `/run/forensics/boot.0`, `/run/forensics/boot.1` | Mounts both boot partitions for slot-local forensic access |
+
+**Services:**
+
+| Service                                    | Purpose                               |
+|--------------------------------------------|---------------------------------------|
+| `forensics-boot-start.service`             | Records `boot userspace-start`        |
+| `forensics-boot-complete.service`          | Records `boot boot-complete`          |
+| `forensics-data-mount-outcome.service`     | Records `/data` mount success/failure |
+| `forensics-shutdown-flush.service`         | Records shutdown Tier 0 flush markers |
+| `forensics-initrd-start.service`           | Records early initrd `boot-start`     |
+| `forensics-initrd-rootfs-selected.service` | Records initrd `lowerdev-selected`    |
+
+The module also installs the `forensic-log` CLI and the helper used to choose
+the currently relevant boot-partition forensic mount.
 
 ---
 

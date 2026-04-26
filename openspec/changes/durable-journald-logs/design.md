@@ -48,20 +48,22 @@ under tight write-wear constraints.
 ```text
 Tier 0: Slot-local forensic black box on /boot
 Tier 1: Volatile host journal in memory
-Tier 2: Application/container log policy (separate concern)
+Tier 2: RAM-queued batched log appends to /data/logs
 ```
 
 Tier 0 exists for the small set of events that must survive reboot and should
 be made as power-loss resistant as practical. Tier 1 keeps normal host logging
 in RAM so the device does not continuously write routine logs to eMMC. Tier 2
-acknowledges that applications run in Podman and need a separate logging policy
-decision, rather than silently inheriting a host forensics design.
+captures the bounded `/data` export path for richer general diagnostics,
+including Podman log traffic that is routed through journald and then queued in
+RAM before being appended to `/data/logs` in large sequential batches.
 
 **Alternatives considered**:
 
 - **Single persistent journald store**: simpler conceptually, but undermines
   the memory-first wear model by making all host logging durable.
-- **No distinction between host and app logs**: blurs responsibility and makes scope creep likely.
+- **No distinction between forensic and buffered logs**: blurs the durability
+  boundary and makes scope creep likely.
 
 ### 2. Reserve `28 MiB` per boot slot for Tier 0 forensic storage
 
@@ -217,6 +219,8 @@ Representative event names include:
 - `reboot-inferred`
 - `flush-begin`
 - `flush-end`
+- `reboot-requested`
+- `poweroff-requested`
 
 **Alternatives considered**:
 
@@ -240,38 +244,95 @@ current storage model.
 - **Batch writes for efficiency**: lower write overhead, but directly weakens the power-loss guarantee.
 - **Rely on periodic journal export only**: leaves exactly the most important events vulnerable.
 
-### 7. Keep Tier 1 journald volatile and bounded
+### 7. Keep Tier 1 journald tmpfs-first with bounded loss
 
-**Choice**: Keep normal host journald storage in volatile memory with an
-explicit `64 MiB` runtime cap.
+**Choice**: Keep normal host journald storage in tmpfs during runtime, bound
+its runtime usage with an explicit cap, and treat it as the ingestion point for
+an in-memory `rsyslog` queue rather than as the persistent log store.
 
 **Rationale**: This preserves the eMMC-wear benefits of the tmpfs-backed system
-while still allowing rich short-term diagnostics during a live session. Tier 0
-covers the durable forensic minimum; Tier 1 remains a convenience layer, not
-the durable truth source.
+while reducing the blast radius of abrupt power loss for general diagnostics.
+Tier 0 still carries the always-durable lifecycle breadcrumbs, while Tier 1
+provides the live message stream without allowing journald itself to emit many
+small persistent writes.
 
 **Alternatives considered**:
 
-- **Persistent journald on `/data`**: contradicts the wear-reduction goal.
+- **Fully persistent journald on `/data`**: simpler durability story, but keeps
+  routine host logging write-heavy all the time.
+- **Purely volatile journald forever**: preserves wear benefits, but discards
+  too much general diagnostic history on power loss and reboot.
 - **No journald cap**: risks memory pressure from noisy services.
 
-### 8. Pin Podman logging to journald inside the volatile boundary
+### 8. Use rsyslog as the Layer 2 RAM queue and batch writer
+
+**Choice**: Introduce `rsyslog` behind volatile journald and configure it with
+an in-memory queue that appends buffered log data to `/data/logs` in large,
+infrequent, sequential writes.
+
+**Rationale**: The point of the durable host log path is not merely to keep
+logs in RAM longer. It is to transform many small writes into much larger,
+more sequential writes that are friendlier to eMMC wear characteristics.
+`rsyslog` provides a mature queueing model for this that journald alone does
+not expose as clearly.
+
+The batch queue should remain RAM-backed during normal operation. The
+persistent path should be append-oriented, size-bounded, and rotated in larger
+chunks under `/data/logs`. Orderly shutdown should flush queued log data so the
+latest clean shutdown preserves the most recent buffered diagnostics.
+
+This change does not introduce `log2ram`; the system already runs on a
+tmpfs-backed overlay, so adding another general `/var/log` RAM shim would be
+redundant complexity for this design.
+
+**Alternatives considered**:
+
+- **Timer-driven journal checkpoints**: better than fully persistent journald,
+  but still less explicit about batching policy and sequential write behavior.
+- **Direct continuous journald persistence**: simpler, but worse for write
+  amplification.
+- **`log2ram` plus ad hoc file syncing**: redundant with the existing overlay
+  model and less targeted than an explicit queued logging layer.
+
+### 9. Align Podman logging with the buffered journald policy
 
 **Choice**: Set Podman's container `log_driver` to `journald` so routine
-application stdout and stderr follow the same volatile-first boundary as host
-journald.
+application stdout and stderr follow the same tmpfs-first journald ingestion,
+RAM-queued `rsyslog` buffering, large sequential `/data/logs` append path, and
+shutdown-flush behavior as host logs.
 
 **Rationale**: Applications run in Podman and their durable state already lives
 on `/data`, but application stdout/stderr retention is a different question
 from host lifecycle forensics. Pinning the log driver avoids drift in Podman
-defaults and keeps application log behavior aligned with the final logging
-boundary documented by this change.
+defaults and keeps application log behavior aligned with the explored logging
+boundary instead of creating a separate file-backed log path with different
+durability semantics.
 
 **Alternatives considered**:
 
 - **Make app logs part of Tier 0**: too broad and too write-heavy.
 - **Ignore app logs entirely**: leaves an important design boundary
   undocumented.
+
+## Tier 1 / Tier 2 Resolution
+
+The recovered explore session was most settled on the Tier 0 `/boot` forensic
+model. The broader journald-to-`/data` path was clearly part of the intended
+architecture, but some details remained less fully pinned down at explore time.
+
+This change resolves the main Layer 2 open question explicitly:
+
+- use volatile journald as the entry point
+- use an in-memory `rsyslog` queue as the batching layer
+- append to `/data/logs` in large sequential writes
+- keep shutdown flush as a secondary durability improvement
+
+The remaining implementation-time decisions are narrower:
+
+- exact queue sizing and dequeue batch thresholds
+- exact rotation and retention policy under `/data/logs`
+- exact journald filtering and rate-limiting thresholds
+- whether `/data` should also gain mount options such as `noatime`
 
 ## Risks / Trade-offs
 
@@ -283,9 +344,13 @@ boundary documented by this change.
 - **Slot-local boot logs may not follow the active slot after rollback** ->
   This is partly a feature, because each slot preserves its own recent history;
   docs should make that mental model clear.
-- **Application log volume could pressure volatile journal space** -> Mitigate
-  by pinning Podman to `journald`, keeping the host runtime cap explicit, and
-  relying on Tier 0 only for critical lifecycle records.
+- **Application log volume could pressure the buffered journal path** ->
+  Mitigate by pinning Podman to `journald`, keeping the host runtime cap
+  explicit, and bounding the `rsyslog` RAM queue plus `/data/logs` rotation
+  budget.
+- **An extra logging daemon increases moving parts** -> Acceptable because it
+  provides explicit queueing and batching behavior that directly serves the
+  eMMC longevity goal.
 - **Metadata corruption could obscure the active segment** -> Keep metadata
   minimal and recoverable by scanning segment files if needed.
 
@@ -321,15 +386,22 @@ boot partitions gain a reserved forensic directory within the existing slot
 budget, and host lifecycle services begin mirroring critical events into that
 bounded store.
 
-Rollback is straightforward: remove the Tier 0 writer and return to purely
-volatile host journald. No data migration is required because the forensic
-store is bounded, slot-local, and self-contained.
+Rollback is straightforward: remove the Tier 0 writer and return to the prior
+general journald policy. No data migration is required for Tier 0 because the
+forensic store is bounded, slot-local, and self-contained.
 
 ## Final Scope Notes
 
-- The explored option of storing the full host journal on `/data` was not
-  adopted. The final design keeps general journald traffic volatile and relies
-  on the bounded Tier 0 `/boot` recorder for durable lifecycle evidence.
-- The volatile journald cap is `64 MiB`.
-- Podman logging is pinned to `journald` so container log traffic remains
-  inside the same volatile-first runtime boundary.
+- The explored design did not choose always-persistent journald on `/data`.
+  Instead it chose tmpfs-first journald feeding a RAM-queued `rsyslog` batch
+  writer to `/data/logs`, plus orderly shutdown flush, while relying on the
+  bounded Tier 0 `/boot` recorder for the critical always-durable lifecycle
+  evidence.
+- Tier 0 remains the power-loss-first forensic layer.
+- Tier 1 remains memory-first during runtime.
+- Tier 2 trades some immediate durability for much lower write amplification by
+  appending buffered logs to `/data/logs` in larger sequential writes.
+- Podman logging is pinned to `journald` so container log traffic follows the
+  same buffered host logging path.
+- Queue sizing, rate limits, and `/data/logs` retention remain tunable
+  implementation details rather than core architecture changes.

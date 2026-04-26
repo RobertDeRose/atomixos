@@ -60,7 +60,8 @@ events. Allowed Tier 0 stages SHALL include `initrd`, `boot`, `firstboot`,
 `rauc`, `verify`, `rollback`, `watchdog`, and `shutdown`. Tier 0 events SHALL
 cover boot progression, slot selection, `/data` mount outcome, update
 lifecycle events, update-confirmation outcome, rollback detection,
-watchdog-related reset markers, and orderly shutdown flush markers.
+watchdog-related reset markers, orderly shutdown flush markers, and managed
+reboot or poweroff request markers where those flows are part of the system.
 
 #### Scenario: Noisy routine logs are excluded from Tier 0
 
@@ -72,13 +73,21 @@ watchdog-related reset markers, and orderly shutdown flush markers.
 - **WHEN** the device boots into an updated slot, fails, and later rolls back to the previous slot
 - **THEN** the failed slot retains its own recent Tier 0 forensic records on its boot partition for later inspection
 
-### Requirement: General host logging remains volatile-first
+### Requirement: General host logging remains memory-first outside Tier 0
 
-The system SHALL keep general host journald logging volatile by default so
-routine host log traffic remains memory-first rather than continuously writing
-to persistent media.
+The system SHALL keep general host journald logging memory-first during runtime
+and SHALL reserve the slot-local forensic store for critical lifecycle evidence
+rather than for general-purpose log persistence.
 
 #### Scenario: Runtime host logs are not automatically durable
 
 - **WHEN** a non-critical host log entry is written only to the general runtime journal
 - **THEN** that entry is not guaranteed to survive an abrupt power loss
+
+#### Scenario: Tier 0 remains focused on critical evidence
+
+- **WHEN** routine host or application log traffic is emitted during normal
+  operation
+- **THEN** that traffic is handled through the general volatile-journald plus
+  RAM-queued batch logging path rather than being mirrored wholesale into the
+  slot-local forensic store

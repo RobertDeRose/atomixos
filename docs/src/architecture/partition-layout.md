@@ -5,7 +5,8 @@ partition at the end. The flash image carries slot A only; initrd `systemd-repar
 boot.
 
 Each boot partition also carries a small slot-local forensic area under `/boot/forensics`. This is separate from
-general host and application logging, which stays memory-first.
+general host and application logging, which stays tmpfs-first during runtime and is intended to be checkpointed to
+`/data` on a bounded schedule and on orderly shutdown.
 
 ## Layout
 
@@ -81,7 +82,7 @@ Contents created during provisioning:
     nixstasis/                       Planned enrollment key and agent state
     openvpn/client.conf              OpenVPN recovery tunnel config (optional)
   containers/                        Reserved for future application workloads
-  logs/                              Reserved for exported/operator-managed logs, not the live host journal
+  logs/                              Reserved for exported/operator-managed logs, including checkpointed journal data
 ```
 
 ## Logging Tiers
@@ -90,6 +91,6 @@ AtomixOS uses three logging tiers with different durability goals:
 
 ```text
 Tier 0  /boot/forensics    Critical host lifecycle and update forensics, slot-local and bounded
-Tier 1  journald runtime   General host logs, volatile (`Storage=volatile`, runtime capped)
-Tier 2  container logs     Podman defaults to `journald`, so app logs stay memory-first by default
+Tier 1  journald runtime   General host and container logs, tmpfs-first (`Storage=volatile`, runtime capped)
+Tier 2  /data exports      Periodic and shutdown-time journal checkpointing for bounded durable diagnostics
 ```
