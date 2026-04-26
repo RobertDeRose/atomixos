@@ -5,21 +5,16 @@ application ingress.
 
 ## Interface Roles
 
-```text
-                    ┌─────────────────────────────┐
-  WAN (internet) ──►│ eth0                         │
-                    │   DHCP client                │
-                    │   Accepts: HTTPS (443),      │
-                    │           OpenVPN (1194)      │
-                    │                               │
-                    │   ip_forward = OFF            │
-                    │   FORWARD chain: DROP all     │
-                    │                               │
-                    │ eth1                          │◄── LAN (isolated)
-                    │   Static: 172.20.30.1/24     │
-                    │   DHCP server (dnsmasq)       │
-                    │   NTP server (chrony)         │
-                    └─────────────────────────────┘
+```mermaid
+flowchart LR
+    WAN["WAN<br/>internet"] --> ETH0["eth0<br/>DHCP client<br/>Accepts: HTTPS 443, OpenVPN 1194"]
+    LAN["LAN<br/>isolated"] --> ETH1["eth1<br/>Static: 172.20.30.1/24<br/>DHCP server: dnsmasq<br/>NTP server: chrony"]
+
+    subgraph DEVICE["AtomixOS device"]
+        ETH0
+        CORE["ip_forward = OFF<br/>FORWARD chain: DROP all"]
+        ETH1
+    end
 ```
 
 ## WAN Interface (eth0)

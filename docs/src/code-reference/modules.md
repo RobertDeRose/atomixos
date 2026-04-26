@@ -5,23 +5,24 @@ hardware-specific modules (`hardware-rock64.nix`, `hardware-qemu.nix`).
 
 ## Module Dependency Graph
 
-```text
-kernel-config.nix ──> shared stripped kernel baseline
+```mermaid
+flowchart LR
+    KERNEL["kernel-config.nix<br/>shared stripped kernel baseline"]
+    ROCK64["hardware-rock64.nix"] --> BASE["base.nix"]
+    QEMU["hardware-qemu.nix"] --> BASE
 
-hardware-rock64.nix ──┐
-                      ├──> base.nix ──> imports 9 service modules
-hardware-qemu.nix  ───┘
+    BASE --> NETWORKING["networking.nix"]
+    BASE --> FIREWALL["firewall.nix"]
+    BASE --> LAN["lan-gateway.nix"]
+    BASE --> OPENVPN["openvpn.nix"]
+    BASE --> RAUC["rauc.nix"]
+    BASE --> FIRSTBOOT["first-boot.nix"]
+    BASE --> VERIFY["os-verification.nix"]
+    BASE --> UPGRADE["os-upgrade.nix"]
+    BASE --> WATCHDOG["watchdog.nix"]
 
-base.nix imports:
-  ├── networking.nix
-  ├── firewall.nix
-  ├── lan-gateway.nix
-  ├── openvpn.nix
-  ├── rauc.nix
-  ├── first-boot.nix
-  ├── os-verification.nix
-  ├── os-upgrade.nix
-  └── watchdog.nix
+    KERNEL -. shared baseline .-> ROCK64
+    KERNEL -. shared baseline .-> QEMU
 ```
 
 ---

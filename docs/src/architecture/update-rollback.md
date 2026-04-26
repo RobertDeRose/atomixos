@@ -5,19 +5,18 @@ recovery from failed updates.
 
 ## Normal Update Cycle
 
-```text
-1. os-upgrade.service polls update server for new .raucb bundle
-2. rauc install writes boot + rootfs to the INACTIVE slot pair
-3. RAUC sets U-Boot env: BOOT_ORDER=B A, BOOT_B_LEFT=3
-4. Device reboots into new slot
-5. U-Boot decrements BOOT_B_LEFT on each boot attempt
-6. os-verification.service runs health checks:
-   - eth0 has WAN address, eth1 has the configured LAN gateway IP
-   - dnsmasq, chronyd running
-   - sustained 60s stability check
-7a. All pass  -> rauc status mark-good (slot committed)
-7b. Any fail  -> exit non-zero, boot-count continues to decrement
-8. After 3 failed boots -> U-Boot falls back to previous good slot
+```mermaid
+flowchart TD
+    POLL["os-upgrade.service polls for a new bundle"]
+        --> INSTALL["rauc install writes boot + rootfs to the inactive slot pair"]
+    INSTALL --> ENV["RAUC sets BOOT_ORDER=B A and BOOT_B_LEFT=3"]
+    ENV --> REBOOT["Device reboots into the updated slot"]
+    REBOOT --> BOOTCOUNT["U-Boot decrements BOOT_B_LEFT on each boot attempt"]
+    BOOTCOUNT --> VERIFY["os-verification.service checks network, services, and 60s stability"]
+    VERIFY --> DECISION{"All checks pass?"}
+    DECISION -->|Yes| COMMIT["rauc status mark-good<br/>slot committed"]
+    DECISION -->|No| RETRY["Exit non-zero<br/>boot-count continues to decrement"]
+    RETRY --> FALLBACK["After 3 failed boots<br/>U-Boot falls back to the previous good slot"]
 ```
 
 ## Boot-Count Mechanism

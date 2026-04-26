@@ -5,10 +5,11 @@ The `nix/` directory contains four derivations that produce the build artifacts.
 
 ## Build Pipeline
 
-```text
-boot-script.nix ──────> image.nix (flashable .img)
-squashfs.nix ─────┬──> image.nix
-                  └──> rauc-bundle.nix (signed .raucb for OTA)
+```mermaid
+flowchart LR
+    BOOTSCRIPT["boot-script.nix"] --> IMAGE["image.nix<br/>flashable .img"]
+    SQUASHFS["squashfs.nix"] --> IMAGE
+    SQUASHFS --> RAUCBUNDLE["rauc-bundle.nix<br/>signed .raucb for OTA"]
 ```
 
 ---
