@@ -332,7 +332,17 @@
       # ── Development shell ────────────────────────────────────────────────
 
       devShells.${system}.default = pkgs.mkShell {
-        packages = mkDocsToolchain pkgs;
+        packages = (mkDocsToolchain pkgs) ++ [ pkgs.zsh ];
+        shellHook = ''
+          case $- in
+            *i*)
+              if [ -z "''${IN_NIX_ZSH:-}" ] && [ -z "''${ZSH_VERSION:-}" ]; then
+                export IN_NIX_ZSH=1
+                exec ${pkgs.zsh}/bin/zsh -i
+              fi
+              ;;
+          esac
+        '';
       };
 
       devShells."aarch64-darwin".default =
@@ -340,7 +350,17 @@
           darwinPkgs = import nixpkgs { system = "aarch64-darwin"; };
         in
         darwinPkgs.mkShell {
-          packages = mkDocsToolchain darwinPkgs;
+          packages = (mkDocsToolchain darwinPkgs) ++ [ darwinPkgs.zsh ];
+          shellHook = ''
+            case $- in
+              *i*)
+                if [ -z "''${IN_NIX_ZSH:-}" ] && [ -z "''${ZSH_VERSION:-}" ]; then
+                  export IN_NIX_ZSH=1
+                  exec ${darwinPkgs.zsh}/bin/zsh -i
+                fi
+                ;;
+            esac
+          '';
         };
     };
 }
