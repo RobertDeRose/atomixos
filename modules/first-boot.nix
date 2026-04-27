@@ -18,6 +18,12 @@
 
 let
   firstBootScript = pkgs.writeShellScript "first-boot" (builtins.readFile ../scripts/first-boot.sh);
+  quadletSyncScript = pkgs.writeShellScript "quadlet-sync" (
+    builtins.readFile ../scripts/quadlet-sync.sh
+  );
+  provisionCli = pkgs.writeScriptBin "first-boot-provision" (
+    builtins.readFile ../scripts/first-boot-provision.py
+  );
   ubootEnvTools = self.packages.${pkgs.stdenv.hostPlatform.system}.uboot-env-tools;
   trimmedDevAdminPasswordHash = lib.strings.trim devAdminPasswordHash;
   devAdminPasswordHash =
@@ -38,10 +44,33 @@ let
     };
 in
 {
+  systemd.services.quadlet-sync = {
+    description = "Sync provisioned Quadlet units";
+    after = [ "data.mount" ];
+    wants = [ "data.mount" ];
+    before = [ "multi-user.target" ];
+    wantedBy = [ "multi-user.target" ];
+
+    unitConfig.ConditionPathExists = "/data/config/config.toml";
+    unitConfig.RequiresMountsFor = [ "/data" ];
+
+    path = [
+      pkgs.coreutils
+      pkgs.systemd
+      provisionCli
+    ];
+
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = quadletSyncScript;
+    };
+  };
+
   systemd.services.first-boot = {
     description = "First-boot initialization (mark slot good, write sentinel)";
     after = [
       "data.mount"
+      "quadlet-sync.service"
       "multi-user.target"
     ];
     wants = [ "data.mount" ];
@@ -56,8 +85,10 @@ in
       pkgs.rauc
       pkgs.coreutils
       pkgs.systemd
+      pkgs.python3Minimal
       ubootEnvTools
       pkgs.util-linux
+      provisionCli
     ];
     environment = firstBootEnv;
 

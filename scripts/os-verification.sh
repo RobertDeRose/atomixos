@@ -8,6 +8,7 @@ set -euo pipefail
 SUSTAIN_DURATION="${ATOMIXOS_VERIFICATION_SUSTAIN_DURATION:-60}"
 CHECK_INTERVAL="${ATOMIXOS_VERIFICATION_CHECK_INTERVAL:-5}"
 FORENSICS_STATE_DIR="${ATOMIXOS_FORENSICS_RAUC_STATE_DIR:-/data/rauc/forensics}"
+HEALTH_REQUIRED_FILE="/data/config/health-required.json"
 
 log() { echo "[os-verification] $*"; }
 
@@ -23,6 +24,20 @@ clear_pending_slot_state() {
 		"$FORENSICS_STATE_DIR/pending-target-slot" \
 		"$FORENSICS_STATE_DIR/pending-target-version" \
 		"$FORENSICS_STATE_DIR/pending-target-booted"
+}
+
+read_required_units() {
+	if [ ! -f "$HEALTH_REQUIRED_FILE" ]; then
+		return 0
+	fi
+	python3 - <<'PY'
+import json
+from pathlib import Path
+
+path = Path("/data/config/health-required.json")
+for item in json.loads(path.read_text()):
+    print(item)
+PY
 }
 
 current_boot_slot() {
@@ -129,6 +144,18 @@ fi
 
 log "System health checks passed"
 
+log "Checking required provisioned units..."
+while IFS= read -r required_unit; do
+	[ -n "$required_unit" ] || continue
+	if systemctl is-active --quiet "${required_unit}.service" 2>/dev/null; then
+		log "  OK ${required_unit}.service is active"
+	else
+		log "  FAIL ${required_unit}.service is NOT active"
+		forensic --stage verify --event failed --slot "$BOOT_SLOT" --reason provisioned-health
+		exit 1
+	fi
+done < <(read_required_units)
+
 # ── Step 3: Sustained health check (60s) ──
 log "Starting sustained health check (${SUSTAIN_DURATION}s)..."
 
@@ -143,6 +170,15 @@ while [ "$ELAPSED" -lt "$SUSTAIN_DURATION" ]; do
 		forensic --stage verify --event failed --slot "$BOOT_SLOT" --reason sustained-check
 		exit 1
 	fi
+
+	while IFS= read -r required_unit; do
+		[ -n "$required_unit" ] || continue
+		if ! systemctl is-active --quiet "${required_unit}.service" 2>/dev/null; then
+			log "FAIL: ${required_unit}.service stopped during sustained check"
+			forensic --stage verify --event failed --slot "$BOOT_SLOT" --reason sustained-check
+			exit 1
+		fi
+	done < <(read_required_units)
 done
 
 log "Sustained health check passed (${SUSTAIN_DURATION}s)"

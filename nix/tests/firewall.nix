@@ -4,7 +4,7 @@
 # 1. Boots a gateway node with firewall rules modelled on firewall.nix
 # 2. Boots a single probe node on BOTH VLANs (1 and 2)
 # 3. Verifies WAN allows only HTTPS (443) and OpenVPN (1194)
-# 4. Verifies LAN allows DHCP (67-68), NTP (123), and SSH (22)
+# 4. Verifies LAN allows DHCP (67-68), NTP (123), SSH (22), and bootstrap UI (8080)
 # 5. Verifies SSH is blocked on WAN by default
 # 6. Verifies no forwarding between interfaces
 #
@@ -97,6 +97,7 @@ nixos-lib.runTest {
             iifname "eth2" udp dport { 67, 68 } accept  comment "DHCP"
             iifname "eth2" udp dport 123 accept          comment "NTP"
             iifname "eth2" tcp dport 22 accept           comment "SSH"
+            iifname "eth2" tcp dport 8080 accept         comment "Bootstrap UI"
 
             # Everything else is dropped by default policy
           }
@@ -221,13 +222,13 @@ nixos-lib.runTest {
     # DHCP (67/udp) — ALLOWED on LAN
     probe.succeed("echo test | ncat -u -w 3 172.20.30.1 67")
 
-    # Random port (8080/tcp) — BLOCKED on LAN
-    probe.fail("nc -z -w 3 172.20.30.1 8080")
+    # Bootstrap UI (8080/tcp) — ALLOWED on LAN
+    probe.succeed("nc -z -w 3 172.20.30.1 8080")
 
     # HTTPS (443/tcp) — BLOCKED on LAN (only allowed on WAN)
     probe.fail("nc -z -w 3 172.20.30.1 443")
 
-    gateway.log("Phase 2 PASSED: LAN allows SSH+NTP+DHCP, blocks HTTPS+other")
+    gateway.log("Phase 2 PASSED: LAN allows SSH+NTP+DHCP+bootstrap, blocks HTTPS")
 
     # ── Phase 3: No forwarding ──
     gateway.log("Phase 3: Testing forward chain (drop all)")

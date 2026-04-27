@@ -261,6 +261,7 @@
 
           netTests = {
             firewall = import ./nix/tests/firewall.nix netTestArgs;
+            first-boot-provision = import ./nix/tests/first-boot-provision.nix netTestArgs;
             forensics-boot-markers = import ./nix/tests/forensics-boot-markers.nix netTestArgs;
             forensics-mount-selection = import ./nix/tests/forensics-mount-selection.nix netTestArgs;
             forensics-ordering = import ./nix/tests/forensics-ordering.nix netTestArgs;
@@ -301,6 +302,7 @@
             rauc-power-loss = import ./nix/tests/rauc-power-loss.nix darwinRaucTestArgs;
             rauc-watchdog = import ./nix/tests/rauc-watchdog.nix darwinRaucTestArgs;
             firewall = import ./nix/tests/firewall.nix darwinNetTestArgs;
+            first-boot-provision = import ./nix/tests/first-boot-provision.nix darwinNetTestArgs;
             forensics-boot-markers = import ./nix/tests/forensics-boot-markers.nix darwinNetTestArgs;
             forensics-mount-selection = import ./nix/tests/forensics-mount-selection.nix darwinNetTestArgs;
             forensics-ordering = import ./nix/tests/forensics-ordering.nix darwinNetTestArgs;

@@ -311,6 +311,51 @@
       empty = "allow";
     };
 
+    boot.initrd.systemd.services.atomixos-detect-fresh-flash = {
+      description = "Detect fresh flash before repartitioning";
+      before = [ "systemd-repart.service" ];
+      wantedBy = [ "systemd-repart.service" ];
+      unitConfig.DefaultDependencies = false;
+      serviceConfig = {
+        Type = "oneshot";
+      };
+      path = [
+        pkgs.coreutils
+        pkgs.util-linux
+      ];
+      script = ''
+        set -euo pipefail
+        mkdir -p /run/atomixos
+        if [ ! -e /dev/disk/by-partlabel/boot-b ]; then
+          : > /run/atomixos/fresh-flash
+        else
+          rm -f /run/atomixos/fresh-flash
+        fi
+      '';
+    };
+
+    boot.initrd.systemd.services.atomixos-persist-fresh-flash-marker = {
+      description = "Persist fresh-flash marker for switched root";
+      before = [ "initrd-switch-root.target" ];
+      wantedBy = [ "initrd-switch-root.target" ];
+      after = [ "sysroot.mount" ];
+      requires = [ "sysroot.mount" ];
+      unitConfig.DefaultDependencies = false;
+      serviceConfig = {
+        Type = "oneshot";
+      };
+      path = [ pkgs.coreutils ];
+      script = ''
+        set -euo pipefail
+        mkdir -p /sysroot/etc/atomixos
+        if [ -f /run/atomixos/fresh-flash ]; then
+          : > /sysroot/etc/atomixos/fresh-flash
+        else
+          rm -f /sysroot/etc/atomixos/fresh-flash
+        fi
+      '';
+    };
+
     # systemd-repart matches existing partitions by GPT type, not by label.
     # Declare the slot-A partitions too so the later slot-B entries become the
     # second xbootldr/root-arm64 partitions instead of matching p1/p2.
@@ -350,6 +395,7 @@
       SizeMinBytes = "64M";
       MakeDirectories = [
         "/config"
+        "/config/quadlet"
         "/config/ssh-authorized-keys"
         "/containers"
         "/logs"

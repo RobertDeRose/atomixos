@@ -42,6 +42,7 @@ in
         iifname "eth1" udp dport { 67, 68 } accept  comment "DHCP"
         iifname "eth1" udp dport 123 accept          comment "NTP"
         iifname "eth1" tcp dport 22 accept           comment "SSH"
+        iifname "eth1" tcp dport 8080 accept         comment "Bootstrap UI"
 
         # -- tun0 (VPN) rules --
         iifname "tun0" tcp dport 22 accept   comment "SSH over VPN"
