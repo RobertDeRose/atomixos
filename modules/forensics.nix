@@ -302,12 +302,10 @@ in
         ATOMIXOS_FORENSICS_BOOT0 = config.atomixos.rauc.slots.boot0;
         ATOMIXOS_FORENSICS_BOOT1 = config.atomixos.rauc.slots.boot1;
       };
-      serviceConfig = {
-        Type = "oneshot";
-        ExecStart = ''
-          ${initrdForensicCli}/bin/forensics-initrd-log --event boot-start
-        '';
-      };
+      serviceConfig.Type = "oneshot";
+      script = ''
+        forensics-initrd-log --event boot-start
+      '';
     };
 
     boot.initrd.systemd.services.forensics-initrd-rootfs-selected = lib.mkIf hasRaucSlots {
@@ -327,12 +325,10 @@ in
         ATOMIXOS_FORENSICS_BOOT0 = config.atomixos.rauc.slots.boot0;
         ATOMIXOS_FORENSICS_BOOT1 = config.atomixos.rauc.slots.boot1;
       };
-      serviceConfig = {
-        Type = "oneshot";
-        ExecStart = ''
-          ${initrdForensicCli}/bin/forensics-initrd-log --event lowerdev-selected
-        '';
-      };
+      serviceConfig.Type = "oneshot";
+      script = ''
+        forensics-initrd-log --event lowerdev-selected
+      '';
     };
 
     virtualisation.containers.containersConf.settings.containers.log_driver = "journald";
