@@ -33,3 +33,6 @@ book/
 # AI Agents
 .opencode
 bkup/
+
+# AtomixOS files
+config.toml
