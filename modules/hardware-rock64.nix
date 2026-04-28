@@ -83,18 +83,12 @@ let
   serialRootDebugScript = pkgs.writeShellScript "rock64-serial-root-debug" ''
     set -euo pipefail
 
-    admin_password_hash="/data/config/admin-password-hash"
-    admin_authorized_key="/data/config/ssh-authorized-keys/admin"
-
     env_value="$(${ubootEnvTools}/bin/fw_printenv -n _RUT_OH_ 2>/dev/null || true)"
     if [ "$env_value" != "1" ]; then
       exit 0
     fi
 
-    if [ -s "$admin_password_hash" ] || [ -s "$admin_authorized_key" ]; then
-      exit 0
-    fi
-
+    ${pkgs.systemd}/bin/systemctl stop serial-getty@ttyS2.service
     ${pkgs.systemd}/bin/systemctl start serial-root-debug@ttyS2.service
     ${ubootEnvTools}/bin/fw_setenv _RUT_OH_
   '';
@@ -909,9 +903,13 @@ in
     "dm_mod"
   ];
 
-  # The systemd initrd only pulls mkfs/fsck helpers for filesystems listed in
-  # boot.initrd.supportedFilesystems. We need vfat there so systemd-repart can
-  # find mkfs.vfat when creating boot-b, and f2fs for /data on first boot.
+  # Keep both stage-1 and stage-2 aware of the filesystems we provision in the
+  # initrd so the required mkfs/fsck helpers are available to systemd-repart.
+  boot.supportedFilesystems = [
+    "vfat"
+    "f2fs"
+  ];
+
   boot.initrd.supportedFilesystems = [
     "vfat"
     "f2fs"
@@ -939,7 +937,6 @@ in
   systemd.services."serial-root-debug@" = lib.mkIf config.atomixos.serialRootDebug.enable {
     description = "Serial root debug autologin on %I";
     after = [ "systemd-user-sessions.service" ];
-    unitConfig.ConditionPathExists = "!/data/config/admin-password-hash";
     serviceConfig = {
       Type = "idle";
       ExecStart = "${pkgs.util-linux}/sbin/agetty --autologin root --keep-baud 1500000,115200,57600,38400 -8 -L %I vt220";

@@ -3,17 +3,12 @@
 AtomixOS ships with no embedded credentials. EN18031 compliance requires that each device has unique credentials
 provisioned at factory time -- there are no default passwords or shared secrets.
 
-For local development, the build can opt into a dev-only path via `.env`
-(`DEVELOPMENT=1`) that seeds a locally generated admin password hash on first
-boot. This is intended only for test images and is not enabled by default.
-
 ## Provisioning State
 
 Persisted device-local state lives on `/data`:
 
 | Item                       | Storage Path                              | Notes                                             |
 |----------------------------|-------------------------------------------|---------------------------------------------------|
-| Admin password             | `/data/config/admin-password-hash`        | Optional local recovery credential                |
 | SSH public key             | `/data/config/ssh-authorized-keys/admin`  | Local operator key for LAN/VPN access             |
 | Nixstasis registration key | `/data/config/nixstasis/registration-key` | Planned persistent device enrollment credential   |
 | Nixstasis agent state      | `/data/config/nixstasis/`                 | Planned client state, tunnel config, and metadata |
@@ -26,9 +21,16 @@ Persisted device-local state lives on `/data`:
 - **VPN (tun0)**: Key-only authentication via SSH public key
 - **WAN (eth0)**: Disabled by default; enabled only when `/data/config/ssh-wan-enabled` flag file exists
 
-When `DEVELOPMENT=1` is enabled at build time, the image also enables password
-authentication for SSH and seeds `/data/config/ssh-wan-enabled` on first boot
-to simplify recovery and SSH testing.
+When `DEVELOPMENT=1` is enabled at build time, first boot can still seed
+`/data/config/ssh-wan-enabled` to simplify SSH testing, but SSH remains
+key-only.
+
+### Physical Recovery
+
+Rock64 keeps a separate physical break-glass path. If `_RUT_OH_=1` is set in
+U-Boot, the next boot starts a serial-only root autologin on `ttyS2` and clears
+that flag after use. This is a local recovery mechanism, not part of normal
+network authentication.
 
 ### Nixstasis Enrollment
 

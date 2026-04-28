@@ -15,7 +15,7 @@
     type = lib.types.bool;
     default = false;
     description = ''
-      Enable the Rock64 serial-only root debug escape hatch gated by the
+      Enable the Rock64 serial-only root debug escape hatch triggered by the
       `_RUT_OH_` U-Boot environment variable.
     '';
   };
@@ -202,6 +202,10 @@
       "d /var/lib/private/systemd/resolve 0755 systemd-resolve systemd-resolve -"
       "d /var/lib/chrony 0750 chrony chrony -"
       "d /var/lib/dnsmasq 0755 dnsmasq dnsmasq -"
+      "d /var/lib/appsvc 0750 appsvc appsvc -"
+      "d /var/lib/appsvc/.config 0750 appsvc appsvc -"
+      "d /var/lib/appsvc/.config/containers 0750 appsvc appsvc -"
+      "d /var/lib/appsvc/.config/containers/systemd 0750 appsvc appsvc -"
       "d /var/cache 0755 root root -"
       "d /var/cache/nscd 0755 nscd nscd -"
       "d /var/log 0755 root root -"
@@ -306,6 +310,12 @@
     # Keep initrd emergency mode usable on the serial console while we are
     # validating early-boot storage changes on hardware.
     boot.initrd.systemd.emergencyAccess = true;
+    # Custom initrd services do not automatically get their `path` entries copied
+    # into the initrd image, so include the probe tools they invoke explicitly.
+    boot.initrd.systemd.initrdBin = [
+      pkgs.gnugrep
+      pkgs.util-linux
+    ];
     boot.initrd.systemd.repart = {
       enable = true;
       empty = "allow";
@@ -315,18 +325,45 @@
       description = "Detect fresh flash before repartitioning";
       before = [ "systemd-repart.service" ];
       wantedBy = [ "systemd-repart.service" ];
+      requires =
+        lib.optional ((config.boot.initrd.systemd.repart.device or null) != null)
+          "${
+            lib.replaceStrings [ "/" ] [ "-" ] (lib.removePrefix "/" config.boot.initrd.systemd.repart.device)
+          }.device";
+      after =
+        lib.optional ((config.boot.initrd.systemd.repart.device or null) != null)
+          "${
+            lib.replaceStrings [ "/" ] [ "-" ] (lib.removePrefix "/" config.boot.initrd.systemd.repart.device)
+          }.device";
       unitConfig.DefaultDependencies = false;
       serviceConfig = {
         Type = "oneshot";
       };
       path = [
         pkgs.coreutils
-        pkgs.util-linux
+        pkgs.systemd
       ];
       script = ''
         set -euo pipefail
         mkdir -p /run/atomixos
-        if [ ! -e /dev/disk/by-partlabel/boot-b ]; then
+
+        # Detect against the repart target directly instead of relying on
+        # /dev/disk/by-partlabel/boot-b, which can lag behind early initrd udev
+        # on subsequent boots and falsely keep the system in fresh-flash mode.
+        repart_device=${lib.escapeShellArg (config.boot.initrd.systemd.repart.device or "")}
+        has_boot_b=1
+
+        udevadm settle --timeout=10 || true
+
+        if [ -n "$repart_device" ] && [ -b "$repart_device" ]; then
+          if ${pkgs.util-linux}/bin/lsblk -nrpo PARTLABEL "$repart_device" | ${pkgs.gnugrep}/bin/grep -Fxq boot-b; then
+            has_boot_b=0
+          fi
+        elif [ -e /dev/disk/by-partlabel/boot-b ]; then
+          has_boot_b=0
+        fi
+
+        if [ "$has_boot_b" -ne 0 ]; then
           : > /run/atomixos/fresh-flash
         else
           rm -f /run/atomixos/fresh-flash
@@ -405,10 +442,13 @@
     # ── Users ────────────────────────────────────────────────────────────────────
 
     users.mutableUsers = false;
+    # This appliance intentionally ships without any built-in login credential.
+    # The admin SSH key is provisioned onto /data on first boot, and Rock64 has
+    # a separate physical serial recovery path via `_RUT_OH_`.
+    users.allowNoPasswordLogin = true;
 
-    # Root stays locked by default. Serial-only debug access is gated separately
-    # on Rock64 by a U-Boot environment flag and only before admin credentials
-    # have been provisioned on /data.
+    # Root stays locked by default. Rock64 can still expose a physical
+    # serial-only root recovery path separately via `_RUT_OH_`.
     users.users.root = {
       hashedPassword = "!";
     };
@@ -420,17 +460,51 @@
         "podman"
       ];
 
-      # Password hash read from /data at boot. The image ships with no
-      # credentials — the hash is written during device provisioning (unique
-      # per device, EN18031 compliant). The file must contain a single line
-      # with a hash suitable for chpasswd -e (e.g. mkpasswd -m sha-512).
-      hashedPasswordFile = "/data/config/admin-password-hash";
+      # Normal operator access is SSH-key-only. The password stays locked even
+      # after provisioning; break-glass serial root recovery is handled
+      # separately on supported hardware.
+      hashedPassword = "!";
     };
+
+    users.users.appsvc = {
+      isSystemUser = true;
+      group = "appsvc";
+      home = "/var/lib/appsvc";
+      createHome = false;
+      extraGroups = [ "podman" ];
+      subUidRanges = [
+        {
+          startUid = 200000;
+          count = 65536;
+        }
+      ];
+      subGidRanges = [
+        {
+          startGid = 200000;
+          count = 65536;
+        }
+      ];
+    };
+    users.groups.appsvc = { };
 
     # Disable sudo and doas — use systemd's run0 for privilege escalation instead.
     # run0 is already part of systemd 258.5 (zero additional closure cost) and
     # doesn't require suid binaries or PAM configuration.
     security.sudo.enable = false;
+    security.polkit = {
+      enable = true;
+
+      # Headless run0 elevation needs a non-interactive policy because the admin
+      # account is intentionally password-locked and there is no desktop auth
+      # agent on the appliance.
+      extraConfig = ''
+        polkit.addRule(function(action, subject) {
+          if (subject.isInGroup("wheel")) {
+            return polkit.Result.YES;
+          }
+        });
+      '';
+    };
 
     # Disable X11 auth forwarding in su's PAM config — shadow.nix defaults this
     # to true, which drags xauth + 9 X11 libraries (~6.5 MB) into the closure.
@@ -459,7 +533,7 @@
     services.openssh = {
       enable = true;
       settings = {
-        PasswordAuthentication = lib.mkForce developmentMode;
+        PasswordAuthentication = false;
         PermitRootLogin = "no";
       };
       # Load SSH public keys from /data — written during device provisioning.

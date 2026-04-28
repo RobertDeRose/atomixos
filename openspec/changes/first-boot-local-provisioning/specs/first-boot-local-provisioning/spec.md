@@ -49,23 +49,24 @@ reprovisioning SHALL use USB seed discovery followed by the bootstrap web consol
 ### Requirement: config.toml defines bounded provisioning data
 
 The local provisioning artifact SHALL be a single `config.toml` file containing only the bounded appliance provisioning
-contract: admin password hash, admin SSH keys, explicit health requirements, and structured Quadlet definitions.
+contract: admin SSH keys, explicit health requirements, and structured Quadlet definitions.
 
 #### Scenario: Minimum valid config.toml includes admin access and stack definition
 
 - **WHEN** a `config.toml` file is accepted for import
-- **THEN** it includes `admin.password_hash`, at least one admin SSH key, at least one Quadlet-defined application or
+- **THEN** it includes at least one admin SSH key, at least one Quadlet-defined application or
   service unit, and explicit health requirements
 
-### Requirement: config.toml expresses Quadlet as structured TOML
+### Requirement: config.toml expresses containers as structured TOML
 
 The `config.toml` format SHALL represent Quadlet units as structured TOML tables rather than raw embedded multiline
-Quadlet blobs. The canonical identity shape SHALL be `quadlet.<type>.<name>.<section>`, where the device derives the
-destination filename, destination path, and file mode from the unit type and name.
+Quadlet blobs. The canonical identity shape SHALL be `container.<name>.<section>`, with a required
+`[container.<name>]` table that declares `privileged = true|false`. The device SHALL derive the rendered filename,
+active path, and runtime mode from the container name plus that privilege flag.
 
 #### Scenario: Structured Quadlet tables map to rendered unit files
 
-- **WHEN** the provisioning flow reads `[quadlet.container.traefik.Container]`
+- **WHEN** the provisioning flow reads `[container.traefik.Container]`
 - **THEN** it treats that table as the `Container` section of the rendered `traefik.container` Quadlet unit under the
   canonical `/data/config/quadlet/` path
 
@@ -77,30 +78,57 @@ destination filename, destination path, and file mode from the unit type and nam
 ### Requirement: Imported provisioning state persists under /data/config
 
 All persisted provisioning-derived configuration SHALL live under `/data/config/`. This SHALL include the imported
-`config.toml`, the admin password hash, the admin SSH authorized key material, and the rendered Quadlet unit files.
+`config.toml`, the admin SSH authorized key material, and the rendered Quadlet unit files.
 
 #### Scenario: Imported provisioning state is stored under /data/config
 
 - **WHEN** the provisioning flow successfully imports a `config.toml` seed
 - **THEN** the resulting durable operator configuration is written under `/data/config/`
 
+### Requirement: Newly imported provisioning is usable without an extra reboot
+
+When a new `config.toml` is imported on an unprovisioned boot, the device SHALL continue first boot without requiring an
+extra reboot before relying on the imported SSH authorized keys or other persisted provisioning-derived runtime state.
+
+#### Scenario: Imported config is usable in the same boot
+
+- **WHEN** the device imports a new `config.toml` from `/boot`, USB, or the bootstrap web console
+- **THEN** it applies the imported SSH keys and runtime configuration during that same boot
+
 ### Requirement: Rendered Quadlet configuration is activated through the standard system path
 
 Rendered Quadlet files SHALL remain canonically stored under `/data/config/quadlet/`, and the boot process SHALL sync
-them into the active rootful Quadlet path under `/etc/containers/systemd/` before starting the provisioned container or
-pod services.
+them into the active Quadlet path for their runtime mode before starting provisioned services. Rootful units SHALL sync
+under `/etc/containers/systemd/`, while rootless application units SHALL sync under the managed app user's Quadlet path.
 
 #### Scenario: Imported Quadlet files are synced into the active system path
 
 - **WHEN** provisioning has rendered Quadlet files under `/data/config/quadlet/`
-- **THEN** the system syncs those files into `/etc/containers/systemd/`, reloads systemd, and starts the rendered
-  container or pod services from that active path
+- **THEN** the system syncs rootful and rootless units into their respective active Quadlet paths, reloads systemd, and
+  starts the rendered services from those active paths
+
+### Requirement: First boot only blocks on provisioning import and validation
+
+The first-boot completion gate SHALL require a discovered `config.toml` to be imported and validated successfully, but
+it SHALL NOT remain blocked solely because Quadlet sync or container activation fails afterward on the subsequent boot.
+Those later failures SHALL remain debuggable from a provisioned login.
+
+#### Scenario: Valid provisioning completes first boot even when Quadlet activation fails later
+
+- **WHEN** a discovered `config.toml` imports and validates successfully
+- **AND** Quadlet sync or service startup fails afterward
+- **THEN** first boot still completes its provisioning gate and leaves the device accessible for debugging
 
 ### Requirement: Bootstrap web console supports upload and basic form generation
 
 When no provisioning seed file is found, the device SHALL start a constrained local bootstrap web console. The console
-SHALL support uploading an existing `config.toml` and generating a new `config.toml` from a basic form for admin
-credentials and application stack provisioning.
+SHALL support uploading an existing `config.toml` or supported config bundle, and generating a new `config.toml` from a
+basic form for admin SSH keys and application stack provisioning.
+
+### Requirement: Bootstrap endpoint supports programmatic config import
+
+The bootstrap service SHALL expose a constrained local API endpoint that accepts a complete `config.toml` payload or a
+supported config bundle for programmatic local import using the same validation and persistence path as the web console.
 
 ### Requirement: Bootstrap web console is exposed only on the LAN bootstrap endpoint
 
@@ -116,9 +144,14 @@ default local endpoint SHALL be `172.20.30.1:8080`.
 #### Scenario: Existing config.toml can be uploaded through the bootstrap console
 
 - **WHEN** an operator opens the bootstrap web console on an unprovisioned device
-- **THEN** the console allows uploading an existing `config.toml` for local import
+- **THEN** the console allows uploading an existing `config.toml` or supported config bundle for local import
 
 #### Scenario: Basic form can generate a config.toml
 
 - **WHEN** an operator uses the bootstrap web console without an existing seed file
 - **THEN** the console presents a basic form that can generate a valid `config.toml` and apply it locally
+
+#### Scenario: Programmatic client can upload config.toml directly
+
+- **WHEN** a local client POSTs a complete `config.toml` payload or supported config bundle to the bootstrap API endpoint
+- **THEN** the bootstrap service validates and imports it through the same path used by the web console upload flow

@@ -318,7 +318,7 @@ kill -STOP 1
 | 5.1 | Cockpit pod                  |        |
 | 5.2 | Health manifest confirmation |        |
 | 6.1 | SSH key auth                 |        |
-| 6.2 | Cockpit password auth        |        |
+| 6.2 | Serial root recovery         |        |
 | 7.1 | RAUC status                  |        |
 | 7.2 | Bundle install               |        |
 | 7.3 | Boot-count rollback          |        |

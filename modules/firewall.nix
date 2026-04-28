@@ -15,6 +15,10 @@ let
   sshWanReload = pkgs.writeShellScript "ssh-wan-reload" (
     builtins.readFile ../scripts/ssh-wan-reload.sh
   );
+
+  provisionedFirewallInbound = pkgs.writeShellScript "provisioned-firewall-inbound" (
+    builtins.readFile ../scripts/provisioned-firewall-inbound.sh
+  );
 in
 {
   # ── Enable nftables ──────────────────────────────────────────────────────────
@@ -33,10 +37,6 @@ in
 
         # Allow established/related connections on all interfaces
         ct state established,related accept
-
-        # -- eth0 (WAN) rules --
-        iifname "eth0" tcp dport 443 accept   comment "HTTPS (Traefik)"
-        iifname "eth0" udp dport 1194 accept  comment "OpenVPN"
 
         # -- eth1 (LAN) rules --
         iifname "eth1" udp dport { 67, 68 } accept  comment "DHCP"
@@ -100,6 +100,34 @@ in
     serviceConfig = {
       Type = "oneshot";
       ExecStart = sshWanReload;
+    };
+  };
+
+  systemd.services.provisioned-firewall-inbound = {
+    description = "Apply provisioned WAN inbound firewall rules";
+    after = [
+      "data.mount"
+      "nftables.service"
+    ];
+    wants = [
+      "data.mount"
+      "nftables.service"
+    ];
+    wantedBy = [ "multi-user.target" ];
+
+    unitConfig = {
+      ConditionPathExists = "/data/config/firewall-inbound.json";
+      RequiresMountsFor = [ "/data" ];
+    };
+
+    path = [
+      pkgs.nftables
+      pkgs.python3Minimal
+    ];
+
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = provisionedFirewallInbound;
     };
   };
 }

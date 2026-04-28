@@ -107,10 +107,10 @@ on first boot.
 
 **User accounts:**
 
-| User    | Groups  | Authentication                                                                                          |
-|---------|---------|---------------------------------------------------------------------------------------------------------|
-| `root`  | --      | Empty password (development)                                                                            |
-| `admin` | `wheel` | Password from `/data/config/admin-password-hash`; SSH key from `/data/config/ssh-authorized-keys/admin` |
+| User    | Groups  | Authentication                                                                 |
+|---------|---------|--------------------------------------------------------------------------------|
+| `root`  | --      | Locked by default; Rock64 serial-root recovery only when `_RUT_OH_=1`          |
+| `admin` | `wheel` | SSH key from `/data/config/ssh-authorized-keys/admin`; password remains locked |
 
 **System packages:** `nano`, `htop`, `curl`, `jq`, `f2fs-tools`, `kmod`
 

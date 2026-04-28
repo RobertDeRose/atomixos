@@ -10,7 +10,7 @@ cleanly with the later Nixstasis direction.
 The provisioning idea captured in `provision_idea.md` converged on a bounded local first-boot provisioning contract:
 
 - a single `config.toml` artifact
-- admin password hash and SSH keys as imported access material
+- admin SSH keys as imported access material
 - structured Quadlet definitions as the application runtime contract
 - explicit health requirements in the same document
 - `/data/config/` as the durable home of imported operator configuration
@@ -42,13 +42,14 @@ switched-root `first-boot.service` executes, initrd repartitioning has already c
 
 ## Decisions
 
-### 1. Use a single config.toml provisioning artifact
+### 1. Use a single config.toml provisioning contract
 
-**Decision:** Local provisioning is driven by a single `config.toml` file.
+**Decision:** Local provisioning is driven by a single `config.toml` contract. The importer and bootstrap path may also
+accept a supported archive bundle that carries that same `config.toml` plus optional `files/` payloads.
 
-**Rationale:** The device needs a narrow contract, not a generic file bundle. A single artifact is easier to move
-through `/boot`, USB mass storage, bootstrap upload, and eventual Nixstasis delivery without introducing multiple
-parallel provisioning formats.
+**Rationale:** The device needs a narrow contract, not a generic provisioning engine. Keeping one logical contract makes
+fresh flash, USB reprovisioning, bootstrap upload, and eventual Nixstasis delivery easier to reason about, while the
+optional archive wrapper gives the importer a safe way to carry auxiliary files.
 
 **Alternatives considered:**
 
@@ -77,11 +78,12 @@ but the check must happen in initrd where that condition is actually true.
 
 ### 3. Represent Quadlet as structured TOML, not raw embedded blobs
 
-**Decision:** `config.toml` uses the canonical shape `quadlet.<type>.<name>.<section>` to represent Quadlet data.
+**Decision:** `config.toml` uses the canonical shape `container.<name>.<section>`, with `[container.<name>]`
+declaring `privileged = true|false` and the OS owning the rootful vs rootless runtime details.
 
 **Rationale:** This preserves the Quadlet runtime model while keeping the provisioning artifact structured and
-validatable. The device can deterministically derive the rendered filename, destination path, and file mode from the
-unit type and name. Arrays in TOML cleanly map to repeated Quadlet directives.
+validatable. The device can deterministically derive the rendered filename, active path, and runtime mode from the
+container name plus its privilege setting. Arrays in TOML cleanly map to repeated Quadlet directives.
 
 **Alternatives considered:**
 
@@ -119,14 +121,15 @@ for diagnostics, `/data/containers` for runtime container state, and `/data/rauc
 - **Keep Quadlet units outside `/data/config/`**: rejected because they are provisioned operator intent, not transient
   runtime state
 
-### 5a. Sync rendered Quadlet units into the active system path at boot
+### 5a. Sync rendered Quadlet units into the active Quadlet paths at boot
 
 **Decision:** Provisioning renders canonical Quadlet files under `/data/config/quadlet/`, then a dedicated boot-time
-sync path copies them into `/etc/containers/systemd/`, reloads systemd, and starts rendered container and pod services.
+sync path copies rootful units into `/etc/containers/systemd/` and rootless app units into the managed app user's
+Quadlet path, reloads systemd, and starts rendered services.
 
-**Rationale:** `/data/config/quadlet/` remains the durable operator-intent boundary, while `/etc/containers/systemd/`
-matches the standard rootful Quadlet discovery path used by the running system. This keeps imported configuration
-persistent without treating `/etc` as the source of truth.
+**Rationale:** `/data/config/quadlet/` remains the durable operator-intent boundary, while the standard rootful and
+rootless Quadlet discovery paths are still what the running system consumes. This keeps imported configuration
+persistent without treating the active runtime paths as the source of truth.
 
 **Alternatives considered:**
 
@@ -142,6 +145,10 @@ persistent without treating `/etc` as the source of truth.
 **Rationale:** A device that merely boots Linux but has no valid admin credentials or application stack is not actually
 ready for production use. This change redefines the production first-boot path from "Linux came up" to "minimum
 provisioned state exists and is coherent."
+
+Imported SSH keys and rendered Quadlet state live under `/data/config/`, and both can be consumed in the same boot.
+That keeps the first-boot flow smaller and avoids introducing an extra reboot boundary before the device becomes
+debuggable.
 
 **Alternatives considered:**
 
@@ -183,7 +190,7 @@ fallback usable without extra manual firewall steps.
 1. Introduce initrd fresh-flash detection and persist the result for the switched-root provisioning path.
 2. Introduce the new `config.toml` provisioning schema and source-order logic behind the first-boot provisioning path.
 3. Persist imported state under `/data/config/`, render the Quadlet files there, and sync them into the active rootful
-   Quadlet path.
+   and rootless Quadlet paths.
 4. Update first-boot validation and confirmation behavior so production slot commit depends on successful provisioning
    import.
 5. Add bootstrap UI support as the final fallback when no local seed file exists, bound to the LAN bootstrap address.
@@ -191,7 +198,9 @@ fallback usable without extra manual firewall steps.
    reprovisioning, and `/data` wipe as the reprovision reset boundary.
 
 Rollback remains straightforward during development: remove the new provisioning-aware commit gate and fall back to the
-current unconditional first-boot path. Operationally, reprovisioning remains `wipe /data` plus reboot.
+current unconditional first-boot path. Operationally, reprovisioning remains `wipe /data` plus reboot, after which the
+device searches USB seed sources first and then falls back to the local bootstrap console without replaying
+`/boot/config.toml`.
 
 ## Open Questions
 

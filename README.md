@@ -110,9 +110,11 @@ The read-only root filesystem contains the full NixOS system closure:
 
 The image ships with no embedded credentials. During provisioning:
 
-- `/data/config/admin-password-hash` -- unique sha-512 password hash per device
 - `/data/config/ssh-authorized-keys/admin` -- operator's SSH public key
 - `/data/config/nixstasis/` -- planned persistent state for Nixstasis enrollment and agent credentials
+
+Normal operator access is SSH-key-only. On Rock64, `_RUT_OH_=1` in U-Boot
+enables a deterministic physical serial-root recovery path on the next boot.
 
 Remote management is intended to flow through Nixstasis using device-approved enrollment, reverse tunnels, and short-lived
 SSH credentials. The device itself keeps SSH-based LAN recovery and local gateway services.

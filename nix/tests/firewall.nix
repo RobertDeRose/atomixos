@@ -3,7 +3,7 @@
 # This test:
 # 1. Boots a gateway node with firewall rules modelled on firewall.nix
 # 2. Boots a single probe node on BOTH VLANs (1 and 2)
-# 3. Verifies WAN allows only HTTPS (443) and OpenVPN (1194)
+# 3. Verifies imported WAN rules allow HTTPS (443) and OpenVPN (1194)
 # 4. Verifies LAN allows DHCP (67-68), NTP (123), SSH (22), and bootstrap UI (8080)
 # 5. Verifies SSH is blocked on WAN by default
 # 6. Verifies no forwarding between interfaces
@@ -89,10 +89,6 @@ nixos-lib.runTest {
             # Allow NixOS test driver backdoor
             iifname "eth0" accept
 
-            # -- eth1 (WAN / VLAN 1) rules --
-            iifname "eth1" tcp dport 443 accept   comment "HTTPS (Traefik)"
-            iifname "eth1" udp dport 1194 accept  comment "OpenVPN"
-
             # -- eth2 (LAN / VLAN 2) rules --
             iifname "eth2" udp dport { 67, 68 } accept  comment "DHCP"
             iifname "eth2" udp dport 123 accept          comment "NTP"
@@ -113,7 +109,7 @@ nixos-lib.runTest {
         '';
       };
 
-      # /data for ssh-wan-toggle flag file
+      # /data for ssh-wan-toggle flag file and imported firewall state
       systemd.tmpfiles.rules = [
         "d /data 0755 root root -"
         "d /data/config 0755 root root -"
@@ -123,7 +119,26 @@ nixos-lib.runTest {
       environment.systemPackages = [
         pkgs.nmap
         pkgs.nftables
+        pkgs.python3Minimal
       ];
+
+      systemd.services.provisioned-firewall-inbound = {
+        description = "Apply provisioned WAN inbound firewall rules (test)";
+        after = [ "nftables.service" ];
+        wantedBy = [ "multi-user.target" ];
+        path = [
+          pkgs.nftables
+          pkgs.python3Minimal
+        ];
+        serviceConfig = {
+          Type = "oneshot";
+          ExecStart = pkgs.writeShellScript "test-provisioned-firewall-inbound" (
+            builtins.replaceStrings [ ''iifname "eth0"'' ] [ ''iifname "eth1"'' ] (
+              builtins.readFile ../../scripts/provisioned-firewall-inbound.sh
+            )
+          );
+        };
+      };
     };
 
   # Single probe node on BOTH VLANs — tests WAN and LAN rules from one VM.
@@ -164,6 +179,8 @@ nixos-lib.runTest {
     gateway.start()
     gateway.wait_for_unit("multi-user.target")
     gateway.wait_for_unit("nftables.service")
+    gateway.succeed("cat > /data/config/firewall-inbound.json <<'EOF'\n{\"tcp\": [443], \"udp\": [1194]}\nEOF")
+    gateway.succeed("systemctl start provisioned-firewall-inbound.service")
 
     probe.start()
     probe.wait_for_unit("multi-user.target")

@@ -15,7 +15,7 @@ order without baking per-device secrets into the base image.
 
 - Add a first-boot local provisioning flow that discovers a single `config.toml` seed from `/boot`, then USB mass
   storage, then a local bootstrap web console
-- Define a bounded `config.toml` schema for provisioning admin password hash, admin SSH keys, explicit health
+- Define a bounded `config.toml` schema for provisioning admin SSH keys, explicit health
   requirements, and structured Quadlet unit definitions
 - Persist the imported provisioning state under `/data/config/`, including the source `config.toml` and rendered
   Quadlet units

@@ -12,7 +12,6 @@
   pkgs,
   self,
   developmentMode ? false,
-  developmentAdminPasswordHashFile ? "",
   ...
 }:
 
@@ -25,23 +24,9 @@ let
     builtins.readFile ../scripts/first-boot-provision.py
   );
   ubootEnvTools = self.packages.${pkgs.stdenv.hostPlatform.system}.uboot-env-tools;
-  trimmedDevAdminPasswordHash = lib.strings.trim devAdminPasswordHash;
-  devAdminPasswordHash =
-    if
-      developmentMode
-      && developmentAdminPasswordHashFile != ""
-      && builtins.pathExists developmentAdminPasswordHashFile
-    then
-      builtins.readFile developmentAdminPasswordHashFile
-    else
-      "";
-  firstBootEnv =
-    lib.optionalAttrs (trimmedDevAdminPasswordHash != "") {
-      ATOMIXOS_DEV_ADMIN_PASSWORD_HASH = trimmedDevAdminPasswordHash;
-    }
-    // lib.optionalAttrs developmentMode {
-      ATOMIXOS_DEV_ENABLE_SSH_WAN = "1";
-    };
+  firstBootEnv = lib.optionalAttrs developmentMode {
+    ATOMIXOS_DEV_ENABLE_SSH_WAN = "1";
+  };
 in
 {
   systemd.services.quadlet-sync = {
@@ -56,7 +41,12 @@ in
 
     path = [
       pkgs.coreutils
+      pkgs.gzip
+      pkgs.podman
+      pkgs.python3Minimal
+      pkgs.util-linux
       pkgs.systemd
+      pkgs.zstd
       provisionCli
     ];
 
@@ -70,7 +60,6 @@ in
     description = "First-boot initialization (mark slot good, write sentinel)";
     after = [
       "data.mount"
-      "quadlet-sync.service"
       "multi-user.target"
     ];
     wants = [ "data.mount" ];
@@ -84,8 +73,10 @@ in
     path = [
       pkgs.rauc
       pkgs.coreutils
+      pkgs.gzip
       pkgs.systemd
       pkgs.python3Minimal
+      pkgs.zstd
       ubootEnvTools
       pkgs.util-linux
       provisionCli

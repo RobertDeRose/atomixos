@@ -41,10 +41,7 @@ All `build:*` tasks accept `--lima` to run inside a Lima VM and `--vm <name>` to
 
 ## Configuration Tasks
 
-| Task               | Description                                                                   |
-|--------------------|-------------------------------------------------------------------------------|
-| `admin:pass`       | Write a local development admin password hash to `.local/admin-password-hash` |
-| `config:lan-range` | Update LAN gateway/DHCP range across all config files                         |
+`config:lan-range`: Update LAN gateway/DHCP range across all config files.
 
 ## Utility Tasks
 

@@ -77,7 +77,6 @@ Contents created during provisioning:
 /data/
   .completed_first_boot              First-boot sentinel
   config/
-    admin-password-hash              SHA-512 password hash (per-device)
     ssh-authorized-keys/admin        Operator's SSH public key
     nixstasis/                       Planned enrollment key and agent state
     openvpn/client.conf              OpenVPN recovery tunnel config (optional)

@@ -74,29 +74,39 @@ The image intentionally does not include slot B or `/data`. On first boot,
 initrd `systemd-repart` creates `boot-b` (vfat), `rootfs-b`, and `/data`
 (`f2fs`) using the remaining eMMC space before the real system mounts it.
 
-## Limitations
+## First Boot Provisioning
 
-The flashable image method does **not** provision credentials. After flashing:
+The flashable image method does **not** embed credentials in the image. After
+flashing, the device boots into the local provisioning flow and imports operator
+configuration into `/data/config/` from one of these sources:
 
-- The `admin` user has no password and no SSH key
-- The device writes only the first-boot sentinel and optional development auth flags
+- `/boot/config.toml` on a fresh flash
+- USB `config.toml`
+- the local bootstrap web console on `172.20.30.1:8080`
 
-Credentials must still be deployed manually to `/data/config/` after first
-boot.
+When a new `config.toml` is applied through one of those paths, the device
+persists it under `/data/config/`, writes admin SSH authorized keys, renders the
+declared Quadlet units, and continues first boot without requiring a second
+reboot.
+
+Reprovisioning is done by wiping `/data` and rebooting. Because initrd only
+treats `/boot/config.toml` as a seed on a true fresh flash, reprovisioning uses
+USB `config.toml` first and then falls back to the bootstrap UI instead of
+replaying an old `/boot/config.toml`.
 
 For local development only, you can opt into a build-time development mode with
 a gitignored `.env` file:
 
 ```sh
-mise run admin:pass
 cat > .env <<'EOF'
 DEVELOPMENT=1
-ADMIN_PASSWORD_HASH_FILE=.local/admin-password-hash
 EOF
 ```
 
-When `DEVELOPMENT=1` is set during the image build, first boot copies the local
-admin password hash into `/data/config/admin-password-hash` and enables the
+When `DEVELOPMENT=1` is set during the image build, first boot only enables the
 existing WAN SSH flag on `/data/config/ssh-wan-enabled` for easier testing.
+Operator access still comes from normal SSH-key provisioning.
 
-For development, the `root` user has an empty password and serial console access on UART2 (ttyS2, 1.5 Mbaud).
+The image keeps both `root` and `admin` passwords locked. On Rock64,
+`_RUT_OH_=1` enables a serial-only root recovery login on UART2 (ttyS2,
+1.5 Mbaud) for the next boot.

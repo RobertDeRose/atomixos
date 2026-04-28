@@ -30,7 +30,6 @@
       };
 
       developmentMode = builtins.getEnv "DEVELOPMENT" == "1";
-      developmentAdminPasswordHashFile = builtins.getEnv "ADMIN_PASSWORD_HASH_FILE";
 
       mkDocsToolchain =
         pkgsFor:
@@ -134,7 +133,7 @@
           ./modules/hardware-rock64.nix
         ];
         specialArgs = {
-          inherit self developmentMode developmentAdminPasswordHashFile;
+          inherit self developmentMode;
         };
       };
 
@@ -146,7 +145,7 @@
           ./modules/hardware-qemu.nix
         ];
         specialArgs = {
-          inherit self developmentMode developmentAdminPasswordHashFile;
+          inherit self developmentMode;
         };
       };
 
@@ -261,7 +260,11 @@
 
           netTests = {
             firewall = import ./nix/tests/firewall.nix netTestArgs;
+            initrd-fresh-flash-marker = import ./nix/tests/initrd-fresh-flash-marker.nix {
+              inherit pkgs self;
+            };
             first-boot-provision = import ./nix/tests/first-boot-provision.nix netTestArgs;
+            first-boot-source-discovery = import ./nix/tests/first-boot-source-discovery.nix netTestArgs;
             forensics-boot-markers = import ./nix/tests/forensics-boot-markers.nix netTestArgs;
             forensics-mount-selection = import ./nix/tests/forensics-mount-selection.nix netTestArgs;
             forensics-ordering = import ./nix/tests/forensics-ordering.nix netTestArgs;
@@ -302,7 +305,13 @@
             rauc-power-loss = import ./nix/tests/rauc-power-loss.nix darwinRaucTestArgs;
             rauc-watchdog = import ./nix/tests/rauc-watchdog.nix darwinRaucTestArgs;
             firewall = import ./nix/tests/firewall.nix darwinNetTestArgs;
+            initrd-fresh-flash-marker = import ./nix/tests/initrd-fresh-flash-marker.nix {
+              inherit self;
+              pkgs = darwinPkgs;
+              hostPkgs = darwinPkgs;
+            };
             first-boot-provision = import ./nix/tests/first-boot-provision.nix darwinNetTestArgs;
+            first-boot-source-discovery = import ./nix/tests/first-boot-source-discovery.nix darwinNetTestArgs;
             forensics-boot-markers = import ./nix/tests/forensics-boot-markers.nix darwinNetTestArgs;
             forensics-mount-selection = import ./nix/tests/forensics-mount-selection.nix darwinNetTestArgs;
             forensics-ordering = import ./nix/tests/forensics-ordering.nix darwinNetTestArgs;

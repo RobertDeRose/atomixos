@@ -9,13 +9,14 @@ set -euo pipefail
 
 log() { echo "[first-boot] $*"; }
 FORENSICS_STATE_DIR="${ATOMIXOS_FORENSICS_RAUC_STATE_DIR:-/data/rauc/forensics}"
-CONFIG_ROOT="/data/config"
+CONFIG_ROOT="${ATOMIXOS_CONFIG_ROOT:-/data/config}"
 CONFIG_TOML="$CONFIG_ROOT/config.toml"
-QUADLET_ACTIVE_DIR="/etc/containers/systemd"
+QUADLET_ACTIVE_DIR="${ATOMIXOS_QUADLET_ACTIVE_DIR:-/etc/containers/systemd}"
 BOOTSTRAP_PORT="${ATOMIXOS_BOOTSTRAP_PORT:-8080}"
 BOOTSTRAP_HOST="${ATOMIXOS_BOOTSTRAP_HOST:-172.20.30.1}"
-INITRD_MARKER="/etc/atomixos/fresh-flash"
-BOOT_CONFIG_PATH="/boot/config.toml"
+INITRD_MARKER="${ATOMIXOS_INITRD_MARKER:-/etc/atomixos/fresh-flash}"
+BOOT_CONFIG_PATH="${ATOMIXOS_BOOT_CONFIG_PATH:-/boot/config.toml}"
+APP_RUNTIME_QUADLET_DIR="${ATOMIXOS_ROOTLESS_QUADLET_DIR:-/var/lib/appsvc/.config/containers/systemd}"
 
 forensic() {
 	if command -v forensic-log >/dev/null 2>&1; then
@@ -23,22 +24,8 @@ forensic() {
 	fi
 }
 
-write_dev_admin_password_hash() {
-	local hash_file="/data/config/admin-password-hash"
-	local hash_value="${ATOMIXOS_DEV_ADMIN_PASSWORD_HASH:-}"
-
-	if [ -z "$hash_value" ] || [ -f "$hash_file" ]; then
-		return 0
-	fi
-
-	mkdir -p "$(dirname "$hash_file")"
-	log "Writing development admin password hash"
-	printf '%s\n' "$hash_value" >"$hash_file"
-	chmod 600 "$hash_file"
-}
-
 enable_dev_ssh_on_wan() {
-	local flag_file="/data/config/ssh-wan-enabled"
+	local flag_file="$CONFIG_ROOT/ssh-wan-enabled"
 
 	if [ "${ATOMIXOS_DEV_ENABLE_SSH_WAN:-}" != "1" ] || [ -f "$flag_file" ]; then
 		return 0
@@ -74,6 +61,10 @@ ensure_rauc_env() {
 
 current_boot_slot() {
 	local arg
+	if [ -n "${ATOMIXOS_BOOT_SLOT:-}" ]; then
+		printf '%s\n' "$ATOMIXOS_BOOT_SLOT"
+		return 0
+	fi
 	for arg in $(</proc/cmdline); do
 		case "$arg" in
 		rauc.slot=boot.*)
@@ -90,23 +81,26 @@ is_fresh_flash() {
 }
 
 find_usb_config() {
-	local device mount_dir
-	for device in /dev/disk/by-label/* /dev/disk/by-partlabel/*; do
-		[ -e "$device" ] || continue
-		case "$device" in
-		*/boot-a | */boot-b | */data | */rootfs-a | */rootfs-b)
-			continue
-			;;
-		esac
-		mount_dir="$(mktemp -d /run/atomixos-usb-config.XXXXXX)"
-		if mount -t vfat -o ro "$device" "$mount_dir" >/dev/null 2>&1; then
-			if [ -f "$mount_dir/config.toml" ]; then
-				printf '%s\n' "$mount_dir/config.toml"
-				return 0
+	local search_dir device mount_dir
+	for search_dir in ${ATOMIXOS_USB_SEARCH_DIRS:-/dev/disk/by-label /dev/disk/by-partlabel}; do
+		[ -d "$search_dir" ] || continue
+		for device in "$search_dir"/*; do
+			[ -e "$device" ] || continue
+			case "$device" in
+			*/boot-a | */boot-b | */data | */rootfs-a | */rootfs-b)
+				continue
+				;;
+			esac
+			mount_dir="$(mktemp -d /run/atomixos-usb-config.XXXXXX)"
+			if mount -t vfat -o ro "$device" "$mount_dir" >/dev/null 2>&1; then
+				if [ -f "$mount_dir/config.toml" ]; then
+					printf '%s\n' "$mount_dir/config.toml"
+					return 0
+				fi
+				umount "$mount_dir" >/dev/null 2>&1 || true
 			fi
-			umount "$mount_dir" >/dev/null 2>&1 || true
-		fi
-		rmdir "$mount_dir" >/dev/null 2>&1 || true
+			rmdir "$mount_dir" >/dev/null 2>&1 || true
+		done
 	done
 	return 1
 }
@@ -126,12 +120,13 @@ cleanup_seed_source() {
 bootstrap_web_console() {
 	local temp_config
 	temp_config="$(mktemp /run/atomixos-bootstrap-config.XXXXXX.toml)"
+	rm -f "$temp_config"
 	log "Starting bootstrap web console on $BOOTSTRAP_HOST:$BOOTSTRAP_PORT"
 	forensic --stage firstboot --event bootstrap-console --result start
 	first-boot-provision serve "$CONFIG_ROOT" "$temp_config" --host "$BOOTSTRAP_HOST" --port "$BOOTSTRAP_PORT" &
 	local server_pid=$!
 	while kill -0 "$server_pid" >/dev/null 2>&1; do
-		if [ -f "$CONFIG_TOML" ]; then
+		if [ -f "$temp_config" ]; then
 			kill "$server_pid" >/dev/null 2>&1 || true
 			wait "$server_pid" 2>/dev/null || true
 			rm -f "$temp_config"
@@ -147,10 +142,22 @@ bootstrap_web_console() {
 
 sync_quadlet_units() {
 	if command -v systemctl >/dev/null 2>&1; then
-		systemctl restart quadlet-sync.service
+		if ! systemctl restart quadlet-sync.service; then
+			log "WARNING: quadlet-sync.service failed; continuing first boot for debugging access"
+			forensic --stage firstboot --event quadlet-sync-failed --result fail
+		fi
+		if systemctl list-unit-files provisioned-firewall-inbound.service >/dev/null 2>&1; then
+			if ! systemctl restart provisioned-firewall-inbound.service; then
+				log "WARNING: provisioned-firewall-inbound.service failed; continuing first boot for debugging access"
+				forensic --stage firstboot --event firewall-sync-failed --result fail
+			fi
+		fi
 	else
 		mkdir -p "$QUADLET_ACTIVE_DIR"
-		first-boot-provision sync-quadlet "$CONFIG_ROOT" "$QUADLET_ACTIVE_DIR"
+		if ! first-boot-provision sync-quadlet "$CONFIG_ROOT" "$QUADLET_ACTIVE_DIR" "$APP_RUNTIME_QUADLET_DIR"; then
+			log "WARNING: quadlet sync failed; continuing first boot for debugging access"
+			forensic --stage firstboot --event quadlet-sync-failed --result fail
+		fi
 	fi
 }
 
@@ -176,6 +183,12 @@ has_valid_provisioning() {
 
 discover_and_import_provisioning() {
 	local seed_path usb_path
+	if has_valid_provisioning; then
+		log "Using existing provisioned config from $CONFIG_TOML"
+		sync_quadlet_units
+		return 0
+	fi
+
 	if is_fresh_flash && [ -f "$BOOT_CONFIG_PATH" ]; then
 		seed_path="$BOOT_CONFIG_PATH"
 	elif usb_path="$(find_usb_config)"; then
@@ -189,15 +202,17 @@ discover_and_import_provisioning() {
 		return $?
 	fi
 
-	bootstrap_web_console
+	if ! bootstrap_web_console; then
+		return 1
+	fi
 	sync_quadlet_units
 }
 
 should_allow_dev_fallback() {
-	[ -n "${ATOMIXOS_DEV_ADMIN_PASSWORD_HASH:-}" ] || [ "${ATOMIXOS_DEV_ENABLE_SSH_WAN:-}" = "1" ]
+	[ "${ATOMIXOS_DEV_ENABLE_SSH_WAN:-}" = "1" ]
 }
 
-SENTINEL="/data/.completed_first_boot"
+SENTINEL="${ATOMIXOS_FIRST_BOOT_SENTINEL:-/data/.completed_first_boot}"
 
 # Guard (belt-and-suspenders alongside systemd ConditionPathExists)
 if [ -f "$SENTINEL" ]; then
@@ -223,7 +238,6 @@ used_dev_fallback=false
 if ! discover_and_import_provisioning; then
 	if should_allow_dev_fallback; then
 		log "Provisioning seed not found; using development fallback"
-		write_dev_admin_password_hash
 		enable_dev_ssh_on_wan
 		write_dev_health_requirements
 		used_dev_fallback=true
