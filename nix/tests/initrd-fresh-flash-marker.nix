@@ -158,17 +158,6 @@ nixos-lib.runTest {
       systemd.services.first-boot.enable = false;
       systemd.services.quadlet-sync.enable = false;
       systemd.services.os-verification.enable = false;
-      atomixos.rauc = {
-        bootloader = "custom";
-        statusFile = "/tmp/rauc.status";
-        slots = {
-          boot0 = "/dev/disk/by-partlabel/boot-a";
-          boot1 = "/dev/disk/by-partlabel/boot-b";
-          rootfs0 = "/dev/disk/by-partlabel/rootfs-a";
-          rootfs1 = "/dev/disk/by-partlabel/rootfs-b";
-        };
-      };
-
       # Point initrd repart at the extra disk, leaving the main VM disk as the
       # regular writable root filesystem.
       boot.initrd.systemd.enable = lib.mkForce true;

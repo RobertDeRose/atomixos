@@ -918,11 +918,14 @@ in
   # ── RAUC slot device paths (eMMC) ──────────────────────────────────────────
   # These map to the GPT partition layout after initrd repartitioning:
   #   p1 = boot A (vfat), p2 = rootfs A, p3 = boot B (vfat), p4 = rootfs B
-  atomixos.rauc.slots = {
-    boot0 = "/dev/mmcblk1p1";
-    boot1 = "/dev/mmcblk1p3";
-    rootfs0 = "/dev/mmcblk1p2";
-    rootfs1 = "/dev/mmcblk1p4";
+  atomixos.rauc = {
+    enable = lib.mkDefault true;
+    slots = {
+      boot0 = "/dev/mmcblk1p1";
+      boot1 = "/dev/mmcblk1p3";
+      rootfs0 = "/dev/mmcblk1p2";
+      rootfs1 = "/dev/mmcblk1p4";
+    };
   };
 
   # ── Serial console (UART2) ─────────────────────────────────────────────────

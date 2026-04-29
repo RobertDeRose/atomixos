@@ -47,7 +47,7 @@ in
   options.atomixos.rauc = {
     enable = lib.mkOption {
       type = lib.types.bool;
-      default = true;
+      default = false;
       description = "Whether to configure the RAUC service and slot metadata.";
     };
 
