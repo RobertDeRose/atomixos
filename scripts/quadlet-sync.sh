@@ -9,6 +9,7 @@ APP_RUNTIME_USER="appsvc"
 APP_RUNTIME_HOME="/var/lib/appsvc"
 ROOTLESS_QUADLET_DIR="$APP_RUNTIME_HOME/.config/containers/systemd"
 RUNTIME_METADATA_FILE="$CONFIG_ROOT/quadlet-runtime.json"
+APP_RUNTIME_SHELL="/run/current-system/sw/bin/sh"
 
 appsvc_uid() {
 	id -u "$APP_RUNTIME_USER"
@@ -19,7 +20,8 @@ run_as_appsvc() {
 	uid="$(appsvc_uid)"
 	local runtime_dir="/run/user/$uid"
 	local bus_address="unix:path=$runtime_dir/bus"
-	runuser -u "$APP_RUNTIME_USER" -- sh -c "HOME=\"$APP_RUNTIME_HOME\" XDG_RUNTIME_DIR=\"$runtime_dir\" DBUS_SESSION_BUS_ADDRESS=\"$bus_address\" $*"
+	local path="/run/wrappers/bin:/run/current-system/sw/bin:$PATH"
+	runuser -u "$APP_RUNTIME_USER" -- "$APP_RUNTIME_SHELL" -c "HOME=\"$APP_RUNTIME_HOME\" PATH=\"$path\" XDG_RUNTIME_DIR=\"$runtime_dir\" DBUS_SESSION_BUS_ADDRESS=\"$bus_address\" $*"
 }
 
 has_rootless_units() {
@@ -44,7 +46,6 @@ prepare_rootless_runtime() {
 	loginctl enable-linger "$APP_RUNTIME_USER"
 	systemctl start "user@$uid.service"
 	run_as_appsvc "systemctl --user daemon-reload"
-	run_as_appsvc "podman network exists atomixos-rootless || podman network create atomixos-rootless"
 }
 
 list_units_by_mode() {

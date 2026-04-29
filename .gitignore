@@ -33,6 +33,7 @@ book/
 
 # AI Agents
 .opencode
+.playwright-mcp/
 bkup/
 
 # AtomixOS files
