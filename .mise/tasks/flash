@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #MISE description="Flash image to disk device (eMMC/SD) using dd with progress"
 #USAGE flag "-y --yes" help="Skip confirmation prompt"
-#USAGE flag "-i --image <path>" help="Path to image file (default: auto-detect atomixos-*.img)"
+#USAGE flag "-i --image <path>" help="Path to image file (default: .gcroots/images/image.1)"
 #USAGE arg "[disk]" help="Target disk device (e.g. /dev/disk4 on macOS, /dev/mmcblk0 on Linux)"
 set -euo pipefail
 
@@ -9,8 +9,7 @@ set -euo pipefail
 
 IMAGE_PATH="${usage_image:-}"
 if [ -z "$IMAGE_PATH" ]; then
-	# Auto-detect: prefer local copy, then result-image symlink
-	for candidate in atomixos-*.img result-image/atomixos-*.img; do
+	for candidate in .gcroots/images/image.1/*.img; do
 		if [ -f "$candidate" ]; then
 			IMAGE_PATH="$candidate"
 			break
@@ -22,7 +21,7 @@ if [ -z "$IMAGE_PATH" ] || [ ! -f "$IMAGE_PATH" ]; then
 	echo "ERROR: No image file found."
 	echo ""
 	echo "Either:"
-	echo "  1. Run 'mise run build:image' to build and copy the image"
+	echo "  1. Run 'mise run build:image' to build the image into .gcroots/images/image.1"
 	echo "  2. Specify the image path: mise run flash --image /path/to/image.img /dev/diskN"
 	exit 1
 fi
