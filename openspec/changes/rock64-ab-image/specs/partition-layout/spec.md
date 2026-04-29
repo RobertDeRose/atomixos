@@ -32,24 +32,22 @@ RAUC SHALL update the boot partition and rootfs partition atomically as part of 
 - **WHEN** a RAUC bundle is installed
 - **THEN** both the boot partition and rootfs partition for the target slot are written as a single operation
 
-### Requirement: Initial provisioning script partitions and deploys first image
+### Requirement: Flashable image and flash workflow deploy the initial slot-A system
 
-An initial provisioning script SHALL partition the eMMC, write U-Boot to the correct raw offset, create the boot slot A
-filesystem, deploy the first kernel+DTB to boot slot A, deploy the first squashfs image to rootfs slot A, and leave the
-remaining eMMC space unallocated so initrd `systemd-repart` can create boot slot B, rootfs slot B, and `/data` on first
-boot.
+The build outputs SHALL include a flashable image that writes U-Boot to the correct raw offset, populates `boot-a` with
+the first kernel/initrd/DTB payload, writes the first squashfs image to `rootfs-a`, and leaves the remaining eMMC space
+unallocated so initrd `systemd-repart` can create `boot-b`, `rootfs-b`, and `/data` on first boot.
 
-#### Scenario: First boot after provisioning
+#### Scenario: First boot after flashing
 
-- **WHEN** the provisioning script completes and the device reboots
+- **WHEN** the flashable image has been written to the device and the system reboots
 - **THEN** U-Boot loads the kernel from boot slot A, mounts rootfs slot A as the root filesystem, and the system reaches
   multi-user.target
 
-#### Scenario: Provisioning script is idempotent
+#### Scenario: Flash workflow warns before overwriting an existing target
 
-- **WHEN** the provisioning script is run a second time on an already-provisioned eMMC
-- **THEN** the script SHALL warn that existing data will be destroyed and require explicit confirmation before
-  proceeding
+- **WHEN** the operator invokes the flashing workflow against an already-populated target device
+- **THEN** the workflow requires explicit operator confirmation before overwriting the target
 
 ### Requirement: U-Boot is written at correct RK3328 offset
 

@@ -2,122 +2,101 @@
 
 ## ADDED Requirements
 
-### Requirement: NixOS flake defines Rock64 system configuration
+### Requirement: The flake defines Rock64 and QEMU system configurations
 
-The flake SHALL define a `nixosConfigurations.rock64` output that targets the Rock64 board (aarch64-linux, Rockchip
-RK3328). The configuration SHALL include systemd, podman, Cockpit (with podman module), openssh, OpenVPN, chrony,
-dnsmasq, nftables, and all dependencies required for the A/B update system and LAN gateway role.
+The flake SHALL define `nixosConfigurations.rock64` for the real Rock64 hardware target and
+`nixosConfigurations.rock64-qemu` for the shared QEMU test target.
 
 #### Scenario: Flake evaluates successfully
 
 - **WHEN** `nix flake check` is run against the repository
-- **THEN** the flake evaluates without errors and `nixosConfigurations.rock64` is present
+- **THEN** the flake evaluates without errors
+- **AND** both `nixosConfigurations.rock64` and `nixosConfigurations.rock64-qemu` are present
 
-#### Scenario: System configuration targets aarch64-linux
+#### Scenario: System configuration targets `aarch64-linux`
 
-- **WHEN** the Rock64 NixOS configuration is built
-- **THEN** all outputs are compiled for the `aarch64-linux` platform
+- **WHEN** the Rock64 configuration is built
+- **THEN** its system outputs target `aarch64-linux`
 
-### Requirement: Flake produces squashfs root filesystem image
+### Requirement: The flake produces a read-only squashfs root filesystem
 
-The flake SHALL produce a squashfs image as a package output (`packages.aarch64-linux.squashfs`). The image SHALL
-contain the complete root filesystem including kernel modules, Cockpit, OpenVPN, chrony, dnsmasq, and all system
-services. The image SHALL be read-only.
+The flake SHALL produce a squashfs image as `packages.aarch64-linux.squashfs`. The image SHALL contain the system
+closure required for the appliance baseline and SHALL be sized to fit within the 1 GiB rootfs slot.
 
 #### Scenario: Squashfs image builds successfully
 
 - **WHEN** `nix build .#squashfs` is run
-- **THEN** a squashfs image file is produced in the `result/` symlink
+- **THEN** a squashfs image is produced
 
-#### Scenario: Squashfs image fits within slot size
+#### Scenario: Squashfs image fits the slot budget
 
 - **WHEN** the squashfs image is built
-- **THEN** the resulting image SHALL be no larger than 200 MB
+- **THEN** the resulting image is no larger than the configured 1 GiB slot limit
 
-### Requirement: Flake produces signed multi-slot RAUC bundle
+### Requirement: The flake produces a signed RAUC bundle and flashable image
 
-The flake SHALL produce a signed RAUC bundle (`.raucb`) as a package output (`packages.aarch64-linux.rauc-bundle`). The
-bundle SHALL contain both the boot partition image (kernel + DTB) and the squashfs rootfs image, and SHALL be signed
-with the project CA key.
+The flake SHALL expose a signed RAUC bundle as `packages.aarch64-linux.rauc-bundle` and a flashable device image as
+`packages.aarch64-linux.image`.
 
 #### Scenario: RAUC bundle builds successfully
 
 - **WHEN** `nix build .#rauc-bundle` is run
-- **THEN** a `.raucb` file is produced that passes `rauc info` validation and contains both boot and rootfs images
+- **THEN** a signed `.raucb` file is produced that passes `rauc info`
 
-#### Scenario: RAUC bundle is signed
+#### Scenario: Flashable image builds successfully
 
-- **WHEN** the RAUC bundle is inspected with `rauc info`
-- **THEN** the bundle shows a valid signature chain rooted at the project CA
+- **WHEN** `nix build .#image` is run
+- **THEN** a flashable Rock64 disk image is produced containing U-Boot, `boot-a`, and `rootfs-a`
 
-### Requirement: Stripped kernel with modular USB peripheral support
+### Requirement: The configuration uses a stripped kernel with modular USB peripheral support
 
-The NixOS configuration SHALL use a custom kernel configuration stripped to only RK3328-required drivers built-in
-(eMMC/dw_mmc, ethernet/stmmac, USB host/dwc2/xhci, watchdog/dw_wdt, squashfs, f2fs). USB WiFi drivers (rtlwifi,
-ath9k_htc, mt76), USB Bluetooth drivers (btusb), and USB serial drivers (ftdi, cp210x) SHALL be built as modules (`=m`)
-and included in the squashfs.
+The Rock64 configuration SHALL use a stripped kernel profile with RK3328-required storage, networking, USB host,
+watchdog, squashfs, f2fs, and overlay support built in. Optional USB WiFi, Bluetooth, and USB serial support SHALL be
+available as modules.
 
 #### Scenario: Kernel boots on Rock64 hardware
 
 - **WHEN** the built kernel and DTB are loaded by U-Boot on a Rock64 board
-- **THEN** the kernel boots successfully and detects eMMC, watchdog, ethernet, and USB hardware
+- **THEN** the kernel boots and detects the required Rock64 hardware path
 
-#### Scenario: WiFi module loads on demand
+#### Scenario: Optional USB peripherals load on demand
 
-- **WHEN** a supported USB WiFi dongle is plugged into the Rock64
-- **THEN** the appropriate kernel module is loaded and a wlan interface appears
+- **WHEN** a supported USB WiFi, Bluetooth, or serial device is connected
+- **THEN** the matching kernel module can be loaded without rebuilding the image
 
-#### Scenario: Bluetooth module loads on demand
+### Requirement: The device image includes the core appliance runtime
 
-- **WHEN** a supported USB Bluetooth dongle is plugged into the Rock64
-- **THEN** the btusb kernel module is loaded and the Bluetooth controller is available
+The Rock64 configuration SHALL include systemd, Podman, OpenSSH, OpenVPN, chrony, dnsmasq, nftables, and the services
+required for the A/B update system, first-boot provisioning flow, and LAN gateway role.
 
-### Requirement: Cockpit is included in the rootfs as a system service
-
-The NixOS configuration SHALL include Cockpit with the podman module as a system service managed by systemd. Cockpit
-SHALL start automatically on boot and provide web-based system management and container management.
-
-#### Scenario: Cockpit is accessible after boot
+#### Scenario: Core runtime services are available after boot
 
 - **WHEN** the Rock64 boots the built image
-- **THEN** Cockpit is running as a systemd service and accessible via HTTPS through Traefik
+- **THEN** systemd is PID 1
+- **AND** Podman is available for application workloads
+- **AND** SSH, LAN gateway, and update services are present in the system configuration
 
-#### Scenario: Cockpit podman module shows containers
+### Requirement: Local web management is not part of the base image
 
-- **WHEN** a user accesses Cockpit's container management interface
-- **THEN** Cockpit displays podman containers running on the device with the ability to start, stop, and inspect them
+The base Rock64 image SHALL NOT require Cockpit or Traefik to be built into the system closure.
 
-### Requirement: OpenVPN is included in the rootfs as a system service
+#### Scenario: Appliance baseline excludes local management stack
 
-The NixOS configuration SHALL include OpenVPN as a system service for recovery management access via VPN tunnel.
+- **WHEN** the Rock64 image is built
+- **THEN** the core platform remains bootable and manageable without a local Cockpit/Traefik stack in the image itself
 
-#### Scenario: OpenVPN service is available after boot
+### Requirement: The flake exposes a QEMU testing target that shares the core configuration
 
-- **WHEN** the Rock64 boots and OpenVPN is configured
-- **THEN** the OpenVPN service is running and creates a tun0 interface when a VPN connection is established
+The `rock64-qemu` target SHALL reuse the shared base system configuration while swapping only the hardware-specific
+pieces needed for `aarch64-virt` test execution.
 
-### Requirement: System includes core services
+#### Scenario: QEMU target boots successfully
 
-The NixOS configuration SHALL enable systemd, podman (for container workloads), and openssh (for remote access). These
-services SHALL start automatically on boot.
+- **WHEN** the QEMU test target is built and run
+- **THEN** the system boots with the shared AtomixOS runtime and test harness overrides
 
-#### Scenario: Core services are running after boot
+#### Scenario: QEMU target stays close to hardware target
 
-- **WHEN** the Rock64 boots the built image
-- **THEN** systemd is PID 1, `podman` is available on PATH, and `sshd` is listening
-
-### Requirement: QEMU testing target is available
-
-The flake SHALL define a `nixosConfigurations.rock64-qemu` output that shares the majority of the Rock64 configuration
-but targets `aarch64-virt` for QEMU testing. The QEMU target SHALL be bootable via `./result/bin/run-vm` or equivalent.
-
-#### Scenario: QEMU VM boots successfully
-
-- **WHEN** `nix build .#rock64-qemu-vm` is run and the resulting VM script is executed
-- **THEN** the NixOS system boots in QEMU with systemd, podman, Cockpit, and other services available
-
-#### Scenario: QEMU target shares configuration with hardware target
-
-- **WHEN** the Rock64 and rock64-qemu configurations are compared
-- **THEN** they share the same service configuration, firewall rules, and application setup, differing only in
-  hardware-specific settings (kernel, DTB, device paths)
+- **WHEN** the Rock64 and QEMU configurations are compared
+- **THEN** they share the same core service, firewall, and update logic while differing only in hardware/test-specific
+  details

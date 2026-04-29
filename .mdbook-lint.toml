@@ -3,6 +3,13 @@
 # Only docs/src/**/*.md files are linted (configured in hk.pkl glob).
 # Rules disabled here are either false positives for this project or
 # already covered by other linters (rumdl handles general markdown).
+# Rule-specific configuration
+[MD007]
+indent = 2
+
+[MD013]
+line-length = 120
+code-blocks = false
 
 # Disable noisy / false-positive rules globally
 disabled-rules = [
@@ -10,6 +17,8 @@ disabled-rules = [
   "MD013",
   # Inline HTML -- we use <img> for centered logo, <br> occasionally
   "MD033",
+  # First visible content in a Markdown file to be an # Heading
+  "MD041",
   # Orphaned files -- picks up .md files outside docs/src/ (openspec, .opencode, etc.)
   "MDBOOK005",
   # Part titles must be h1 -- mdBook supports ## for part titles in SUMMARY.md

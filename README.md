@@ -137,7 +137,7 @@ After changing the range, rebuild:
 
 ```sh
 mise run check
-mise run build:image
+mise run build
 ```
 
 ## Project structure
@@ -231,21 +231,22 @@ mise run check
 mise run build:squashfs        # result-squashfs/
 mise run build:rauc-bundle     # result-rauc-bundle/
 mise run build:boot-script     # result-boot-script/
-mise run build:image           # result-image/
+mise run build                 # .gcroots/images/image.1/
 
 # Build everything
 mise run build
 
 # Build via Lima VM (when nix-darwin linux-builder is not available)
-mise run build:image -- --lima
-mise run build:image -- --lima --vm my-builder
+mise run build -- --lima
+mise run build -- --lima --vm my-builder
 ```
 
 ## Running E2E Tests
 
-Nine NixOS VM integration tests validate the full RAUC update lifecycle, network security, and rollback behavior. Tests
-run on both Linux (TCG software emulation) and macOS (Apple Virtualization Framework). The mise task wrappers
-auto-detect the platform and select the correct flake output (`aarch64-linux` or `aarch64-darwin`).
+The core `mise run e2e` suite runs 9 NixOS VM integration tests for the RAUC lifecycle and network behavior. The flake
+also exposes additional provisioning and forensics checks directly under `checks.*`. Tests run on both Linux (TCG
+software emulation) and macOS (Apple Virtualization Framework). The mise task wrappers auto-detect the platform and
+select the correct flake output (`aarch64-linux` or `aarch64-darwin`).
 
 ### Run all tests
 
@@ -346,7 +347,7 @@ nix build "path:$PWD#checks.aarch64-darwin.rauc-slots" --no-link -L
 Build an `.img` file that can be written to eMMC (or SD card):
 
 ```sh
-mise run build:image
+mise run build
 
 # Flash to a disk device (eMMC module via USB/SD adapter)
 mise run flash /dev/disk4          # macOS — auto-detects image, uses raw device for speed
@@ -369,15 +370,14 @@ All tasks are run with `mise run <task>`. Run `mise tasks` to list them.
 |-------------------------|-------------------------------------------------------------|
 | `check`                 | Verify flake evaluates cleanly (`nix flake check`)          |
 | **Build**               |                                                             |
-| `build`                 | Build all image artifacts (depends on all `build:*` tasks)  |
+| `build`                 | Build and retain image artifacts under `.gcroots/`          |
 | `build:squashfs`        | Build squashfs rootfs → `result-squashfs/`                  |
 | `build:rauc-bundle`     | Build signed RAUC bundle → `result-rauc-bundle/`            |
 | `build:boot-script`     | Build U-Boot boot script → `result-boot-script/`            |
-| `build:image`           | Build flashable disk image, copy `.img` to cwd              |
+|                         | Optional `-o <path>` copies the latest `.img` to a path     |
 |                         | All `build:*` tasks accept `--lima` and `--vm <name>`       |
-|                         | `build:image` also accepts `-o <path>`                      |
 | **E2E Tests**           |                                                             |
-| `e2e`                   | Run all 9 integration tests sequentially                    |
+| `e2e`                   | Run the core 9-task E2E suite sequentially                  |
 | `e2e:rauc-slots`        | RAUC slot detection after boot                              |
 | `e2e:rauc-update`       | Bundle install + slot switch A→B                            |
 | `e2e:rauc-rollback`     | Install → mark bad → rollback to previous slot              |
@@ -398,18 +398,18 @@ All tasks are run with `mise run <task>`. Run `mise tasks` to list them.
 
 ## Flake outputs
 
-| Output                               | Description                                            |
-|--------------------------------------|--------------------------------------------------------|
-| `nixosConfigurations.rock64`         | Real hardware NixOS system                             |
-| `nixosConfigurations.rock64-qemu`    | QEMU aarch64-virt testing target                       |
-| `packages.aarch64-linux.squashfs`    | Compressed squashfs root filesystem                    |
-| `packages.aarch64-linux.rauc-bundle` | Signed multi-slot `.raucb` bundle                      |
-| `packages.aarch64-linux.boot-script` | Compiled U-Boot `boot.scr`                             |
-| `packages.aarch64-linux.image`       | Flashable eMMC disk image (U-Boot + boot-a + rootfs-a) |
-| `apps.aarch64-linux.rock64-qemu-vm`  | QEMU VM runner                                         |
-| `checks.aarch64-linux.*`             | E2E integration tests (9 tests, see `nix/tests/`)      |
-| `checks.aarch64-darwin.*`            | Same tests, run natively on macOS via apple-virt       |
-| `devShells.*.default`                | Development shell with mdBook                          |
+| Output                               | Description                                              |
+|--------------------------------------|----------------------------------------------------------|
+| `nixosConfigurations.rock64`         | Real hardware NixOS system                               |
+| `nixosConfigurations.rock64-qemu`    | QEMU aarch64-virt testing target                         |
+| `packages.aarch64-linux.squashfs`    | Compressed squashfs root filesystem                      |
+| `packages.aarch64-linux.rauc-bundle` | Signed multi-slot `.raucb` bundle                        |
+| `packages.aarch64-linux.boot-script` | Compiled U-Boot `boot.scr`                               |
+| `packages.aarch64-linux.image`       | Flashable eMMC disk image (U-Boot + boot-a + rootfs-a)   |
+| `apps.aarch64-linux.rock64-qemu-vm`  | QEMU VM runner                                           |
+| `checks.aarch64-linux.*`             | Full VM test suite from `nix/tests/`                     |
+| `checks.aarch64-darwin.*`            | Same VM test suite, run natively on macOS via apple-virt |
+| `devShells.*.default`                | Development shell with mdBook                            |
 
 ## Versioned Image Naming
 
@@ -430,7 +430,7 @@ console. The remaining 17 tasks require physical hardware testing or network acc
 
 - **Hardware verification (15 tasks)** — require a physical Rock64 board (NIC naming, DHCP/NTP on real
   network, RAUC on-device, provisioning boot, Cockpit SSH bridge, credential verification)
-- **Integration tests needing containers (2 tasks)** — Cockpit pod HTTPS verification, confirmation with real
-  containers and health manifest
+- **Integration tests needing containers (2 tasks)** — remaining hardware/runtime validation tied to real
+  provisioned workloads and on-device confirmation behavior
 
 See `openspec/changes/rock64-ab-image/tasks.md` for the full task breakdown.

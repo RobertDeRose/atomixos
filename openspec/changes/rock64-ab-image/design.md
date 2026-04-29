@@ -1,442 +1,189 @@
 # Design
 
+This document is maintained as the current source of truth for the foundational Rock64 A/B image design. Where the
+implementation diverged from early exploration, the current design is described directly and explicit divergence notes
+are kept only when they explain an important technical decision.
+
 ## Context
 
-This is a greenfield project — no existing NixOS configuration, RAUC setup, or image build pipeline exists. The target
-hardware is the Rock64 board (Rockchip RK3328 SoC, aarch64) with 16 GB eMMC.
+AtomixOS is a secure, reproducible operating system for single-board computers. The initial target is Rock64 (RK3328,
+aarch64) hardware. The platform must tolerate failed updates and power loss without bricking the device, while keeping
+the base image small enough to fit two rootfs slots plus persistent state on 16 GB eMMC.
 
-These devices are deployed remotely in the thousands and growing. They serve as network gateways for legacy downstream
-devices, providing a security/compliance boundary (EN18031). The current Debian-based system suffers from a ~3% update
-failure rate due to power loss during apt-based upgrades, requiring manual SSH recovery via VPN.
+The implemented platform centers on:
 
-The Rock64 acts as:
-
-- An OTA-updatable edge compute platform (NixOS + podman containers)
-- A network security boundary between WAN and an isolated LAN of legacy devices
-- A management hub with Cockpit (web UI via pod) and application-layer proxying (Traefik) to LAN devices
-- The sole communication path to legacy devices via TCP sockets the Rock64 opens to them
-
-The 16 GB eMMC is the primary constraint. A/B root filesystem slots must coexist with persistent storage for containers,
-state, and logs.
+- NixOS built as a read-only squashfs image
+- RAUC-managed A/B updates
+- U-Boot boot-count rollback
+- Podman for on-device application workloads
+- LAN gateway services (dnsmasq, chrony, nftables)
+- SSH-key-only operator access and a physical serial recovery path
+- Nixstasis-oriented remote management rather than a permanent local web-management stack inside the device image
 
 ## Goals / Non-Goals
 
-**Goals:**
+**Goals**
 
-- Atomic over-the-air updates: writing to the inactive slot pair (boot + rootfs) while the active slot continues running
-- Automatic rollback via U-Boot boot-count logic if a new image fails to boot
-- Hardware watchdog ensuring hung systems reboot and trigger rollback
-- Local health-check confirmation before committing a new slot — validates system services and manifest-defined
-  containers are running
-- Signed RAUC bundles (`.raucb`) built as a Nix flake output for reproducible, verifiable images
-- Initial provisioning script to partition eMMC and deploy the first image
-- Systemd-based update polling service, designed to be swappable with hawkBit client
-- Network isolation: LAN devices cannot reach the internet; Rock64 is the sole access point
-- Cockpit as a pod (`quay.io/cockpit/ws`) that SSHes into the host — keeps the squashfs small while providing web
-  management
-- `python3Minimal` in the rootfs to support Cockpit's SSH-based Python bridge
-- EN18031-compliant user authentication: no default passwords, unique per-device credentials set during provisioning
-- QEMU testing target for fast development iteration without hardware
+- Atomic A/B updates that only write the inactive slot pair
+- Automatic rollback when a new slot fails to boot or cannot stay healthy
+- A read-only appliance baseline with durable state isolated under `/data`
+- Deterministic networking and strict LAN/WAN isolation behavior
+- A small runtime closure that still supports Podman workloads and recovery access
+- A QEMU target that shares the real configuration for rapid iteration and test coverage
 
-**Non-Goals:**
+**Non-Goals**
 
-- Update server infrastructure (Azure Blob Storage, CDN, HTTP API) — assumed to exist; out of scope
-- hawkBit server deployment — device side is hawkBit-ready, but server is deferred
-- Delta/differential updates — first version uses full squashfs images; delta optimization is a future concern
-- Multi-board support — this targets Rock64 (RK3328) only; other boards are future work
-- Traefik configuration — The image defines the Traefik systemd service (same raw-podman pattern as Cockpit), but the
-  container image lives on `/data` and configuration files on `/data/config/traefik/`. The provisioning task
-  writes default config and a self-signed TLS certificate.
-- Container orchestration — the image provides podman + Cockpit; what containers run is determined by the application
-  layer and health manifest
+- Running a permanent Cockpit/Traefik management surface directly on the device
+- Embedding device credentials or per-device secrets in the base image
+- Generic provisioning engines such as cloud-init
+- Server-side update infrastructure design
+- Full initrd forensic-log persistence redesign in this change
 
 ## Decisions
 
-### 1. RAUC as the update framework
+### 1. Use RAUC for A/B updates
 
-**Choice**: RAUC over SWUpdate or custom scripts.
+**Decision:** Use RAUC as the update framework for multi-slot installs, signature verification, and slot metadata.
 
-**Rationale**: RAUC has first-class U-Boot integration (boot-count via environment variables), a NixOS module in nixpkgs
-(`services.rauc`), cryptographic bundle verification, and a D-Bus API for integration. SWUpdate is comparable but has
-weaker NixOS ecosystem support. Custom scripts are brittle and would reimplement what RAUC already provides.
+**Rationale:** RAUC fits the NixOS ecosystem well, supports multi-image bundles, and integrates cleanly with the U-Boot
+boot-count model the device uses.
 
-**Alternatives considered**:
+### 2. Use a read-only squashfs rootfs with OverlayFS at boot
 
-- **SWUpdate**: Capable, but less NixOS community support and no existing nixpkgs module.
-- **Mender**: SaaS-oriented, heavier footprint, less suitable for constrained eMMC.
-- **Custom dd-based scripts**: No verification, no rollback, no slot management — unacceptable for production.
+**Decision:** The runtime system is a read-only squashfs lower layer combined with a tmpfs-backed OverlayFS upper/work
+layer assembled in initrd.
 
-### 2. Read-only squashfs root filesystem
+**Rationale:** This keeps the runtime root immutable, avoids drift across boots, and makes the A/B slot boundary easy to
+reason about. Mutable state lives outside the rootfs on `/data`.
 
-**Choice**: squashfs for rootfs with a separate writable /data partition.
+### 3. Partition the eMMC as raw U-Boot + per-slot boot/rootfs + `/data`
 
-**Rationale**: squashfs provides excellent compression (current image: ~333 MB compressed with zstd at 1 MB block size),
-integrity (immutable), and simplicity (no fsck needed). The A/B design requires two copies of the rootfs — compression
-is essential to fit within the 16 GB eMMC budget. Mutable state lives on the /data partition (f2fs), mounted at boot.
+**Decision:** The flashable image contains raw U-Boot plus `boot-a` and `rootfs-a`. On first boot, initrd
+`systemd-repart` creates `boot-b`, `rootfs-b`, and the persistent `data` partition from the remaining space.
 
-The build uses `mksquashfs` with `-b 1048576` (1 MB block size, the maximum) which gives zstd more context for pattern
-matching and reduces the compressed size by ~9% compared to the default 128 KB block size. Runtime impact is negligible
-on a 1-4 GB RAM device with long-running services.
+**Rationale:** This keeps the shipped image small and deterministic while still resulting in a full A/B layout on-device.
+Per-slot boot partitions avoid a shared `/boot` single point of failure.
 
-**Alternatives considered**:
-
-- **ext4 with dm-verity**: More complex, larger on disk, marginal integrity benefit over squashfs for this use case.
-- **erofs**: Newer, less tooling support in NixOS.
-
-### 3. Kernel in per-slot boot partitions with modules in squashfs
-
-**Choice**: Each A/B slot gets its own small vfat boot partition containing the kernel and DTB. Kernel modules
-(including WiFi/BT USB dongle drivers) live inside the squashfs rootfs.
-
-**Rationale**: U-Boot cannot read squashfs, so the kernel must be on a U-Boot-accessible filesystem. A shared /boot
-partition would be a single point of failure — if a kernel update corrupts it, both slots are dead. Per-slot boot
-partitions make kernel updates atomic with rootfs updates. RAUC supports multi-slot bundles that write both the boot
-partition and rootfs partition in a single install operation.
-
-The kernel is stripped to only RK3328-required drivers (eMMC, ethernet, USB host, watchdog, squashfs, f2fs) built-in.
-Optional USB peripheral drivers (WiFi: rtlwifi/ath9k_htc/mt76, Bluetooth: btusb) are built as modules (`=m`) and
-included in the squashfs. They compress to nearly nothing and only consume RAM when loaded.
-
-**Alternatives considered**:
-
-- **Shared /boot partition**: Simpler but single point of failure. Rejected because a corrupted shared /boot bricks both
-  slots.
-- **FIT image in raw partition**: Works but less standard tooling; vfat is simpler for U-Boot.
-- **Overlayfs for optional modules**: Unnecessary complexity; modules in squashfs are effectively free when not loaded.
-
-### 4. eMMC partition layout
-
-**Choice**: Fixed partition table with raw U-Boot, per-slot vfat boot partitions, two squashfs slots, and f2fs /data.
+The current target layout is:
 
 ```text
-Offset     Size       Content          Filesystem
-0          4 MB       U-Boot           raw (idbloader @ sector 64, u-boot.itb @ sector 16384)
-4 MB       128 MB     boot slot A      vfat (kernel + DTB for slot A)
-132 MB     128 MB     boot slot B      vfat (kernel + DTB for slot B)
-260 MB     1 GB       rootfs slot A    squashfs (NixOS system + kernel modules)
-1284 MB    1 GB       rootfs slot B    squashfs (NixOS system + kernel modules)
-2308 MB    ~13.3 GB   /data         f2fs (containers, state, logs, health manifest)
+0-16 MiB     raw U-Boot region
+128 MiB      boot-a (vfat)
+1024 MiB     rootfs-a (squashfs/raw)
+128 MiB      boot-b (vfat, created on first boot)
+1024 MiB     rootfs-b (raw, created on first boot)
+remainder    /data (f2fs, created on first boot)
 ```
 
-**Rationale**: Per-slot boot partitions eliminate the shared /boot single point of failure. 128 MB per boot partition
-accommodates the uncompressed aarch64 kernel Image (~63 MB) plus DTB and boot.scr with room for growth. The 1 GB rootfs
-slots accommodate the NixOS system closure (currently ~333 MB compressed) with room for growth. The initial design
-targeted 200 MB slots but this proved unrealistic for NixOS + Podman + networking stack. f2fs is chosen for /data
-because it's designed for flash storage (wear leveling awareness, power-loss resilience). The layout leaves ~13.3 GB for
-/data, which holds container images, application data, and logs.
+### 4. Use U-Boot bootmeth plus RAUC mark-good for slot commit
 
-**Alternatives considered**:
+**Decision:** U-Boot bootmeth handles slot choice and boot-count decrement. Linux confirms a healthy slot with
+`rauc status mark-good`.
 
-- **ext4 for /data**: Works, but f2fs is purpose-built for eMMC/flash and handles power loss better.
+**Rationale:** This matches the current Rock64 implementation and keeps the rollback model aligned with RAUC's slot view.
 
-### 5. U-Boot from nixpkgs with boot-count via FAT flag file
+**Technical note:** Earlier investigation explored alternatives because raw eMMC env writes were risky on this hardware
+path. The current implementation relies on SPI-backed environment handling plus `rauc status mark-good`, which is what
+the live system and tests now use.
 
-**Choice**: Use the `ubootRock64` package from nixpkgs. Use a FAT flag file approach for boot confirmation instead of
-direct U-Boot environment manipulation from Linux.
+### 5. Keep the device image small and remove local Cockpit/Traefik management
 
-**Rationale**: Rock64/RK3328 has mainline U-Boot support, and nixpkgs packages it. No custom U-Boot build needed.
+**Decision:** Keep Podman on-device for application workloads, but do not ship a local Cockpit/Traefik management stack
+as part of the final base image.
 
-**CHANGED from original design**: The original plan used RAUC's built-in U-Boot bootloader backend, which calls
-`fw_setenv` from Linux to manipulate boot-count variables. Testing revealed that **writing to the raw eMMC user data
-area from Linux bricks NCard eMMC modules** — the board produces no U-Boot output at all after power cycle. This was
-confirmed through systematic testing: even writing 32 bytes of zeros to an already-zeroed area at the env offset via
-`dd` bricks the board. However, U-Boot's own `saveenv` command works correctly.
+**Rationale:** The local web-management path added closure size and operational complexity that no longer matches the
+intended remote-management model. The current design expects remote web access to be hosted from the Nixstasis side,
+while the device itself remains focused on SSH, update logic, LAN gateway behavior, and workload runtime support.
 
-**Current approach — FAT flag file**:
+### 6. Keep OpenVPN in the rootfs as a recovery path
 
-1. After successful boot confirmation, Linux writes a `slot_good` file to the boot FAT partition (`/boot`)
-2. On next boot, U-Boot's `boot.cmd` checks for `slot_good` via `fatload`
-3. If found: U-Boot restores `BOOT_x_LEFT=3`, calls `saveenv` (which works from U-Boot), and deletes the file
-4. If not found: normal boot-count decrement continues
+**Decision:** OpenVPN remains a rootfs service for recovery-oriented remote access.
 
-This avoids all raw eMMC writes from Linux. The U-Boot environment has a single 32 KB copy at offset `0x3F8000`
-(`CONFIG_ENV_REDUNDANT` is not enabled for this platform).
+**Rationale:** It provides a durable management path independent of application containers and is useful when WAN SSH is
+disabled by policy.
 
-Key U-Boot environment variables:
+### 7. Make first boot provisioning-aware
 
-- `BOOT_ORDER`: slot priority (e.g., `A B`)
-- `BOOT_A_LEFT` / `BOOT_B_LEFT`: remaining boot attempts per slot (e.g., `3`)
+**Decision:** A valid provisioning import is part of the production first-boot contract, not a post-boot manual step.
 
-### 6. Watchdog strategy
+**Rationale:** A device that boots Linux but lacks operator credentials and required workload intent is not actually ready
+for deployment. The detailed contract is defined in the `first-boot-local-provisioning` follow-on change, but the core
+foundational design is now provisioning-aware:
 
-**Choice**: Hardware watchdog (RK3328 built-in) driven by systemd's watchdog integration.
+- fresh-flash detection happens in initrd
+- first boot can import from `/boot/config.toml`, USB media, or a LAN-local bootstrap UI
+- imported operator intent persists under `/data/config/`
+- first boot calls `rauc status mark-good` only after provisioning import/validation succeeds
 
-**Rationale**: systemd can kick the hardware watchdog at a configurable interval. If systemd hangs (kernel panic,
-deadlock, OOM), the hardware watchdog fires and triggers a hard reboot. Combined with U-Boot boot-count, this means a
-hung system reboots and U-Boot decrements the attempt counter — leading to automatic rollback if the system can't stay
-up.
+### 8. Use local health confirmation for updated slots
 
-Configuration:
+**Decision:** `os-verification.service` validates device-local health before committing an updated slot.
 
-- `RuntimeWatchdogSec=30s` — systemd kicks the watchdog every 30s
-- `RebootWatchdogSec=10min` — if reboot itself hangs, force reset after 10 minutes
+**Rationale:** Slot confirmation should not depend on external connectivity. The implemented checks are intentionally
+bounded:
 
-### 7. Local health-check confirmation (not phone-home)
+- `dnsmasq.service` is active
+- `chronyd.service` is active
+- `eth0` has a WAN IPv4 address
+- `eth1` is `172.20.30.1`
+- each unit listed in `/data/config/health-required.json` is active
+- the checks stay healthy for a sustained 60-second window
 
-**Choice**: A systemd oneshot service that performs local health checks and calls `rauc status mark-good` to commit the
-slot. No network/phone-home dependency.
+If those checks pass, `os-verification.service` calls `rauc status mark-good`.
 
-**Rationale**: A phone-home approach couples update success to network availability — if the update server is down, the
-device rolls back even though it's perfectly functional. This is unacceptable for remotely deployed devices with
-potentially unreliable connectivity. Local health checks verify what actually matters: are the system services and
-application containers running?
+### 9. Enforce deterministic networking and strict LAN/WAN separation
 
-**Flow**:
+**Decision:** The onboard GMAC is always `eth0`, the USB LAN adapter becomes `eth1`, and packet forwarding stays off.
 
-1. Device boots into new slot
-2. If this is the **first boot** (no `/data/.completed_first_boot` sentinel): `first-boot.service` runs — writes a
-   `slot_good` flag file to `/boot` (the boot FAT partition) and writes the sentinel. `os-verification.service` is
-   skipped (its `ConditionPathExists=/data/.completed_first_boot` is unmet). U-Boot will detect the flag on the
-   next power cycle, restore the boot counter, and delete the file. This ensures the initial provisioned image is
-   always committed without health-check gates.
-3. On **subsequent boots** (sentinel exists): `os-verification.service` starts after `multi-user.target`
-4. Check system health: eth0 has WAN address, eth1 is 172.20.30.1, dnsmasq running, chronyd running
-5. If `/data/config/health-manifest.yaml` exists, check each container listed is in "running" state (timeout: 5
-   minutes) — this includes the Cockpit pod and Traefik
-6. If no manifest exists (bare/unprovisioned image), skip container checks
-7. Sustain all checks passing for 60 seconds (catch restart loops — check every 5s)
-8. All pass → write `slot_good` flag to `/boot` (U-Boot restores counter on next boot)
-9. Any fail → exit non-zero, slot stays uncommitted, boot-count continues to decrement
+**Rationale:** The device identity, WAN policy, and LAN gateway behavior all depend on stable interface roles.
 
-The health manifest is placed on `/data/config/` by the device provisioning process (initial flash or remote
-provisioning service), not shipped in the image. This allows different deployments to define different health criteria.
+The effective network model is:
 
-**Alternatives considered**:
+- `eth0`: WAN DHCP client
+- `eth1`: LAN gateway at `172.20.30.1/24`
+- dnsmasq serves DHCP only on LAN
+- chrony serves NTP only on LAN
+- nftables allows WAN HTTPS/OpenVPN, LAN DHCP/NTP/SSH/bootstrap UI, and no forwarding
+- WAN SSH stays off unless `/data/config/ssh-wan-enabled` exists
 
-- **Phone-home to update server**: Creates unnecessary rollbacks when network is down. Rejected.
-- **No confirmation (trust boot success)**: Insufficient — a device that boots but has broken containers would be
-  considered "good." Rejected.
+### 10. Use SSH-key-only operator access with physical serial recovery
 
-### 8. Cockpit as a pod with python3Minimal in the rootfs
+**Decision:** The `admin` account remains password-locked and uses SSH keys from `/data/config/ssh-authorized-keys/admin`.
+Root is also locked by default. `_RUT_OH_` is a physical serial-only recovery path, not a network authentication mode.
 
-**Choice**: Run Cockpit as a container pod (`quay.io/cockpit/ws`) that SSHes into the host to execute a Python bridge.
-Include `python3Minimal` in the squashfs rootfs to support the bridge.
+**Rationale:** This matches the implemented security posture and removes ambiguity around password-based operator access.
 
-**Rationale**: The original design placed Cockpit directly in the squashfs rootfs. Investigation revealed that Cockpit's
-NixOS module pulls in gcc (230 MB RPATH leak) and full python3 (102 MB) into the runtime closure, adding ~330 MB to the
-squashfs. This was unacceptable for an embedded image.
+### 11. Keep the update client hawkBit-ready, but default to simple polling
 
-The pod-based approach (`quay.io/cockpit/ws`) is Cockpit's official container deployment model. The Cockpit pod SSHes
-into the host on localhost and spawns a Python bridge process. This requires Python on the host, but `python3Minimal`
-(30 MB on disk, 7 MB compressed in squashfs) provides a minimal Python 3.13 interpreter with no SSL, no sqlite, no
-readline, and no external dependencies. Its `allowedReferences` guard ensures its closure contains only glibc and bash
-(both already in the image). No SSL is acceptable because the transport is SSH.
+**Decision:** `os-upgrade.timer` is the default update client. The design still reserves a future hawkBit path through a
+configuration switch, but the current implementation keeps the simple polling path as the active one.
 
-Cockpit runs on `/data` as a pod managed by podman (via Quadlet or systemd unit). Container images are pulled during
-provisioning or first boot. The health-check confirmation service validates that the Cockpit pod is running before
-committing a slot.
+**Rationale:** The device-side architecture should not block future fleet-management integration, but the default runtime
+should stay small and directly testable.
 
-**Alternatives considered**:
+### 12. Keep runtime log durability simple and bounded
 
-- **Cockpit native in rootfs**: Reliable (survives container failures) but closure size is prohibitive. Rejected due to
-  gcc/python3 dependency chain.
-- **Cockpit native with closure surgery**: Attempted but the gcc RPATH leak comes from deep in the NixOS module system
-  (pam, shadow) and cannot be cleanly removed without patching nixpkgs. Rejected as too fragile.
-- **No Cockpit**: Unacceptable — web management is a core requirement for the device.
+**Decision:** Runtime logs use volatile journald plus buffered rsyslog writes to `/data/logs`, with a slot-local forensic
+ring for key lifecycle events.
 
-### 9. OpenVPN in the rootfs
+**Rationale:** This keeps the general logging path lightweight while still persisting important state transitions.
 
-**Choice**: Include OpenVPN in the squashfs rootfs as a system service for recovery management access.
-
-**Rationale**: OpenVPN provides an out-of-band SSH access path via VPN tunnel. It's a belt-and-suspenders recovery
-mechanism in case Cockpit or Traefik has issues. Since it's in the rootfs, it survives any container-layer failures.
-With the A/B update system, it should rarely be needed, but having it available costs very little.
-
-### 10. Network architecture — LAN isolation boundary
-
-**Choice**: The Rock64 acts as a network isolation boundary. `ip_forward` is OFF. No NAT. No packet-level routing
-between eth0 (WAN) and eth1 (LAN). Application-layer proxying only via Traefik (container).
-
-**Rationale**: EN18031 compliance requires network security for connected devices. The legacy devices on the LAN cannot
-be made compliant themselves, so the Rock64 provides the compliance boundary. By disabling IP forwarding entirely, no
-packet can traverse from LAN to WAN or vice versa at the kernel level. Only user-space processes that explicitly bind
-both interfaces (Traefik, device control service) can bridge the gap, and they do so selectively with authentication.
-
-Network topology:
-
-- eth0 (WAN): DHCP client, internet-facing. Accepts HTTPS (443) and OpenVPN (1194).
-- eth1 (LAN): Static 172.20.30.1/24. Serves DHCP, NTP. Accepts SSH (22).
-- tun0 (VPN): SSH access for remote recovery.
-- The Rock64 opens TCP sockets to LAN devices to push commands; devices reply on the same socket.
-- LAN devices have zero internet access.
-
-### 11. NIC naming via systemd link files
-
-**Choice**: Disable systemd predictable interface names. Use systemd-networkd `.link` files matching on hardware path
-for the onboard NIC and driver/type for USB peripherals.
-
-**Rationale**: The onboard RK3328 GMAC must always be eth0 (WAN, device identity via MAC). USB NICs must be eth1, eth2,
-etc. (LAN). WiFi dongles must be wlan0, wlan1, etc. Matching on the RK3328 GMAC's fixed platform hardware path
-(platform-ff540000.ethernet) guarantees eth0 is always the internal NIC regardless of USB device enumeration order.
-
-Device identity: `eth0` MAC address = device ID (existing convention, read from `/sys/class/net/eth0/address`).
-
-### 12. Firewall via nftables
-
-**Choice**: nftables with static rules in the image and a manual SSH-on-WAN toggle via flag file.
-
-Rules:
-
-- eth0 (WAN) inbound: ALLOW tcp/443 (HTTPS), ALLOW udp/1194 (OpenVPN), ALLOW established/related, DROP all else. SSH
-  (tcp/22) allowed only if `/data/config/ssh-wan-enabled` flag file exists.
-- eth1 (LAN) inbound: ALLOW udp/67-68 (DHCP), ALLOW udp/123 (NTP), ALLOW tcp/22 (SSH), ALLOW established/related, DROP
-  all else.
-- tun0 (VPN) inbound: ALLOW tcp/22 (SSH), ALLOW established/related, DROP all else.
-- FORWARD chain: DROP all (no inter-interface routing).
-
-The SSH-on-WAN flag is a persistent file on `/data/config/`. Toggled manually via Cockpit, API, or SSH. No automated
-opening — eliminates the security risk of an attacker forcing the flag.
-
-### 13. hawkBit-ready architecture
-
-**Choice**: Design the device-side update client to be swappable between a simple polling service and the
-`rauc-hawkbit-updater` client via a NixOS configuration flag.
-
-**Rationale**: At thousands of devices, hawkBit's fleet management (staged rollouts, per-device status, rollback
-campaigns) is valuable. But deploying the hawkBit server (Java/Spring Boot + DB) adds operational complexity that should
-be deferred until the core A/B infrastructure is proven. Since both clients ultimately trigger `rauc install`,
-everything downstream (RAUC slots, confirmation, rollback) is identical regardless of which client is active.
-
-The NixOS config includes both services with one enabled by default:
-
-- `os-upgrade` (simple polling timer) — **enabled by default**
-- `rauc-hawkbit-updater` — **disabled by default**, flip a flag to switch
-
-### 14. QEMU testing target
-
-**Choice**: Add a `nixosConfigurations.rock64-qemu` flake output that shares 95% of the real config but targets
-`aarch64-virt` for QEMU testing.
-
-**Rationale**: Building and flashing real hardware for every iteration is slow. A QEMU target allows testing NixOS
-configuration, systemd services, podman, RAUC slot logic, and the confirmation service without hardware.
-Hardware-specific testing (U-Boot boot-count, real watchdog, eMMC) still requires a physical Rock64.
-
-Flake outputs:
-
-- `nixosConfigurations.rock64` — real hardware target
-- `nixosConfigurations.rock64-qemu` — QEMU testing target
-- `packages.aarch64-linux.squashfs` — root filesystem image
-- `packages.aarch64-linux.rauc-bundle` — signed multi-slot `.raucb` bundle
-
-### 15. EN18031-compliant user authentication (Option 4 Hybrid)
-
-**Choice**: No default passwords. Unique per-device credentials provisioned during initial flash. OIDC (Microsoft Entra
-via Traefik forward-auth) is the primary auth when internet is available; provisioned password is the LAN/offline
-fallback.
-
-**Rationale**: EN18031 prohibits default passwords. The image ships with no embedded credentials —
-`users.users.admin.hashedPasswordFile` points to `/data/config/admin-password-hash`, which is created during
-provisioning with a unique sha-512 hash (from `mkpasswd`). SSH authorized keys are loaded at runtime from
-`/data/config/ssh-authorized-keys/%u` (per-user key files), not baked into the image.
-
-**Authentication flows**:
-
-- **WAN (internet available)**: Traefik forward-auth requires OIDC (Microsoft Entra). After OIDC, request reaches
-  Cockpit. User types provisioned password to authenticate the SSH bridge session. This provides two-factor access: OIDC
-  identity + device password. (Future: a custom `[bearer]` auth command could trust `X-Forwarded-User` from Traefik and
-  use an SSH service key for SSO, but this requires careful trust boundary management.)
-- **LAN (internet unavailable)**: Traefik routes directly to Cockpit (ipAllowList middleware bypasses OIDC for
-  172.20.30.0/24). User sees Cockpit login page, authenticates with provisioned password.
-- **SSH from WAN**: Key-only (password auth disabled globally, enabled only for localhost via `Match Address
-  127.0.0.1,::1`).
-- **SSH from LAN/VPN**: Key-preferred, password fallback.
-
-**SSH localhost password auth**: The Cockpit pod SSHes to the host on localhost to spawn its Python bridge. `Match
-Address 127.0.0.1,::1` in sshd_config enables password authentication only for loopback connections, allowing the
-Cockpit pod to authenticate with the provisioned password. Remote SSH remains key-only.
-
-**Provisioning creates**:
-
-- `/data/config/admin-password-hash` — sha-512 password hash
-- `/data/config/ssh-authorized-keys/admin` — operator's SSH public key
-- `/data/config/traefik/traefik.yaml` — Traefik static config (entrypoints, providers)
-- `/data/config/traefik/dynamic/cockpit.yaml` — Cockpit reverse proxy route + TLS cert paths
-- `/data/config/traefik/dynamic/oidc.yaml.disabled` — OIDC forward-auth template (rename to enable)
-- `/data/config/traefik/certs/server.{crt,key}` — self-signed TLS certificate (EC P-256, 10-year)
-- `/data/config/health-manifest.yaml` — container health entries (cockpit-ws, traefik)
-
-**Alternatives considered**:
-
-- **Default password with forced change on first login**: Violates EN18031 — the default password exists in the image
-  and is the same across all devices.
-- **Certificate-only auth**: Operationally complex for field deployment; requires PKI infrastructure.
-- **OIDC-only**: Fails when internet is unavailable; LAN access is a core requirement.
-
-### 16. Squashfs closure size optimization
-
-**Choice**: Aggressively reduce the NixOS system closure size through targeted NixOS option overrides and mksquashfs
-tuning.
-
-**Applied optimizations** (cumulative reduction: 126 MB / 27% from initial 459 MB):
-
-- `security.pam.services.su.forwardXAuth = lib.mkForce false` — Removed xauth + 9 X11 libraries (~6.5 MB uncompressed)
-- `system.fsPackages = lib.mkForce []` — Removed dosfstools/e2fsprogs from system PATH
-- `boot.bcache.enable = false` — Disabled bcache (defaults to true), suppresses udev rules
-- `boot.kexec.enable = false` — No kexec on A/B image device
-- `services.lvm.enable = false` — No LVM/device-mapper, suppresses udev rules
-- `mksquashfs -b 1048576` (1 MB block size) — 32 MB (9%) compression improvement over default 128 KB
-
-**Rejected optimization**: `lib.mkForce` on `environment.corePackages` to strip default GNU tools was attempted but
-reverted. Investigation showed nearly all tools remain in the nix store as transitive deps of systemd/perl/shadow —
-removing them from PATH saves zero bytes in the squashfs but creates maintenance risk (silently suppressing future NixOS
-module additions).
-
-**Structural deps that cannot be removed within NixOS**:
-
-| Package                     | Size    | Reason                                                          |
-|-----------------------------|---------|-----------------------------------------------------------------|
-| linux-6.19 kernel + modules | ~308 MB | Kernel build tree + modules                                     |
-| systemd                     | ~69 MB  | Core init — pulls elfutils, p11-kit, tpm2-tss, cracklib, lvm2   |
-| podman ecosystem            | ~150 MB | podman, netavark, cni-plugins, gvproxy, runc, fuse-overlayfs    |
-| perl                        | ~59 MB  | NixOS activation scripts (setup-etc.pl, update-users-groups.pl) |
+**Technical note:** The initrd forensic persistence path is currently disabled pending redesign. That follow-on work is
+tracked in `durable-journald-logs`.
 
 ## Risks / Trade-offs
 
-**[Risk] eMMC wear from frequent updates** → squashfs writes to raw partitions on each update. Mitigation: f2fs on
-/data handles wear leveling for frequent writes; rootfs updates should be infrequent (weekly/monthly, not hourly).
-eMMC controllers have internal wear leveling.
+- **Watchdog on hardware is still staged**: the design includes the hardware watchdog path, but live Rock64 enablement is
+  still gated on stable hardware validation.
+- **Provisioning is now part of the first-boot success contract**: this is correct for production, but it means invalid
+  provisioning blocks slot confirmation.
+- **No local web-management stack in the base image**: this reduces closure size and appliance complexity, but shifts
+  remote-management responsibility to Nixstasis-hosted services.
+- **Full image updates consume more bandwidth than delta approaches**: acceptable for the current phase.
+- **Initrd forensic durability is incomplete**: runtime durability exists, but the earliest boot persistence path still
+  needs a safer redesign.
 
-**[Risk] U-Boot environment storage corruption** → U-Boot env is stored as a single 32 KB copy at offset `0x3F8000` on
-eMMC. **CRITICAL DISCOVERY**: Writing to raw eMMC from Linux bricks NCard eMMC modules. All env writes are now done via
-U-Boot's own `saveenv` command (triggered by the FAT flag file mechanism). Power loss during `saveenv` could still
-corrupt the env, but the `slot_good` flag file on the FAT partition persists and U-Boot will retry on the next boot.
+## Follow-on Changes
 
-**[Risk] 1 GB slot size insufficient** → If the NixOS system closure grows beyond 1 GB compressed, updates will fail.
-Current image is ~333 MB compressed, leaving significant headroom. The initial 200 MB target proved unrealistic for
-NixOS + Podman + networking stack. Mitigation: monitor image size in CI (build fails if squashfs exceeds 1 GB); the 1 GB
-limit provides 3x headroom over current size.
-
-**[Risk] Health manifest missing on first boot** → If the provisioner doesn't place the manifest, the confirmation
-service marks good immediately. This is intentional for development but means an unprovisioned device in production
-won't have container health checks. Mitigation: provisioning process must include manifest deployment; document this
-requirement.
-
-**[Risk] Cockpit/Traefik pod failure independent of rootfs** → Since Cockpit and Traefik run as pods rather than native
-in the rootfs, container-layer failures (missing image, pull failure, OCI runtime error) could break the management
-interface independently of the OS. Mitigation: the health-check confirmation service validates both pods via the health
-manifest before committing a slot. The OpenVPN recovery path remains available in the rootfs. A debug rootful pod can be
-deployed for emergency access.
-
-**[Risk] python3Minimal insufficient for Cockpit bridge** → `python3Minimal` strips SSL, sqlite, readline, and other
-modules. If a future Cockpit version requires these, the bridge will fail. Mitigation: `python3Minimal`'s
-`allowedReferences` guard catches closure growth at build time. If full python3 is ever needed, the Cockpit pod approach
-must be reconsidered.
-
-**[Risk] Provisioning credential management** → EN18031 requires unique per-device passwords. The provisioning script
-must create `/data/config/admin-password-hash`, `/data/config/ssh-authorized-keys/admin`, Traefik configuration,
-and the health manifest. If these are missing, the device has no usable credentials or web access and requires
-re-provisioning. Mitigation: provisioning script validates all credential and config files exist before completing.
-
-**[Trade-off] No delta updates** → Full image writes use more bandwidth and take longer. Acceptable for initial version;
-RAUC supports adaptive updates (casync) that can be added later.
-
-**[Trade-off] No automated WAN SSH opening** → If Cockpit breaks at runtime (not during update), the only remote access
-paths are VPN+SSH or manually enabling the SSH-on-WAN flag. The A/B update system with confirmation should prevent
-Cockpit from being committed in a broken state, making runtime failures rare.
-
-**[Trade-off] hawkBit deferred** → No staged rollouts, fleet visibility, or campaign management initially. Acceptable
-because the device-side architecture supports hawkBit with a flag flip when ready.
-
-**[Trade-off] Reduced /data space** → Moving from 200 MB to 1 GB rootfs slots and 32 MB to 128 MB boot slots reduces
-/data from ~15 GB to ~13.3 GB. This is acceptable — 13.3 GB is still ample for container images, application data,
-and logs. The boot partition increase was necessary because the uncompressed aarch64 kernel Image is ~63 MB.
+- `first-boot-local-provisioning` refines the provisioning contract, source-order logic, and `/data/config/` layout
+- `durable-journald-logs` refines the runtime log-durability model and tracks the incomplete initrd redesign

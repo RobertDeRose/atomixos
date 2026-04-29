@@ -32,7 +32,7 @@ and rootfs are always consistent for a given slot.
 
 ### ADDED: Flashable disk image
 
-The `build:image` task produces a flashable `.img` file containing U-Boot, boot slot A, rootfs slot A, and a
+The `build` task produces a flashable `.img` file containing U-Boot, boot slot A, rootfs slot A, and a
 remaining-space region reserved for first-boot creation of boot slot B, rootfs slot B, and `/data` by initrd
 `systemd-repart`.
 

@@ -6,22 +6,21 @@ All tasks are run with `mise run <task>`. Run `mise tasks` to list them.
 
 All `build:*` tasks accept `--lima` to run inside a Lima VM and `--vm <name>` to specify which VM (default: `default`).
 
-| Task                | Description                                                  |
-|---------------------|--------------------------------------------------------------|
-| `check`             | Verify flake evaluates cleanly (`nix flake check`)           |
-| `build`             | Build all image artifacts in a single `nix build` invocation |
-| `build:squashfs`    | Build squashfs rootfs &rarr; `result-squashfs/`              |
-| `build:rauc-bundle` | Build signed RAUC bundle &rarr; `result-rauc-bundle/`        |
-| `build:boot-script` | Build U-Boot boot script &rarr; `result-boot-script/`        |
-| `build:image`       | Build flashable disk image, copy `.img` to cwd               |
+| Task                | Description                                           |
+|---------------------|-------------------------------------------------------|
+| `check`             | Verify flake evaluates cleanly (`nix flake check`)    |
+| `build`             | Build and retain image artifacts under `.gcroots/`    |
+| `build:squashfs`    | Build squashfs rootfs &rarr; `result-squashfs/`       |
+| `build:rauc-bundle` | Build signed RAUC bundle &rarr; `result-rauc-bundle/` |
+| `build:boot-script` | Build U-Boot boot script &rarr; `result-boot-script/` |
 
-`build:image` also accepts `-o <path>` to specify the output filename.
+`build` also accepts `-o <path>` to copy the latest `.img` to a path.
 
 ## E2E Test Tasks
 
 | Task                    | Description                                               |
 |-------------------------|-----------------------------------------------------------|
-| `e2e`                   | Run all 9 integration tests sequentially                  |
+| `e2e`                   | Run the core 9-task E2E suite sequentially                |
 | `e2e:rauc-slots`        | RAUC slot detection after boot                            |
 | `e2e:rauc-update`       | Bundle install + slot switch A&rarr;B                     |
 | `e2e:rauc-rollback`     | Install &rarr; mark bad &rarr; rollback to previous slot  |

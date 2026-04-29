@@ -43,9 +43,10 @@
   squashfs) using mtools (no loop devices/mount needed in Nix sandbox)
 - [x] 4b.2 Create `scripts/build-image.sh` template with `@variable@` placeholders for Nix substitute
 - [x] 4b.3 Expose the image as `packages.aarch64-linux.image` in flake outputs
-- [x] 4b.4 Add mise TOML build tasks: `check`, `build:squashfs`, `build:rauc-bundle`, `build:boot-script`,
-  `build:image`, `build` (depends on all)
-- [x] 4b.5 Create `.mise/tasks/provision/image` file task to copy built `.img` to user-specified output path
+- [x] 4b.4 Add mise build tasks: `check`, `build:squashfs`, `build:rauc-bundle`, `build:boot-script`, and `build`
+  (retains rooted artifacts and supports optional image copy-out)
+- [x] 4b.5 Create the flash/build workflow around `.gcroots/images/image.1` and `.mise/tasks/flash` for safe device
+  flashing from the latest built image
 - [x] 4b.6 Verify all flake outputs evaluate cleanly with `nix flake check --no-build`
 - [x] 4b.7 Verify `nix build .#image` produces a valid disk image — GPT partition table correct, U-Boot at sectors
   64/16384, boot-a vfat contains Image (63 MB) + DTB + boot.scr, rootfs-a has valid squashfs (hsqs magic, 334 MB)
@@ -250,14 +251,12 @@
 
 ## 18. Authentication Provisioning
 
-- [x] 18.1 Update `.mise/tasks/provision/emmc` to prompt for and create `/data/config/admin-password-hash` (sha-512
-  via mkpasswd) — interactive password prompt with confirmation, min 8 chars
-- [x] 18.2 Update `.mise/tasks/provision/emmc` to accept and deploy SSH public key to
-  `/data/config/ssh-authorized-keys/admin` — via --ssh-key flag, accepts key string or .pub file path
-- [x] 18.3 Add provisioning validation: fail if credential files are missing after provisioning — validation step
-  re-mounts persist read-only and checks files exist and are non-empty
-- [ ] 18.4 Verify device boots with provisioned credentials: admin SSH key auth works, development-mode password auth
-  behaves as expected, and serial-only root debug via `_RUT_OH_` is disabled once admin credentials are provisioned
+- [x] 18.1 Persist imported admin SSH keys under `/data/config/ssh-authorized-keys/admin` through the provisioning
+  importer
+- [x] 18.2 Enforce SSH-key-only operator access with both `root` and `admin` password-locked by default
+- [x] 18.3 Validate imported provisioning state before first boot commits the slot
+- [ ] 18.4 Verify on hardware that admin SSH key auth works, password auth remains rejected, and `_RUT_OH_` stays a
+  physical serial recovery path rather than a normal operator login mode
 - [x] 18.5 Verify no credentials exist in the squashfs image itself (EN18031 compliance) — verified via source audit:
   `hashedPasswordFile` reads from `/data` at runtime (modules/base.nix:130), SSH authorized keys loaded from
   `/data` (modules/base.nix:161), no `hashedPassword`/`password`/`initialPassword` attributes anywhere, TLS certs

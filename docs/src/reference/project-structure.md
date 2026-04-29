@@ -16,7 +16,9 @@ modules/
   watchdog.nix                     systemd watchdog config
   os-verification.nix              Post-update health check service
   os-upgrade.nix                   Update polling + hawkBit toggle
-  first-boot.nix                   First-boot RAUC slot commit + sentinel
+  first-boot.nix                   First-boot provisioning import + slot commit
+  forensics.nix                    Tier 0 forensic ring + journald/rsyslog durability
+  boot-storage-debug.nix           Boot-partition mount helpers for debugging
   openvpn.nix                      OpenVPN recovery tunnel
 
 nix/
@@ -32,6 +34,10 @@ nix/
     rauc-power-loss.nix            Crash mid-install, verify recovery
     rauc-watchdog.nix              Watchdog + boot-count rollback
     firewall.nix                   2-node WAN/LAN port allow/deny
+    initrd-fresh-flash-marker.nix  Initrd fresh-flash detection
+    first-boot-provision.nix       Provisioning import + Quadlet rendering
+    first-boot-source-discovery.nix USB/boot seed discovery rules
+    forensics-*.nix                Forensic ring, journald, rsyslog durability tests
     network-isolation.nix          2-node DHCP/NTP/WAN isolation
     ssh-wan-toggle.nix             SSH-on-WAN flag enable/disable
 
@@ -43,7 +49,11 @@ scripts/
   os-upgrade.sh                    Runtime update polling script
   ssh-wan-toggle.sh                SSH-on-WAN flag check
   ssh-wan-reload.sh                SSH-on-WAN runtime reload
-  first-boot.sh                    First-boot FAT flag write + sentinel
+  first-boot.sh                    First-boot provisioning import + mark-good
+  first-boot-provision.py          Provisioning importer/bootstrap/Quadlet renderer
+  quadlet-sync.sh                  Rootful/rootless Quadlet sync + startup
+  forensic-log.sh                  Tier 0 forensic ring reader/writer
+  forensics-slot-transition.sh     Slot transition forensic marker helper
   boot.cmd                         U-Boot A/B boot script source
   fw_env.config                    U-Boot env config (reference only, not installed)
 
@@ -54,17 +64,17 @@ scripts/
     shell                          Interactive serial console (minicom)
   config/
     lan-range                      Update LAN gateway/DHCP range across all configs
-  provision/
-    image                          Generate flashable .img file
-    emmc                           Flash directly to eMMC block device (Linux only)
   e2e/
     rauc-slots ... ssh-wan-toggle  Individual E2E test runners
     debug                          Interactive QEMU debugging
+  docs/
+    build                          Build the documentation site
+    serve                          Serve docs locally with hot reload
 
 certs/
   dev.ca.cert.pem                  Development RAUC CA certificate (public)
   dev.signing.cert.pem             Development RAUC signing certificate (public)
-  dev.*.key.pem                    Private keys (gitignored)
+  dev.*.key.pem                    Development private keys
 
 docs/
   book.toml                        mdBook configuration

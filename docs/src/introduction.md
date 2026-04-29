@@ -41,8 +41,8 @@ AtomixOS eliminates this class of failure through:
 - **Reproducible** -- the entire system image is built from a single Nix flake with pinned inputs; same flake, same
   image
 - **Immutable** -- the squashfs root filesystem is read-only; writable state lives on a dedicated `/data` partition
-- **Testable** -- 9 NixOS VM integration tests validate the full update lifecycle, network security, and rollback
-  behavior without physical hardware
+- **Testable** -- a NixOS VM integration test suite covers the update lifecycle, provisioning paths, forensic log
+  durability, network security, and rollback behavior without physical hardware
 - **EN18031 compliant** -- ships without default credentials; per-device credentials are provisioned at factory time; IP
   forwarding is disabled by default
 
@@ -53,14 +53,14 @@ Each AtomixOS device acts as a gateway between an isolated LAN and the internet:
 - **WAN (eth0)**: DHCP client, accepts HTTPS (443) and OpenVPN (1194) from the internet
 - **LAN (eth1)**: Static IP, runs DHCP server (dnsmasq) and NTP server (chrony) for local devices
 - **No routing**: IP forwarding is disabled; LAN devices have zero internet access
-- **Application-layer proxying**: Traefik reverse proxy selectively bridges WAN and LAN with authentication (OIDC via
-  Microsoft Entra, with local password fallback)
+- **Application-layer proxying**: Traefik reverse proxy selectively bridges WAN and LAN while operator access remains
+  SSH-key-only and bootstrap stays LAN-local
 
 ## Quick Start
 
 ```sh
-# Build the flashable disk image
-mise run build:image
+# Build the flashable disk image set
+mise run build
 
 # Flash to eMMC (macOS)
 mise run flash /dev/disk4

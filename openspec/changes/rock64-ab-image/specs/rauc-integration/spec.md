@@ -19,11 +19,10 @@ specify U-Boot as the bootloader backend.
 The RAUC configuration SHALL specify `bootloader=uboot` and configure the appropriate U-Boot environment variable names
 for slot selection and boot-count tracking.
 
-#### Scenario: RAUC sets U-Boot environment on install
+#### Scenario: RAUC install selects the newly written slot for the next boot
 
 - **WHEN** a RAUC bundle is installed to the inactive slot pair
-- **THEN** RAUC updates the U-Boot environment variables to set the newly written slot as primary and resets the boot
-  attempt counter
+- **THEN** the newly written slot becomes the next slot attempted on reboot
 
 ### Requirement: RAUC verifies bundle signatures before installation
 
@@ -61,10 +60,10 @@ Each RAUC bundle (`.raucb`) SHALL contain two images: a boot partition image (ke
 - **WHEN** the RAUC bundle is inspected with `rauc info`
 - **THEN** the bundle manifest lists both a boot image and a rootfs image
 
-### Requirement: Update polling service checks for new bundles
+### Requirement: Default update client polls for new bundles
 
-A systemd timer (`apollo-update.timer`) SHALL periodically poll the update server for new RAUC bundles. When a new
-bundle is available, the service SHALL download it and invoke `rauc install`.
+A systemd timer (`os-upgrade.timer`) SHALL periodically poll the update server for new RAUC bundles. When a new bundle
+is available, the service SHALL download it and invoke `rauc install`.
 
 #### Scenario: New bundle is detected and installed
 
@@ -83,19 +82,19 @@ bundle is available, the service SHALL download it and invoke `rauc install`.
 
 ### Requirement: Update client is swappable with hawkBit
 
-The NixOS configuration SHALL include both the simple polling service (`apollo-update`) and the `rauc-hawkbit-updater`
-client. Only one SHALL be enabled at a time, selectable via a NixOS configuration flag. Both clients SHALL trigger `rauc
-install` for bundle installation.
+The design SHALL reserve a configuration switch for a future hawkBit-based update client while keeping the simple
+polling path as the implemented default.
 
 #### Scenario: Simple polling is enabled by default
 
 - **WHEN** the device boots with default configuration
-- **THEN** `apollo-update.timer` is active and `rauc-hawkbit-updater` is not running
+- **THEN** `os-upgrade.timer` is active
+- **AND** the simple polling path is the active update client
 
 #### Scenario: hawkBit client can be enabled
 
 - **WHEN** the NixOS configuration flag for hawkBit is set to true
-- **THEN** `rauc-hawkbit-updater` is active and `apollo-update.timer` is not running
+- **THEN** the configuration reserves the hawkBit path instead of the default polling path
 
 ### Requirement: NixOS RAUC module is enabled in configuration
 

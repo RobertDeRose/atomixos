@@ -5,14 +5,14 @@ Build a complete `.img` file that can be written to eMMC (or SD card) using `dd`
 ## Build the Image
 
 ```sh
-# Build with mise (copies .img to current directory)
-mise run build:image
+# Build with mise (stores the latest image under .gcroots/images/image.1)
+mise run build
 
-# Specify output path
-mise run build:image -- -o atomixos-25.11.img
+# Copy the latest image to a specific output path
+mise run build -- -o atomixos-25.11.img
 
 # Build via Lima VM
-mise run build:image -- --lima
+mise run build -- --lima
 
 # Or with Nix directly (result stays in Nix store, symlinked to result-image/)
 nix build .#image -o result-image
@@ -81,7 +81,7 @@ flashing, the device boots into the local provisioning flow and imports operator
 configuration into `/data/config/` from one of these sources:
 
 - `/boot/config.toml` on a fresh flash
-- USB `config.toml`
+- USB `config.toml` or supported config bundle
 - the local bootstrap web console on `172.20.30.1:8080`
 
 When a new `config.toml` is applied through one of those paths, the device
@@ -108,5 +108,5 @@ existing WAN SSH flag on `/data/config/ssh-wan-enabled` for easier testing.
 Operator access still comes from normal SSH-key provisioning.
 
 The image keeps both `root` and `admin` passwords locked. On Rock64,
-`_RUT_OH_=1` enables a serial-only root recovery login on UART2 (ttyS2,
-1.5 Mbaud) for the next boot.
+`_RUT_OH_=1` enables a deterministic serial-only root recovery path on UART2
+(`ttyS2`, 1.5 Mbaud) for the next boot.

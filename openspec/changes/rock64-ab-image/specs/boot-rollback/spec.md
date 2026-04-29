@@ -4,95 +4,66 @@
 
 ### Requirement: U-Boot tracks boot attempts per slot
 
-U-Boot SHALL maintain a boot attempt counter for each slot (`BOOT_A_LEFT`, `BOOT_B_LEFT`). On each boot, U-Boot SHALL
-decrement the counter for the slot being booted. If the counter reaches zero, U-Boot SHALL switch to the other slot on
-the next boot.
+U-Boot SHALL maintain a boot-attempt counter for each slot (`BOOT_A_LEFT`, `BOOT_B_LEFT`). On each boot attempt, the
+counter for the selected slot SHALL be decremented. If the counter reaches zero, U-Boot SHALL fall back to the other
+slot on the next boot.
 
 #### Scenario: Boot counter decrements on each boot
 
 - **WHEN** the device boots and the active slot has `BOOT_A_LEFT=3`
-- **THEN** after U-Boot runs, `BOOT_A_LEFT` is decremented to `2`
+- **THEN** U-Boot decrements the slot counter before attempting the boot
 
 #### Scenario: Slot switches when counter reaches zero
 
-- **WHEN** the active slot's boot counter reaches `0` and the device reboots
-- **THEN** U-Boot selects the other slot as the boot target on the next boot
+- **WHEN** the active slot's boot counter reaches `0`
+- **THEN** U-Boot selects the other slot on the next boot
 
-### Requirement: U-Boot boot order reflects RAUC slot priority
+### Requirement: U-Boot boot order reflects the next slot priority
 
-U-Boot SHALL use a `BOOT_ORDER` environment variable (e.g., `A B`) to determine slot priority. RAUC SHALL update this
-variable when installing a new bundle so that the newly written slot is attempted first.
+U-Boot SHALL use `BOOT_ORDER` to determine slot priority, and RAUC installation SHALL make the newly written inactive
+slot the next slot to attempt.
 
-#### Scenario: RAUC install changes boot order
+#### Scenario: RAUC install changes the preferred slot
 
 - **WHEN** RAUC installs a bundle to slot B while slot A is active
-- **THEN** the U-Boot environment is updated so that `BOOT_ORDER` is `B A` and `BOOT_B_LEFT` is reset to the configured
-  attempt count
+- **THEN** the next boot attempts slot B before slot A
 
-### Requirement: Successful boot commits the slot via mark-good
+### Requirement: Successful confirmation commits the slot with RAUC
 
-After a successful boot and confirmation, the system SHALL call `rauc status mark-good` which resets the boot attempt
-counter to its maximum value, preventing further rollback for the current slot.
+After successful first-boot validation or post-update confirmation, Linux SHALL call `rauc status mark-good` for the
+booted slot.
 
-#### Scenario: Mark-good prevents rollback
+#### Scenario: First boot commits the slot after valid provisioning
 
-- **WHEN** `rauc status mark-good` is called on the active slot
-- **THEN** the boot attempt counter for the active slot is reset to its maximum value and the slot is marked as
-  committed
+- **WHEN** `first-boot.service` successfully imports and validates provisioning state
+- **THEN** it calls `rauc status mark-good` for the booted slot
 
-### Requirement: Rollback recovers the previous working image
+#### Scenario: Updated slot is committed after local verification
 
-If the new slot fails to boot (boot counter exhausted), U-Boot SHALL boot the previous slot. The previous slot SHALL
-still be intact and bootable because RAUC only writes to the inactive slot.
+- **WHEN** `os-verification.service` confirms the booted slot is healthy
+- **THEN** it calls `rauc status mark-good` for the booted slot
+
+### Requirement: Rollback preserves the previous working slot
+
+If a newly installed slot cannot boot successfully or never reaches a committed state, U-Boot SHALL eventually fall back
+to the previous working slot.
 
 #### Scenario: Failed update triggers automatic rollback
 
-- **WHEN** a new image is installed to slot B and slot B fails to boot 3 consecutive times
-- **THEN** U-Boot switches back to slot A and the device boots successfully from the previous known-good image
+- **WHEN** a new image is installed to slot B and slot B fails repeatedly until its boot counter is exhausted
+- **THEN** U-Boot falls back to slot A
 
-#### Scenario: Rollback preserves previous slot integrity
+#### Scenario: Previous slot remains intact
 
 - **WHEN** the device rolls back from slot B to slot A
-- **THEN** slot A's root filesystem is identical to its state before the update was attempted
+- **THEN** slot A still contains the previously working image because updates only write the inactive slot pair
 
-### Requirement: Boot confirmation uses FAT flag file (not fw_setenv)
+### Requirement: Rock64 uses the active U-Boot environment path supported by the platform
 
-**CHANGED**: The original design called for `fw_setenv` from Linux to reset boot counters after successful confirmation.
-Testing revealed that **writing to the raw eMMC user data area from Linux bricks NCard eMMC modules** (the board fails
-to produce any U-Boot output after power cycle). U-Boot's own `saveenv` command works correctly.
+The Rock64 rollback design SHALL use the platform's active U-Boot environment path together with RAUC's U-Boot backend
+rather than relying on ad hoc slot bookkeeping in Linux.
 
-The confirmation flow now uses a FAT flag file approach:
+#### Scenario: Linux and U-Boot agree on slot identity
 
-1. `first-boot.service` (or `os-verification.service`) writes a `slot_good` file to the boot FAT partition (`/boot`)
-2. On next boot, U-Boot's `boot.cmd` checks for `slot_good` via `fatload`
-3. If found: U-Boot restores `BOOT_x_LEFT=3` and calls `saveenv` (which works from U-Boot), then deletes the flag file
-4. If not found: normal boot-count decrement continues
-
-This avoids all raw eMMC writes from Linux while preserving the boot-count rollback mechanism.
-
-#### Scenario: First boot confirmation via FAT flag
-
-- **WHEN** `first-boot.service` runs on a freshly provisioned image
-- **THEN** it writes a `slot_good` file to `/boot` (the boot FAT partition)
-- **AND** on the next power cycle, U-Boot detects `slot_good`, restores the boot counter, and deletes the file
-
-#### Scenario: Update confirmation via FAT flag
-
-- **WHEN** `os-verification.service` confirms a successful update
-- **THEN** it writes a `slot_good` file to `/boot`
-- **AND** on the next power cycle, U-Boot commits the slot via `saveenv`
-
-### Requirement: U-Boot environment uses single-copy storage
-
-U-Boot environment is stored as a single 32 KB copy at offset `0x3F8000` on the eMMC. The Rock64's U-Boot build
-(`rk3328_defconfig`) does NOT enable `CONFIG_ENV_REDUNDANT`.
-
-**Note**: The original design called for redundant environment storage. Investigation of the U-Boot source confirmed
-this is not configured for this platform. The FAT flag file approach mitigates the risk — if U-Boot's `saveenv` is
-interrupted by power loss, the `slot_good` file remains on the FAT partition and U-Boot will retry on the next boot.
-
-#### Scenario: Power loss during U-Boot saveenv
-
-- **WHEN** power is lost while U-Boot is writing environment variables via `saveenv`
-- **THEN** the `slot_good` flag file remains on the FAT partition, and U-Boot will re-attempt the counter restore on
-  the next boot
+- **WHEN** Linux determines the booted slot and calls `rauc status mark-good`
+- **THEN** the same slot identity is used by the U-Boot / RAUC rollback path

@@ -79,9 +79,6 @@ Tier 0 forensic writer and reader for the slot-local `/boot/forensics` ring.
 
 Initrd forensic helper scripts are currently disabled pending redesign of the
 early-boot persistence path.
-2. Mount the appropriate boot FAT partition in initrd
-3. Fail explicitly if required mount or device prerequisites are missing
-4. Emit initrd lifecycle events such as `boot-start` and `lowerdev-selected`
 
 ### boot.cmd
 
@@ -162,13 +159,16 @@ polling or "no update" chatter in the durable forensic log.
 
 **Location:** `scripts/first-boot.sh`
 
-First-boot initialization. Writes boot confirmation flag and sentinel.
+First-boot provisioning/import/bootstrap flow plus boot confirmation.
 
 **Steps:**
 
-1. Check for `/data/.completed_first_boot` — exit if exists
-2. Write `slot_good` flag file to `/boot` (boot FAT partition) — U-Boot will restore boot counter on next power cycle
-3. Write timestamp to sentinel file `/data/.completed_first_boot`
+1. Check for `/data/.completed_first_boot` and exit if it already exists
+2. Discover provisioning input from fresh-flash `/boot/config.toml`, USB media, or the LAN bootstrap console
+3. Validate and import the config into `/data/config/`
+4. Render and sync rootful and rootless Quadlet units
+5. Mark the current RAUC slot good
+6. Write timestamp to `/data/.completed_first_boot`
 
 ### ssh-wan-toggle.sh
 

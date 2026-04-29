@@ -28,7 +28,7 @@ Rebuild:
 
 ```sh
 mise run check
-mise run build:image
+mise run build
 ```
 
 ## Constraints

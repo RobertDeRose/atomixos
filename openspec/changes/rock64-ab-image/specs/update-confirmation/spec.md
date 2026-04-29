@@ -2,93 +2,87 @@
 
 ## ADDED Requirements
 
-### Requirement: Local health-check service validates system and container health
+### Requirement: `os-verification.service` validates local post-update health
 
-A systemd oneshot service (`apollo-confirm.service`) SHALL run after boot (after `multi-user.target`). It SHALL perform
-local health checks on system services and manifest-defined containers. It SHALL NOT depend on network connectivity to
-an external server.
+A systemd oneshot service (`os-verification.service`) SHALL run after boot on systems that have already completed the
+separate first-boot provisioning flow. It SHALL perform device-local health checks and SHALL NOT depend on external
+network reachability for slot confirmation.
 
-#### Scenario: System services are validated
+#### Scenario: Gateway services are validated
 
-- **WHEN** `apollo-confirm.service` runs after boot
-- **THEN** it checks that Cockpit, dnsmasq (DHCP), chronyd (NTP), and network interfaces (eth0 with WAN address, eth1 at
-  172.20.30.1) are healthy
+- **WHEN** `os-verification.service` runs after boot on a pending slot
+- **THEN** it checks that `dnsmasq.service` and `chronyd.service` are active
+- **AND** it checks that `eth0` has a WAN IPv4 address
+- **AND** it checks that `eth1` is `172.20.30.1`
 
-#### Scenario: Service runs only on uncommitted slots
+#### Scenario: Service exits early for already-good slots
 
-- **WHEN** the device boots on a slot that has already been marked good
-- **THEN** `apollo-confirm.service` detects this via `rauc status` and exits immediately without performing health
-  checks
+- **WHEN** the device boots a slot that RAUC already reports as good
+- **THEN** `os-verification.service` exits without re-running the confirmation flow
 
-### Requirement: Manifest-driven container health checks
+### Requirement: Provisioned health requirements come from `/data/config/health-required.json`
 
-If `/data/apollo/health-manifest.yaml` exists, the confirmation service SHALL read it and verify that each listed
-container is in "running" state via podman. The service SHALL wait up to 5 minutes for all containers to reach running
-state, checking every 10 seconds.
+If `/data/config/health-required.json` exists, `os-verification.service` SHALL read it as the list of provisioned units
+that must be active before the slot can be committed.
 
-#### Scenario: All manifest containers are running
+#### Scenario: Required provisioned units are active
 
-- **WHEN** all containers listed in the health manifest are in "running" state
-- **THEN** the service proceeds to the sustained health check phase
+- **WHEN** `/data/config/health-required.json` lists one or more provisioned units
+- **THEN** `os-verification.service` checks that each corresponding `${name}.service` is active
 
-#### Scenario: Container fails to start within timeout
+#### Scenario: Required provisioned unit is missing or inactive
 
-- **WHEN** a container listed in the manifest does not reach "running" state within 5 minutes
-- **THEN** the service exits with a non-zero status and the slot remains uncommitted
+- **WHEN** any unit named in `/data/config/health-required.json` is not active
+- **THEN** `os-verification.service` exits with a non-zero status
+- **AND** the slot remains uncommitted
 
-#### Scenario: No manifest exists
+#### Scenario: No explicit provisioned health requirements exist
 
-- **WHEN** `/data/apollo/health-manifest.yaml` does not exist (unprovisioned or development image)
-- **THEN** the service skips container health checks and proceeds directly to system health checks and the sustained
-  check phase
+- **WHEN** `/data/config/health-required.json` is absent or empty
+- **THEN** `os-verification.service` uses the gateway health checks alone
 
-### Requirement: Sustained health check catches restart loops
+### Requirement: Sustained health check catches unstable services
 
-After all system and container checks pass, the confirmation service SHALL continue checking every 5 seconds for 60
-seconds. If any container restarts (restart count increments) or stops during this period, the check SHALL fail.
+After the initial checks pass, `os-verification.service` SHALL continue checking health for a sustained 60-second window
+using a 5-second interval.
 
-#### Scenario: All services stable for 60 seconds
+#### Scenario: Health remains stable for the sustained window
 
-- **WHEN** all checks pass continuously for 60 seconds
-- **THEN** the service calls `rauc status mark-good` to commit the slot
+- **WHEN** all confirmation checks continue to pass for 60 seconds
+- **THEN** the slot is eligible to be committed
 
-#### Scenario: Container restart loop detected
+#### Scenario: A required service becomes unhealthy during the sustained window
 
-- **WHEN** a container restarts during the 60-second sustained check period
-- **THEN** the service exits with a non-zero status and the slot remains uncommitted
+- **WHEN** `dnsmasq.service`, a required provisioned unit, or another required check fails during the 60-second window
+- **THEN** `os-verification.service` exits with a non-zero status
+- **AND** the slot remains uncommitted
 
-### Requirement: Successful confirmation writes FAT flag file
+### Requirement: Successful confirmation commits the slot with RAUC
 
-**CHANGED**: After all health checks pass and the 60-second sustained period completes, the service SHALL write a
-`slot_good` file to the boot FAT partition (`/boot`). U-Boot will detect this file on the next boot and restore the
-boot counter via its own `saveenv` command.
-
-The original design used `rauc status mark-good` which internally calls `fw_setenv`. This was changed because raw eMMC
-writes from Linux brick NCard eMMC modules (see boot-rollback spec for details).
+When the confirmation checks succeed, `os-verification.service` SHALL call `rauc status mark-good` for the booted slot.
 
 #### Scenario: Slot is committed after successful checks
 
-- **WHEN** all system and container health checks pass for the sustained period
-- **THEN** the service writes a `slot_good` file to `/boot`
-- **AND** on the next power cycle, U-Boot reads the flag, restores the boot counter, and deletes the flag
+- **WHEN** all required checks pass for the sustained confirmation window
+- **THEN** `os-verification.service` calls `rauc status mark-good`
+- **AND** the booted slot becomes committed
 
-### Requirement: Failed confirmation leaves slot uncommitted
+### Requirement: Failed confirmation leaves the slot pending rollback
 
-If any health check fails, the service SHALL NOT call `rauc status mark-good`. The slot SHALL remain uncommitted,
-meaning the boot attempt counter continues to decrement on subsequent reboots, eventually triggering rollback.
+If confirmation fails, the system SHALL NOT commit the slot.
 
-#### Scenario: Failed checks lead to rollback
+#### Scenario: Repeated failed confirmation leads to rollback
 
-- **WHEN** the confirmation service fails on every boot attempt and the boot counter is exhausted
-- **THEN** U-Boot rolls back to the previous slot on the next reboot
+- **WHEN** the device repeatedly boots an updated slot that never passes confirmation
+- **THEN** the slot remains uncommitted
+- **AND** the U-Boot / RAUC rollback path can eventually fall back to the previous working slot
 
-### Requirement: Health manifest is provided by provisioning
+### Requirement: First boot uses a separate provisioning-aware commit path
 
-The health manifest file (`/data/apollo/health-manifest.yaml`) SHALL be placed on the /data partition by the
-device provisioning process (initial flash or remote provisioning service). The image SHALL NOT include a default
-manifest.
+Initial first boot SHALL be handled by `first-boot.service`, not `os-verification.service`.
 
-#### Scenario: Manifest defines required containers
+#### Scenario: First boot is gated on valid provisioning
 
-- **WHEN** the health manifest is read by the confirmation service
-- **THEN** it contains a list of container names that must be in "running" state for the slot to be committed
+- **WHEN** the device boots for the first time after flash or reprovisioning
+- **THEN** `first-boot.service` owns the provisioning import and validation flow
+- **AND** the initial slot is committed only after valid provisioning state exists

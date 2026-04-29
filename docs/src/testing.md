@@ -1,7 +1,8 @@
 # Testing
 
-Nine NixOS VM integration tests validate the full RAUC update lifecycle, network security, and rollback behavior. Tests
-run on both Linux (TCG software emulation) and macOS (Apple Virtualization Framework).
+The core `mise run e2e` task runs 9 NixOS VM integration tests that validate the RAUC update lifecycle, network
+security, and rollback behavior. Additional provisioning and forensics checks are also available directly under the
+flake `checks.*` outputs. Tests run on both Linux (TCG software emulation) and macOS (Apple Virtualization Framework).
 
 ## Running Tests
 

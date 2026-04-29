@@ -22,15 +22,14 @@ mise run check
 mise run build:squashfs        # result-squashfs/
 mise run build:rauc-bundle     # result-rauc-bundle/
 mise run build:boot-script     # result-boot-script/
-mise run build:image           # result-image/
 
-# Build everything (single nix build invocation)
+# Build everything and retain the latest image/bundle roots under .gcroots/
 mise run build
 ```
 
-`mise run build` runs a single
-`nix build .#squashfs .#rauc-bundle .#boot-script .#image --no-link` command.
-The individual `build:*` tasks are still available for inspecting specific artifacts.
+`mise run build` refreshes the rooted build outputs under `.gcroots/`, keeps the
+latest two distinct images and the latest two RAUC bundles, and can optionally
+copy the newest `.img` to an explicit output path with `-o <path>`.
 
 ### Building via Lima VM
 
@@ -38,11 +37,11 @@ All build tasks accept `--lima` to run inside a Lima VM. This is useful when the
 when the nix-darwin `linux-builder` is not configured.
 
 ```sh
-# Build the disk image inside the default Lima VM
-mise run build:image -- --lima
+# Build the retained artifacts inside the default Lima VM
+mise run build -- --lima
 
 # Use a specific Lima VM
-mise run build:image -- --lima --vm my-builder
+mise run build -- --lima --vm my-builder
 
 # Build everything via Lima
 mise run build -- --lima
@@ -53,12 +52,12 @@ Lima, so the flake path works unchanged.
 
 ## Build Artifacts
 
-| Artifact        | mise Task           | Nix Output                           | Description                          |
-|-----------------|---------------------|--------------------------------------|--------------------------------------|
-| Squashfs rootfs | `build:squashfs`    | `packages.aarch64-linux.squashfs`    | Compressed root filesystem (~300 MB) |
-| RAUC bundle     | `build:rauc-bundle` | `packages.aarch64-linux.rauc-bundle` | Signed `.raucb` for OTA updates      |
-| Boot script     | `build:boot-script` | `packages.aarch64-linux.boot-script` | Compiled U-Boot `boot.scr`           |
-| Disk image      | `build:image`       | `packages.aarch64-linux.image`       | Flashable eMMC `.img` copied to cwd  |
+| Artifact        | mise Task           | Nix Output                           | Description                                           |
+|-----------------|---------------------|--------------------------------------|-------------------------------------------------------|
+| Squashfs rootfs | `build:squashfs`    | `packages.aarch64-linux.squashfs`    | Compressed root filesystem (~300 MB)                  |
+| RAUC bundle     | `build:rauc-bundle` | `packages.aarch64-linux.rauc-bundle` | Signed `.raucb` for OTA updates                       |
+| Boot script     | `build:boot-script` | `packages.aarch64-linux.boot-script` | Compiled U-Boot `boot.scr`                            |
+| Disk image      | `build`             | `packages.aarch64-linux.image`       | Latest `.img` rooted under `.gcroots/images/image.1/` |
 
 ## Building with Nix Directly
 

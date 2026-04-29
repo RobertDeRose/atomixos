@@ -21,7 +21,7 @@ software alone.
 
 ```sh
 # Flash with mise
-mise run build:image
+mise run build
 mise run flash /dev/diskN
 
 # Or with dd directly
@@ -171,7 +171,7 @@ From a device on the **LAN** side:
 
 ```sh
 # From LAN (172.20.30.x)
-ssh admin@172.20.30.1                # expect: connection accepted (key or password)
+ssh admin@172.20.30.1                # expect: key-based connection accepted
 nmap -p 22,67,123 172.20.30.1       # expect: all open
 ```
 
@@ -245,12 +245,11 @@ good.
 # SSH key auth (from your workstation, WAN or LAN)
 ssh -i ~/.ssh/id_ed25519 admin@172.20.30.1    # expect: logged in, no password prompt
 
-# Password auth via Cockpit (from browser)
-# Navigate to https://172.20.30.1
-# Login with admin + provisioned password       # expect: Cockpit dashboard
+# Password auth should remain disabled
+ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no admin@172.20.30.1
 ```
 
-**Pass criteria**: SSH key auth works from LAN. Password auth works via Cockpit pod on localhost.
+**Pass criteria**: SSH key auth works from LAN. Password authentication remains rejected.
 
 ---
 
