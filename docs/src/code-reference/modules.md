@@ -132,18 +132,17 @@ on first boot.
 
 **Services:**
 
-| Service                                    | Purpose                                  |
-|--------------------------------------------|------------------------------------------|
-| `forensics-boot-start.service`             | Records `boot userspace-start`           |
-| `forensics-boot-complete.service`          | Records `boot boot-complete`             |
-| `forensics-slot-transition.service`        | Records slot switch and fallback markers |
-| `forensics-data-mount-outcome.service`     | Records `/data` mount success/failure    |
-| `forensics-shutdown-flush.service`         | Records shutdown Tier 0 flush markers    |
-| `forensics-initrd-start.service`           | Records early initrd `boot-start`        |
-| `forensics-initrd-rootfs-selected.service` | Records initrd `lowerdev-selected`       |
+| Service                                | Purpose                                  |
+|----------------------------------------|------------------------------------------|
+| `forensics-boot-start.service`         | Records `boot userspace-start`           |
+| `forensics-boot-complete.service`      | Records `boot boot-complete`             |
+| `forensics-slot-transition.service`    | Records slot switch and fallback markers |
+| `forensics-data-mount-outcome.service` | Records `/data` mount success/failure    |
+| `forensics-shutdown-flush.service`     | Records shutdown Tier 0 flush markers    |
 
 The module also installs the `forensic-log` CLI and the helper used to choose
-the currently relevant boot-partition forensic mount.
+the currently relevant boot-partition forensic mount. Initrd forensic units are
+currently disabled pending redesign of the early-boot persistence path.
 
 ---
 

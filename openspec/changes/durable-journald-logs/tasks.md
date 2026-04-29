@@ -14,7 +14,8 @@
 
 ## 2. Critical Event Coverage
 
-- [x] 2.1 Wire boot and initrd progression markers into Tier 0 forensic logging
+- [ ] 2.1 Redesign initrd Tier 0 forensic logging so early-boot markers are captured without relying on ad hoc
+  boot-partition mounts during normal initrd execution
 - [x] 2.2 Wire `/data` mount outcome, `first-boot`, RAUC install, update
   confirmation, and shutdown flush or managed reboot markers into Tier 0
   forensic logging using the defined stage/event taxonomy
@@ -46,7 +47,8 @@
 
 ## 4. Validation and Documentation
 
-- [x] 4.1 Verify Tier 0 forensic records survive reboot and remain readable after a successful slot switch
+- [ ] 4.1 Verify the redesigned initrd Tier 0 path records the intended early-boot evidence without leaving failed
+  initrd units on successful boots
 - [x] 4.2 Verify the bounded retention model overwrites old records without exceeding the per-slot `28 MiB` budget
 - [x] 4.3 Verify critical Tier 0 events remain available after simulated failed
   update or rollback scenarios using the real forensic implementation rather
@@ -60,6 +62,5 @@
   batched persistent retention path
 - [x] 4.8 Update architecture and operational docs to describe the three-tier
   logging model and the power-loss durability boundary
-- [x] 4.9 Record post-review hardening fixes and regression coverage for mount
-  selection, initrd durability, RAUC confirmation failure handling, and Tier 0
-  event filtering
+- [ ] 4.9 Record post-review hardening fixes and regression coverage for the redesigned initrd forensic path,
+  mount selection, RAUC confirmation failure handling, and Tier 0 event filtering

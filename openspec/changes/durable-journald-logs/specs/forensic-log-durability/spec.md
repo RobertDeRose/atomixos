@@ -6,7 +6,9 @@
 
 The system SHALL mirror critical host lifecycle events into a bounded forensic
 store on the active boot slot so they remain available after reboot, slot
-rollback, and as many power-loss scenarios as practical.
+rollback, and as many power-loss scenarios as practical. The initrd portion of
+this path remains incomplete until the early-boot persistence design is revised
+to avoid fragile direct boot-partition mounts during normal initrd execution.
 
 #### Scenario: Critical boot event is retained after reboot
 
@@ -62,6 +64,8 @@ cover boot progression, slot selection, `/data` mount outcome, update
 lifecycle events, update-confirmation outcome, rollback detection,
 watchdog-related reset markers, orderly shutdown flush markers, and managed
 reboot or poweroff request markers where those flows are part of the system.
+The initrd stage specifically requires redesign before this requirement can be
+considered complete.
 
 #### Scenario: Noisy routine logs are excluded from Tier 0
 

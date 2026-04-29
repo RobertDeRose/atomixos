@@ -265,7 +265,6 @@
             };
             first-boot-provision = import ./nix/tests/first-boot-provision.nix netTestArgs;
             first-boot-source-discovery = import ./nix/tests/first-boot-source-discovery.nix netTestArgs;
-            forensics-boot-markers = import ./nix/tests/forensics-boot-markers.nix netTestArgs;
             forensics-mount-selection = import ./nix/tests/forensics-mount-selection.nix netTestArgs;
             forensics-ordering = import ./nix/tests/forensics-ordering.nix netTestArgs;
             forensics-podman-log-path = import ./nix/tests/forensics-podman-log-path.nix netTestArgs;
@@ -312,7 +311,6 @@
             };
             first-boot-provision = import ./nix/tests/first-boot-provision.nix darwinNetTestArgs;
             first-boot-source-discovery = import ./nix/tests/first-boot-source-discovery.nix darwinNetTestArgs;
-            forensics-boot-markers = import ./nix/tests/forensics-boot-markers.nix darwinNetTestArgs;
             forensics-mount-selection = import ./nix/tests/forensics-mount-selection.nix darwinNetTestArgs;
             forensics-ordering = import ./nix/tests/forensics-ordering.nix darwinNetTestArgs;
             forensics-podman-log-path = import ./nix/tests/forensics-podman-log-path.nix darwinNetTestArgs;

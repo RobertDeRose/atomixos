@@ -13,9 +13,6 @@ let
   forensicCli = pkgs.writeShellScriptBin "forensic-log" (
     builtins.readFile ../scripts/forensic-log.sh
   );
-  initrdForensicCli = pkgs.writeShellScriptBin "forensics-initrd-log" (
-    builtins.readFile ../scripts/forensics-initrd-log.sh
-  );
   slotTransitionCli = pkgs.writeShellScriptBin "forensics-slot-transition" (
     builtins.readFile ../scripts/forensics-slot-transition.sh
   );
@@ -284,52 +281,6 @@ in
       RateLimitIntervalSec=30s
       RateLimitBurst=500
     '';
-
-    boot.initrd.systemd.services.forensics-initrd-start = lib.mkIf hasRaucSlots {
-      description = "Record initrd forensic start marker";
-      wantedBy = [ "initrd-prepare-overlay-lower.service" ];
-      before = [ "initrd-prepare-overlay-lower.service" ];
-      after = [ "initrd-root-device.target" ];
-      wants = [ "initrd-root-device.target" ];
-      unitConfig.DefaultDependencies = false;
-      path = [
-        pkgs.coreutils
-        pkgs.util-linux
-        forensicCli
-        initrdForensicCli
-      ];
-      environment = {
-        ATOMIXOS_FORENSICS_BOOT0 = config.atomixos.rauc.slots.boot0;
-        ATOMIXOS_FORENSICS_BOOT1 = config.atomixos.rauc.slots.boot1;
-      };
-      serviceConfig.Type = "oneshot";
-      script = ''
-        forensics-initrd-log --event boot-start
-      '';
-    };
-
-    boot.initrd.systemd.services.forensics-initrd-rootfs-selected = lib.mkIf hasRaucSlots {
-      description = "Record initrd rootfs selection marker";
-      wantedBy = [ "sysroot.mount" ];
-      before = [ "sysroot.mount" ];
-      after = [ "initrd-prepare-overlay-lower.service" ];
-      requires = [ "initrd-prepare-overlay-lower.service" ];
-      unitConfig.DefaultDependencies = false;
-      path = [
-        pkgs.coreutils
-        pkgs.util-linux
-        forensicCli
-        initrdForensicCli
-      ];
-      environment = {
-        ATOMIXOS_FORENSICS_BOOT0 = config.atomixos.rauc.slots.boot0;
-        ATOMIXOS_FORENSICS_BOOT1 = config.atomixos.rauc.slots.boot1;
-      };
-      serviceConfig.Type = "oneshot";
-      script = ''
-        forensics-initrd-log --event lowerdev-selected
-      '';
-    };
 
     virtualisation.containers.containersConf.settings.containers.log_driver = "journald";
 

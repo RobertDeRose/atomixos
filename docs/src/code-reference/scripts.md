@@ -77,16 +77,8 @@ Tier 0 forensic writer and reader for the slot-local `/boot/forensics` ring.
 5. Rotate to the next segment when the current one fills
 6. Read back only complete lines so a torn final record is ignored
 
-### forensics-initrd-log.sh
-
-**Location:** `scripts/forensics-initrd-log.sh`
-
-Initrd-safe helper that mounts the active boot partition early and writes Tier 0
-initrd markers through `forensic-log`.
-
-**Key behavior:**
-
-1. Resolve slot and lower device from the environment or kernel command line
+Initrd forensic helper scripts are currently disabled pending redesign of the
+early-boot persistence path.
 2. Mount the appropriate boot FAT partition in initrd
 3. Fail explicitly if required mount or device prerequisites are missing
 4. Emit initrd lifecycle events such as `boot-start` and `lowerdev-selected`
