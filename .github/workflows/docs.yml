@@ -25,9 +25,15 @@ jobs:
 
       - name: Install mise
         uses: jdx/mise-action@v4
+        with:
+          experimental: true
+          mise_toml: |
+            [tools]
+            mdbook = "0.5.2"
+            "github:badboy/mdbook-mermaid" = "0.17.0"
 
       - name: Build docs
-        run: mise run docs:build
+        run: mdbook build docs
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v5
