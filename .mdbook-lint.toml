@@ -3,14 +3,6 @@
 # Only docs/src/**/*.md files are linted (configured in hk.pkl glob).
 # Rules disabled here are either false positives for this project or
 # already covered by other linters (rumdl handles general markdown).
-# Rule-specific configuration
-[MD007]
-indent = 2
-
-[MD013]
-line-length = 120
-code-blocks = false
-
 # Disable noisy / false-positive rules globally
 disabled-rules = [
   # Line length -- prose lines >80 chars are normal; rumdl handles this if needed
@@ -38,3 +30,11 @@ disabled-rules = [
   # Future tense -- too pedantic for technical docs
   "CONTENT011",
 ]
+
+# Rule-specific configuration
+[MD007]
+indent = 2
+
+[MD013]
+line-length = 120
+code-blocks = false
