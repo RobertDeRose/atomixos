@@ -17,6 +17,7 @@ BOOTSTRAP_HOST="${ATOMIXOS_BOOTSTRAP_HOST:-172.20.30.1}"
 INITRD_MARKER="${ATOMIXOS_INITRD_MARKER:-/etc/atomixos/fresh-flash}"
 BOOT_CONFIG_PATH="${ATOMIXOS_BOOT_CONFIG_PATH:-/boot/config.toml}"
 APP_RUNTIME_QUADLET_DIR="${ATOMIXOS_ROOTLESS_QUADLET_DIR:-/var/lib/appsvc/.config/containers/systemd}"
+RAUC_ENABLED="${ATOMIXOS_RAUC_ENABLE:-1}"
 
 forensic() {
 	if command -v forensic-log >/dev/null 2>&1; then
@@ -221,15 +222,12 @@ if [ -f "$SENTINEL" ]; then
 	exit 0
 fi
 
-# ── Confirm the boot slot via RAUC ──
 BOOT_SLOT="$(current_boot_slot || true)"
-if [ -z "$BOOT_SLOT" ]; then
-	log "ERROR: could not determine boot slot from /proc/cmdline"
-	forensic --stage firstboot --event failed --reason missing-boot-slot
-	exit 1
+if [ -n "$BOOT_SLOT" ]; then
+	forensic --stage firstboot --event start --slot "$BOOT_SLOT"
+else
+	forensic --stage firstboot --event start --slot skipped
 fi
-
-forensic --stage firstboot --event start --slot "$BOOT_SLOT"
 
 mkdir -p "$FORENSICS_STATE_DIR"
 
@@ -252,27 +250,38 @@ if ! discover_and_import_provisioning; then
 fi
 
 if [ "$used_dev_fallback" != true ] && ! has_valid_provisioning; then
-	forensic --stage firstboot --event failed --slot "$BOOT_SLOT" --reason invalid-provisioning
+	forensic --stage firstboot --event failed --slot "${BOOT_SLOT:-unknown}" --reason invalid-provisioning
 	exit 1
 fi
 
-ensure_rauc_env
+if [ "$RAUC_ENABLED" = "1" ]; then
+	if [ -z "$BOOT_SLOT" ]; then
+		log "ERROR: could not determine boot slot from /proc/cmdline"
+		forensic --stage firstboot --event failed --reason missing-boot-slot
+		exit 1
+	fi
 
-log "Marking current slot as good via RAUC: $BOOT_SLOT"
-if ! rauc status mark-good "$BOOT_SLOT"; then
-	forensic --stage rauc --event mark-good-failed --slot "$BOOT_SLOT" --reason first-boot
-	exit 1
+	ensure_rauc_env
+
+	log "Marking current slot as good via RAUC: $BOOT_SLOT"
+	if ! rauc status mark-good "$BOOT_SLOT"; then
+		forensic --stage rauc --event mark-good-failed --slot "$BOOT_SLOT" --reason first-boot
+		exit 1
+	fi
+	forensic --stage rauc --event mark-good-complete --slot "$BOOT_SLOT" --result ok
+	rm -f \
+		"$FORENSICS_STATE_DIR/pending-source-slot" \
+		"$FORENSICS_STATE_DIR/pending-target-slot" \
+		"$FORENSICS_STATE_DIR/pending-target-version" \
+		"$FORENSICS_STATE_DIR/pending-target-booted"
+else
+	log "RAUC disabled; skipping slot confirmation"
+	forensic --stage rauc --event skipped --reason disabled
 fi
-forensic --stage rauc --event mark-good-complete --slot "$BOOT_SLOT" --result ok
-rm -f \
-	"$FORENSICS_STATE_DIR/pending-source-slot" \
-	"$FORENSICS_STATE_DIR/pending-target-slot" \
-	"$FORENSICS_STATE_DIR/pending-target-version" \
-	"$FORENSICS_STATE_DIR/pending-target-booted"
 
 # ── Write sentinel ──
 log "Writing first-boot sentinel: $SENTINEL"
 date -Iseconds >"$SENTINEL"
 
 log "First boot initialization complete"
-forensic --stage firstboot --event complete --slot "$BOOT_SLOT" --result ok
+forensic --stage firstboot --event complete --slot "${BOOT_SLOT:-none}" --result ok

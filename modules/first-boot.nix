@@ -1,11 +1,13 @@
 # First-boot initialization — runs once on initial device boot.
 #
-# Marks the RAUC slot as good unconditionally (no health manifest or
-# container images exist yet on first boot) and writes a sentinel file
-# (/data/.completed_first_boot) so it never runs again.
+# Imports provisioning state and writes a sentinel file
+# (/data/.completed_first_boot) so it never runs again. When RAUC is enabled,
+# it also marks the current slot good because there is no health manifest or
+# container image state yet on first boot.
 #
 # os-verification.service has the inverse condition — it only runs after
-# the sentinel exists (i.e. on all boots AFTER the first).
+# the sentinel exists (i.e. on all boots AFTER the first) and only when RAUC
+# confirmation is enabled.
 {
   config,
   lib,
@@ -24,7 +26,10 @@ let
     builtins.readFile ../scripts/first-boot-provision.py
   );
   ubootEnvTools = self.packages.${pkgs.stdenv.hostPlatform.system}.uboot-env-tools;
-  firstBootEnv = lib.optionalAttrs developmentMode {
+  firstBootEnv = {
+    ATOMIXOS_RAUC_ENABLE = if config.atomixos.rauc.enable then "1" else "0";
+  }
+  // lib.optionalAttrs developmentMode {
     ATOMIXOS_DEV_ENABLE_SSH_WAN = "1";
   };
 in
@@ -57,7 +62,7 @@ in
   };
 
   systemd.services.first-boot = {
-    description = "First-boot initialization (mark slot good, write sentinel)";
+    description = "First-boot initialization (provision, confirm slot if enabled)";
     after = [
       "data.mount"
       "multi-user.target"
@@ -70,17 +75,20 @@ in
     unitConfig.RequiresMountsFor = [ "/data" ];
 
     # RAUC needs to be on PATH to call `rauc status mark-good`
-    path = [
-      pkgs.rauc
-      pkgs.coreutils
-      pkgs.gzip
-      pkgs.systemd
-      pkgs.python3Minimal
-      pkgs.zstd
-      ubootEnvTools
-      pkgs.util-linux
-      provisionCli
-    ];
+    path =
+      lib.optionals config.atomixos.rauc.enable [
+        pkgs.rauc
+        ubootEnvTools
+      ]
+      ++ [
+        pkgs.coreutils
+        pkgs.gzip
+        pkgs.systemd
+        pkgs.python3Minimal
+        pkgs.zstd
+        pkgs.util-linux
+        provisionCli
+      ];
     environment = firstBootEnv;
 
     serviceConfig = {

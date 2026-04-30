@@ -11,6 +11,7 @@
 }:
 
 let
+  cfg = config.atomixos.rauc;
   verificationScript = pkgs.writeShellScript "os-verification" (
     builtins.readFile ../scripts/os-verification.sh
   );
@@ -18,7 +19,7 @@ in
 {
   # ── os-verification.service ─────────────────────────────────────────────────
 
-  systemd.services.os-verification = {
+  systemd.services.os-verification = lib.mkIf cfg.enable {
     description = "OS update verification - local health check";
     after = [
       "data.mount"
