@@ -1,3 +1,4 @@
+# Defines shared AtomixOS ARM64 kernel config fragments, including the stripped base config and optional USB-serial support.
 {
   lib,
 }:

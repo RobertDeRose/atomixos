@@ -1,3 +1,4 @@
+# Configures persistent forensic logging and boot/shutdown markers, including RAUC slot mounts under /run/forensics.
 {
   config,
   lib,

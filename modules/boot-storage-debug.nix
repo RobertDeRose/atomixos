@@ -1,3 +1,4 @@
+# Installs boot storage debug tools and runs a oneshot service ordered after rauc.service to record storage diagnostics.
 {
   pkgs,
   self,
