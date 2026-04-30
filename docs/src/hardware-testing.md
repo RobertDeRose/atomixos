@@ -218,12 +218,43 @@ journalctl -u os-verification -f
 ```sh
 # From an external machine on the LAN
 ssh -i ~/.ssh/id_ed25519 admin@172.20.30.1
+
+# Password auth should remain disabled
+ssh -vv -o PreferredAuthentications=none -o PubkeyAuthentication=no \
+  -o BatchMode=yes -o NumberOfPasswordPrompts=0 admin@172.20.30.1 true \
+  2>&1 | grep 'Authentications that can continue:'
 ```
 
 **Pass criteria**:
 
 - Key-based authentication succeeds
-- Password authentication is rejected by default
+- The verbose auth-method line excludes `password`
+
+### Test 6.2: Serial root recovery
+
+```sh
+# On the device
+fw_setenv _RUT_OH_ 1
+reboot
+
+# `_RUT_OH_` should remain a serial-only recovery path
+# On UART2/ttyS2 at 1500000 baud, expect serial root autologin on the next boot.
+
+# From an external machine on the LAN after the reboot
+ssh -i ~/.ssh/id_ed25519 admin@172.20.30.1
+ssh -vv -o PreferredAuthentications=none -o PubkeyAuthentication=no \
+  -o BatchMode=yes -o NumberOfPasswordPrompts=0 admin@172.20.30.1 true \
+  2>&1 | grep 'Authentications that can continue:'
+
+# On the device after boot completes
+fw_printenv -n _RUT_OH_    # expect: empty / unset
+```
+
+**Pass criteria**:
+
+- `_RUT_OH_` enables one-shot serial root autologin on UART2 only
+- SSH behavior on the network is unchanged after the recovery boot
+- `_RUT_OH_` is cleared after use
 
 ## Phase 7: RAUC Update Lifecycle
 
@@ -316,7 +347,6 @@ kill -STOP 1
 | 4.1 | WAN port access          |        |
 | 4.2 | SSH-on-WAN toggle        |        |
 | 5.1 | Update confirmation      |        |
-| 5.2 | Serial root recovery     |        |
 | 6.1 | SSH key auth             |        |
 | 6.2 | Serial root recovery     |        |
 | 7.1 | RAUC status              |        |

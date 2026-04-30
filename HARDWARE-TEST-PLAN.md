@@ -242,14 +242,36 @@ good.
 ### Task 18.4 -- Provisioned credentials work
 
 ```sh
-# SSH key auth (from your workstation, WAN or LAN)
+# SSH key auth (from your workstation on the LAN)
 ssh -i ~/.ssh/id_ed25519 admin@172.20.30.1    # expect: logged in, no password prompt
 
 # Password auth should remain disabled
-ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no admin@172.20.30.1
+ssh -vv -o PreferredAuthentications=none -o PubkeyAuthentication=no \
+  -o BatchMode=yes -o NumberOfPasswordPrompts=0 admin@172.20.30.1 true \
+  2>&1 | grep 'Authentications that can continue:'
 ```
 
-**Pass criteria**: SSH key auth works from LAN. Password authentication remains rejected.
+**Pass criteria**: SSH key auth works from LAN. The verbose auth-method line
+excludes `password`.
+
+```sh
+# `_RUT_OH_` should remain a serial-only recovery path, not a normal login path
+fw_setenv _RUT_OH_ 1
+reboot
+# On UART2/ttyS2 at 1500000 baud, expect serial root autologin on the next boot
+# and no change to SSH login behavior. After boot completes, from your
+# workstation on the LAN:
+ssh -i ~/.ssh/id_ed25519 admin@172.20.30.1    # expect: still works
+ssh -vv -o PreferredAuthentications=none -o PubkeyAuthentication=no \
+  -o BatchMode=yes -o NumberOfPasswordPrompts=0 admin@172.20.30.1 true \
+  2>&1 | grep 'Authentications that can continue:'
+
+# On the device:
+fw_printenv -n _RUT_OH_    # expect: empty / unset
+```
+
+**Pass criteria**: `_RUT_OH_` only enables the one-shot serial recovery path,
+clears itself after use, and does not change SSH behavior on the network.
 
 ---
 
