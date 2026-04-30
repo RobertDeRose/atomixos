@@ -37,7 +37,10 @@ OS=$(uname -s)
 
 select_macos_disk() {
 	local external_disks selection index line disk desc
-	mapfile -t external_disks < <(diskutil list external | awk '/^\/dev\/disk/ { disk=$1 } /^ *0:/ { printf "%s %s %s %s\n", disk, $3, $4, $5 }')
+	external_disks=()
+	while IFS= read -r line; do
+		external_disks+=("$line")
+	done < <(diskutil list external | awk '/^\/dev\/disk/ { disk=$1 } /^ *0:/ { printf "%s %s %s %s\n", disk, $3, $4, $5 }')
 
 	if [ ${#external_disks[@]} -eq 0 ]; then
 		echo "ERROR: No external disks found." >&2
@@ -72,7 +75,10 @@ select_macos_disk() {
 
 select_linux_disk() {
 	local external_disks selection index line disk desc
-	mapfile -t external_disks < <(
+	external_disks=()
+	while IFS= read -r line; do
+		external_disks+=("$line")
+	done < <(
 		lsblk -dpno NAME,TYPE,RM,TRAN,SIZE,MODEL | \
 			awk '$2 == "disk" && ($3 == "1" || $4 == "usb") {
 				model = ""
