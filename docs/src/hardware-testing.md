@@ -220,15 +220,16 @@ journalctl -u os-verification -f
 ssh -i ~/.ssh/id_ed25519 admin@172.20.30.1
 
 # Password auth should remain disabled
-ssh -vv -o PreferredAuthentications=none -o PubkeyAuthentication=no \
-  -o BatchMode=yes -o NumberOfPasswordPrompts=0 admin@172.20.30.1 true \
-  2>&1 | grep 'Authentications that can continue:'
+auth_line="$({ ssh -vv -o PreferredAuthentications=none -o PubkeyAuthentication=no \
+  -o BatchMode=yes -o NumberOfPasswordPrompts=0 admin@172.20.30.1 true; } \
+  2>&1 | grep 'Authentications that can continue:' | tail -n 1)"
+[ -n "$auth_line" ] && ! printf '%s\n' "$auth_line" | grep -Fq 'password'
 ```
 
 **Pass criteria**:
 
 - Key-based authentication succeeds
-- The verbose auth-method line excludes `password`
+- The auth-method probe exits successfully, confirming `password` is excluded
 
 ### Test 6.2: Serial root recovery
 
@@ -242,9 +243,10 @@ reboot
 
 # From an external machine on the LAN after the reboot
 ssh -i ~/.ssh/id_ed25519 admin@172.20.30.1
-ssh -vv -o PreferredAuthentications=none -o PubkeyAuthentication=no \
-  -o BatchMode=yes -o NumberOfPasswordPrompts=0 admin@172.20.30.1 true \
-  2>&1 | grep 'Authentications that can continue:'
+auth_line="$({ ssh -vv -o PreferredAuthentications=none -o PubkeyAuthentication=no \
+  -o BatchMode=yes -o NumberOfPasswordPrompts=0 admin@172.20.30.1 true; } \
+  2>&1 | grep 'Authentications that can continue:' | tail -n 1)"
+[ -n "$auth_line" ] && ! printf '%s\n' "$auth_line" | grep -Fq 'password'
 
 # On the device after boot completes
 fw_printenv -n _RUT_OH_    # expect: empty / unset
