@@ -125,6 +125,16 @@ When no provisioning seed file is found, the device SHALL start a constrained lo
 SHALL support uploading an existing `config.toml` or supported config bundle, and generating a new `config.toml` from a
 basic form for admin SSH keys and application stack provisioning.
 
+#### Scenario: Generated config is shown back to the operator after apply
+
+- **WHEN** an operator uses the bootstrap form to generate and apply a valid `config.toml`
+- **THEN** the bootstrap UI shows the final applied `config.toml` content back to the operator
+
+#### Scenario: Generated config can be downloaded after apply
+
+- **WHEN** an operator uses the bootstrap form to generate and apply a valid `config.toml`
+- **THEN** the bootstrap UI offers a direct download for that final applied `config.toml`
+
 ### Requirement: Bootstrap endpoint supports programmatic config import
 
 The bootstrap service SHALL expose a constrained local API endpoint that accepts a complete `config.toml` payload or a

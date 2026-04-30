@@ -36,6 +36,10 @@
 - [x] 5.2 Support uploading an existing `config.toml` through the bootstrap console
 - [x] 5.3 Support generating a valid `config.toml` from a basic form and applying it locally
 - [x] 5.4 Support programmatic local import of a complete `config.toml` through the bootstrap endpoint
+- [ ] 5.5 After form-based generation, show the final applied `config.toml` in the bootstrap UI and offer a download
+  action for that artifact
+- [ ] 5.6 Apply minimal AtomixOS branding to the bootstrap UI, including the logo and cobalt-blue theme styling aligned
+  with the mdBook visual language
 
 ## 6. Reprovisioning And Documentation
 

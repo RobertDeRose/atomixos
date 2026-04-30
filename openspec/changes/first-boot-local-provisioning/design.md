@@ -7,7 +7,7 @@ application stack configuration, and health requirements necessarily exist. That
 it leaves production provisioning split across ad hoc files copied into `/data/config/` after boot and does not align
 cleanly with the later Nixstasis direction.
 
-The provisioning idea captured in `provision_idea.md` converged on a bounded local first-boot provisioning contract:
+The current first-boot-local-provisioning work converged on a bounded local provisioning contract:
 
 - a single `config.toml` artifact
 - admin SSH keys as imported access material
@@ -172,6 +172,23 @@ fallback usable without extra manual firewall steps.
 - **Require operators to open the firewall manually**: rejected because it makes the fallback path brittle during
   unprovisioned boot
 
+### 7a. Generated form-based configs should be shown and downloadable
+
+**Decision:** When the bootstrap web console generates a `config.toml` from its basic form and applies it locally, the
+UI should show the final applied `config.toml` back to the operator and offer a direct download action for that exact
+rendered artifact.
+
+**Rationale:** The generated file is the actual operator-facing provisioning contract. Showing the final rendered TOML
+immediately after apply makes the bootstrap flow easier to audit, makes the generated state reusable for later devices
+or reprovisioning, and avoids treating the form submission as a write-only UX.
+
+**Alternatives considered:**
+
+- **Apply silently and show only success/failure**: rejected because it hides the final contract the device actually
+  accepted
+- **Offer download only as an optional later enhancement**: rejected because the generated artifact is useful immediately
+  in the same provisioning session
+
 ## Risks / Trade-offs
 
 - **[Risk] Bootstrap UI becomes a second management plane** -> Keep it narrowly scoped to upload/generate/apply during
@@ -205,4 +222,3 @@ device searches USB seed sources first and then falls back to the local bootstra
 ## Open Questions
 
 - What exact subset of Quadlet sections and directives should the first implementation support?
-- Should the bootstrap UI always offer the generated `config.toml` as a downloadable artifact, or is that optional UX?
