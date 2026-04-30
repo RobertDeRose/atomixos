@@ -17,12 +17,14 @@ configuration (kernel drivers, device paths, boot method).
 All packages target `aarch64-linux`. An `aarch64-darwin` alias is provided so that `nix build .#image` works directly
 from macOS when a linux-builder is available (the alias points to the same `aarch64-linux` package set):
 
-| Output                               | Description                                                     |
-|--------------------------------------|-----------------------------------------------------------------|
-| `packages.aarch64-linux.squashfs`    | Compressed squashfs root filesystem (~300-400 MB)               |
-| `packages.aarch64-linux.rauc-bundle` | Signed multi-slot `.raucb` bundle for OTA updates               |
-| `packages.aarch64-linux.boot-script` | Compiled U-Boot `boot.scr`                                      |
-| `packages.aarch64-linux.image`       | Flashable eMMC disk image (U-Boot + boot-a + rootfs-a, ~1.2 GB) |
+| Output                                   | Description                                                       |
+|------------------------------------------|-------------------------------------------------------------------|
+| `packages.aarch64-linux.squashfs`        | Compressed squashfs root filesystem (~300-400 MB)                 |
+| `packages.aarch64-linux.rauc-bundle`     | Signed multi-slot `.raucb` bundle for OTA updates                 |
+| `packages.aarch64-linux.boot-script`     | Compiled U-Boot `boot.scr`                                        |
+| `packages.aarch64-linux.uboot`           | Custom Rock64 U-Boot package providing the bootloader artifacts   |
+| `packages.aarch64-linux.uboot-env-tools` | `fw_printenv` / `fw_setenv` binaries used with the Rock64 SPI env |
+| `packages.aarch64-linux.image`           | Flashable eMMC disk image (U-Boot + boot-a + rootfs-a, ~1.2 GB)   |
 
 ## Apps
 
