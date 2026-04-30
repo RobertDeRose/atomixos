@@ -9,6 +9,7 @@
 
 let
   cfg = config.os-upgrade;
+  raucEnabled = config.atomixos.rauc.enable;
 
   upgradeScript = pkgs.writeShellScript "os-upgrade" (builtins.readFile ../scripts/os-upgrade.sh);
 in
@@ -38,7 +39,7 @@ in
   config = {
     # ── Simple polling service (default) ─────────────────────────────────────
 
-    systemd.services.os-upgrade = lib.mkIf (!cfg.useHawkbit) {
+    systemd.services.os-upgrade = lib.mkIf (raucEnabled && !cfg.useHawkbit) {
       description = "OS upgrade polling service";
       after = [
         "network-online.target"
@@ -68,7 +69,7 @@ in
       };
     };
 
-    systemd.timers.os-upgrade = lib.mkIf (!cfg.useHawkbit) {
+    systemd.timers.os-upgrade = lib.mkIf (raucEnabled && !cfg.useHawkbit) {
       description = "OS upgrade polling timer";
       wantedBy = [ "timers.target" ];
 
@@ -83,7 +84,7 @@ in
 
     # rauc-hawkbit-updater is available as a package but only enabled when
     # useHawkbit is true. Configuration is expected at /data/config/hawkbit/
-    environment.systemPackages = lib.mkIf cfg.useHawkbit [
+    environment.systemPackages = lib.mkIf (raucEnabled && cfg.useHawkbit) [
       pkgs.rauc-hawkbit-updater
     ];
 

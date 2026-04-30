@@ -247,7 +247,10 @@ ssh -i ~/.ssh/id_ed25519 admin@172.20.30.1    # expect: logged in, no password p
 
 # Password auth should remain disabled
 auth_line="$({ ssh -vv -o PreferredAuthentications=none -o PubkeyAuthentication=no \
-  -o BatchMode=yes -o NumberOfPasswordPrompts=0 admin@172.20.30.1 true; } \
+  -o BatchMode=yes -o NumberOfPasswordPrompts=0 \
+  -o StrictHostKeyChecking=accept-new \
+  -o UserKnownHostsFile=/tmp/atomixos-rock64-known_hosts \
+  -o ConnectTimeout=10 admin@172.20.30.1 true; } \
   2>&1 | grep 'Authentications that can continue:' | tail -n 1)"
 [ -n "$auth_line" ] && ! printf '%s\n' "$auth_line" | grep -Fq 'password'
 ```
@@ -264,7 +267,10 @@ reboot
 # workstation on the LAN:
 ssh -i ~/.ssh/id_ed25519 admin@172.20.30.1    # expect: still works
 auth_line="$({ ssh -vv -o PreferredAuthentications=none -o PubkeyAuthentication=no \
-  -o BatchMode=yes -o NumberOfPasswordPrompts=0 admin@172.20.30.1 true; } \
+  -o BatchMode=yes -o NumberOfPasswordPrompts=0 \
+  -o StrictHostKeyChecking=accept-new \
+  -o UserKnownHostsFile=/tmp/atomixos-rock64-known_hosts \
+  -o ConnectTimeout=10 admin@172.20.30.1 true; } \
   2>&1 | grep 'Authentications that can continue:' | tail -n 1)"
 [ -n "$auth_line" ] && ! printf '%s\n' "$auth_line" | grep -Fq 'password'
 
