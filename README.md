@@ -142,77 +142,11 @@ mise run build
 
 ## Project structure
 
-```text
-flake.nix                          Main flake (pinned nixpkgs release, aarch64-linux)
-flake.lock                         Pinned nixpkgs
-mise.toml                          Tool versions, build tasks, hooks
+For a detailed project layout overview, see
+[`docs/src/reference/project-structure.md`](docs/src/reference/project-structure.md).
 
-modules/
-  base.nix                         Shared NixOS config (systemd, podman, ssh, auth, closure opts)
-  kernel-config.nix                Shared stripped kernel baseline used by Rock64 and QEMU
-  hardware-rock64.nix              RK3328 kernel, DTB, eMMC/watchdog drivers
-  hardware-qemu.nix                QEMU aarch64-virt target for testing
-  networking.nix                   NIC naming (.link files), eth0/eth1 config
-  firewall.nix                     nftables rules (WAN/LAN/VPN/FORWARD)
-  lan-gateway.nix                  dnsmasq DHCP, chrony NTP, IP forwarding off
-  rauc.nix                         RAUC system.conf, slot definitions
-  watchdog.nix                     systemd watchdog config
-  os-verification.nix              Post-update health check service
-  os-upgrade.nix                   Update polling + hawkBit toggle
-  first-boot.nix                   First-boot RAUC slot commit + sentinel
-  openvpn.nix                      OpenVPN recovery tunnel
-
-nix/
-  squashfs.nix                     Squashfs image derivation (closureInfo + mksquashfs)
-  rauc-bundle.nix                  Multi-slot RAUC bundle derivation
-  boot-script.nix                  U-Boot boot.scr compilation
-  image.nix                        Flashable eMMC disk image derivation
-  tests/                           NixOS VM integration tests (nixos-lib.runTest)
-    rauc-slots.nix                 RAUC slot detection + custom backend
-    rauc-update.nix                Bundle install + slot switch
-    rauc-rollback.nix              Install → mark-bad → rollback
-    rauc-confirm.nix               os-verification health check → mark-good
-    rauc-power-loss.nix            Crash mid-install, verify recovery
-    rauc-watchdog.nix              Watchdog + boot-count rollback
-    rauc-qemu-config.nix           Shared QEMU RAUC slot mapping (/dev/vdb-vde, custom backend)
-    firewall.nix                   2-node WAN/LAN port allow/deny
-    network-isolation.nix          2-node DHCP/NTP/WAN isolation
-    ssh-wan-toggle.nix             SSH-on-WAN flag enable/disable
-
-scripts/
-  build-squashfs.sh                Squashfs build template (Nix derivation)
-  build-rauc-bundle.sh             RAUC bundle build template (Nix derivation)
-  build-image.sh                   Disk image assembly template (Nix derivation)
-  os-verification.sh               Runtime health check script
-  os-upgrade.sh                    Runtime update polling script
-  ssh-wan-toggle.sh                SSH-on-WAN flag check
-  ssh-wan-reload.sh                SSH-on-WAN runtime reload
-  first-boot.sh                    First-boot RAUC mark-good + sentinel
-  boot.cmd                         U-Boot A/B boot script source
-  fw_env.config                    Redundant U-Boot env storage config
-
-.mise/tasks/config/
-  lan-range                        Update LAN gateway/DHCP range across all configs
-
-.mise/tasks/e2e/
-  rauc-slots                       Run RAUC slot logic test
-  rauc-update                      Run RAUC update install test
-  rauc-rollback                    Run RAUC rollback test
-  rauc-confirm                     Run os-verification confirmation test
-  rauc-power-loss                  Run power-loss simulation test
-  rauc-watchdog                    Run watchdog rollback test
-  firewall                         Run firewall test
-  network-isolation                Run network isolation test
-  ssh-wan-toggle                   Run SSH toggle test
-  debug                            Interactive QEMU debugging
-
-certs/
-  dev.ca.cert.pem                  Development RAUC CA certificate (public)
-  dev.signing.cert.pem             Development RAUC signing certificate (public)
-  dev.*.key.pem                    Private keys (gitignored)
-
-_typos.toml                        Typos checker config (iif nftables keyword allowlist)
-```
+It covers the main modules, scripts, tasks, tests, and documentation entry
+points in the repo.
 
 ## Building
 
