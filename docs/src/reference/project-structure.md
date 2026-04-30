@@ -74,7 +74,7 @@ scripts/
 certs/
   dev.ca.cert.pem                  Development RAUC CA certificate (public)
   dev.signing.cert.pem             Development RAUC signing certificate (public)
-  dev.*.key.pem                    Development private keys
+  dev.*.key.pem                    Development private keys (committed for dev/test only)
 
 docs/
   book.toml                        mdBook configuration
