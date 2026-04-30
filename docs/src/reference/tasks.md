@@ -44,7 +44,8 @@ All `build:*` tasks accept `--lima` to run inside a Lima VM and `--vm <name>` to
 
 ## Utility Tasks
 
-| Task             | Description                                                              |
-|------------------|--------------------------------------------------------------------------|
-| `serial:capture` | Capture serial output (1.5 Mbaud, auto-reconnect). `--bg` for background |
-| `serial:shell`   | Interactive serial shell via minicom (1.5 Mbaud)                         |
+| Task             | Description                                                                                           |
+|------------------|-------------------------------------------------------------------------------------------------------|
+| `gc`             | Delete old generations and collect unrooted store paths (`--lima`; `--vm <name>` when using `--lima`) |
+| `serial:capture` | Capture serial output (1.5 Mbaud, auto-reconnect). `--bg` for background                              |
+| `serial:shell`   | Interactive serial shell via minicom (1.5 Mbaud)                                                      |
