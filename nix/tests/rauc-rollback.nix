@@ -21,38 +21,6 @@
 
 let
   nixos-lib = import (pkgs.path + "/nixos/lib") { };
-  forensicStub = pkgs.writeShellScriptBin "forensic-log" ''
-    set -euo pipefail
-    segment_dir=/boot/forensics
-    mkdir -p "$segment_dir"
-    if [ ! -f "$segment_dir/meta" ]; then
-      printf '%s\n' "format=v1" > "$segment_dir/meta"
-    fi
-    if [ ! -f "$segment_dir/segment-0.log" ]; then
-      : > "$segment_dir/segment-0.log"
-    fi
-
-    record=""
-    while [ $# -gt 0 ]; do
-      case "$1" in
-        --stage|--event|--slot|--result|--reason|--target-slot|--version|--device|--service|--attempt|--detail)
-          key=$(printf '%s' "$1" | sed 's/^--//' | tr '-' '_')
-          value="$2"
-          if [ -n "$record" ]; then
-            record="$record "
-          fi
-          record="$record$key=$value"
-          shift 2
-          ;;
-        *)
-          shift
-          ;;
-      esac
-    done
-
-    printf '%s\n' "$record" >> "$segment_dir/segment-0.log"
-  '';
-
   signingCert = ../../certs/dev.signing.cert.pem;
   signingKey = ../../certs/dev.signing.key.pem;
 
@@ -128,7 +96,6 @@ nixos-lib.runTest {
       environment.systemPackages = [
         pkgs.rauc
         pkgs.jq
-        forensicStub
       ];
 
       boot.kernelParams = [ "rauc.slot=boot.0" ];
@@ -137,8 +104,6 @@ nixos-lib.runTest {
         "+plain"
         "-verity"
       ];
-
-      systemd.tmpfiles.rules = [ "d /boot/forensics 0755 root root -" ];
     };
 
   testScript = ''
@@ -156,9 +121,7 @@ nixos-lib.runTest {
 
     # ── Phase 2: Install bundle → B becomes primary ──
     gateway.copy_from_host("${testBundle}/test-update.raucb", "/tmp/test-update.raucb")
-    gateway.succeed("forensic-log --stage rauc --event install-start --target-slot boot.1 --version 2.0.0")
     gateway.succeed("rauc install /tmp/test-update.raucb")
-    gateway.succeed("forensic-log --stage rauc --event install-complete --slot boot.1 --version 2.0.0 --result ok")
 
     primary_after_install = gateway.succeed("cat /var/lib/rauc/primary").strip()
     assert primary_after_install == "B", f"Expected primary=B after install, got: {primary_after_install}"
@@ -169,7 +132,6 @@ nixos-lib.runTest {
     # marking B as bad and switching primary back to A via RAUC.
 
     # Mark B as bad (this is what rauc does when boot-count is exhausted)
-    gateway.succeed("forensic-log --stage rauc --event rollback-start --slot boot.1 --reason health-check")
     gateway.succeed("rauc status mark-bad boot.1")
 
     state_b = gateway.succeed("cat /var/lib/rauc/state.B").strip()
@@ -177,7 +139,6 @@ nixos-lib.runTest {
 
     # Switch primary back to A (simulating U-Boot fallback)
     gateway.succeed("rauc status mark-active boot.0")
-    gateway.succeed("forensic-log --stage rauc --event rollback-complete --slot boot.1 --target-slot boot.0 --result ok")
 
     primary_after_rollback = gateway.succeed("cat /var/lib/rauc/primary").strip()
     assert primary_after_rollback == "A", f"Expected primary=A after rollback, got: {primary_after_rollback}"
@@ -193,8 +154,6 @@ nixos-lib.runTest {
     # Verify via rauc status JSON output
     status_json = gateway.succeed("rauc status --output-format=json")
     gateway.succeed("echo '${testBundle}' > /dev/null")  # reference for nix
-    gateway.succeed("grep 'stage=rauc event=install-complete slot=boot.1 version=2.0.0 result=ok' /boot/forensics/segment-0.log")
-    gateway.succeed("grep 'stage=rauc event=rollback-complete slot=boot.1 target_slot=boot.0 result=ok' /boot/forensics/segment-0.log")
 
     gateway.log("RAUC rollback test passed — install to B, mark B bad, primary reverted to A")
   '';

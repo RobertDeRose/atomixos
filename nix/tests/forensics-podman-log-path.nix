@@ -34,17 +34,11 @@ nixos-lib.runTest {
     {
       imports = [
         ../../modules/rauc.nix
-        ../../modules/forensics.nix
+        ../../modules/logging.nix
         qemuModule
       ];
 
       boot.kernelParams = [ "rauc.slot=boot.0" ];
-
-      environment.etc."atomixos/current-boot-forensics-mount".source = lib.mkForce (
-        pkgs.writeShellScript "current-boot-forensics-mount" ''
-          printf '%s\n' /boot
-        ''
-      );
 
       virtualisation.podman = {
         enable = true;
@@ -58,8 +52,6 @@ nixos-lib.runTest {
           runroot = "/run/containers/storage";
         };
       };
-
-      systemd.tmpfiles.rules = [ "d /boot/forensics 0755 root root -" ];
     };
 
   testScript = ''

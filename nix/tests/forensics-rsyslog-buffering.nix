@@ -18,17 +18,11 @@ nixos-lib.runTest {
     {
       imports = [
         ../../modules/rauc.nix
-        ../../modules/forensics.nix
+        ../../modules/logging.nix
         qemuModule
       ];
 
       boot.kernelParams = [ "rauc.slot=boot.0" ];
-
-      environment.etc."atomixos/current-boot-forensics-mount".source = lib.mkForce (
-        pkgs.writeShellScript "current-boot-forensics-mount" ''
-          printf '%s\n' /boot
-        ''
-      );
 
       environment.systemPackages = [
         pkgs.gawk
@@ -37,9 +31,6 @@ nixos-lib.runTest {
         pkgs.procps
         pkgs.strace
       ];
-
-      systemd.tmpfiles.rules = [ "d /boot/forensics 0755 root root -" ];
-
       services.rsyslogd.extraConfig = lib.mkForce ''
         $WorkDirectory /run/rsyslog
 

@@ -6,7 +6,7 @@
 # 3. Builds a minimal RAUC bundle with dummy boot + rootfs images
 # 4. Installs the bundle via `rauc install`
 # 5. Verifies RAUC switched the primary to boot.1 (B)
-# 6. Verifies forensic records on the previously active slot remain readable
+# 6. Verifies the install switched the primary slot without relying on slot-local forensic storage
 #
 # Only imports rauc.nix + hardware-qemu.nix — no podman/cockpit/traefik.
 #
@@ -22,7 +22,6 @@
 
 let
   nixos-lib = import (pkgs.path + "/nixos/lib") { };
-  forensicScript = builtins.readFile ../../scripts/forensic-log.sh;
 
   signingCert = ../../certs/dev.signing.cert.pem;
   signingKey = ../../certs/dev.signing.key.pem;
@@ -105,17 +104,7 @@ nixos-lib.runTest {
       environment.systemPackages = [
         pkgs.rauc
         pkgs.dosfstools
-        (pkgs.writeShellScriptBin "forensic-log" forensicScript)
       ];
-      environment.etc."atomixos/current-boot-forensics-mount".source =
-        pkgs.writeShellScript "current-boot-forensics-mount" ''
-          set -euo pipefail
-          case "''${1:-}" in
-            boot.0) printf '%s\n' /run/forensics/boot.0 ;;
-            boot.1) printf '%s\n' /run/forensics/boot.1 ;;
-            *) printf '%s\n' /boot ;;
-          esac
-        '';
 
       boot.kernelParams = [ "rauc.slot=boot.0" ];
       atomixos.rauc.statusFile = "/tmp/rauc.status";
@@ -130,12 +119,6 @@ nixos-lib.runTest {
     gateway.wait_for_unit("multi-user.target")
     gateway.wait_for_unit("rauc.service")
 
-    # The extra QEMU slot disks start blank, so prepare VFAT boot filesystems
-    # before checking the slot-local forensic mounts.
-    gateway.succeed("mkfs.vfat -n BOOTA /dev/vdb")
-    gateway.succeed("mkdir -p /run/forensics/boot.0 /run/forensics/boot.1")
-    gateway.succeed("mount -t vfat /dev/vdb /run/forensics/boot.0")
-
     # Verify we booted into slot A
     status = gateway.succeed("rauc status --output-format=json 2>&1")
     assert '"booted": "A"' in status or '"booted":"A"' in status or "booted" in status, \
@@ -144,10 +127,6 @@ nixos-lib.runTest {
     # Verify slot A is primary
     primary = gateway.succeed("cat /var/lib/rauc/primary 2>/dev/null || echo A").strip()
     assert primary == "A", f"Expected primary=A, got: {primary}"
-
-    # Record a Tier 0 event on the active slot before switching primary.
-    gateway.succeed("forensic-log --stage rauc --event install-start --slot boot.0 --detail pre-switch && sync")
-    gateway.succeed("grep 'slot=boot.0 stage=rauc event=install-start detail=pre-switch' /run/forensics/boot.0/forensics/segment-0.log")
 
     # Copy the test bundle into the VM
     gateway.succeed("mkdir -p /tmp/bundles")
@@ -160,12 +139,9 @@ nixos-lib.runTest {
     primary_after = gateway.succeed("cat /var/lib/rauc/primary").strip()
     assert primary_after == "B", f"Expected primary=B after install, got: {primary_after}"
 
-    # The previous slot's forensic ring must remain readable after the switch.
-    gateway.succeed("grep 'slot=boot.0 stage=rauc event=install-start detail=pre-switch' /run/forensics/boot.0/forensics/segment-0.log")
-
     # Verify rauc status shows the update
     status_after = gateway.succeed("rauc status --output-format=json 2>&1")
 
-    gateway.log("RAUC update install test passed — bundle installed to inactive slot, primary switched to B, and slot-local forensics remained readable")
+    gateway.log("RAUC update install test passed — bundle installed to inactive slot and primary switched to B")
   '';
 }
