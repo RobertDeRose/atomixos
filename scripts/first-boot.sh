@@ -49,6 +49,14 @@ write_dev_health_requirements() {
 	chmod 600 "$health_file"
 }
 
+clear_pending_forensics_state() {
+	rm -f \
+		"$FORENSICS_STATE_DIR/pending-source-slot" \
+		"$FORENSICS_STATE_DIR/pending-target-slot" \
+		"$FORENSICS_STATE_DIR/pending-target-version" \
+		"$FORENSICS_STATE_DIR/pending-target-booted"
+}
+
 ensure_rauc_env() {
 	if fw_printenv BOOT_ORDER >/dev/null 2>&1; then
 		return 0
@@ -269,20 +277,12 @@ if [ "$RAUC_ENABLED" = "1" ]; then
 		exit 1
 	fi
 	forensic --stage rauc --event mark-good-complete --slot "$BOOT_SLOT" --result ok
-	rm -f \
-		"$FORENSICS_STATE_DIR/pending-source-slot" \
-		"$FORENSICS_STATE_DIR/pending-target-slot" \
-		"$FORENSICS_STATE_DIR/pending-target-version" \
-		"$FORENSICS_STATE_DIR/pending-target-booted"
 else
 	log "RAUC disabled; skipping slot confirmation"
-	rm -f \
-		"$FORENSICS_STATE_DIR/pending-source-slot" \
-		"$FORENSICS_STATE_DIR/pending-target-slot" \
-		"$FORENSICS_STATE_DIR/pending-target-version" \
-		"$FORENSICS_STATE_DIR/pending-target-booted"
 	forensic --stage rauc --event skipped --reason disabled
 fi
+
+clear_pending_forensics_state
 
 # ── Write sentinel ──
 log "Writing first-boot sentinel: $SENTINEL"

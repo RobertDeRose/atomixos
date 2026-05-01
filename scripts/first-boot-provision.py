@@ -40,6 +40,8 @@ ROOTLESS_NETWORK_NAME = "pasta"
 BOOTSTRAP_LAN_HOST = "172.20.30.1"
 BOOTSTRAP_DEFAULT_DOWNLOAD_GRACE_SECONDS = 10.0
 BOOTSTRAP_MAX_DOWNLOAD_GRACE_SECONDS = 60.0
+BOOTSTRAP_DOWNLOAD_TOKEN_TTL_SECONDS = 300.0
+BOOTSTRAP_MAX_DOWNLOAD_TOKENS = 32
 RUNTIME_METADATA_FILENAME = "quadlet-runtime.json"
 FIREWALL_INBOUND_FILENAME = "firewall-inbound.json"
 CONTAINER_SUFFIX = ".container"
@@ -830,6 +832,22 @@ class BootstrapHandler(BaseHTTPRequestHandler):
     download_tokens = {}
     download_tokens_lock = threading.Lock()
 
+    @classmethod
+    def _prune_download_tokens(cls, now: float):
+        expired = [
+            token
+            for token, (_client, issued_at) in cls.download_tokens.items()
+            if now - issued_at > BOOTSTRAP_DOWNLOAD_TOKEN_TTL_SECONDS
+        ]
+        for token in expired:
+            del cls.download_tokens[token]
+
+        overflow = len(cls.download_tokens) - BOOTSTRAP_MAX_DOWNLOAD_TOKENS
+        if overflow > 0:
+            oldest = sorted(cls.download_tokens.items(), key=lambda item: item[1][1])[:overflow]
+            for token, _value in oldest:
+                del cls.download_tokens[token]
+
     def _mark_applied(self):
         output_path = getattr(self, "output_path", None)
         if not output_path:
@@ -859,8 +877,10 @@ class BootstrapHandler(BaseHTTPRequestHandler):
 
     def _prepare_download_link(self):
         token = secrets.token_urlsafe(24)
+        now = time.monotonic()
         with type(self).download_tokens_lock:
-            type(self).download_tokens[token] = self.client_address[0]
+            type(self)._prune_download_tokens(now)
+            type(self).download_tokens[token] = (self.client_address[0], now)
         return f"/download/config.toml?token={token}"
 
     def _read_multipart_form(self, body: bytes):
@@ -932,8 +952,14 @@ class BootstrapHandler(BaseHTTPRequestHandler):
                 return
 
             token = parse_qs(request.query, keep_blank_values=True).get("token", [""])[0]
+            now = time.monotonic()
             with type(self).download_tokens_lock:
-                expected_client = type(self).download_tokens.get(token)
+                type(self)._prune_download_tokens(now)
+                entry = type(self).download_tokens.get(token)
+                if entry is None:
+                    expected_client = None
+                else:
+                    expected_client, _issued_at = entry
                 if expected_client == self.client_address[0]:
                     del type(self).download_tokens[token]
                 else:
