@@ -167,7 +167,7 @@ First-boot provisioning/import/bootstrap flow plus boot confirmation.
 2. Discover provisioning input from fresh-flash `/boot/config.toml`, USB media, or the LAN bootstrap console
 3. Validate and import the config into `/data/config/`
 4. Render and sync rootful and rootless Quadlet units
-5. Mark the current RAUC slot good
+5. Mark the current RAUC slot good when RAUC is enabled
 6. Write timestamp to `/data/.completed_first_boot`
 
 ### ssh-wan-toggle.sh
