@@ -42,10 +42,8 @@ Tests are available for both Linux and macOS:
 | `checks.aarch64-darwin.*` | Same tests running natively on macOS via Apple Virtualization Framework |
 
 Available test names: `rauc-slots`, `rauc-update`, `rauc-rollback`, `rauc-confirm`, `rauc-power-loss`, `rauc-watchdog`,
-`firewall`, `initrd-fresh-flash-marker`, `first-boot-provision`, `first-boot-source-discovery`, `forensics-mount-selection`,
-`forensics-ordering`, `forensics-podman-log-path`, `forensics-persistence`, `forensics-readback`,
-`forensics-rsyslog-path`, `forensics-rsyslog-buffering`, `forensics-shutdown-flush`, `forensics-rollover`,
-`forensics-slot-transition`, `network-isolation`, `ssh-wan-toggle`.
+`firewall`, `initrd-fresh-flash-marker`, `first-boot-provision`, `first-boot-source-discovery`, `forensics-podman-log-path`,
+`forensics-rsyslog-path`, `forensics-rsyslog-buffering`, `forensics-shutdown-flush`, `network-isolation`, `ssh-wan-toggle`.
 
 ## Overlay
 

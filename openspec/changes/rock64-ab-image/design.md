@@ -37,7 +37,7 @@ The implemented platform centers on:
 - Embedding device credentials or per-device secrets in the base image
 - Generic provisioning engines such as cloud-init
 - Server-side update infrastructure design
-- Full initrd forensic-log persistence redesign in this change
+- Full logging durability redesign in this change
 
 ## Decisions
 

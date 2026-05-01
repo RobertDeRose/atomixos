@@ -86,57 +86,23 @@ forensic artifacts from crowding out boot assets.
 - **Use a smaller budget**: safer for boot growth but less useful for field debugging.
 - **Use a larger budget**: possible, but starts trading too much future boot payload headroom for logs.
 
-### 3. Tier 0 should use a fixed-size rotated layout, not an unbounded append log
+### 3. Runtime durability should come from buffered `/data/logs` appends
 
-**Choice**: Represent Tier 0 as a fixed-size rotated or segmented store within the `28 MiB` budget.
+**Choice**: Keep `journald` volatile and use `rsyslog` with an in-memory queue
+to append larger batches to `/data/logs`.
 
-**Rationale**: A black-box retention model only works if the size ceiling is
-absolute. Fixed-size segments avoid unbounded growth, make recovery
-expectations clearer, and reduce metadata churn compared with arbitrary file
-creation.
-
-One concrete model is seven `4 MiB` segments per slot plus a tiny metadata file:
-
-```text
-/boot/forensics/
-  meta
-  segment-0.log
-  segment-1.log
-  ...
-  segment-6.log
-```
-
-The active segment appends new records until full, then the oldest segment is
-reused. That makes retention size-based rather than time-based and keeps the
-implementation aligned with a black-box recorder.
-
-The metadata file should track only the minimum state needed for recovery and
-continuation, such as format version, active segment, active `boot_id`, and
-next sequence number.
+**Rationale**: The active runtime goal is to preserve the eMMC-wear benefits of
+tmpfs-first logging while still making broader host and container diagnostics
+available after clean operation and orderly shutdown. Buffered appends to
+`/data/logs` provide a simpler path than a separate slot-local Tier 0 store and
+match the logging model now used by the runtime services.
 
 **Alternatives considered**:
 
-- **Single growing file with truncation**: simpler initially, but harder to
-  reason about after crashes and less explicit as a ring-buffer design.
-- **Timestamp-based rotation**: less deterministic under bursty failure scenarios.
-
-### 4. Tier 0 should use compact key/value line records with `boot_id + seq`
-
-**Choice**: Encode Tier 0 as single-line key/value records with a per-boot `boot_id` and a monotonic `seq` within that boot.
-
-**Rationale**: Tier 0 is a forensic recorder, not a general logging backend.
-Human-readable key/value lines are compact, easy to inspect over serial or SSH,
-easy to emit from shell-driven services, and degrade gracefully on power loss
-because a torn final line can simply be ignored.
-
-The record format should require:
-
-- `boot_id`
-- `seq`
-- `ts`
-- `slot`
-- `stage`
-- `event`
+- **Make journald persistent directly**: simpler pipeline, but increases write
+  amplification during steady-state operation.
+- **Keep a separate slot-local forensic ring**: more durable for a narrow set of
+  events, but adds another logging path and extra boot-partition complexity.
 
 with optional fields such as:
 

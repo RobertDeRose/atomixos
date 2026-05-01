@@ -62,23 +62,20 @@ create vfat boot partitions (mtools), write squashfs to rootfs-a.
 
 These scripts run on the device at runtime, invoked by systemd services.
 
-### forensic-log.sh
+### watchdog-boot-count.sh
 
-**Location:** `scripts/forensic-log.sh`
+**Location:** `scripts/watchdog-boot-count.sh`
 
-Tier 0 forensic writer and reader for the slot-local `/boot/forensics` ring.
+Records watchdog boot-count state and rollback decisions for the configured
+RAUC bootloader backend.
 
 **Responsibilities:**
 
-1. Resolve the active slot and target forensic mount
-2. Ensure `meta` plus seven `4 MiB` segment files exist
-3. Encode records as single-line `key=value` entries
-4. Maintain `boot_id + seq` ordering, resetting `seq` on a new boot
-5. Rotate to the next segment when the current one fills
-6. Read back only complete lines so a torn final record is ignored
-
-Initrd forensic helper scripts are currently disabled pending redesign of the
-early-boot persistence path.
+1. Detect the active bootloader mode from `ATOMIXOS_RAUC_BOOTLOADER`
+2. For the `custom` backend, decrement `/var/lib/rauc/boot-count.<slot>` on boot
+3. Mark the failed slot bad and switch primary when the count is exhausted
+4. For the `uboot` backend, read the post-boot `BOOT_*_LEFT` value via `fw_printenv`
+5. Emit journal-visible lifecycle lines through normal stdout
 
 ### boot.cmd
 
@@ -132,8 +129,8 @@ Post-update health check. Runs after every boot (except first).
 6. Sustained 60s check (every 5s): dnsmasq still active
 7. On success: `rauc status mark-good`
 
-**Forensics:** Emits Tier 0 verification and `mark-good` lifecycle markers,
-including explicit failure markers when confirmation fails.
+**Logging:** Emits progress and failure details through normal service output,
+which is captured by `journald` and forwarded to `/data/logs` by `rsyslog`.
 
 **Dependencies:** `rauc`, `jq`, `systemctl`, `ip`
 

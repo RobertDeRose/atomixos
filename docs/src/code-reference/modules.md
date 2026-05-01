@@ -20,7 +20,7 @@ flowchart TD
 
     subgraph IMPORTS["base.nix imports"]
         direction LR
-        FORENSICS["forensics.nix"]
+        LOGGING["logging.nix"]
         NETWORKING["networking.nix"]
         FIREWALL["firewall.nix"]
         LAN["lan-gateway.nix"]
@@ -33,7 +33,7 @@ flowchart TD
     end
 
     BASE --> NETWORKING
-    BASE --> FORENSICS
+    BASE --> LOGGING
     BASE --> FIREWALL
     BASE --> LAN
     BASE --> OPENVPN
@@ -116,33 +116,31 @@ on first boot.
 
 ---
 
-## forensics.nix
+## logging.nix
 
-**Purpose**: Tier 0 forensic logging plus the volatile `journald` to buffered `rsyslog` boundary for general runtime logs.
+**Purpose**: Configure the runtime logging path: volatile `journald` as
+ingress, buffered `rsyslog` appends to `/data/logs`, and a shutdown flush
+hook.
 
 **Key configuration:**
 
-| Setting           | Value                                            | Notes                                                      |
-|-------------------|--------------------------------------------------|------------------------------------------------------------|
-| journald storage  | `Storage=volatile`                               | Keeps general runtime logs in tmpfs-backed journal storage |
-| journald cap      | `RuntimeMaxUse=32M`                              | Bounds memory use for runtime logs                         |
-| rsyslog output    | buffered `omfile` appends to `/data/logs/*.log`  | Uses async buffered writes instead of direct per-line sync |
-| Podman log driver | `journald`                                       | Routes container stdout/stderr into the same journald path |
-| slot mounts       | `/run/forensics/boot.0`, `/run/forensics/boot.1` | Mounts both boot partitions for slot-local forensic access |
+| Setting           | Value                                           | Notes                                                      |
+|-------------------|-------------------------------------------------|------------------------------------------------------------|
+| journald storage  | `Storage=volatile`                              | Keeps runtime logs in tmpfs-backed journal storage         |
+| journald cap      | `RuntimeMaxUse=32M`                             | Bounds memory use for runtime logs                         |
+| rsyslog output    | buffered `omfile` appends to `/data/logs/*.log` | Uses async buffered writes instead of direct per-line sync |
+| Podman log driver | `journald`                                      | Routes container stdout/stderr into the same journald path |
 
 **Services:**
 
-| Service                                | Purpose                                  |
-|----------------------------------------|------------------------------------------|
-| `forensics-boot-start.service`         | Records `boot userspace-start`           |
-| `forensics-boot-complete.service`      | Records `boot boot-complete`             |
-| `forensics-slot-transition.service`    | Records slot switch and fallback markers |
-| `forensics-data-mount-outcome.service` | Records `/data` mount success/failure    |
-| `forensics-shutdown-flush.service`     | Records shutdown Tier 0 flush markers    |
+| Service                          | Purpose                                                   |
+|----------------------------------|-----------------------------------------------------------|
+| `syslog.service`                 | Runs `rsyslogd` and drains journald into buffered files   |
+| `logging-shutdown-flush.service` | Flushes journald and asks rsyslog to sync buffered output |
 
-The module also installs the `forensic-log` CLI and the helper used to choose
-the currently relevant boot-partition forensic mount. Initrd forensic units are
-currently disabled pending redesign of the early-boot persistence path.
+This module no longer installs slot-local forensic helpers. Runtime service and
+script output is expected to go to stdout/stderr under `systemd`, which places
+it into `journald` and then through the buffered `rsyslog` path.
 
 ---
 
@@ -318,7 +316,7 @@ files in `/var/lib/rauc/`.
 
 ## watchdog.nix
 
-**Purpose**: systemd hardware watchdog integration plus forensic boot-count and rollback markers.
+**Purpose**: systemd hardware watchdog integration plus boot-count and rollback bookkeeping.
 
 ```nix
 systemd.settings.Manager = {
@@ -329,7 +327,7 @@ systemd.settings.Manager = {
 
 The hardware watchdog manager settings remain disabled during development, but
 `watchdog-boot-count.service` is installed so the real boot-count and rollback
-path records watchdog lifecycle markers through `forensic-log`.
+path records lifecycle markers to the journal through normal service stdout.
 
 ---
 

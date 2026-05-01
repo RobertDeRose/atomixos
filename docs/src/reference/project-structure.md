@@ -17,7 +17,7 @@ modules/
   os-verification.nix              Post-update health check service
   os-upgrade.nix                   Update polling + hawkBit toggle
   first-boot.nix                   First-boot provisioning import + slot commit
-  forensics.nix                    Tier 0 forensic ring + journald/rsyslog durability
+  logging.nix                      journald ingress + buffered rsyslog durability
   boot-storage-debug.nix           Boot-partition mount helpers for debugging
   openvpn.nix                      OpenVPN recovery tunnel
 
@@ -37,7 +37,7 @@ nix/
     initrd-fresh-flash-marker.nix  Initrd fresh-flash detection
     first-boot-provision.nix       Provisioning import + Quadlet rendering
     first-boot-source-discovery.nix USB/boot seed discovery rules
-    forensics-*.nix                Forensic ring, journald, rsyslog durability tests
+    forensics-*.nix                journald/rsyslog durability and log-path tests
     network-isolation.nix          2-node DHCP/NTP/WAN isolation
     ssh-wan-toggle.nix             SSH-on-WAN flag enable/disable
 
@@ -52,8 +52,7 @@ scripts/
   first-boot.sh                    First-boot provisioning import + mark-good
   first-boot-provision.py          Provisioning importer/bootstrap/Quadlet renderer
   quadlet-sync.sh                  Rootful/rootless Quadlet sync + startup
-  forensic-log.sh                  Tier 0 forensic ring reader/writer
-  forensics-slot-transition.sh     Slot transition forensic marker helper
+  watchdog-boot-count.sh           Boot-count decrement and rollback journal logging
   boot.cmd                         U-Boot A/B boot script source
   fw_env.config                    U-Boot env config (reference only, not installed)
 
