@@ -47,6 +47,7 @@ nixos-lib.runTest {
     gateway.succeed("cat > /tmp/config.toml <<'EOF'\nversion = 1\n\n[admin]\nssh_keys = [\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBootstrapKey admin@example\"]\n\n[firewall.inbound]\ntcp = [80, 443]\nudp = [1194]\n\n[health]\nrequired = [\"traefik\", \"myapp\"]\n\n[container.traefik]\nprivileged = true\n\n[container.traefik.Unit]\nDescription = \"Traefik\"\n\n[container.traefik.Container]\nImage = \"docker.io/library/traefik:v3.1\"\nEnvironment = [\"A=1\", \"B=2\"]\nExec = [\"--serve\", \"--port=8080\"]\n\n[container.traefik.Install]\nWantedBy = [\"multi-user.target\"]\n\n[container.myapp]\nprivileged = false\n\n[container.myapp.Unit]\nDescription = \"My App\"\n\n[container.myapp.Container]\nImage = \"ghcr.io/example/myapp:latest\"\nNetwork = [\"frontend\"]\nPublishPort = [\"10080:80\", \"192.168.1.20:10081:81\"]\nVolume = [\"''${FILES_DIR}/app/config.yaml:/app/config.yaml:ro\", \"''${CONFIG_DIR}/local.env:/app/local.env:ro\"]\n\n[container.myapp.Install]\nWantedBy = [\"default.target\"]\nEOF")
 
     gateway.succeed("printf 'KEY=VALUE\n' >/tmp/local.env")
+    gateway.succeed("cat > /tmp/invalid-config.toml <<'EOF'\nversion = 1\n\n[admin]\nssh_keys = [\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBootstrapKey admin@example\"]\n\n[firewall.inbound]\ntcp = [443]\n\n[health]\nrequired = [\"missing-service\"]\n\n[container.myapp]\nprivileged = false\n\n[container.myapp.Container]\nImage = \"ghcr.io/example/myapp:latest\"\nEOF")
 
     gateway.succeed("first-boot-provision validate /tmp/config.toml")
     gateway.succeed("first-boot-provision import /tmp/config.toml /data/config")
@@ -86,9 +87,15 @@ nixos-lib.runTest {
     gateway.succeed("test -f /tmp/bootstrap-root/health-required.json")
     gateway.succeed("grep 'Configuration applied' /tmp/bootstrap-response.html")
     gateway.succeed("grep 'Download applied config.toml' /tmp/bootstrap-response.html")
-    gateway.succeed("download_path=$(python3 - <<'PY'\nimport re\nfrom pathlib import Path\nhtml = Path('/tmp/bootstrap-response.html').read_text()\nmatch = re.search(r'href=\"([^\"]*/download/config\.toml\?token=[^\"]+)\"', html)\nassert match, html\nprint(match.group(1))\nPY\n) && curl -fsS \"http://127.0.0.1:18080$download_path\" >/tmp/bootstrap-download.toml")
+    gateway.succeed("download_path=$(python3 - <<'PY'\nimport re\nfrom pathlib import Path\nhtml = Path('/tmp/bootstrap-response.html').read_text()\nmatch = re.search(r'href=\"([^\"]*/download/config\.toml\?token=[^\"]+)\"', html)\nassert match, html\nprint(match.group(1))\nPY\n) && printf '%s' \"$download_path\" >/tmp/bootstrap-download.path && curl -fsS -D /tmp/bootstrap-download.headers \"http://127.0.0.1:18080$download_path\" >/tmp/bootstrap-download.toml")
     gateway.succeed("cmp /tmp/bootstrap-root/config.toml /tmp/bootstrap-download.toml")
+    gateway.succeed("tr -d '\\r' </tmp/bootstrap-download.headers >/tmp/bootstrap-download.headers.unix")
+    gateway.succeed("grep '^Cache-Control: no-store$' /tmp/bootstrap-download.headers.unix")
+    gateway.succeed("grep '^Pragma: no-cache$' /tmp/bootstrap-download.headers.unix")
+    gateway.succeed("grep '^X-Content-Type-Options: nosniff$' /tmp/bootstrap-download.headers.unix")
+    gateway.fail("download_path=$(cat /tmp/bootstrap-download.path) && curl -fsS \"http://127.0.0.1:18080$download_path\" >/tmp/bootstrap-download-reuse.toml")
     gateway.fail("curl -fsS http://127.0.0.1:18080/download/config.toml >/tmp/bootstrap-download-missing.toml")
+    gateway.fail("curl -fsS 'http://127.0.0.1:18080/download/config.toml?token=definitely-wrong' >/tmp/bootstrap-download-wrong.toml")
     gateway.succeed("rm -rf /tmp/bootstrap-root-api && mkdir -p /tmp/bootstrap-root-api")
     gateway.succeed("kill $(cat /tmp/bootstrap.pid)")
     gateway.succeed("ATOMIXOS_BOOTSTRAP_DOWNLOAD_GRACE_SECONDS=0 first-boot-provision serve /tmp/bootstrap-root-api /tmp/bootstrap-output-api.toml --host 127.0.0.1 --port 18080 >/tmp/bootstrap.log 2>&1 & echo $! >/tmp/bootstrap.pid")
@@ -106,9 +113,19 @@ nixos-lib.runTest {
     gateway.succeed("curl -fsS --data-urlencode 'ssh_keys=ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBootstrapKey admin@example' --data-urlencode 'wan_tcp=443' --data-urlencode 'wan_udp=1194' --data-urlencode 'required=' --data-urlencode 'quadlet=[container.myapp]\nprivileged = false\n\n[container.myapp.Unit]\nDescription = \"My App\"\n\n[container.myapp.Container]\nImage = \"ghcr.io/example/myapp:latest\"\nPublishPort = [\"10080:8080\"]\n\n[container.myapp.Install]\nWantedBy = [\"default.target\"]' http://127.0.0.1:18080/generate >/tmp/bootstrap-generate-response.html")
     gateway.succeed("grep 'Configuration applied' /tmp/bootstrap-generate-response.html")
     gateway.succeed("grep 'Download applied config.toml' /tmp/bootstrap-generate-response.html")
-    gateway.succeed("generate_download_path=$(python3 - <<'PY'\nimport re\nfrom pathlib import Path\nhtml = Path('/tmp/bootstrap-generate-response.html').read_text()\nmatch = re.search(r'href=\"([^\"]*/download/config\.toml\?token=[^\"]+)\"', html)\nassert match, html\nprint(match.group(1))\nPY\n) && curl -fsS \"http://127.0.0.1:18080$generate_download_path\" >/tmp/bootstrap-generate-download.toml")
+    gateway.succeed("generate_download_path=$(python3 - <<'PY'\nimport re\nfrom pathlib import Path\nhtml = Path('/tmp/bootstrap-generate-response.html').read_text()\nmatch = re.search(r'href=\"([^\"]*/download/config\.toml\?token=[^\"]+)\"', html)\nassert match, html\nprint(match.group(1))\nPY\n) && printf '%s' \"$generate_download_path\" >/tmp/bootstrap-generate-download.path && curl -fsS \"http://127.0.0.1:18080$generate_download_path\" >/tmp/bootstrap-generate-download.toml")
     gateway.succeed("cmp /tmp/bootstrap-root-generate/config.toml /tmp/bootstrap-generate-download.toml")
+    gateway.fail("generate_download_path=$(cat /tmp/bootstrap-generate-download.path) && curl -fsS \"http://127.0.0.1:18080$generate_download_path\" >/tmp/bootstrap-generate-download-reuse.toml")
     gateway.succeed("python3 - <<'PY'\nimport json\nimport tomllib\nfrom pathlib import Path\n\nconfig = tomllib.loads(Path('/tmp/bootstrap-root-generate/config.toml').read_text())\nassert config['health']['required'] == ['myapp'], config['health']['required']\nrequired = json.loads(Path('/tmp/bootstrap-root-generate/health-required.json').read_text())\nassert required == ['myapp'], required\nPY")
+    gateway.succeed("kill $(cat /tmp/bootstrap.pid)")
+
+    gateway.succeed("rm -rf /tmp/bootstrap-root-invalid && mkdir -p /tmp/bootstrap-root-invalid")
+    gateway.succeed("ATOMIXOS_BOOTSTRAP_DOWNLOAD_GRACE_SECONDS=inf first-boot-provision serve /tmp/bootstrap-root-invalid /tmp/bootstrap-output-invalid.toml --host 127.0.0.1 --port 18080 >/tmp/bootstrap.log 2>&1 & echo $! >/tmp/bootstrap.pid")
+    gateway.wait_until_succeeds("ss -tln | grep ':18080'", timeout=30)
+    gateway.succeed("curl -fsS -F config_file=@/tmp/invalid-config.toml http://127.0.0.1:18080/apply >/tmp/bootstrap-invalid-response.html")
+    gateway.succeed("grep 'missing-service' /tmp/bootstrap-invalid-response.html")
+    gateway.succeed("grep 'container.myapp' /tmp/bootstrap-invalid-response.html")
+    gateway.succeed("grep 'non-finite ATOMIXOS_BOOTSTRAP_DOWNLOAD_GRACE_SECONDS' /tmp/bootstrap.log")
     gateway.succeed("kill $(cat /tmp/bootstrap.pid)")
 
     gateway.succeed("rm -rf /tmp/bundle-root && mkdir -p /tmp/bundle-root/files/app")
@@ -129,7 +146,6 @@ nixos-lib.runTest {
     gateway.succeed("test -f /tmp/import-bundle-zst/config.toml")
     gateway.succeed("test -f /tmp/import-bundle-zst/files/app/config.yaml")
 
-    gateway.succeed("cat > /tmp/invalid-config.toml <<'EOF'\nversion = 1\n\n[admin]\nssh_keys = [\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBootstrapKey admin@example\"]\n\n[firewall.inbound]\ntcp = [443]\n\n[health]\nrequired = [\"missing-service\"]\n\n[container.myapp]\nprivileged = false\n\n[container.myapp.Container]\nImage = \"ghcr.io/example/myapp:latest\"\nEOF")
     gateway.fail("first-boot-provision validate /tmp/invalid-config.toml")
 
     gateway.log("first-boot-provision helper test passed")

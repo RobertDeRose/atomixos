@@ -184,7 +184,7 @@ model rather than an always-durable one.
 | Risk                              | Mitigation                                                                                                      |
 |-----------------------------------|-----------------------------------------------------------------------------------------------------------------|
 | eMMC wear from frequent writes    | `/data` uses f2fs (wear-leveling aware); squashfs slots are written only during updates                         |
-| U-Boot env corruption             | Redundant environment storage at two offsets; power-loss safe                                                   |
+| U-Boot env corruption             | Single-copy environment storage; corruption is handled through normal recovery and reprovisioning flows         |
 | 1 GB rootfs slot too small        | Current closure is ~300-400 MB; aggressive optimization keeps headroom                                          |
 | Missing health manifest           | `first-boot.service` commits only when RAUC is enabled; `os-verification` skips container checks if no manifest |
 | Cockpit/Traefik container failure | OpenVPN in rootfs provides alternate remote access                                                              |

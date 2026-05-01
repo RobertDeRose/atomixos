@@ -5,6 +5,7 @@ import email.policy
 import html
 import io
 import json
+import math
 import os
 import pwd
 import secrets
@@ -15,6 +16,7 @@ import sys
 import tarfile
 import tempfile
 import textwrap
+import threading
 import time
 from email.parser import BytesParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -36,6 +38,8 @@ ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
 APP_RUNTIME_USER = "appsvc"
 ROOTLESS_NETWORK_NAME = "pasta"
 BOOTSTRAP_LAN_HOST = "172.20.30.1"
+BOOTSTRAP_DEFAULT_DOWNLOAD_GRACE_SECONDS = 10.0
+BOOTSTRAP_MAX_DOWNLOAD_GRACE_SECONDS = 60.0
 RUNTIME_METADATA_FILENAME = "quadlet-runtime.json"
 FIREWALL_INBOUND_FILENAME = "firewall-inbound.json"
 CONTAINER_SUFFIX = ".container"
@@ -369,15 +373,26 @@ def generated_required_units(quadlet: str):
 
 
 def bootstrap_download_grace_seconds():
-    value = os.environ.get("ATOMIXOS_BOOTSTRAP_DOWNLOAD_GRACE_SECONDS", "10")
+    value = os.environ.get("ATOMIXOS_BOOTSTRAP_DOWNLOAD_GRACE_SECONDS", str(BOOTSTRAP_DEFAULT_DOWNLOAD_GRACE_SECONDS))
     try:
         seconds = float(value)
     except ValueError:
         sys.stderr.write(
             "[bootstrap] invalid ATOMIXOS_BOOTSTRAP_DOWNLOAD_GRACE_SECONDS; defaulting to 10 seconds\n"
         )
-        return 10.0
-    return max(0.0, seconds)
+        return BOOTSTRAP_DEFAULT_DOWNLOAD_GRACE_SECONDS
+    if not math.isfinite(seconds):
+        sys.stderr.write(
+            "[bootstrap] non-finite ATOMIXOS_BOOTSTRAP_DOWNLOAD_GRACE_SECONDS; defaulting to 10 seconds\n"
+        )
+        return BOOTSTRAP_DEFAULT_DOWNLOAD_GRACE_SECONDS
+    return min(BOOTSTRAP_MAX_DOWNLOAD_GRACE_SECONDS, max(0.0, seconds))
+
+
+def uploaded_config_text(payload: bytes, filename: str):
+    if detect_bundle_kind(payload, filename) is not None:
+        return ""
+    return payload.decode("utf-8", errors="replace")
 
 
 def extract_bundle_archive(source_bytes: bytes, filename: str, destination: Path):
@@ -812,8 +827,8 @@ class BootstrapHandler(BaseHTTPRequestHandler):
     config_root = None
     output_path = None
     download_grace_seconds = 10.0
-    download_client = None
-    download_token = None
+    download_tokens = {}
+    download_tokens_lock = threading.Lock()
 
     def _mark_applied(self):
         output_path = getattr(self, "output_path", None)
@@ -835,14 +850,17 @@ class BootstrapHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.send_header("Content-Disposition", 'attachment; filename="config.toml"')
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
 
     def _prepare_download_link(self):
         token = secrets.token_urlsafe(24)
-        type(self).download_client = self.client_address[0]
-        type(self).download_token = token
+        with type(self).download_tokens_lock:
+            type(self).download_tokens[token] = self.client_address[0]
         return f"/download/config.toml?token={token}"
 
     def _read_multipart_form(self, body: bytes):
@@ -914,7 +932,13 @@ class BootstrapHandler(BaseHTTPRequestHandler):
                 return
 
             token = parse_qs(request.query, keep_blank_values=True).get("token", [""])[0]
-            if token != self.download_token or self.client_address[0] != self.download_client:
+            with type(self).download_tokens_lock:
+                expected_client = type(self).download_tokens.get(token)
+                if expected_client == self.client_address[0]:
+                    del type(self).download_tokens[token]
+                else:
+                    expected_client = None
+            if expected_client is None:
                 self.send_error(403)
                 return
             self._send_config_download(config_path.read_text())
@@ -944,6 +968,7 @@ class BootstrapHandler(BaseHTTPRequestHandler):
                 if isinstance(uploaded, dict) and uploaded.get("body"):
                     payload = uploaded["body"]
                     filename = uploaded.get("filename", "config.toml")
+                    config_text = uploaded_config_text(payload, filename)
                 else:
                     config_text = form.get("config", "")
                     payload = config_text.encode("utf-8")
@@ -1003,6 +1028,9 @@ class BootstrapHandler(BaseHTTPRequestHandler):
             self._mark_applied()
 
     def log_message(self, format, *args):
+        if format == '"%s" %s %s' and args:
+            request_line = f"{self.command} {urlparse(self.path).path} {self.request_version}"
+            args = (request_line, *args[1:])
         sys.stderr.write("[bootstrap] " + (format % args) + "\n")
 
 
