@@ -276,6 +276,11 @@ if [ "$RAUC_ENABLED" = "1" ]; then
 		"$FORENSICS_STATE_DIR/pending-target-booted"
 else
 	log "RAUC disabled; skipping slot confirmation"
+	rm -f \
+		"$FORENSICS_STATE_DIR/pending-source-slot" \
+		"$FORENSICS_STATE_DIR/pending-target-slot" \
+		"$FORENSICS_STATE_DIR/pending-target-version" \
+		"$FORENSICS_STATE_DIR/pending-target-booted"
 	forensic --stage rauc --event skipped --reason disabled
 fi
 
