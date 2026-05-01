@@ -62,9 +62,9 @@ slot.
 
 ## First Boot Exception
 
-On initial device provisioning, the `first-boot.service` handles this by
-unconditionally marking the slot as good (no network dependency) and writing a sentinel file
-(`/data/.completed_first_boot`). After this, all subsequent boots use the full health-check path.
+On initial device provisioning, `first-boot.service` writes the sentinel file
+(`/data/.completed_first_boot`) after successful provisioning import/validation and marks the slot good only when RAUC
+is enabled. After this, all subsequent boots use the full health-check path.
 
 ## Watchdog Integration (currently disabled on Rock64 during development)
 

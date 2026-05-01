@@ -365,14 +365,14 @@ path records watchdog lifecycle markers through `forensic-log`.
 
 ## first-boot.nix
 
-**Purpose**: One-time first-boot slot confirmation.
+**Purpose**: One-time first-boot provisioning and optional slot confirmation.
 
-| Setting   | Value                                              |
-|-----------|----------------------------------------------------|
-| Type      | oneshot                                            |
-| Condition | `ConditionPathExists=!/data/.completed_first_boot` |
-| Script    | `scripts/first-boot.sh`                            |
-| Effect    | `rauc status mark-good` + write sentinel           |
+| Setting   | Value                                                                     |
+|-----------|---------------------------------------------------------------------------|
+| Type      | oneshot                                                                   |
+| Condition | `ConditionPathExists=!/data/.completed_first_boot`                        |
+| Script    | `scripts/first-boot.sh`                                                   |
+| Effect    | provision config, optionally `rauc status mark-good`, then write sentinel |
 
 Mutually exclusive with `os-verification.service` via the sentinel file.
 

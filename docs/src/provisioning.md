@@ -17,10 +17,10 @@ On first boot:
    bootstrap web console on `172.20.30.1:8080`
 6. The imported config is validated, persisted under `/data/config/`, rendered into canonical Quadlet files, and synced
    into the active rootful and rootless Quadlet paths
-7. `first-boot.service` marks the RAUC slot as good only after provisioning import/validation succeeds, then writes the
-   sentinel file
+7. `first-boot.service` writes the sentinel file after provisioning import/validation succeeds and marks the RAUC slot as
+   good when RAUC is enabled
 8. Network interfaces come up (eth0 via DHCP, eth1 static); `systemd-networkd-wait-online` uses 30s timeout with `anyInterface=true`
-9. Services start: dnsmasq, chrony, sshd, os-upgrade timer
+9. Services start: dnsmasq, chrony, sshd, and the RAUC update timer when RAUC is enabled
 
 The device is then ready to receive OTA updates and serve LAN clients.
 

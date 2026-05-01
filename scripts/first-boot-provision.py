@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 import argparse
+import errno
 import email.policy
 import html
 import io
 import json
 import os
 import pwd
+import secrets
 import shutil
 import stat
 import subprocess
@@ -13,10 +15,11 @@ import sys
 import tarfile
 import tempfile
 import textwrap
+import time
 from email.parser import BytesParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlparse
 
 try:
     import tomllib
@@ -32,6 +35,7 @@ GZIP_MAGIC = b"\x1f\x8b"
 ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
 APP_RUNTIME_USER = "appsvc"
 ROOTLESS_NETWORK_NAME = "pasta"
+BOOTSTRAP_LAN_HOST = "172.20.30.1"
 RUNTIME_METADATA_FILENAME = "quadlet-runtime.json"
 FIREWALL_INBOUND_FILENAME = "firewall-inbound.json"
 CONTAINER_SUFFIX = ".container"
@@ -347,6 +351,35 @@ def validate_bundle_member(name: str):
         raise ProvisionError(f"invalid bundle member path: {name!r}")
 
 
+def generated_required_units(quadlet: str):
+    snippet = quadlet.strip()
+    if not snippet:
+        raise ProvisionError("container TOML snippet is required")
+
+    try:
+        parsed = tomllib.loads(snippet)
+    except tomllib.TOMLDecodeError as exc:
+        raise ProvisionError(f"invalid container TOML snippet: {exc}") from exc
+
+    container = parsed.get("container")
+    if not isinstance(container, dict) or not container:
+        raise ProvisionError("container TOML snippet must define at least one [container.<name>] table")
+
+    return [validate_name(name) for name in container]
+
+
+def bootstrap_download_grace_seconds():
+    value = os.environ.get("ATOMIXOS_BOOTSTRAP_DOWNLOAD_GRACE_SECONDS", "10")
+    try:
+        seconds = float(value)
+    except ValueError:
+        sys.stderr.write(
+            "[bootstrap] invalid ATOMIXOS_BOOTSTRAP_DOWNLOAD_GRACE_SECONDS; defaulting to 10 seconds\n"
+        )
+        return 10.0
+    return max(0.0, seconds)
+
+
 def extract_bundle_archive(source_bytes: bytes, filename: str, destination: Path):
     bundle_kind = detect_bundle_kind(source_bytes, filename)
     if bundle_kind == "tar.gz":
@@ -592,40 +625,184 @@ BOOTSTRAP_HTML = """<!doctype html>
 <html>
   <head>
     <meta charset=\"utf-8\">
+    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
     <title>AtomixOS Bootstrap</title>
     <style>
-      body {{ font-family: sans-serif; max-width: 48rem; margin: 2rem auto; padding: 0 1rem; }}
-      textarea {{ width: 100%; min-height: 18rem; font-family: monospace; }}
-      label {{ display: block; margin-top: 1rem; }}
-      button {{ margin-top: 1rem; padding: 0.5rem 1rem; }}
-      .note {{ color: #444; }}
+      :root {{
+        color-scheme: dark;
+        --bg: #06102a;
+        --panel: rgba(11, 26, 58, 0.88);
+        --panel-border: rgba(93, 121, 168, 0.34);
+        --fg: #d4e6ff;
+        --muted: #c3dbff;
+        --link: #61b3ff;
+        --accent: #4ea3ff;
+        --accent-strong: #2f7fe0;
+        --input: rgba(10, 22, 50, 0.9);
+        --input-border: rgba(124, 183, 255, 0.28);
+        --shadow: rgba(0, 0, 0, 0.35);
+      }}
+      * {{ box-sizing: border-box; }}
+      body {{
+        margin: 0;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+        color: var(--fg);
+        background:
+          radial-gradient(circle at 16% 8%, rgba(76, 146, 255, 0.2), transparent 36%),
+          radial-gradient(circle at 86% 0%, rgba(50, 107, 206, 0.2), transparent 30%),
+          var(--bg);
+      }}
+      main {{
+        max-width: 60rem;
+        margin: 0 auto;
+        padding: 1.5rem 1rem 2rem;
+      }}
+      .hero {{
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        gap: 0.85rem;
+        margin-bottom: 1.5rem;
+      }}
+      .hero-mark {{
+        width: min(19rem, 68vw);
+        height: auto;
+        filter: drop-shadow(0 12px 28px rgba(0, 0, 0, 0.34));
+      }}
+      .hero h1 {{
+        margin: 0;
+        font-size: clamp(1.8rem, 4vw, 2.7rem);
+        letter-spacing: 0.02em;
+        color: #e7f3ff;
+      }}
+      .hero p {{
+        margin: 0;
+        max-width: 44rem;
+        color: var(--muted);
+        line-height: 1.6;
+      }}
+      .grid {{
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+        gap: 1rem;
+      }}
+      .panel {{
+        background: var(--panel);
+        border: 1px solid var(--panel-border);
+        border-radius: 14px;
+        box-shadow: 0 18px 54px var(--shadow);
+        padding: 1rem;
+        backdrop-filter: blur(8px);
+      }}
+      .panel h2 {{
+        margin: 0 0 0.35rem;
+        font-size: 1.15rem;
+        color: #e7f3ff;
+      }}
+      .panel p {{
+        margin: 0 0 0.75rem;
+        color: var(--muted);
+        line-height: 1.5;
+      }}
+      label {{
+        display: block;
+        margin-top: 0.9rem;
+        margin-bottom: 0.35rem;
+        color: #e7f3ff;
+        font-weight: 600;
+      }}
+      input[type=file], textarea {{
+        width: 100%;
+        border-radius: 10px;
+        border: 1px solid var(--input-border);
+        background: var(--input);
+        color: var(--fg);
+        padding: 0.8rem 0.9rem;
+        font: inherit;
+      }}
+      textarea {{
+        min-height: 18rem;
+        resize: vertical;
+        font-family: ui-monospace, SFMono-Regular, SFMono-Regular, Menlo, Consolas, monospace;
+      }}
+      .short {{ min-height: 6rem; }}
+      .medium {{ min-height: 8rem; }}
+      button {{
+        margin-top: 1rem;
+        border: 1px solid rgba(124, 183, 255, 0.45);
+        border-radius: 999px;
+        background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+        color: #f4f9ff;
+        cursor: pointer;
+        font: inherit;
+        font-weight: 700;
+        padding: 0.75rem 1.15rem;
+        box-shadow: 0 10px 24px rgba(26, 73, 150, 0.35);
+      }}
+      button:hover, button:focus-visible {{
+        filter: brightness(1.08);
+      }}
+      a {{
+        color: var(--link);
+        text-underline-offset: 0.14em;
+      }}
+      code {{
+        color: #c6defe;
+        background: rgba(33, 70, 130, 0.34);
+        border: 1px solid rgba(86, 141, 226, 0.32);
+        border-radius: 0.4rem;
+        padding: 0.08rem 0.35rem;
+      }}
+      .message {{
+        margin-top: 1rem;
+        background: rgba(13, 26, 56, 0.88);
+        border: 1px solid rgba(86, 141, 226, 0.28);
+        border-radius: 12px;
+        padding: 0.9rem 1rem;
+      }}
+      .message p {{ margin: 0; }}
+      @media (max-width: 640px) {{
+        main {{ padding: 1rem 0.75rem 1.5rem; }}
+        .panel {{ padding: 0.85rem; }}
+      }}
     </style>
   </head>
   <body>
-    <h1>AtomixOS Bootstrap</h1>
-    <p class=\"note\">Upload an existing <code>config.toml</code>, <code>config.tar.gz</code>, or <code>config.tar.zst</code> bundle as a file or paste a plain <code>config.toml</code> below, or fill the basic form to generate one.</p>
-    <form method=\"post\" action=\"/apply\" enctype=\"multipart/form-data\">
-      <label>Config file or bundle</label>
-      <input type=\"file\" name=\"config_file\" accept=\".toml,.tar.gz,.tgz,.tar.zst,.tzst,text/plain,application/gzip,application/zstd,application/octet-stream\">
-      <label>config.toml</label>
-      <textarea name=\"config\">{config_text}</textarea>
-      <button type=\"submit\">Apply configuration</button>
-    </form>
-    <hr>
-    <form method=\"post\" action=\"/generate\">
-      <label>Admin SSH keys (one per line)</label>
-      <textarea name=\"ssh_keys\" style=\"min-height:8rem\"></textarea>
-      <label>WAN TCP ports (one per line)</label>
-      <textarea name=\"wan_tcp\" style=\"min-height:6rem\">443</textarea>
-      <label>WAN UDP ports (one per line)</label>
-      <textarea name=\"wan_udp\" style=\"min-height:6rem\">1194</textarea>
-      <label>Required health units (one per line)</label>
-      <textarea name=\"required\" style=\"min-height:6rem\"></textarea>
-      <label>Container TOML snippet</label>
-      <textarea name=\"quadlet\">[container.myapp]\nprivileged = false\n\n[container.myapp.Unit]\nDescription = \"My App\"\n\n[container.myapp.Container]\nImage = \"ghcr.io/example/myapp:latest\"\nPublishPort = [\"10080:8080\"]\n\n[container.myapp.Install]\nWantedBy = [\"default.target\"]\n</textarea>
-      <button type=\"submit\">Generate config.toml</button>
-    </form>
-    {message}
+    <main>
+      <section class=\"hero\">
+        <img class=\"hero-mark\" src=\"/assets/atomixos.png\" alt=\"AtomixOS logo\">
+        <h1>Bootstrap Console</h1>
+        <p>Import an existing <code>config.toml</code>, <code>config.tar.gz</code>, or <code>config.tar.zst</code> bundle, or build a fresh configuration with the guided form below.</p>
+      </section>
+      <section class=\"grid\">
+        <form class=\"panel\" method=\"post\" action=\"/apply\" enctype=\"multipart/form-data\">
+          <h2>Apply Existing Configuration</h2>
+          <p>Upload a prepared config or paste a plain <code>config.toml</code> payload.</p>
+          <label>Config file or bundle</label>
+          <input type=\"file\" name=\"config_file\" accept=\".toml,.tar.gz,.tgz,.tar.zst,.tzst,text/plain,application/gzip,application/zstd,application/octet-stream\">
+          <label>config.toml</label>
+          <textarea name=\"config\">{config_text}</textarea>
+          <button type=\"submit\">Apply configuration</button>
+        </form>
+        <form class=\"panel\" method=\"post\" action=\"/generate\">
+          <h2>Generate New Configuration</h2>
+          <p>Build a valid AtomixOS bootstrap config for operator access and provisioned containers.</p>
+          <label>Admin SSH keys (one per line)</label>
+          <textarea class=\"medium\" name=\"ssh_keys\"></textarea>
+          <label>WAN TCP ports (one per line)</label>
+          <textarea class=\"short\" name=\"wan_tcp\">443</textarea>
+          <label>WAN UDP ports (one per line)</label>
+          <textarea class=\"short\" name=\"wan_udp\">1194</textarea>
+          <label>Required health units (one per line)</label>
+          <textarea class=\"short\" name=\"required\"></textarea>
+          <label>Container TOML snippet</label>
+          <textarea name=\"quadlet\">[container.myapp]\nprivileged = false\n\n[container.myapp.Unit]\nDescription = \"My App\"\n\n[container.myapp.Container]\nImage = \"ghcr.io/example/myapp:latest\"\nPublishPort = [\"10080:8080\"]\n\n[container.myapp.Install]\nWantedBy = [\"default.target\"]\n</textarea>
+          <button type=\"submit\">Generate config.toml</button>
+        </form>
+      </section>
+      {message_block}
+    </main>
   </body>
 </html>
 """
@@ -634,6 +811,9 @@ BOOTSTRAP_HTML = """<!doctype html>
 class BootstrapHandler(BaseHTTPRequestHandler):
     config_root = None
     output_path = None
+    download_grace_seconds = 10.0
+    download_client = None
+    download_token = None
 
     def _mark_applied(self):
         output_path = getattr(self, "output_path", None)
@@ -646,8 +826,24 @@ class BootstrapHandler(BaseHTTPRequestHandler):
         try:
             parsed = load_config(prepared_config, Path(self.config_root))
             write_imported_state(parsed, prepared_config, prepared_files, Path(self.config_root))
+            return prepared_config.read_text()
         finally:
             temp_bundle.cleanup()
+
+    def _send_config_download(self, config_text: str):
+        body = config_text.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Disposition", 'attachment; filename="config.toml"')
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _prepare_download_link(self):
+        token = secrets.token_urlsafe(24)
+        type(self).download_client = self.client_address[0]
+        type(self).download_token = token
+        return f"/download/config.toml?token={token}"
 
     def _read_multipart_form(self, body: bytes):
         content_type = self.headers.get("Content-Type", "")
@@ -697,6 +893,32 @@ class BootstrapHandler(BaseHTTPRequestHandler):
         self.wfile.write(body_bytes)
 
     def do_GET(self):
+        request = urlparse(self.path)
+        if request.path == "/assets/atomixos.png":
+            if not BOOTSTRAP_LOGO_PATH.is_file():
+                self.send_error(404)
+                return
+
+            body = BOOTSTRAP_LOGO_PATH.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("Cache-Control", "public, max-age=3600")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if request.path == "/download/config.toml":
+            config_path = Path(self.config_root) / "config.toml"
+            if not config_path.is_file():
+                self.send_error(404)
+                return
+
+            token = parse_qs(request.query, keep_blank_values=True).get("token", [""])[0]
+            if token != self.download_token or self.client_address[0] != self.download_client:
+                self.send_error(403)
+                return
+            self._send_config_download(config_path.read_text())
+            return
         self._send_html()
 
     def do_POST(self):
@@ -715,57 +937,70 @@ class BootstrapHandler(BaseHTTPRequestHandler):
             return
 
         form = self._read_form()
-        if self.path == "/apply":
-            uploaded = form.get("config_file")
-            if isinstance(uploaded, dict) and uploaded.get("body"):
-                payload = uploaded["body"]
-                filename = uploaded.get("filename", "config.toml")
-                config_text = ""
-            else:
-                config_text = form.get("config", "")
+        config_text = ""
+        try:
+            if self.path == "/apply":
+                uploaded = form.get("config_file")
+                if isinstance(uploaded, dict) and uploaded.get("body"):
+                    payload = uploaded["body"]
+                    filename = uploaded.get("filename", "config.toml")
+                else:
+                    config_text = form.get("config", "")
+                    payload = config_text.encode("utf-8")
+                    filename = "config.toml"
+            elif self.path == "/generate":
+                ssh_keys = [line.strip() for line in form.get("ssh_keys", "").splitlines() if line.strip()]
+                tcp_ports = [int(line.strip()) for line in form.get("wan_tcp", "").splitlines() if line.strip()]
+                udp_ports = [int(line.strip()) for line in form.get("wan_udp", "").splitlines() if line.strip()]
+                quadlet = form.get("quadlet", "").strip()
+                required = [line.strip() for line in form.get("required", "").splitlines() if line.strip()]
+                if not required:
+                    required = generated_required_units(quadlet)
+                firewall_lines = ["[firewall.inbound]"]
+                if tcp_ports:
+                    firewall_lines.append(f"tcp = {json.dumps(tcp_ports)}")
+                if udp_ports:
+                    firewall_lines.append(f"udp = {json.dumps(udp_ports)}")
+                firewall_text = "\n".join(firewall_lines)
+                config_text = textwrap.dedent(
+                    f"""
+                    version = 1
+
+                    [admin]
+                    ssh_keys = {json.dumps(ssh_keys)}
+
+                    {firewall_text}
+
+                    [health]
+                    required = {json.dumps(required)}
+
+                    {quadlet}
+                    """
+                ).strip() + "\n"
                 payload = config_text.encode("utf-8")
                 filename = "config.toml"
-        elif self.path == "/generate":
-            ssh_keys = [line.strip() for line in form.get("ssh_keys", "").splitlines() if line.strip()]
-            tcp_ports = [int(line.strip()) for line in form.get("wan_tcp", "").splitlines() if line.strip()]
-            udp_ports = [int(line.strip()) for line in form.get("wan_udp", "").splitlines() if line.strip()]
-            required = [line.strip() for line in form.get("required", "").splitlines() if line.strip()]
-            quadlet = form.get("quadlet", "").strip()
-            firewall_lines = ["[firewall.inbound]"]
-            if tcp_ports:
-                firewall_lines.append(f"tcp = {json.dumps(tcp_ports)}")
-            if udp_ports:
-                firewall_lines.append(f"udp = {json.dumps(udp_ports)}")
-            firewall_text = "\n".join(firewall_lines)
-            config_text = textwrap.dedent(
-                f"""
-                version = 1
+            else:
+                self.send_error(404)
+                return
 
-                [admin]
-                ssh_keys = {json.dumps(ssh_keys)}
-
-                {firewall_text}
-
-                [health]
-                required = {json.dumps(required)}
-
-                {quadlet}
-                """
-            ).strip() + "\n"
-            payload = config_text.encode("utf-8")
-            filename = "config.toml"
-        else:
-            self.send_error(404)
-            return
-
-        try:
-            self._write_payload(payload, filename)
+            applied_config = self._write_payload(payload, filename)
         except Exception as exc:  # noqa: BLE001
             self._send_html(config_text=config_text, message=f"<p><strong>Error:</strong> {html.escape(str(exc))}</p>")
             return
 
-        self._send_html(config_text=config_text, message="<p><strong>Configuration applied.</strong></p>")
-        self._mark_applied()
+        self._send_html(
+            config_text=applied_config,
+            message=(
+                '<p><strong>Configuration applied.</strong> '
+                f'<a href="{self._prepare_download_link()}">Download applied config.toml</a></p>'
+            ),
+        )
+        try:
+            time.sleep(max(0.0, float(self.download_grace_seconds)))
+        except (TypeError, ValueError):
+            sys.stderr.write("[bootstrap] invalid download grace value; applying immediately\n")
+        finally:
+            self._mark_applied()
 
     def log_message(self, format, *args):
         sys.stderr.write("[bootstrap] " + (format % args) + "\n")
@@ -774,7 +1009,20 @@ class BootstrapHandler(BaseHTTPRequestHandler):
 def serve_bootstrap(config_root: Path, output_path: Path, host: str, port: int):
     BootstrapHandler.config_root = str(config_root)
     BootstrapHandler.output_path = str(output_path)
-    httpd = ThreadingHTTPServer((host, port), BootstrapHandler)
+    BootstrapHandler.download_grace_seconds = bootstrap_download_grace_seconds()
+    waiting_for_bind = False
+    while True:
+        try:
+            httpd = ThreadingHTTPServer((host, port), BootstrapHandler)
+            break
+        except OSError as exc:
+            if exc.errno == errno.EADDRNOTAVAIL and host == BOOTSTRAP_LAN_HOST:
+                if not waiting_for_bind:
+                    sys.stderr.write(f"[bootstrap] waiting for bootstrap address {host}\n")
+                    waiting_for_bind = True
+                time.sleep(1)
+                continue
+            raise
     httpd.serve_forever()
 
 
@@ -797,7 +1045,7 @@ def main():
     serve_parser = sub.add_parser("serve")
     serve_parser.add_argument("config_root")
     serve_parser.add_argument("output")
-    serve_parser.add_argument("--host", default="0.0.0.0")
+    serve_parser.add_argument("--host", default=BOOTSTRAP_LAN_HOST)
     serve_parser.add_argument("--port", type=int, default=8080)
 
     args = parser.parse_args()

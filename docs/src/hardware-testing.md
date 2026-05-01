@@ -37,21 +37,23 @@ screen /dev/tty.usbserial-DM02496T 1500000
 - `bootflow scan` finds `boot.scr` on boot-a
 - Kernel loads and prints boot messages
 - System reaches `multi-user.target`
-- `first-boot.service` runs and marks slot as good
+- If `/boot/config.toml` or a USB seed is present, `first-boot.service` completes provisioning
+- Without a seed, the bootstrap UI appears on `172.20.30.1:8080` and first boot waits for operator input
 
 ### Test 1.2: Verify first-boot service
 
 ```sh
 systemctl status first-boot
-cat /data/.completed_first_boot
-rauc status
+[ -f /data/.completed_first_boot ] && cat /data/.completed_first_boot
+[ -x "$(command -v rauc)" ] && rauc status
 ```
 
 **Pass criteria**:
 
-- `first-boot.service` completed successfully
-- Sentinel file exists at `/data/.completed_first_boot`
-- RAUC shows the booted slot as "good"
+- With a seed config present, `first-boot.service` completed successfully
+- Without a seed config, the bootstrap UI is reachable and `first-boot.service` remains waiting
+- After provisioning succeeds, the sentinel exists at `/data/.completed_first_boot`
+- On RAUC-enabled images, `rauc status` shows the booted slot as "good" after provisioning succeeds
 
 ## Phase 2: Kernel & Hardware Detection
 

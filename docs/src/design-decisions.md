@@ -181,12 +181,12 @@ model rather than an always-durable one.
 
 ## Risks and Trade-offs
 
-| Risk                              | Mitigation                                                                                            |
-|-----------------------------------|-------------------------------------------------------------------------------------------------------|
-| eMMC wear from frequent writes    | `/data` uses f2fs (wear-leveling aware); squashfs slots are written only during updates               |
-| U-Boot env corruption             | Redundant environment storage at two offsets; power-loss safe                                         |
-| 1 GB rootfs slot too small        | Current closure is ~300-400 MB; aggressive optimization keeps headroom                                |
-| Missing health manifest           | `first-boot.service` unconditionally commits; `os-verification` skips container checks if no manifest |
-| Cockpit/Traefik container failure | OpenVPN in rootfs provides alternate remote access                                                    |
-| No delta updates                  | Full-image updates are ~300 MB; acceptable on broadband WAN connections                               |
-| No automatic WAN SSH              | Deliberate security constraint; manual flag file required                                             |
+| Risk                              | Mitigation                                                                                                      |
+|-----------------------------------|-----------------------------------------------------------------------------------------------------------------|
+| eMMC wear from frequent writes    | `/data` uses f2fs (wear-leveling aware); squashfs slots are written only during updates                         |
+| U-Boot env corruption             | Redundant environment storage at two offsets; power-loss safe                                                   |
+| 1 GB rootfs slot too small        | Current closure is ~300-400 MB; aggressive optimization keeps headroom                                          |
+| Missing health manifest           | `first-boot.service` commits only when RAUC is enabled; `os-verification` skips container checks if no manifest |
+| Cockpit/Traefik container failure | OpenVPN in rootfs provides alternate remote access                                                              |
+| No delta updates                  | Full-image updates are ~300 MB; acceptable on broadband WAN connections                                         |
+| No automatic WAN SSH              | Deliberate security constraint; manual flag file required                                                       |
