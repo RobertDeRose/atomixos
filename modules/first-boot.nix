@@ -22,9 +22,11 @@ let
   quadletSyncScript = pkgs.writeShellScript "quadlet-sync" (
     builtins.readFile ../scripts/quadlet-sync.sh
   );
-  provisionCli = pkgs.writeScriptBin "first-boot-provision" (
-    builtins.readFile ../scripts/first-boot-provision.py
-  );
+  provisionCli = pkgs.runCommand "first-boot-provision" { } ''
+    mkdir -p "$out/bin" "$out/share/atomixos"
+    install -m0755 ${../scripts/first-boot-provision.py} "$out/bin/first-boot-provision"
+    install -m0644 ${../docs/src/atomixos.png} "$out/share/atomixos/atomixos.png"
+  '';
   ubootEnvTools = self.packages.${pkgs.stdenv.hostPlatform.system}.uboot-env-tools;
   firstBootEnv = {
     ATOMIXOS_RAUC_ENABLE = if config.atomixos.rauc.enable then "1" else "0";

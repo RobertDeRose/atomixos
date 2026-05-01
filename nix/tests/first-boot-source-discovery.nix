@@ -8,9 +8,11 @@
 let
   nixos-lib = import (pkgs.path + "/nixos/lib") { };
   firstBootScript = pkgs.writeScriptBin "first-boot" (builtins.readFile ../../scripts/first-boot.sh);
-  provisionCli = pkgs.writeScriptBin "first-boot-provision" (
-    builtins.readFile ../../scripts/first-boot-provision.py
-  );
+  provisionCli = pkgs.runCommand "first-boot-provision" { } ''
+    mkdir -p "$out/bin" "$out/share/atomixos"
+    install -m0755 ${../../scripts/first-boot-provision.py} "$out/bin/first-boot-provision"
+    install -m0644 ${../../docs/src/atomixos.png} "$out/share/atomixos/atomixos.png"
+  '';
 in
 nixos-lib.runTest {
   name = "first-boot-source-discovery";

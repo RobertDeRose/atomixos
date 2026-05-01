@@ -46,6 +46,7 @@ RUNTIME_METADATA_FILENAME = "quadlet-runtime.json"
 FIREWALL_INBOUND_FILENAME = "firewall-inbound.json"
 CONTAINER_SUFFIX = ".container"
 QUADLET_SUFFIXES = {".build", ".container", ".image", ".kube", ".network", ".pod", ".volume"}
+BOOTSTRAP_LOGO_PATH = Path(__file__).resolve().parent.parent / "share" / "atomixos" / "atomixos.png"
 
 
 class ProvisionError(RuntimeError):
@@ -914,7 +915,8 @@ class BootstrapHandler(BaseHTTPRequestHandler):
         return {k: v[-1] for k, v in parse_qs(body.decode(), keep_blank_values=True).items()}
 
     def _send_html(self, config_text="", message=""):
-        body = BOOTSTRAP_HTML.format(config_text=html.escape(config_text), message=message)
+        message_block = f'<section class="message">{message}</section>' if message else ""
+        body = BOOTSTRAP_HTML.format(config_text=html.escape(config_text), message_block=message_block)
         body_bytes = body.encode()
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")

@@ -8,9 +8,11 @@
 
 let
   nixos-lib = import (pkgs.path + "/nixos/lib") { };
-  provisionCli = pkgs.writeScriptBin "first-boot-provision" (
-    builtins.readFile ../../scripts/first-boot-provision.py
-  );
+  provisionCli = pkgs.runCommand "first-boot-provision" { } ''
+    mkdir -p "$out/bin" "$out/share/atomixos"
+    install -m0755 ${../../scripts/first-boot-provision.py} "$out/bin/first-boot-provision"
+    install -m0644 ${../../docs/src/atomixos.png} "$out/share/atomixos/atomixos.png"
+  '';
 in
 nixos-lib.runTest {
   name = "first-boot-provision";
@@ -81,10 +83,13 @@ nixos-lib.runTest {
     gateway.succeed("mkdir -p /tmp/bootstrap-root")
     gateway.succeed("ATOMIXOS_BOOTSTRAP_DOWNLOAD_GRACE_SECONDS=0 first-boot-provision serve /tmp/bootstrap-root /tmp/bootstrap-output.toml --host 127.0.0.1 --port 18080 >/tmp/bootstrap.log 2>&1 & echo $! >/tmp/bootstrap.pid")
     gateway.wait_until_succeeds("ss -tln | grep ':18080'", timeout=30)
+    gateway.succeed("curl -fsS http://127.0.0.1:18080/assets/atomixos.png >/tmp/bootstrap-logo.png")
+    gateway.succeed("test -s /tmp/bootstrap-logo.png")
     gateway.succeed("curl -fsS -F config_file=@/tmp/config.toml http://127.0.0.1:18080/apply >/tmp/bootstrap-response.html")
     gateway.succeed("test -f /tmp/bootstrap-root/config.toml")
     gateway.succeed("test -f /tmp/bootstrap-root/ssh-authorized-keys/admin")
     gateway.succeed("test -f /tmp/bootstrap-root/health-required.json")
+    gateway.succeed("grep 'src=\"/assets/atomixos.png\"' /tmp/bootstrap-response.html")
     gateway.succeed("grep 'Configuration applied' /tmp/bootstrap-response.html")
     gateway.succeed("grep 'Download applied config.toml' /tmp/bootstrap-response.html")
     gateway.succeed("download_path=$(python3 - <<'PY'\nimport re\nfrom pathlib import Path\nhtml = Path('/tmp/bootstrap-response.html').read_text()\nmatch = re.search(r'href=\"([^\"]*/download/config\.toml\?token=[^\"]+)\"', html)\nassert match, html\nprint(match.group(1))\nPY\n) && printf '%s' \"$download_path\" >/tmp/bootstrap-download.path && curl -fsS -D /tmp/bootstrap-download.headers \"http://127.0.0.1:18080$download_path\" >/tmp/bootstrap-download.toml")
