@@ -7,24 +7,9 @@ set -euo pipefail
 
 SUSTAIN_DURATION="${ATOMIXOS_VERIFICATION_SUSTAIN_DURATION:-60}"
 CHECK_INTERVAL="${ATOMIXOS_VERIFICATION_CHECK_INTERVAL:-5}"
-FORENSICS_STATE_DIR="${ATOMIXOS_FORENSICS_RAUC_STATE_DIR:-/data/rauc/forensics}"
 HEALTH_REQUIRED_FILE="/data/config/health-required.json"
 
 log() { echo "[os-verification] $*"; }
-
-forensic() {
-	if command -v forensic-log >/dev/null 2>&1; then
-		forensic-log "$@" || true
-	fi
-}
-
-clear_pending_slot_state() {
-	rm -f \
-		"$FORENSICS_STATE_DIR/pending-source-slot" \
-		"$FORENSICS_STATE_DIR/pending-target-slot" \
-		"$FORENSICS_STATE_DIR/pending-target-version" \
-		"$FORENSICS_STATE_DIR/pending-target-booted"
-}
 
 read_required_units() {
 	if [ ! -f "$HEALTH_REQUIRED_FILE" ]; then
@@ -62,20 +47,14 @@ if [ -z "$SLOT_STATUS" ]; then
 	BOOT_SLOT="$(current_boot_slot || true)"
 	if [ -z "$BOOT_SLOT" ]; then
 		log "Could not determine boot slot from /proc/cmdline"
-		forensic --stage verify --event failed --reason missing-boot-slot
 		exit 1
 	fi
 	log "Assuming first boot, marking good: $BOOT_SLOT"
-	forensic --stage verify --event start --slot "$BOOT_SLOT"
-	forensic --stage rauc --event mark-good-start --slot "$BOOT_SLOT"
 	if rauc status mark-good "$BOOT_SLOT"; then
-		forensic --stage rauc --event mark-good-complete --slot "$BOOT_SLOT" --result ok
-		clear_pending_slot_state
-		forensic --stage verify --event complete --slot "$BOOT_SLOT" --result ok
+		log "Slot marked good during fallback verification path"
 		exit 0
 	fi
-	forensic --stage rauc --event mark-good-failed --slot "$BOOT_SLOT" --reason initial-boot
-	forensic --stage verify --event failed --slot "$BOOT_SLOT" --reason mark-good-failed
+	log "Failed to mark slot good during fallback verification path"
 	exit 1
 fi
 
@@ -88,17 +67,15 @@ BOOT_GOOD=$(printf '%s\n' "$RAUC_STATUS_JSON" | jq -r '
 ' 2>/dev/null || true)
 if [ "$BOOT_GOOD" = "good" ]; then
 	log "Slot already marked good, nothing to do"
-	forensic --stage verify --event complete --result already-good
 	exit 0
 fi
 
 log "Slot is pending confirmation, running health checks..."
 BOOT_SLOT="$(current_boot_slot || true)"
 if [ -z "$BOOT_SLOT" ]; then
-	forensic --stage verify --event failed --reason missing-boot-slot
+	log "Could not determine boot slot from /proc/cmdline"
 	exit 1
 fi
-forensic --stage verify --event start --slot "$BOOT_SLOT"
 
 # ── Step 2: System health checks ──
 check_service() {
@@ -138,7 +115,6 @@ fi
 
 if [ "$SYSTEM_OK" != "true" ]; then
 	log "FAIL: System health checks failed"
-	forensic --stage verify --event failed --slot "$BOOT_SLOT" --reason system-health
 	exit 1
 fi
 
@@ -151,7 +127,6 @@ while IFS= read -r required_unit; do
 		log "  OK ${required_unit}.service is active"
 	else
 		log "  FAIL ${required_unit}.service is NOT active"
-		forensic --stage verify --event failed --slot "$BOOT_SLOT" --reason provisioned-health
 		exit 1
 	fi
 done < <(read_required_units)
@@ -167,7 +142,6 @@ while [ "$ELAPSED" -lt "$SUSTAIN_DURATION" ]; do
 	# Check system services still up
 	if ! systemctl is-active --quiet "dnsmasq.service" 2>/dev/null; then
 		log "FAIL: dnsmasq stopped during sustained check"
-		forensic --stage verify --event failed --slot "$BOOT_SLOT" --reason sustained-check
 		exit 1
 	fi
 
@@ -175,7 +149,6 @@ while [ "$ELAPSED" -lt "$SUSTAIN_DURATION" ]; do
 		[ -n "$required_unit" ] || continue
 		if ! systemctl is-active --quiet "${required_unit}.service" 2>/dev/null; then
 			log "FAIL: ${required_unit}.service stopped during sustained check"
-			forensic --stage verify --event failed --slot "$BOOT_SLOT" --reason sustained-check
 			exit 1
 		fi
 	done < <(read_required_units)
@@ -187,20 +160,14 @@ log "Sustained health check passed (${SUSTAIN_DURATION}s)"
 BOOT_SLOT="$(current_boot_slot || true)"
 if [ -z "$BOOT_SLOT" ]; then
 	log "Could not determine boot slot from /proc/cmdline"
-	forensic --stage verify --event failed --reason missing-boot-slot
 	exit 1
 fi
 
 log "All checks passed, marking slot as good: $BOOT_SLOT"
-forensic --stage rauc --event mark-good-start --slot "$BOOT_SLOT"
 if rauc status mark-good "$BOOT_SLOT"; then
-	forensic --stage rauc --event mark-good-complete --slot "$BOOT_SLOT" --result ok
-	clear_pending_slot_state
-	forensic --stage verify --event complete --slot "$BOOT_SLOT" --result ok
 	log "Slot committed successfully"
 	exit 0
 fi
 
-forensic --stage rauc --event mark-good-failed --slot "$BOOT_SLOT" --reason health-check
-forensic --stage verify --event failed --slot "$BOOT_SLOT" --reason mark-good-failed
+log "Failed to mark slot good after successful health checks"
 exit 1

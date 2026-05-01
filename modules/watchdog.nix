@@ -10,9 +10,6 @@
 }:
 
 let
-  forensicCli = pkgs.writeShellScriptBin "forensic-log" (
-    builtins.readFile ../scripts/forensic-log.sh
-  );
   watchdogBootCountCli = pkgs.writeShellScriptBin "watchdog-boot-count" (
     builtins.readFile ../scripts/watchdog-boot-count.sh
   );
@@ -30,7 +27,6 @@ in
   systemd.settings.Manager = { };
 
   environment.systemPackages = [
-    forensicCli
     watchdogBootCountCli
   ];
 
@@ -40,7 +36,6 @@ in
     before = [ "rauc.service" ];
     after = [ "local-fs.target" ];
     path = [
-      forensicCli
       watchdogBootCountCli
     ]
     ++ lib.optionals (config.atomixos.rauc.bootloader == "uboot") [

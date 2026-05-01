@@ -8,7 +8,6 @@
 set -euo pipefail
 
 log() { echo "[first-boot] $*"; }
-FORENSICS_STATE_DIR="${ATOMIXOS_FORENSICS_RAUC_STATE_DIR:-/data/rauc/forensics}"
 CONFIG_ROOT="${ATOMIXOS_CONFIG_ROOT:-/data/config}"
 CONFIG_TOML="$CONFIG_ROOT/config.toml"
 QUADLET_ACTIVE_DIR="${ATOMIXOS_QUADLET_ACTIVE_DIR:-/etc/containers/systemd}"
@@ -18,12 +17,6 @@ INITRD_MARKER="${ATOMIXOS_INITRD_MARKER:-/etc/atomixos/fresh-flash}"
 BOOT_CONFIG_PATH="${ATOMIXOS_BOOT_CONFIG_PATH:-/boot/config.toml}"
 APP_RUNTIME_QUADLET_DIR="${ATOMIXOS_ROOTLESS_QUADLET_DIR:-/var/lib/appsvc/.config/containers/systemd}"
 RAUC_ENABLED="${ATOMIXOS_RAUC_ENABLE:-1}"
-
-forensic() {
-	if command -v forensic-log >/dev/null 2>&1; then
-		forensic-log "$@" || true
-	fi
-}
 
 enable_dev_ssh_on_wan() {
 	local flag_file="$CONFIG_ROOT/ssh-wan-enabled"
@@ -47,14 +40,6 @@ write_dev_health_requirements() {
 	mkdir -p "$CONFIG_ROOT"
 	printf '%s\n' '[]' >"$health_file"
 	chmod 600 "$health_file"
-}
-
-clear_pending_forensics_state() {
-	rm -f \
-		"$FORENSICS_STATE_DIR/pending-source-slot" \
-		"$FORENSICS_STATE_DIR/pending-target-slot" \
-		"$FORENSICS_STATE_DIR/pending-target-version" \
-		"$FORENSICS_STATE_DIR/pending-target-booted"
 }
 
 ensure_rauc_env() {
@@ -131,7 +116,6 @@ bootstrap_web_console() {
 	temp_config="$(mktemp /run/atomixos-bootstrap-config.XXXXXX.toml)"
 	rm -f "$temp_config"
 	log "Starting bootstrap web console on $BOOTSTRAP_HOST:$BOOTSTRAP_PORT"
-	forensic --stage firstboot --event bootstrap-console --result start
 	first-boot-provision serve "$CONFIG_ROOT" "$temp_config" --host "$BOOTSTRAP_HOST" --port "$BOOTSTRAP_PORT" &
 	local server_pid=$!
 	while kill -0 "$server_pid" >/dev/null 2>&1; do
@@ -139,13 +123,11 @@ bootstrap_web_console() {
 			kill "$server_pid" >/dev/null 2>&1 || true
 			wait "$server_pid" 2>/dev/null || true
 			rm -f "$temp_config"
-			forensic --stage firstboot --event bootstrap-console --result ok
 			return 0
 		fi
 		sleep 1
 	done
 	rm -f "$temp_config"
-	forensic --stage firstboot --event failed --reason bootstrap-console-exited
 	return 1
 }
 
@@ -153,19 +135,16 @@ sync_quadlet_units() {
 	if command -v systemctl >/dev/null 2>&1; then
 		if ! systemctl restart quadlet-sync.service; then
 			log "WARNING: quadlet-sync.service failed; continuing first boot for debugging access"
-			forensic --stage firstboot --event quadlet-sync-failed --result fail
 		fi
 		if systemctl list-unit-files provisioned-firewall-inbound.service >/dev/null 2>&1; then
 			if ! systemctl restart provisioned-firewall-inbound.service; then
 				log "WARNING: provisioned-firewall-inbound.service failed; continuing first boot for debugging access"
-				forensic --stage firstboot --event firewall-sync-failed --result fail
 			fi
 		fi
 	else
 		mkdir -p "$QUADLET_ACTIVE_DIR"
 		if ! first-boot-provision sync-quadlet "$CONFIG_ROOT" "$QUADLET_ACTIVE_DIR" "$APP_RUNTIME_QUADLET_DIR"; then
 			log "WARNING: quadlet sync failed; continuing first boot for debugging access"
-			forensic --stage firstboot --event quadlet-sync-failed --result fail
 		fi
 	fi
 }
@@ -226,18 +205,10 @@ SENTINEL="${ATOMIXOS_FIRST_BOOT_SENTINEL:-/data/.completed_first_boot}"
 # Guard (belt-and-suspenders alongside systemd ConditionPathExists)
 if [ -f "$SENTINEL" ]; then
 	log "Sentinel exists, skipping (not first boot)"
-	forensic --stage firstboot --event failed --reason sentinel-exists
 	exit 0
 fi
 
 BOOT_SLOT="$(current_boot_slot || true)"
-if [ -n "$BOOT_SLOT" ]; then
-	forensic --stage firstboot --event start --slot "$BOOT_SLOT"
-else
-	forensic --stage firstboot --event start --slot skipped
-fi
-
-mkdir -p "$FORENSICS_STATE_DIR"
 
 used_dev_fallback=false
 
@@ -248,24 +219,23 @@ if ! discover_and_import_provisioning; then
 		write_dev_health_requirements
 		used_dev_fallback=true
 	else
-		forensic --stage firstboot --event failed --slot "$BOOT_SLOT" --reason provisioning-missing
+		log "ERROR: provisioning seed not found"
 		exit 1
 	fi
 	if [ "$used_dev_fallback" != true ] && ! has_valid_provisioning; then
-		forensic --stage firstboot --event failed --slot "$BOOT_SLOT" --reason invalid-provisioning
+		log "ERROR: imported provisioning is invalid"
 		exit 1
 	fi
 fi
 
 if [ "$used_dev_fallback" != true ] && ! has_valid_provisioning; then
-	forensic --stage firstboot --event failed --slot "${BOOT_SLOT:-unknown}" --reason invalid-provisioning
+	log "ERROR: resulting provisioning is invalid"
 	exit 1
 fi
 
 if [ "$RAUC_ENABLED" = "1" ]; then
 	if [ -z "$BOOT_SLOT" ]; then
 		log "ERROR: could not determine boot slot from /proc/cmdline"
-		forensic --stage firstboot --event failed --reason missing-boot-slot
 		exit 1
 	fi
 
@@ -273,20 +243,15 @@ if [ "$RAUC_ENABLED" = "1" ]; then
 
 	log "Marking current slot as good via RAUC: $BOOT_SLOT"
 	if ! rauc status mark-good "$BOOT_SLOT"; then
-		forensic --stage rauc --event mark-good-failed --slot "$BOOT_SLOT" --reason first-boot
+		log "ERROR: failed to mark current slot good via RAUC"
 		exit 1
 	fi
-	forensic --stage rauc --event mark-good-complete --slot "$BOOT_SLOT" --result ok
 else
 	log "RAUC disabled; skipping slot confirmation"
-	forensic --stage rauc --event skipped --reason disabled
 fi
-
-clear_pending_forensics_state
 
 # ── Write sentinel ──
 log "Writing first-boot sentinel: $SENTINEL"
 date -Iseconds >"$SENTINEL"
 
 log "First boot initialization complete"
-forensic --stage firstboot --event complete --slot "${BOOT_SLOT:-none}" --result ok

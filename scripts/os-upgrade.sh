@@ -11,7 +11,6 @@ set -euo pipefail
 UPDATE_URL="${OS_UPGRADE_URL:-http://localhost/updates}"
 DEVICE_ID=$(cat /sys/class/net/eth0/address 2>/dev/null | tr -d ':' || echo "unknown")
 BUNDLE_DIR="/data/config/bundles"
-FORENSICS_STATE_DIR="${ATOMIXOS_FORENSICS_RAUC_STATE_DIR:-/data/rauc/forensics}"
 CURRENT_VERSION=$(rauc status --output-format=json 2>/dev/null | jq -r '
   .booted as $booted
   | .slots[]
@@ -21,12 +20,6 @@ CURRENT_VERSION=$(rauc status --output-format=json 2>/dev/null | jq -r '
 ' || echo "unknown")
 
 log() { echo "[os-upgrade] $*"; }
-
-forensic() {
-	if command -v forensic-log >/dev/null 2>&1; then
-		forensic-log "$@" || true
-	fi
-}
 
 current_boot_slot() {
 	local arg
@@ -93,7 +86,7 @@ TARGET_BOOT_SLOT="$(target_boot_slot_from_status || true)"
 if [ -z "$TARGET_BOOT_SLOT" ]; then
 	TARGET_BOOT_SLOT="unknown"
 fi
-forensic --stage rauc --event install-start --slot "$BOOT_SLOT" --target-slot "$TARGET_BOOT_SLOT" --version "$LATEST_VERSION"
+log "Preparing install from ${BOOT_SLOT:-unknown} to $TARGET_BOOT_SLOT"
 
 # Download the bundle
 mkdir -p "$BUNDLE_DIR"
@@ -102,7 +95,6 @@ BUNDLE_PATH="$BUNDLE_DIR/update-$LATEST_VERSION.raucb"
 log "Downloading bundle to $BUNDLE_PATH..."
 if ! curl -f -m 600 -o "$BUNDLE_PATH.tmp" "$BUNDLE_URL"; then
 	log "Download failed, cleaning up"
-	forensic --stage rauc --event install-failed --version "$LATEST_VERSION" --reason download-failed
 	rm -f "$BUNDLE_PATH.tmp"
 	exit 0 # Will retry next interval
 fi
@@ -114,25 +106,11 @@ log "Download complete"
 log "Installing bundle..."
 if rauc install "$BUNDLE_PATH"; then
 	log "Bundle installed successfully, cleaning up"
-	mkdir -p "$FORENSICS_STATE_DIR"
-	if [ -n "$BOOT_SLOT" ]; then
-		printf '%s\n' "$BOOT_SLOT" >"$FORENSICS_STATE_DIR/pending-source-slot"
-	fi
-	if [ "$TARGET_BOOT_SLOT" != "unknown" ]; then
-		printf '%s\n' "$TARGET_BOOT_SLOT" >"$FORENSICS_STATE_DIR/pending-target-slot"
-	else
-		rm -f "$FORENSICS_STATE_DIR/pending-target-slot"
-	fi
-	printf '%s\n' "$LATEST_VERSION" >"$FORENSICS_STATE_DIR/pending-target-version"
-	rm -f "$FORENSICS_STATE_DIR/pending-target-booted"
-	forensic --stage rauc --event install-complete --slot "$TARGET_BOOT_SLOT" --target-slot "$TARGET_BOOT_SLOT" --version "$LATEST_VERSION" --result ok
 	rm -f "$BUNDLE_PATH"
 	log "Rebooting into new slot..."
-	forensic --stage shutdown --event reboot-requested --result ok --detail os-upgrade
 	systemctl reboot
 else
 	log "Bundle installation failed"
-	forensic --stage rauc --event install-failed --version "$LATEST_VERSION" --reason install-failed
 	rm -f "$BUNDLE_PATH"
 	exit 1
 fi

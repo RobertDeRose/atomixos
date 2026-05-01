@@ -4,12 +4,6 @@ set -euo pipefail
 RAUC_BOOTLOADER="${ATOMIXOS_RAUC_BOOTLOADER:-unknown}"
 STATE_DIR="${ATOMIXOS_RAUC_STATE_DIR:-/var/lib/rauc}"
 
-forensic() {
-	if command -v forensic-log >/dev/null 2>&1; then
-		forensic-log "$@" || true
-	fi
-}
-
 current_boot_slot() {
 	local arg
 	for arg in $(</proc/cmdline); do
@@ -42,7 +36,7 @@ handle_custom_backend() {
 	esac
 
 	new_count=$((count - 1))
-	forensic --stage watchdog --event boot-count-decrement --detail "$primary:$new_count"
+	echo "[watchdog-boot-count] boot-count decremented: $primary:$new_count"
 
 	if [ "$new_count" -le 0 ]; then
 		case "$primary" in
@@ -61,10 +55,10 @@ handle_custom_backend() {
 			;;
 		esac
 
-		forensic --stage watchdog --event rollback-triggered --slot "$failed_slot" --target-slot "$target_slot" --reason boot-count-exhausted
+		echo "[watchdog-boot-count] rollback triggered: failed=$failed_slot target=$target_slot reason=boot-count-exhausted"
 		echo "bad" >"$STATE_DIR/state.$primary"
 		rm -f "$count_file"
-		forensic --stage rauc --event rollback-complete --slot "$failed_slot" --target-slot "$target_slot" --result ok
+		echo "[watchdog-boot-count] rollback complete: failed=$failed_slot target=$target_slot result=ok"
 	else
 		printf '%s\n' "$new_count" >"$count_file"
 	fi
@@ -100,7 +94,7 @@ handle_uboot_backend() {
 	esac
 
 	# U-Boot decrements BOOT_*_LEFT before Linux starts; record the observed post-boot value.
-	forensic --stage watchdog --event boot-count-decrement --slot "$boot_slot" --detail "$boot_letter:$attempts_left"
+	echo "[watchdog-boot-count] boot-count observed: slot=$boot_slot detail=$boot_letter:$attempts_left"
 }
 
 case "$RAUC_BOOTLOADER" in
