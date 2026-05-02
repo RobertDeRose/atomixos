@@ -38,9 +38,16 @@ in
 {
   systemd.services.quadlet-sync = {
     description = "Sync provisioned Quadlet units";
-    after = [ "data.mount" ];
-    wants = [ "data.mount" ];
-    before = [ "multi-user.target" ];
+    after = [
+      "data.mount"
+      "multi-user.target"
+      "network-online.target"
+      "chronyd.service"
+    ];
+    wants = [
+      "data.mount"
+      "network-online.target"
+    ];
     wantedBy = [ "multi-user.target" ];
 
     unitConfig.ConditionPathExists = "/data/config/config.toml";
@@ -48,6 +55,7 @@ in
 
     path = [
       pkgs.coreutils
+      pkgs.chrony
       pkgs.gzip
       pkgs.podman
       pkgs.python3Minimal
@@ -59,7 +67,9 @@ in
 
     serviceConfig = {
       Type = "oneshot";
+      ExecStartPre = "${pkgs.chrony}/bin/chronyc waitsync 0 1";
       ExecStart = quadletSyncScript;
+      TimeoutStartSec = "infinity";
     };
   };
 

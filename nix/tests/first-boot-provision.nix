@@ -8,6 +8,9 @@
 
 let
   nixos-lib = import (pkgs.path + "/nixos/lib") { };
+  quadletSyncScript = pkgs.writeShellScriptBin "quadlet-sync" (
+    builtins.readFile ../../scripts/quadlet-sync.sh
+  );
   provisionCli = pkgs.runCommand "first-boot-provision" { } ''
     mkdir -p "$out/bin" "$out/share/atomixos"
     install -m0755 ${../../scripts/first-boot-provision.py} "$out/bin/first-boot-provision"
@@ -33,6 +36,7 @@ nixos-lib.runTest {
         pkgs.python3Minimal
         pkgs.gnutar
         provisionCli
+        quadletSyncScript
         pkgs.zstd
       ];
 
@@ -107,6 +111,26 @@ nixos-lib.runTest {
     gateway.succeed("grep '^try-restart systemd-networkd.service$' /tmp/lan-apply/systemctl.log")
     gateway.succeed("grep '^try-restart dnsmasq.service$' /tmp/lan-apply/systemctl.log")
     gateway.succeed("grep '^try-restart chronyd.service$' /tmp/lan-apply/systemctl.log")
+
+    gateway.succeed("rm -rf /tmp/quadlet-sync && mkdir -p /tmp/quadlet-sync/bin /var/lib/appsvc/.config/containers/systemd /var/lib/appsvc")
+    gateway.succeed("cat > /tmp/quadlet-sync/bin/id <<'EOF'\n#!/usr/bin/env bash\nset -euo pipefail\nif [ \"$#\" -eq 2 ] && [ \"$1\" = \"-u\" ] && [ \"$2\" = \"appsvc\" ]; then\n  echo 999\n  exit 0\nfi\necho unexpected id invocation >&2\nexit 1\nEOF\nchmod +x /tmp/quadlet-sync/bin/id")
+    gateway.succeed("cat > /tmp/quadlet-sync/bin/chown <<'EOF'\n#!/usr/bin/env bash\nexit 0\nEOF\nchmod +x /tmp/quadlet-sync/bin/chown")
+    gateway.succeed("cat > /tmp/quadlet-sync/bin/loginctl <<'EOF'\n#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" >>/tmp/quadlet-sync/loginctl.log\nEOF\nchmod +x /tmp/quadlet-sync/bin/loginctl")
+    gateway.succeed("cat > /tmp/quadlet-sync/bin/runuser <<'EOF'\n#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' \"$*\" >>/tmp/quadlet-sync/runuser.log\nwhile [ \"$1\" != \"--\" ]; do\n  shift\ndone\nshift\nexec \"$@\"\nEOF\nchmod +x /tmp/quadlet-sync/bin/runuser")
+    gateway.succeed("cat > /tmp/quadlet-sync/bin/systemctl <<'EOF'\n#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' \"$*\" >>/tmp/quadlet-sync/systemctl.log\ncase \"$*\" in\n  'start user@999.service'|'daemon-reload'|'--user daemon-reload') exit 0 ;;&\n  'start traefik.service'|'--user start myapp.service') exit 1 ;;&\n  *) echo unexpected systemctl invocation >&2; exit 1 ;;&\nesac\nEOF\nchmod +x /tmp/quadlet-sync/bin/systemctl")
+    gateway.succeed("cat > /tmp/quadlet-sync/bin/first-boot-provision <<'EOF'\n#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' \"$*\" >>/tmp/quadlet-sync/provision.log\nif [ \"$1\" = \"sync-quadlet\" ]; then\n  exit 0\nfi\necho unexpected first-boot-provision invocation >&2\nexit 1\nEOF\nchmod +x /tmp/quadlet-sync/bin/first-boot-provision")
+    gateway.succeed("PATH=/tmp/quadlet-sync/bin:$PATH quadlet-sync >/tmp/quadlet-sync/output.log 2>&1 || (cat /tmp/quadlet-sync/output.log >&2; false)")
+    gateway.succeed("grep '^sync-quadlet /data/config /etc/containers/systemd /var/lib/appsvc/.config/containers/systemd$' /tmp/quadlet-sync/provision.log")
+    gateway.succeed("grep '^enable-linger appsvc$' /tmp/quadlet-sync/loginctl.log")
+    gateway.succeed("grep '^start user@999.service$' /tmp/quadlet-sync/systemctl.log")
+    gateway.succeed("grep '^daemon-reload$' /tmp/quadlet-sync/systemctl.log")
+    gateway.succeed("grep '^--user daemon-reload$' /tmp/quadlet-sync/systemctl.log")
+    gateway.succeed("grep '^start traefik.service$' /tmp/quadlet-sync/systemctl.log")
+    gateway.succeed("grep '^--user start myapp.service$' /tmp/quadlet-sync/systemctl.log")
+    gateway.succeed("grep 'WARNING: units failed to start after sync: traefik.service myapp.service' /tmp/quadlet-sync/output.log")
+    gateway.succeed("grep 'continuing so the provisioned system remains debuggable' /tmp/quadlet-sync/output.log")
+    gateway.succeed("cat > /tmp/quadlet-sync/bin/first-boot-provision <<'EOF'\n#!/usr/bin/env bash\nset -euo pipefail\nif [ \"$1\" = \"sync-quadlet\" ]; then\n  exit 1\nfi\necho unexpected first-boot-provision invocation >&2\nexit 1\nEOF\nchmod +x /tmp/quadlet-sync/bin/first-boot-provision")
+    gateway.fail("PATH=/tmp/quadlet-sync/bin:$PATH quadlet-sync >/tmp/quadlet-sync/fatal.log 2>&1")
 
     gateway.succeed("rm -rf /tmp/bootstrap-root")
     gateway.succeed("mkdir -p /tmp/bootstrap-root")

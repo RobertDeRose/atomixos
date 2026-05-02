@@ -20,7 +20,7 @@ run_as_appsvc() {
 	uid="$(appsvc_uid)"
 	local runtime_dir="/run/user/$uid"
 	local bus_address="unix:path=$runtime_dir/bus"
-	local path="/run/wrappers/bin:/run/current-system/sw/bin:$PATH"
+	local path="$PATH:/run/wrappers/bin:/run/current-system/sw/bin"
 	runuser -u "$APP_RUNTIME_USER" -- "$APP_RUNTIME_SHELL" -c "HOME=\"$APP_RUNTIME_HOME\" PATH=\"$path\" XDG_RUNTIME_DIR=\"$runtime_dir\" DBUS_SESSION_BUS_ADDRESS=\"$bus_address\" $*"
 }
 
@@ -108,6 +108,6 @@ if has_rootless_units; then
 fi
 
 if [ "${#failed_units[@]}" -gt 0 ]; then
-	log "Units failed: ${failed_units[*]}"
-	exit 1
+	log "WARNING: units failed to start after sync: ${failed_units[*]}"
+	log "WARNING: continuing so the provisioned system remains debuggable"
 fi
