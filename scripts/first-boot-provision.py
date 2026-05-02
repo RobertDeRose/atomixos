@@ -6,10 +6,8 @@ import html
 import ipaddress
 import io
 import json
-import math
 import os
 import pwd
-import secrets
 import shutil
 import stat
 import subprocess
@@ -17,7 +15,6 @@ import sys
 import tarfile
 import tempfile
 import textwrap
-import threading
 import time
 from email.parser import BytesParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -39,10 +36,6 @@ ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
 APP_RUNTIME_USER = "appsvc"
 ROOTLESS_NETWORK_NAME = "pasta"
 BOOTSTRAP_LAN_HOST = "172.20.30.1"
-BOOTSTRAP_DEFAULT_DOWNLOAD_GRACE_SECONDS = 10.0
-BOOTSTRAP_MAX_DOWNLOAD_GRACE_SECONDS = 60.0
-BOOTSTRAP_DOWNLOAD_TOKEN_TTL_SECONDS = 300.0
-BOOTSTRAP_MAX_DOWNLOAD_TOKENS = 32
 RUNTIME_METADATA_FILENAME = "quadlet-runtime.json"
 FIREWALL_INBOUND_FILENAME = "firewall-inbound.json"
 LAN_SETTINGS_FILENAME = "lan-settings.json"
@@ -479,23 +472,6 @@ def generated_required_units(quadlet: str):
     return [validate_name(name) for name in container]
 
 
-def bootstrap_download_grace_seconds():
-    value = os.environ.get("ATOMIXOS_BOOTSTRAP_DOWNLOAD_GRACE_SECONDS", str(BOOTSTRAP_DEFAULT_DOWNLOAD_GRACE_SECONDS))
-    try:
-        seconds = float(value)
-    except ValueError:
-        sys.stderr.write(
-            "[bootstrap] invalid ATOMIXOS_BOOTSTRAP_DOWNLOAD_GRACE_SECONDS; defaulting to 10 seconds\n"
-        )
-        return BOOTSTRAP_DEFAULT_DOWNLOAD_GRACE_SECONDS
-    if not math.isfinite(seconds):
-        sys.stderr.write(
-            "[bootstrap] non-finite ATOMIXOS_BOOTSTRAP_DOWNLOAD_GRACE_SECONDS; defaulting to 10 seconds\n"
-        )
-        return BOOTSTRAP_DEFAULT_DOWNLOAD_GRACE_SECONDS
-    return min(BOOTSTRAP_MAX_DOWNLOAD_GRACE_SECONDS, max(0.0, seconds))
-
-
 def uploaded_config_text(payload: bytes, filename: str):
     if detect_bundle_kind(payload, filename) is not None:
         return ""
@@ -888,11 +864,35 @@ BOOTSTRAP_HTML = """<!doctype html>
         padding: 0.9rem 1rem;
       }}
       .message p {{ margin: 0; }}
+      .message-actions {{
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        margin-top: 0.75rem;
+      }}
       @media (max-width: 640px) {{
         main {{ padding: 1rem 0.75rem 1.5rem; }}
         .panel {{ padding: 0.85rem; }}
       }}
     </style>
+    <script>
+      function downloadAppliedConfig() {{
+        const textarea = document.querySelector('textarea[name="config"]');
+        if (!textarea) {{
+          return;
+        }}
+
+        const blob = new Blob([textarea.value], {{ type: 'text/plain;charset=utf-8' }});
+        const href = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = href;
+        link.download = 'config.toml';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(href);
+      }}
+    </script>
   </head>
   <body>
     <main>
@@ -949,25 +949,6 @@ BOOTSTRAP_HTML = """<!doctype html>
 class BootstrapHandler(BaseHTTPRequestHandler):
     config_root = None
     output_path = None
-    download_grace_seconds = 10.0
-    download_tokens = {}
-    download_tokens_lock = threading.Lock()
-
-    @classmethod
-    def _prune_download_tokens(cls, now: float):
-        expired = [
-            token
-            for token, (_client, issued_at) in cls.download_tokens.items()
-            if now - issued_at > BOOTSTRAP_DOWNLOAD_TOKEN_TTL_SECONDS
-        ]
-        for token in expired:
-            del cls.download_tokens[token]
-
-        overflow = len(cls.download_tokens) - BOOTSTRAP_MAX_DOWNLOAD_TOKENS
-        if overflow > 0:
-            oldest = sorted(cls.download_tokens.items(), key=lambda item: item[1][1])[:overflow]
-            for token, _value in oldest:
-                del cls.download_tokens[token]
 
     def _mark_applied(self):
         output_path = getattr(self, "output_path", None)
@@ -983,26 +964,6 @@ class BootstrapHandler(BaseHTTPRequestHandler):
             return prepared_config.read_text()
         finally:
             temp_bundle.cleanup()
-
-    def _send_config_download(self, config_text: str):
-        body = config_text.encode("utf-8")
-        self.send_response(200)
-        self.send_header("Content-Type", "text/plain; charset=utf-8")
-        self.send_header("Content-Disposition", 'attachment; filename="config.toml"')
-        self.send_header("Cache-Control", "no-store")
-        self.send_header("Pragma", "no-cache")
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
-    def _prepare_download_link(self):
-        token = secrets.token_urlsafe(24)
-        now = time.monotonic()
-        with type(self).download_tokens_lock:
-            type(self)._prune_download_tokens(now)
-            type(self).download_tokens[token] = (self.client_address[0], now)
-        return f"/download/config.toml?token={token}"
 
     def _read_multipart_form(self, body: bytes):
         content_type = self.headers.get("Content-Type", "")
@@ -1066,30 +1027,6 @@ class BootstrapHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
-            return
-        if request.path == "/download/config.toml":
-            config_path = Path(self.config_root) / "config.toml"
-            if not config_path.is_file():
-                self.send_error(404)
-                return
-
-            token = parse_qs(request.query, keep_blank_values=True).get("token", [""])[0]
-            now = time.monotonic()
-            with type(self).download_tokens_lock:
-                type(self)._prune_download_tokens(now)
-                entry = type(self).download_tokens.get(token)
-                if entry is None:
-                    expected_client = None
-                else:
-                    expected_client, _issued_at = entry
-                if expected_client == self.client_address[0]:
-                    del type(self).download_tokens[token]
-                else:
-                    expected_client = None
-            if expected_client is None:
-                self.send_error(403)
-                return
-            self._send_config_download(config_path.read_text())
             return
         self._send_html()
 
@@ -1188,15 +1125,13 @@ class BootstrapHandler(BaseHTTPRequestHandler):
             config_text=applied_config,
             message=(
                 '<p><strong>Configuration applied.</strong> '
-                f'<a href="{self._prepare_download_link()}">Download applied config.toml</a></p>'
+                'Use the button below to save the rendered <code>config.toml</code> directly from this page.</p>'
+                '<div class="message-actions">'
+                '<button type="button" onclick="downloadAppliedConfig()">Download applied config.toml</button>'
+                '</div>'
             ),
         )
-        try:
-            time.sleep(max(0.0, float(self.download_grace_seconds)))
-        except (TypeError, ValueError):
-            sys.stderr.write("[bootstrap] invalid download grace value; applying immediately\n")
-        finally:
-            self._mark_applied()
+        self._mark_applied()
 
     def log_message(self, format, *args):
         if format == '"%s" %s %s' and args:
@@ -1208,7 +1143,6 @@ class BootstrapHandler(BaseHTTPRequestHandler):
 def serve_bootstrap(config_root: Path, output_path: Path, host: str, port: int):
     BootstrapHandler.config_root = str(config_root)
     BootstrapHandler.output_path = str(output_path)
-    BootstrapHandler.download_grace_seconds = bootstrap_download_grace_seconds()
     waiting_for_bind = False
     while True:
         try:
