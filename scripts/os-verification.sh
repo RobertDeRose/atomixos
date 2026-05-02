@@ -17,11 +17,12 @@ read_gateway_ip() {
 		printf '%s\n' '172.20.30.1'
 		return 0
 	fi
-	python3 - <<'PY'
+	python3 - "$LAN_SETTINGS_FILE" <<'PY'
 import json
+import sys
 from pathlib import Path
 
-path = Path("/data/config/lan-settings.json")
+path = Path(sys.argv[1])
 payload = json.loads(path.read_text())
 print(payload.get("gateway_ip", "172.20.30.1"))
 PY

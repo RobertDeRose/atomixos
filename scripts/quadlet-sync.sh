@@ -20,7 +20,10 @@ run_as_appsvc() {
 	uid="$(appsvc_uid)"
 	local runtime_dir="/run/user/$uid"
 	local bus_address="unix:path=$runtime_dir/bus"
-	local path="$PATH:/run/wrappers/bin:/run/current-system/sw/bin"
+	local path="/run/wrappers/bin:/run/current-system/sw/bin"
+	if [ "${ATOMIXOS_ALLOW_UNSAFE_PATH:-0}" = "1" ] && [ -n "${PATH:-}" ]; then
+		path="$PATH:$path"
+	fi
 	runuser -u "$APP_RUNTIME_USER" -- "$APP_RUNTIME_SHELL" -c "HOME=\"$APP_RUNTIME_HOME\" PATH=\"$path\" XDG_RUNTIME_DIR=\"$runtime_dir\" DBUS_SESSION_BUS_ADDRESS=\"$bus_address\" $*"
 }
 

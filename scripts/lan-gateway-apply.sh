@@ -15,9 +15,11 @@ if [ ! -f "$CONFIG_FILE" ]; then
 	exit 0
 fi
 
-python3 - "$CONFIG_FILE" "$DNSMASQ_CONFIG_FILE" "$DNSMASQ_HOSTS_FILE" "$CHRONY_LAN_FILE" "$NETWORK_FILE" "$ETC_HOSTS_FILE" "$LAN_INTERFACE" "$SYS_CLASS_NET_DIR" <<'PY'
+change_summary="$(
+	python3 - "$CONFIG_FILE" "$DNSMASQ_CONFIG_FILE" "$DNSMASQ_HOSTS_FILE" "$CHRONY_LAN_FILE" "$NETWORK_FILE" "$ETC_HOSTS_FILE" "$LAN_INTERFACE" "$SYS_CLASS_NET_DIR" <<'PY'
 import json
 import sys
+import tempfile
 from pathlib import Path
 
 config_path = Path(sys.argv[1])
@@ -41,14 +43,25 @@ domain = payload["domain"]
 aliases = payload.get("gateway_aliases", [])
 hostname_pattern = payload.get("hostname_pattern", "")
 
-
 def replace_file(path: Path, content: str):
     path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = path.parent / f".{path.name}.tmp"
-    temp_path.write_text(content)
+    if path.exists() and path.read_text() == content:
+        return False
+
+    with tempfile.NamedTemporaryFile(
+        "w",
+        dir=path.parent,
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+        delete=False,
+    ) as handle:
+        handle.write(content)
+        temp_name = handle.name
+
+    temp_path = Path(temp_name)
     temp_path.chmod(0o644)
     temp_path.replace(path)
-
+    return True
 
 def read_mac_suffix(interface: str):
     address_path = sys_class_net_dir / interface / "address"
@@ -64,7 +77,6 @@ def read_mac_suffix(interface: str):
         return ""
     return "".join(octets)
 
-
 gateway_names = []
 if hostname_pattern:
     mac_suffix = read_mac_suffix(lan_interface)
@@ -78,13 +90,13 @@ for name in gateway_names:
         continue
     resolved_names.append(name)
 
-replace_file(
+network_changed = replace_file(
     network_path,
     "[Network]\n"
     f"Address={gateway_cidr}\n"
 )
 
-replace_file(
+dnsmasq_changed = replace_file(
     dnsmasq_config_path,
     f"interface={lan_interface}\n"
     "bind-dynamic\n"
@@ -105,9 +117,9 @@ for alias in resolved_names:
     if "." not in alias:
         names.append(f"{alias}.{domain}")
     host_lines.append(f"{gateway_ip} {' '.join(dict.fromkeys(names))}")
-replace_file(dnsmasq_hosts_path, "\n".join(host_lines) + ("\n" if host_lines else ""))
+dnsmasq_hosts_changed = replace_file(dnsmasq_hosts_path, "\n".join(host_lines) + ("\n" if host_lines else ""))
 
-replace_file(
+chrony_changed = replace_file(
     chrony_lan_path,
     "# Managed by lan-gateway-apply\n"
     f"allow {subnet_cidr}\n"
@@ -125,10 +137,34 @@ for alias in resolved_names:
     if "." not in alias:
         names.append(f"{alias}.{domain}")
     existing_hosts.append(f"{gateway_ip} {' '.join(dict.fromkeys(names))} # ATOMIXOS_LAN_GATEWAY")
-replace_file(etc_hosts_path, "\n".join(existing_hosts) + "\n")
-PY
+hosts_changed = replace_file(etc_hosts_path, "\n".join(existing_hosts) + "\n")
 
-networkctl reload || true
-systemctl try-restart systemd-networkd.service || true
-systemctl try-restart dnsmasq.service || true
-systemctl try-restart chronyd.service || true
+print(
+    json.dumps(
+        {
+            "network_changed": network_changed,
+            "dnsmasq_changed": dnsmasq_changed or dnsmasq_hosts_changed,
+            "chrony_changed": chrony_changed,
+            "hosts_changed": hosts_changed,
+        }
+    )
+)
+PY
+)"
+
+network_changed="$(printf '%s' "$change_summary" | python3 -c 'import json,sys; print("1" if json.load(sys.stdin)["network_changed"] else "0")')"
+dnsmasq_changed="$(printf '%s' "$change_summary" | python3 -c 'import json,sys; print("1" if json.load(sys.stdin)["dnsmasq_changed"] else "0")')"
+chrony_changed="$(printf '%s' "$change_summary" | python3 -c 'import json,sys; print("1" if json.load(sys.stdin)["chrony_changed"] else "0")')"
+
+if [ "$network_changed" = "1" ]; then
+	networkctl reload || true
+	systemctl try-restart systemd-networkd.service || true
+fi
+
+if [ "$dnsmasq_changed" = "1" ]; then
+	systemctl try-restart dnsmasq.service || true
+fi
+
+if [ "$chrony_changed" = "1" ]; then
+	systemctl try-restart chronyd.service || true
+fi
