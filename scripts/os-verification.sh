@@ -17,29 +17,14 @@ read_gateway_ip() {
 		printf '%s\n' '172.20.30.1'
 		return 0
 	fi
-	python3 - "$LAN_SETTINGS_FILE" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-path = Path(sys.argv[1])
-payload = json.loads(path.read_text())
-print(payload.get("gateway_ip", "172.20.30.1"))
-PY
+	jq -r '.gateway_ip // "172.20.30.1"' "$LAN_SETTINGS_FILE"
 }
 
 read_required_units() {
 	if [ ! -f "$HEALTH_REQUIRED_FILE" ]; then
 		return 0
 	fi
-	python3 - <<'PY'
-import json
-from pathlib import Path
-
-path = Path("/data/config/health-required.json")
-for item in json.loads(path.read_text()):
-    print(item)
-PY
+	jq -r '.[]' "$HEALTH_REQUIRED_FILE"
 }
 
 current_boot_slot() {

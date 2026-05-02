@@ -28,17 +28,7 @@ run_as_appsvc() {
 }
 
 has_rootless_units() {
-	python3 - <<'PY'
-import json
-from pathlib import Path
-
-path = Path("/data/config/quadlet-runtime.json")
-data = json.loads(path.read_text())
-for unit in data.get("units", []):
-    if unit.get("mode") == "rootless":
-        raise SystemExit(0)
-raise SystemExit(1)
-PY
+	jq -e 'any(.units[]?; .mode == "rootless")' "$RUNTIME_METADATA_FILE" >/dev/null
 }
 
 prepare_rootless_runtime() {
@@ -53,18 +43,7 @@ prepare_rootless_runtime() {
 
 list_units_by_mode() {
 	local mode="$1"
-	python3 - "$mode" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-mode = sys.argv[1]
-path = Path("/data/config/quadlet-runtime.json")
-data = json.loads(path.read_text())
-for unit in data.get("units", []):
-    if unit.get("mode") == mode and unit.get("service"):
-        print(unit["service"])
-PY
+	jq -r --arg mode "$mode" '.units[]? | select(.mode == $mode and (.service // "") != "") | .service' "$RUNTIME_METADATA_FILE"
 }
 
 if [ ! -f "$CONFIG_ROOT/config.toml" ]; then

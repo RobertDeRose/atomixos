@@ -8,9 +8,10 @@
 }:
 
 let
-  lanGatewayApply = pkgs.writeShellScript "lan-gateway-apply" (
-    builtins.readFile ../scripts/lan-gateway-apply.sh
-  );
+  lanGatewayApply = pkgs.runCommand "lan-gateway-apply" { } ''
+    mkdir -p "$out/bin"
+    install -m0755 ${../scripts/lan-gateway-apply.py} "$out/bin/lan-gateway-apply"
+  '';
 in
 {
   # ── DHCP server via dnsmasq ──────────────────────────────────────────────────
@@ -97,7 +98,7 @@ in
 
     serviceConfig = {
       Type = "oneshot";
-      ExecStart = lanGatewayApply;
+      ExecStart = "${lanGatewayApply}/bin/lan-gateway-apply";
     };
   };
 }

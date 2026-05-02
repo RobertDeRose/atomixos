@@ -1,0 +1,161 @@
+#!/usr/bin/env python3
+import json
+import os
+import subprocess
+import tempfile
+from pathlib import Path
+
+
+CONFIG_FILE = Path(os.environ.get("ATOMIXOS_LAN_SETTINGS_FILE", "/data/config/lan-settings.json"))
+DNSMASQ_CONFIG_DIR = Path(os.environ.get("ATOMIXOS_DNSMASQ_CONFIG_DIR", "/etc/dnsmasq.d"))
+DNSMASQ_CONFIG_FILE = DNSMASQ_CONFIG_DIR / "atomixos-lan.conf"
+DNSMASQ_HOSTS_FILE = Path(os.environ.get("ATOMIXOS_DNSMASQ_HOSTS_FILE", "/etc/atomixos/dnsmasq-hosts"))
+CHRONY_LAN_FILE = Path(os.environ.get("ATOMIXOS_CHRONY_LAN_FILE", "/etc/atomixos/chrony-lan.conf"))
+NETWORK_FILE = Path(
+    os.environ.get(
+        "ATOMIXOS_LAN_NETWORK_FILE",
+        "/etc/systemd/network/20-lan.network.d/50-atomixos.conf",
+    )
+)
+ETC_HOSTS_FILE = Path(os.environ.get("ATOMIXOS_ETC_HOSTS_FILE", "/etc/hosts"))
+LAN_INTERFACE = os.environ.get("ATOMIXOS_LAN_INTERFACE", "eth1")
+SYS_CLASS_NET_DIR = Path(os.environ.get("ATOMIXOS_SYS_CLASS_NET_DIR", "/sys/class/net"))
+
+
+def replace_file(path: Path, content: str) -> bool:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists() and path.read_text() == content:
+        return False
+
+    with tempfile.NamedTemporaryFile(
+        "w",
+        dir=path.parent,
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+        delete=False,
+    ) as handle:
+        handle.write(content)
+        temp_path = Path(handle.name)
+
+    temp_path.chmod(0o644)
+    temp_path.replace(path)
+    return True
+
+
+def read_mac_suffix(interface: str) -> str:
+    address_path = SYS_CLASS_NET_DIR / interface / "address"
+    try:
+        raw = address_path.read_text().strip().lower()
+    except OSError:
+        return ""
+
+    octets = raw.split(":")
+    if len(octets) != 6 or any(len(octet) != 2 for octet in octets):
+        return ""
+    if any(any(char not in "0123456789abcdef" for char in octet) for octet in octets):
+        return ""
+    return "".join(octets)
+
+
+def run_command(args: list[str]) -> None:
+    try:
+        subprocess.run(args, check=False)
+    except OSError:
+        pass
+
+
+def host_names(alias: str, domain: str) -> list[str]:
+    names = [alias]
+    if "." not in alias:
+        names.append(f"{alias}.{domain}")
+    return list(dict.fromkeys(names))
+
+
+def main() -> int:
+    if not CONFIG_FILE.exists():
+        return 0
+
+    payload = json.loads(CONFIG_FILE.read_text())
+
+    gateway_cidr = payload["gateway_cidr"]
+    gateway_ip = payload["gateway_ip"]
+    subnet_cidr = payload["subnet_cidr"]
+    netmask = payload["netmask"]
+    dhcp_start = payload["dhcp_start"]
+    dhcp_end = payload["dhcp_end"]
+    domain = payload["domain"]
+    aliases = payload.get("gateway_aliases", [])
+    hostname_pattern = payload.get("hostname_pattern", "")
+
+    gateway_names: list[str] = []
+    if hostname_pattern:
+        mac_suffix = read_mac_suffix(LAN_INTERFACE)
+        if mac_suffix:
+            gateway_names.append(hostname_pattern.replace("{mac}", mac_suffix))
+    gateway_names.extend(aliases)
+
+    resolved_names: list[str] = []
+    for name in gateway_names:
+        if name and name not in resolved_names:
+            resolved_names.append(name)
+
+    network_changed = replace_file(
+        NETWORK_FILE,
+        "[Network]\n" f"Address={gateway_cidr}\n",
+    )
+
+    dnsmasq_changed = replace_file(
+        DNSMASQ_CONFIG_FILE,
+        f"interface={LAN_INTERFACE}\n"
+        "bind-dynamic\n"
+        f"dhcp-range={dhcp_start},{dhcp_end},{netmask},24h\n"
+        f"dhcp-option=3,{gateway_ip}\n"
+        f"dhcp-option=6,{gateway_ip}\n"
+        f"dhcp-option=42,{gateway_ip}\n"
+        f"domain={domain}\n"
+        "expand-hosts\n"
+        f"addn-hosts={DNSMASQ_HOSTS_FILE}\n"
+        "log-dhcp\n"
+        "port=53\n",
+    )
+
+    dnsmasq_hosts_changed = replace_file(
+        DNSMASQ_HOSTS_FILE,
+        "\n".join(f"{gateway_ip} {' '.join(host_names(alias, domain))}" for alias in resolved_names)
+        + ("\n" if resolved_names else ""),
+    )
+
+    chrony_changed = replace_file(
+        CHRONY_LAN_FILE,
+        "# Managed by lan-gateway-apply\n" f"allow {subnet_cidr}\n",
+    )
+
+    existing_hosts: list[str] = []
+    if ETC_HOSTS_FILE.exists():
+        existing_hosts = [
+            line for line in ETC_HOSTS_FILE.read_text().splitlines() if "# ATOMIXOS_LAN_GATEWAY" not in line
+        ]
+        while existing_hosts and existing_hosts[-1] == "":
+            existing_hosts.pop()
+
+    for alias in resolved_names:
+        existing_hosts.append(
+            f"{gateway_ip} {' '.join(host_names(alias, domain))} # ATOMIXOS_LAN_GATEWAY"
+        )
+    hosts_changed = replace_file(ETC_HOSTS_FILE, "\n".join(existing_hosts) + "\n")
+
+    if network_changed:
+        run_command(["networkctl", "reload"])
+        run_command(["systemctl", "try-restart", "systemd-networkd.service"])
+
+    if dnsmasq_changed or dnsmasq_hosts_changed:
+        run_command(["systemctl", "try-restart", "dnsmasq.service"])
+
+    if chrony_changed:
+        run_command(["systemctl", "try-restart", "chronyd.service"])
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

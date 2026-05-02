@@ -57,6 +57,7 @@ in
       pkgs.coreutils
       pkgs.chrony
       pkgs.gzip
+      pkgs.jq
       pkgs.podman
       pkgs.python3Minimal
       pkgs.util-linux
@@ -95,6 +96,7 @@ in
       ++ [
         pkgs.coreutils
         pkgs.gzip
+        pkgs.jq
         pkgs.systemd
         pkgs.python3Minimal
         pkgs.zstd

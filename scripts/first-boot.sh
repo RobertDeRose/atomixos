@@ -25,21 +25,7 @@ read_bootstrap_host() {
 		return 0
 	fi
 
-	python3 - "$LAN_SETTINGS_FILE" "$BOOTSTRAP_HOST" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-path = Path(sys.argv[1])
-default = sys.argv[2]
-try:
-    payload = json.loads(path.read_text())
-except Exception:
-    print(default)
-    raise SystemExit(0)
-
-print(payload.get("gateway_ip", default))
-PY
+	jq -r --arg default "$BOOTSTRAP_HOST" '.gateway_ip // $default' "$LAN_SETTINGS_FILE" 2>/dev/null || printf '%s\n' "$BOOTSTRAP_HOST"
 }
 
 enable_dev_ssh_on_wan() {

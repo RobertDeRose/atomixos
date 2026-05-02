@@ -16,9 +16,10 @@ let
     builtins.readFile ../scripts/ssh-wan-reload.sh
   );
 
-  provisionedFirewallInbound = pkgs.writeShellScript "provisioned-firewall-inbound" (
-    builtins.readFile ../scripts/provisioned-firewall-inbound.sh
-  );
+  provisionedFirewallInbound = pkgs.runCommand "provisioned-firewall-inbound" { } ''
+    mkdir -p "$out/bin"
+    install -m0755 ${../scripts/provisioned-firewall-inbound.py} "$out/bin/provisioned-firewall-inbound"
+  '';
 in
 {
   # ── Enable nftables ──────────────────────────────────────────────────────────
@@ -125,7 +126,7 @@ in
 
     serviceConfig = {
       Type = "oneshot";
-      ExecStart = provisionedFirewallInbound;
+      ExecStart = "${provisionedFirewallInbound}/bin/provisioned-firewall-inbound";
     };
   };
 }

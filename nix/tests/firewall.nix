@@ -132,11 +132,11 @@ nixos-lib.runTest {
         ];
         serviceConfig = {
           Type = "oneshot";
-          ExecStart = pkgs.writeShellScript "test-provisioned-firewall-inbound" (
-            builtins.replaceStrings [ ''iifname "eth0"'' ] [ ''iifname "eth1"'' ] (
-              builtins.readFile ../../scripts/provisioned-firewall-inbound.sh
-            )
-          );
+          Environment = "ATOMIXOS_FIREWALL_WAN_INTERFACE=eth1";
+          ExecStart = pkgs.writeScript "test-provisioned-firewall-inbound" ''
+            #!${pkgs.python3Minimal}/bin/python3
+            ${builtins.readFile ../../scripts/provisioned-firewall-inbound.py}
+          '';
         };
       };
     };

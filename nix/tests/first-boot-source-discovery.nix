@@ -29,6 +29,7 @@ nixos-lib.runTest {
 
       environment.systemPackages = [
         pkgs.gzip
+        pkgs.jq
         pkgs.python3Minimal
         pkgs.util-linux
         pkgs.zstd

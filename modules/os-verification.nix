@@ -37,7 +37,6 @@ in
     path = [
       pkgs.rauc
       pkgs.jq
-      pkgs.python3Minimal
       pkgs.systemd
       pkgs.iproute2
       pkgs.coreutils
