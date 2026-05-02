@@ -24,9 +24,13 @@ in
     description = "OS update verification - local health check";
     after = [
       "data.mount"
+      "lan-gateway-apply.service"
       "multi-user.target"
     ];
-    wants = [ "data.mount" ];
+    wants = [
+      "data.mount"
+      "lan-gateway-apply.service"
+    ];
     wantedBy = [ "multi-user.target" ];
 
     # Skip on first boot — first-boot.service handles slot confirmation.
