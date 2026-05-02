@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import contextlib
 import json
 import os
 import subprocess
@@ -58,10 +59,8 @@ def read_mac_suffix(interface: str) -> str:
 
 
 def run_command(args: list[str]) -> None:
-    try:
+    with contextlib.suppress(OSError):
         subprocess.run(args, check=False)
-    except OSError:
-        pass
 
 
 def host_names(alias: str, domain: str) -> list[str]:
@@ -142,7 +141,7 @@ def main() -> int:
         existing_hosts.append(
             f"{gateway_ip} {' '.join(host_names(alias, domain))} # ATOMIXOS_LAN_GATEWAY"
         )
-    hosts_changed = replace_file(ETC_HOSTS_FILE, "\n".join(existing_hosts) + "\n")
+    replace_file(ETC_HOSTS_FILE, "\n".join(existing_hosts) + "\n")
 
     if network_changed:
         run_command(["networkctl", "reload"])

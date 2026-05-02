@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 import argparse
-import errno
 import email.policy
+import errno
 import html
-import ipaddress
 import io
+import ipaddress
 import json
 import os
 import pwd
 import shutil
-import stat
 import subprocess
 import sys
 import tarfile
@@ -21,6 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+
 try:
     import tomllib
 except ModuleNotFoundError:
@@ -29,10 +29,12 @@ except ModuleNotFoundError:
 
 
 DEFAULT_CONFIG_DIR = Path("/data/config")
-CONFIG_DIR_TOKEN = "${CONFIG_DIR}"
-FILES_DIR_TOKEN = "${FILES_DIR}"
+CONFIG_DIR_TOKEN = "${CONFIG_DIR}"  # noqa: S105
+FILES_DIR_TOKEN = "${FILES_DIR}"  # noqa: S105
 GZIP_MAGIC = b"\x1f\x8b"
 ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
+GZIP_BIN = os.environ.get("ATOMIXOS_GZIP", "gzip")
+ZSTD_BIN = os.environ.get("ATOMIXOS_ZSTD", "zstd")
 APP_RUNTIME_USER = "appsvc"
 ROOTLESS_NETWORK_NAME = "pasta"
 BOOTSTRAP_LAN_HOST = "172.20.30.1"
@@ -54,18 +56,24 @@ class ProvisionError(RuntimeError):
     pass
 
 
+def provision_error(message: str) -> ProvisionError:
+    return ProvisionError(message)
+
+
 def validate_name(name: str) -> str:
+    message = f"invalid quadlet unit name: {name!r}"
     if not name or "/" in name or "\x00" in name or "." in name or name in {".", ".."}:
-        raise ProvisionError(f"invalid quadlet unit name: {name!r}")
+        raise provision_error(message)
     for char in name:
         if not (char.isalnum() or char in {"_", "-"}):
-            raise ProvisionError(f"invalid quadlet unit name: {name!r}")
+            raise provision_error(message)
     return name
 
 
 def require_mapping(value, path: str):
     if not isinstance(value, dict):
-        raise ProvisionError(f"expected table at {path}")
+        message = f"expected table at {path}"
+        raise provision_error(message)
     return value
 
 
@@ -74,30 +82,35 @@ def require_allowed_keys(value, path: str, allowed: set[str], required: set[str]
     unexpected = set(table) - allowed
     if unexpected:
         keys = ", ".join(sorted(unexpected))
-        raise ProvisionError(f"unsupported keys at {path}: {keys}")
+        message = f"unsupported keys at {path}: {keys}"
+        raise provision_error(message)
 
     if required is not None:
         missing = required - set(table)
         if missing:
             keys = ", ".join(sorted(missing))
-            raise ProvisionError(f"missing required keys at {path}: {keys}")
+            message = f"missing required keys at {path}: {keys}"
+            raise provision_error(message)
 
     return table
 
 
 def require_string(value, path: str):
     if not isinstance(value, str) or not value.strip():
-        raise ProvisionError(f"expected non-empty string at {path}")
+        message = f"expected non-empty string at {path}"
+        raise provision_error(message)
     return value.strip()
 
 
 def require_string_list(value, path: str):
     if not isinstance(value, list) or not value:
-        raise ProvisionError(f"expected non-empty array at {path}")
+        message = f"expected non-empty array at {path}"
+        raise provision_error(message)
     result = []
     for idx, item in enumerate(value):
         if not isinstance(item, str) or not item.strip():
-            raise ProvisionError(f"expected non-empty string at {path}[{idx}]")
+            message = f"expected non-empty string at {path}[{idx}]"
+            raise provision_error(message)
         result.append(item.strip())
     return result
 
@@ -106,30 +119,35 @@ def require_optional_string_list(value, path: str):
     if value is None:
         return []
     if not isinstance(value, list):
-        raise ProvisionError(f"expected array at {path}")
+        message = f"expected array at {path}"
+        raise provision_error(message)
 
     result = []
     for idx, item in enumerate(value):
         if not isinstance(item, str) or not item.strip():
-            raise ProvisionError(f"expected non-empty string at {path}[{idx}]")
+            message = f"expected non-empty string at {path}[{idx}]"
+            raise provision_error(message)
         result.append(item.strip())
     return result
 
 
 def require_bool(value, path: str):
     if not isinstance(value, bool):
-        raise ProvisionError(f"expected boolean at {path}")
+        message = f"expected boolean at {path}"
+        raise provision_error(message)
     return value
 
 
 def require_port_list(value, path: str):
     if not isinstance(value, list) or not value:
-        raise ProvisionError(f"expected non-empty array at {path}")
+        message = f"expected non-empty array at {path}"
+        raise provision_error(message)
 
     ports = []
     for idx, item in enumerate(value):
         if not isinstance(item, int) or isinstance(item, bool) or item < 1 or item > 65535:
-            raise ProvisionError(f"expected port integer in range 1..65535 at {path}[{idx}]")
+            message = f"expected port integer in range 1..65535 at {path}[{idx}]"
+            raise provision_error(message)
         ports.append(item)
     return ports
 
@@ -137,17 +155,19 @@ def require_port_list(value, path: str):
 def require_dns_name(value, path: str):
     name = require_string(value, path).lower().rstrip(".")
     if not name:
-        raise ProvisionError(f"expected non-empty string at {path}")
+        message = f"expected non-empty string at {path}"
+        raise provision_error(message)
 
     labels = name.split(".")
+    invalid_name_message = f"invalid DNS name at {path}: {value!r}"
     for label in labels:
         if not label or len(label) > 63:
-            raise ProvisionError(f"invalid DNS name at {path}: {value!r}")
+            raise provision_error(invalid_name_message)
         if not label[0].isalnum() or not label[-1].isalnum():
-            raise ProvisionError(f"invalid DNS name at {path}: {value!r}")
+            raise provision_error(invalid_name_message)
         for char in label:
             if not (char.isalnum() or char == "-"):
-                raise ProvisionError(f"invalid DNS name at {path}: {value!r}")
+                raise provision_error(invalid_name_message)
     return name
 
 
@@ -165,9 +185,11 @@ def load_lan_settings(lan_value, path: str = "lan"):
     try:
         gateway = ipaddress.IPv4Interface(gateway_cidr)
     except ValueError as exc:
-        raise ProvisionError(f"invalid IPv4 CIDR at {path}.gateway_cidr: {gateway_cidr}") from exc
+        message = f"invalid IPv4 CIDR at {path}.gateway_cidr: {gateway_cidr}"
+        raise provision_error(message) from exc
     if gateway.network.prefixlen != 24:
-        raise ProvisionError(f"{path}.gateway_cidr must use a /24 subnet")
+        message = f"{path}.gateway_cidr must use a /24 subnet"
+        raise provision_error(message)
 
     dhcp_start_raw = require_string(lan.get("dhcp_start", DEFAULT_LAN_DHCP_START), f"{path}.dhcp_start")
     dhcp_end_raw = require_string(lan.get("dhcp_end", DEFAULT_LAN_DHCP_END), f"{path}.dhcp_end")
@@ -175,14 +197,18 @@ def load_lan_settings(lan_value, path: str = "lan"):
         dhcp_start = ipaddress.IPv4Address(dhcp_start_raw)
         dhcp_end = ipaddress.IPv4Address(dhcp_end_raw)
     except ValueError as exc:
-        raise ProvisionError(f"invalid IPv4 address in {path}.dhcp_start or {path}.dhcp_end") from exc
+        message = f"invalid IPv4 address in {path}.dhcp_start or {path}.dhcp_end"
+        raise provision_error(message) from exc
 
     if dhcp_start not in gateway.network or dhcp_end not in gateway.network:
-        raise ProvisionError(f"{path}.dhcp_start and {path}.dhcp_end must be inside {gateway.network}")
+        message = f"{path}.dhcp_start and {path}.dhcp_end must be inside {gateway.network}"
+        raise provision_error(message)
     if dhcp_start > dhcp_end:
-        raise ProvisionError(f"{path}.dhcp_start must be less than or equal to {path}.dhcp_end")
+        message = f"{path}.dhcp_start must be less than or equal to {path}.dhcp_end"
+        raise provision_error(message)
     if dhcp_start == gateway.ip or dhcp_end == gateway.ip:
-        raise ProvisionError(f"{path}.dhcp_start and {path}.dhcp_end must not equal the gateway IP")
+        message = f"{path}.dhcp_start and {path}.dhcp_end must not equal the gateway IP"
+        raise provision_error(message)
 
     domain = require_dns_name(lan.get("domain", DEFAULT_LAN_DOMAIN), f"{path}.domain")
     hostname_pattern = require_string(
@@ -191,7 +217,8 @@ def load_lan_settings(lan_value, path: str = "lan"):
     ) if lan.get("hostname_pattern") not in (None, "") else DEFAULT_LAN_HOSTNAME_PATTERN
     if hostname_pattern:
         if "{mac}" not in hostname_pattern:
-            raise ProvisionError(f"{path}.hostname_pattern must include {{mac}}")
+            message = f"{path}.hostname_pattern must include {{mac}}"
+            raise provision_error(message)
         pattern_probe = hostname_pattern.replace("{mac}", "001122334455")
         require_dns_name(pattern_probe, f"{path}.hostname_pattern")
 
@@ -233,7 +260,8 @@ def format_scalar(value):
         return str(value)
     if isinstance(value, str):
         return value
-    raise ProvisionError(f"unsupported scalar value type: {type(value).__name__}")
+    message = f"unsupported scalar value type: {type(value).__name__}"
+    raise provision_error(message)
 
 
 def substitute_tokens(value: str, config_root: Path):
@@ -252,8 +280,9 @@ def normalize_directives(directives_table: dict, path: str):
         normalized_values = []
         for idx, value in enumerate(values):
             item_path = f"{path}.{key}[{idx}]" if isinstance(raw_value, list) else f"{path}.{key}"
-            if isinstance(value, list) or isinstance(value, dict):
-                raise ProvisionError(f"expected scalar value at {item_path}")
+            if isinstance(value, (list, dict)):
+                message = f"expected scalar value at {item_path}"
+                raise provision_error(message)
             normalized_values.append(value)
         normalized[key] = normalized_values
     return normalized
@@ -302,7 +331,8 @@ def render_containers(container_table: dict, config_root: Path):
     warnings = []
 
     if not container_table:
-        raise ProvisionError("container must define at least one container")
+        message = "container must define at least one container"
+        raise provision_error(message)
 
     for container_name, raw_sections in container_table.items():
         validate_name(container_name)
@@ -321,7 +351,8 @@ def render_containers(container_table: dict, config_root: Path):
 
         image_values = container_directives.get("Image")
         if image_values is None or len(image_values) != 1:
-            raise ProvisionError(f"{container_path}.Container.Image must be a single string value")
+            message = f"{container_path}.Container.Image must be a single string value"
+            raise provision_error(message)
         require_string(image_values[0], f"{container_path}.Container.Image")
 
         if privileged:
@@ -334,7 +365,8 @@ def render_containers(container_table: dict, config_root: Path):
         else:
             if "Network" in container_directives:
                 warnings.append(
-                    f"container.{container_name}.Container.Network overridden to {ROOTLESS_NETWORK_NAME} for rootless container"
+                    f"container.{container_name}.Container.Network overridden to "
+                    f"{ROOTLESS_NETWORK_NAME} for rootless container"
                 )
             container_directives["Network"] = [ROOTLESS_NETWORK_NAME]
             publish_ports = container_directives.get("PublishPort", [])
@@ -381,7 +413,8 @@ def load_config(config_path: Path, config_root: Path = DEFAULT_CONFIG_DIR):
     try:
         data = tomllib.loads(config_path.read_text())
     except tomllib.TOMLDecodeError as exc:
-        raise ProvisionError(f"invalid TOML in {config_path}: {exc}") from exc
+        message = f"invalid TOML in {config_path}: {exc}"
+        raise provision_error(message) from exc
 
     root = require_allowed_keys(
         data,
@@ -392,7 +425,8 @@ def load_config(config_path: Path, config_root: Path = DEFAULT_CONFIG_DIR):
 
     version = root.get("version")
     if not isinstance(version, int) or isinstance(version, bool) or version != 1:
-        raise ProvisionError("version must be integer 1")
+        message = "version must be integer 1"
+        raise provision_error(message)
 
     admin = require_allowed_keys(root.get("admin"), "admin", {"ssh_keys"}, {"ssh_keys"})
     ssh_keys = require_string_list(admin.get("ssh_keys"), "admin.ssh_keys")
@@ -404,7 +438,8 @@ def load_config(config_path: Path, config_root: Path = DEFAULT_CONFIG_DIR):
         {"tcp", "udp"},
     )
     if "tcp" not in inbound and "udp" not in inbound:
-        raise ProvisionError("firewall.inbound must define tcp and/or udp")
+        message = "firewall.inbound must define tcp and/or udp"
+        raise provision_error(message)
     firewall_inbound = {}
     if "tcp" in inbound:
         firewall_inbound["tcp"] = require_port_list(inbound.get("tcp"), "firewall.inbound.tcp")
@@ -419,11 +454,13 @@ def load_config(config_path: Path, config_root: Path = DEFAULT_CONFIG_DIR):
     container = require_mapping(root.get("container"), "container")
     rendered_units, runtime_units, warnings = render_containers(container, config_root)
     if not rendered_units:
-        raise ProvisionError("config.toml must define at least one Quadlet unit")
+        message = "config.toml must define at least one Quadlet unit"
+        raise provision_error(message)
 
     for unit in required_units:
         if unit not in container:
-            raise ProvisionError(f"health.required references unknown unit: {unit}")
+            message = f"health.required references unknown unit: {unit}"
+            raise provision_error(message)
 
     return {
         "ssh_keys": ssh_keys,
@@ -452,22 +489,26 @@ def detect_bundle_kind(source_bytes: bytes, filename: str = ""):
 def validate_bundle_member(name: str):
     path = Path(name)
     if path.is_absolute() or ".." in path.parts or name in {"", "."}:
-        raise ProvisionError(f"invalid bundle member path: {name!r}")
+        message = f"invalid bundle member path: {name!r}"
+        raise provision_error(message)
 
 
 def generated_required_units(quadlet: str):
     snippet = quadlet.strip()
     if not snippet:
-        raise ProvisionError("container TOML snippet is required")
+        message = "container TOML snippet is required"
+        raise provision_error(message)
 
     try:
         parsed = tomllib.loads(snippet)
     except tomllib.TOMLDecodeError as exc:
-        raise ProvisionError(f"invalid container TOML snippet: {exc}") from exc
+        message = f"invalid container TOML snippet: {exc}"
+        raise provision_error(message) from exc
 
     container = parsed.get("container")
     if not isinstance(container, dict) or not container:
-        raise ProvisionError("container TOML snippet must define at least one [container.<name>] table")
+        message = "container TOML snippet must define at least one [container.<name>] table"
+        raise provision_error(message)
 
     return [validate_name(name) for name in container]
 
@@ -483,70 +524,78 @@ def extract_bundle_archive(source_bytes: bytes, filename: str, destination: Path
     if bundle_kind == "tar.gz":
         try:
             decompressed = subprocess.run(
-                ["gzip", "-dc"],
+                [GZIP_BIN, "-dc"],
                 input=source_bytes,
                 capture_output=True,
                 check=True,
             ).stdout
         except FileNotFoundError as exc:
-            raise ProvisionError("gzip is required to import .tar.gz bundles") from exc
+            message = "gzip is required to import .tar.gz bundles"
+            raise provision_error(message) from exc
         except subprocess.CalledProcessError as exc:
             stderr = exc.stderr.decode("utf-8", errors="replace").strip()
             detail = f": {stderr}" if stderr else ""
-            raise ProvisionError(f"failed to decompress .tar.gz bundle{detail}") from exc
-        archive = tarfile.open(fileobj=io.BytesIO(decompressed), mode="r:")
+            message = f"failed to decompress .tar.gz bundle{detail}"
+            raise provision_error(message) from exc
     elif bundle_kind == "tar.zst":
         try:
             decompressed = subprocess.run(
-                ["zstd", "-dcq"],
+                [ZSTD_BIN, "-dcq"],
                 input=source_bytes,
                 capture_output=True,
                 check=True,
             ).stdout
         except FileNotFoundError as exc:
-            raise ProvisionError("zstd is required to import .tar.zst bundles") from exc
+            message = "zstd is required to import .tar.zst bundles"
+            raise provision_error(message) from exc
         except subprocess.CalledProcessError as exc:
             stderr = exc.stderr.decode("utf-8", errors="replace").strip()
             detail = f": {stderr}" if stderr else ""
-            raise ProvisionError(f"failed to decompress .tar.zst bundle{detail}") from exc
-        archive = tarfile.open(fileobj=io.BytesIO(decompressed), mode="r:")
+            message = f"failed to decompress .tar.zst bundle{detail}"
+            raise provision_error(message) from exc
     else:
-        raise ProvisionError("supported bundle formats are .tar.gz, .tgz, .tar.zst, and .tzst")
+        message = "supported bundle formats are .tar.gz, .tgz, .tar.zst, and .tzst"
+        raise provision_error(message)
 
-    with archive:
+    with tarfile.open(fileobj=io.BytesIO(decompressed), mode="r:") as archive:
         for member in archive.getmembers():
             validate_bundle_member(member.name)
             target = destination / member.name
             if member.isdir():
                 ensure_dir(target)
-                os.chmod(target, 0o755)
+                target.chmod(0o755)
                 continue
             if not member.isfile():
-                raise ProvisionError(f"unsupported bundle member type: {member.name}")
+                message = f"unsupported bundle member type: {member.name}"
+                raise provision_error(message)
 
             ensure_dir(target.parent)
             extracted = archive.extractfile(member)
             if extracted is None:
-                raise ProvisionError(f"failed to read bundle member: {member.name}")
+                message = f"failed to read bundle member: {member.name}"
+                raise provision_error(message)
             with extracted, target.open("wb") as output:
                 shutil.copyfileobj(extracted, output)
-            os.chmod(target, 0o644)
+            target.chmod(0o644)
 
 
 def validate_bundle_layout(bundle_root: Path):
     allowed_entries = {"config.toml", "files"}
     actual_entries = {entry.name for entry in bundle_root.iterdir()}
     if "config.toml" not in actual_entries:
-        raise ProvisionError("bundle must contain config.toml at the top level")
+        message = "bundle must contain config.toml at the top level"
+        raise provision_error(message)
 
     unexpected = actual_entries - allowed_entries
     if unexpected:
         names = ", ".join(sorted(unexpected))
-        raise ProvisionError(f"bundle contains unsupported top-level entries: {names}")
+        message = f"bundle contains unsupported top-level entries: {names}"
+        raise provision_error(message)
 
     files_dir = bundle_root / "files"
     if files_dir.exists() and not files_dir.is_dir():
-        raise ProvisionError("bundle entry 'files' must be a directory")
+        message = "bundle entry 'files' must be a directory"
+        raise provision_error(message)
 
 
 def prepare_bundle_from_bytes(source_bytes: bytes, filename: str = ""):
@@ -564,7 +613,8 @@ def prepare_source_path(source_path: Path):
     source_bytes = source_path.read_bytes()
     bundle_kind = detect_bundle_kind(source_bytes, source_path.name)
     if bundle_kind is None:
-        raise ProvisionError("supported import inputs are config.toml, .tar.gz/.tgz, and .tar.zst/.tzst")
+        message = "supported import inputs are config.toml, .tar.gz/.tgz, and .tar.zst/.tzst"
+        raise provision_error(message)
     return prepare_bundle_from_bytes(source_bytes, source_path.name)
 
 
@@ -590,12 +640,12 @@ def copy_bundle_files(files_source: Path | None, config_root: Path):
         destination = target / relative
         if source.is_dir():
             ensure_dir(destination)
-            os.chmod(destination, 0o755)
+            destination.chmod(0o755)
             continue
 
         ensure_dir(destination.parent)
         shutil.copyfile(source, destination)
-        os.chmod(destination, 0o644)
+        destination.chmod(0o644)
 
 
 def write_imported_state(parsed: dict, prepared_config: Path, prepared_files: Path | None, config_root: Path):
@@ -605,28 +655,28 @@ def write_imported_state(parsed: dict, prepared_config: Path, prepared_files: Pa
 
     imported_path = config_root / "config.toml"
     shutil.copyfile(prepared_config, imported_path)
-    os.chmod(imported_path, 0o600)
+    imported_path.chmod(0o600)
 
     ssh_path = config_root / "ssh-authorized-keys" / "admin"
     ssh_path.write_text("\n".join(parsed["ssh_keys"]) + "\n")
-    os.chmod(ssh_path, 0o600)
+    ssh_path.chmod(0o600)
     maybe_chown_user(ssh_path, "admin")
 
     health_path = config_root / "health-required.json"
     health_path.write_text(json.dumps(parsed["required_units"], indent=2) + "\n")
-    os.chmod(health_path, 0o600)
+    health_path.chmod(0o600)
 
     firewall_path = config_root / FIREWALL_INBOUND_FILENAME
     firewall_path.write_text(json.dumps(parsed["firewall_inbound"], indent=2) + "\n")
-    os.chmod(firewall_path, 0o600)
+    firewall_path.chmod(0o600)
 
     lan_settings_path = config_root / LAN_SETTINGS_FILENAME
     lan_settings_path.write_text(json.dumps(parsed["lan_settings"], indent=2) + "\n")
-    os.chmod(lan_settings_path, 0o600)
+    lan_settings_path.chmod(0o600)
 
     runtime_path = config_root / RUNTIME_METADATA_FILENAME
     runtime_path.write_text(json.dumps(parsed["runtime"], indent=2) + "\n")
-    os.chmod(runtime_path, 0o600)
+    runtime_path.chmod(0o600)
 
     quadlet_dir = config_root / "quadlet"
     for existing in quadlet_dir.iterdir():
@@ -635,7 +685,7 @@ def write_imported_state(parsed: dict, prepared_config: Path, prepared_files: Pa
     for filename, content in parsed["rendered_units"].items():
         unit_path = quadlet_dir / filename
         unit_path.write_text(content)
-        os.chmod(unit_path, 0o644)
+        unit_path.chmod(0o644)
 
     copy_bundle_files(prepared_files, config_root)
 
@@ -643,15 +693,18 @@ def write_imported_state(parsed: dict, prepared_config: Path, prepared_files: Pa
 def load_runtime_metadata(config_root: Path):
     metadata_path = config_root / RUNTIME_METADATA_FILENAME
     if not metadata_path.exists():
-        raise ProvisionError(f"missing runtime metadata: {metadata_path}")
+        message = f"missing runtime metadata: {metadata_path}"
+        raise provision_error(message)
 
     try:
         metadata = json.loads(metadata_path.read_text())
     except json.JSONDecodeError as exc:
-        raise ProvisionError(f"invalid runtime metadata in {metadata_path}: {exc}") from exc
+        message = f"invalid runtime metadata in {metadata_path}: {exc}"
+        raise provision_error(message) from exc
 
     if not isinstance(metadata, dict) or not isinstance(metadata.get("units"), list):
-        raise ProvisionError(f"invalid runtime metadata structure in {metadata_path}")
+        message = f"invalid runtime metadata structure in {metadata_path}"
+        raise provision_error(message)
     return metadata
 
 
@@ -682,11 +735,13 @@ def sync_quadlet_units(config_root: Path, rootful_target: Path, rootless_target:
     units_by_mode = {"rootful": set(), "rootless": set()}
     for unit in metadata["units"]:
         if not isinstance(unit, dict):
-            raise ProvisionError("invalid runtime unit entry")
+            message = "invalid runtime unit entry"
+            raise provision_error(message)
         filename = unit.get("filename")
         mode = unit.get("mode")
         if not isinstance(filename, str) or mode not in units_by_mode:
-            raise ProvisionError("invalid runtime unit metadata")
+            message = "invalid runtime unit metadata"
+            raise provision_error(message)
         units_by_mode[mode].add(filename)
 
     ensure_dir(rootful_target)
@@ -698,14 +753,15 @@ def sync_quadlet_units(config_root: Path, rootful_target: Path, rootless_target:
     for filename in desired_rootful:
         unit_file = source / filename
         shutil.copyfile(unit_file, rootful_target / filename)
-        os.chmod(rootful_target / filename, 0o644)
+        (rootful_target / filename).chmod(0o644)
 
     for stale in existing_rootful - desired_rootful:
         (rootful_target / stale).unlink()
 
     if rootless_target is None:
         if units_by_mode["rootless"]:
-            raise ProvisionError("rootless target path is required when rootless units are present")
+            message = "rootless target path is required when rootless units are present"
+            raise provision_error(message)
         return
 
     ensure_dir(rootless_target)
@@ -717,7 +773,7 @@ def sync_quadlet_units(config_root: Path, rootful_target: Path, rootless_target:
     for filename in desired_rootless:
         unit_file = source / filename
         shutil.copyfile(unit_file, rootless_target / filename)
-        os.chmod(rootless_target / filename, 0o644)
+        (rootless_target / filename).chmod(0o644)
 
     for stale in existing_rootless - desired_rootless:
         (rootless_target / stale).unlink()
@@ -899,14 +955,21 @@ BOOTSTRAP_HTML = """<!doctype html>
       <section class=\"hero\">
         <img class=\"hero-mark\" src=\"/assets/atomixos.png\" alt=\"AtomixOS logo\">
         <h1>Bootstrap Console</h1>
-        <p>Import an existing <code>config.toml</code>, <code>config.tar.gz</code>, or <code>config.tar.zst</code> bundle, or build a fresh configuration with the guided form below.</p>
+        <p>
+          Import an existing <code>config.toml</code>, <code>config.tar.gz</code>, or
+          <code>config.tar.zst</code> bundle, or build a fresh configuration with the guided form below.
+        </p>
       </section>
       <section class=\"grid\">
         <form class=\"panel\" method=\"post\" action=\"/apply\" enctype=\"multipart/form-data\">
           <h2>Apply Existing Configuration</h2>
           <p>Upload a prepared config or paste a plain <code>config.toml</code> payload.</p>
           <label>Config file or bundle</label>
-          <input type=\"file\" name=\"config_file\" accept=\".toml,.tar.gz,.tgz,.tar.zst,.tzst,text/plain,application/gzip,application/zstd,application/octet-stream\">
+          <input
+            type=\"file\"
+            name=\"config_file\"
+            accept=\".toml,.tar.gz,.tgz,.tar.zst,.tzst,text/plain,application/gzip,application/zstd,application/octet-stream\"
+          >
           <label>config.toml</label>
           <textarea name=\"config\">{config_text}</textarea>
           <button type=\"submit\">Apply configuration</button>
@@ -935,7 +998,19 @@ BOOTSTRAP_HTML = """<!doctype html>
           <label>Required health units (one per line)</label>
           <textarea class=\"short\" name=\"required\"></textarea>
           <label>Container TOML snippet</label>
-          <textarea name=\"quadlet\">[container.myapp]\nprivileged = false\n\n[container.myapp.Unit]\nDescription = \"My App\"\n\n[container.myapp.Container]\nImage = \"ghcr.io/example/myapp:latest\"\nPublishPort = [\"10080:8080\"]\n\n[container.myapp.Install]\nWantedBy = [\"default.target\"]\n</textarea>
+          <textarea name=\"quadlet\">[container.myapp]
+privileged = false
+
+[container.myapp.Unit]
+Description = \"My App\"
+
+[container.myapp.Container]
+Image = \"ghcr.io/example/myapp:latest\"
+PublishPort = [\"10080:8080\"]
+
+[container.myapp.Install]
+WantedBy = [\"default.target\"]
+</textarea>
           <button type=\"submit\">Generate config.toml</button>
         </form>
       </section>
@@ -1037,7 +1112,7 @@ class BootstrapHandler(BaseHTTPRequestHandler):
             filename = self.headers.get("X-Config-Filename", "config.toml")
             try:
                 self._write_payload(payload, filename)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 self._send_json(400, {"ok": False, "error": str(exc)})
                 return
 
@@ -1117,7 +1192,7 @@ class BootstrapHandler(BaseHTTPRequestHandler):
                 return
 
             applied_config = self._write_payload(payload, filename)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             self._send_html(config_text=config_text, message=f"<p><strong>Error:</strong> {html.escape(str(exc))}</p>")
             return
 
@@ -1133,11 +1208,11 @@ class BootstrapHandler(BaseHTTPRequestHandler):
         )
         self._mark_applied()
 
-    def log_message(self, format, *args):
-        if format == '"%s" %s %s' and args:
+    def log_message(self, fmt, *args):
+        if fmt == '"%s" %s %s' and args:
             request_line = f"{self.command} {urlparse(self.path).path} {self.request_version}"
             args = (request_line, *args[1:])
-        sys.stderr.write("[bootstrap] " + (format % args) + "\n")
+        sys.stderr.write("[bootstrap] " + (fmt % args) + "\n")
 
 
 def serve_bootstrap(config_root: Path, output_path: Path, host: str, port: int):

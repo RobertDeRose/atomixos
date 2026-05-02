@@ -1,0 +1,116 @@
+fix = true
+indent-width = 4
+line-length = 120
+force-exclude = true
+target-version = "py313"
+# output-format = "grouped"
+
+[format]
+docstring-code-format = true
+indent-style = "space"
+line-ending = "lf"
+quote-style = "double"
+
+[lint]
+select = [
+  # flake8-builtins
+  "A",
+  # flake8-unused-arguments
+  "ARG",
+  # flake8-async
+  "ASYNC",
+  # flake8-bugbear,
+  "B",
+  # flake8-comprehensions
+  # 825"C4",
+  # pydocstyle
+  # "D",
+  # pycodestyle Errors
+  "E",
+  # flake8-errmsg
+  "EM",
+  # Pyflakes
+  "F",
+  # FastAPI
+  "FAST",
+  # flake8-boolean-trap
+  # "FBT",
+  # refurb
+  "FURB",
+  # flake8-logging-format
+  "G",
+  # iSort
+  "I",
+  # flake8-logging
+  "LOG",
+  # pep8-naming
+  # "N",
+  # flake8-pie
+  "PIE",
+  # Pylint
+  # "PL",
+  # flake8-pytest-style
+  "PT",
+  # flake8-use-pathlib
+  "PTH",
+  # flake8-return
+  "RET",
+  # Ruff-specific rules
+  "RUF",
+  # flake8-banit
+  "S",
+  # flake8-simplify
+  "SIM",
+  # flake8-debugger
+  "T10",
+  # tryceratops
+  # "TRY",
+  # PyUpgrade
+  "UP",
+  # pycodestyle Warnings
+  "W",
+]
+ignore = [
+  "D100",
+  "D101",
+  "D102",
+  "D103",
+  "D104",
+  "D105",
+  "D106",
+  "D107",
+  "S101",
+  "S108",
+  "S311",
+  "S312",
+  "S321",
+  "S603",
+  "S605",
+]
+
+[lint.flake8-bugbear]
+# Allow default arguments like, e.g., `data: List[str] = fastapi.Query(None)`.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query"]
+
+[lint.isort]
+# length-sort = true
+combine-as-imports = true
+known-third-party = []
+lines-after-imports = 2
+order-by-type = false
+section-order = [
+  "future",
+  "standard-library",
+  "third-party",
+  "first-party",
+  "local-folder"
+]
+
+[lint.pyupgrade]
+keep-runtime-typing = true
+
+[lint.pydocstyle]
+convention = "google"
+
+[lint.per-file-ignores]
+"tests/**/*.py" = ["ARG001"]

@@ -22,10 +22,13 @@ Or via mise:
   mise run serial
 """
 
-import serial
+import os
 import sys
 import time
-import os
+from contextlib import suppress
+from pathlib import Path
+
+import serial
 
 
 PORT = os.environ.get("SERIAL_PORT")
@@ -38,6 +41,8 @@ if not PORT:
 BAUD = int(os.environ.get("SERIAL_BAUD", "1500000"))
 LOG = os.environ.get("SERIAL_LOG", "/tmp/rock64-serial.log")
 TIMEOUT = int(os.environ.get("SERIAL_TIMEOUT", "0"))
+PORT_PATH = Path(PORT)
+LOG_PATH = Path(LOG)
 
 
 def open_port():
@@ -61,7 +66,7 @@ def wait_for_port(max_wait=120):
     """
     printed = False
     for _ in range(max_wait):
-        if os.path.exists(PORT):
+        if PORT_PATH.exists():
             conn = open_port()
             if conn:
                 return conn
@@ -89,7 +94,7 @@ def main():
     start = time.time()
     total_bytes = 0
 
-    with open(LOG, "wb") as logfile:
+    with LOG_PATH.open("wb") as logfile:
         try:
             while True:
                 # Check timeout
@@ -115,12 +120,10 @@ def main():
                     # OSError even though the USB adapter is still present.
                     # Only treat it as a real disconnect if the device node
                     # has actually disappeared.
-                    try:
+                    with suppress(Exception):
                         conn.close()
-                    except Exception:
-                        pass
 
-                    if os.path.exists(PORT):
+                    if PORT_PATH.exists():
                         # Device still present — transient UART glitch.
                         # Brief pause then re-open.
                         time.sleep(0.2)
@@ -157,10 +160,8 @@ def main():
             pass
         finally:
             if conn:
-                try:
+                with suppress(Exception):
                     conn.close()
-                except Exception:
-                    pass
             elapsed = int(time.time() - start)
             print(
                 f"\nCapture stopped. {total_bytes} bytes in {elapsed}s, saved to {LOG}",

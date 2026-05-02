@@ -9,6 +9,7 @@ from pathlib import Path
 CONFIG_FILE = Path(os.environ.get("ATOMIXOS_FIREWALL_INBOUND_FILE", "/data/config/firewall-inbound.json"))
 RULE_COMMENT = os.environ.get("ATOMIXOS_FIREWALL_RULE_COMMENT", "ATOMIXOS_PROVISIONED_INBOUND")
 WAN_INTERFACE = os.environ.get("ATOMIXOS_FIREWALL_WAN_INTERFACE", "eth0")
+NFT = os.environ.get("ATOMIXOS_NFT", "nft")
 
 
 def main() -> int:
@@ -17,7 +18,7 @@ def main() -> int:
 
     payload = json.loads(CONFIG_FILE.read_text())
     existing = subprocess.run(
-        ["nft", "-a", "list", "chain", "inet", "filter", "input"],
+        [NFT, "-a", "list", "chain", "inet", "filter", "input"],
         capture_output=True,
         check=False,
         text=True,
@@ -42,7 +43,7 @@ def main() -> int:
         )
 
     if commands:
-        subprocess.run(["nft", "-f", "-"], input="\n".join(commands), text=True, check=True)
+        subprocess.run([NFT, "-f", "-"], input="\n".join(commands), text=True, check=True)
 
     return 0
 
