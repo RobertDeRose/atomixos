@@ -17,6 +17,30 @@ INITRD_MARKER="${ATOMIXOS_INITRD_MARKER:-/etc/atomixos/fresh-flash}"
 BOOT_CONFIG_PATH="${ATOMIXOS_BOOT_CONFIG_PATH:-/boot/config.toml}"
 APP_RUNTIME_QUADLET_DIR="${ATOMIXOS_ROOTLESS_QUADLET_DIR:-/var/lib/appsvc/.config/containers/systemd}"
 RAUC_ENABLED="${ATOMIXOS_RAUC_ENABLE:-1}"
+LAN_SETTINGS_FILE="$CONFIG_ROOT/lan-settings.json"
+
+read_bootstrap_host() {
+	if [ ! -f "$LAN_SETTINGS_FILE" ]; then
+		printf '%s\n' "$BOOTSTRAP_HOST"
+		return 0
+	fi
+
+	python3 - "$LAN_SETTINGS_FILE" "$BOOTSTRAP_HOST" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+default = sys.argv[2]
+try:
+    payload = json.loads(path.read_text())
+except Exception:
+    print(default)
+    raise SystemExit(0)
+
+print(payload.get("gateway_ip", default))
+PY
+}
 
 enable_dev_ssh_on_wan() {
 	local flag_file="$CONFIG_ROOT/ssh-wan-enabled"
@@ -113,10 +137,12 @@ cleanup_seed_source() {
 
 bootstrap_web_console() {
 	local temp_config
+	local host
 	temp_config="$(mktemp /run/atomixos-bootstrap-config.XXXXXX.toml)"
 	rm -f "$temp_config"
-	log "Starting bootstrap web console on $BOOTSTRAP_HOST:$BOOTSTRAP_PORT"
-	first-boot-provision serve "$CONFIG_ROOT" "$temp_config" --host "$BOOTSTRAP_HOST" --port "$BOOTSTRAP_PORT" &
+	host="$(read_bootstrap_host)"
+	log "Starting bootstrap web console on $host:$BOOTSTRAP_PORT"
+	first-boot-provision serve "$CONFIG_ROOT" "$temp_config" --host "$host" --port "$BOOTSTRAP_PORT" &
 	local server_pid=$!
 	while kill -0 "$server_pid" >/dev/null 2>&1; do
 		if [ -f "$temp_config" ]; then
@@ -135,6 +161,11 @@ sync_quadlet_units() {
 	if command -v systemctl >/dev/null 2>&1; then
 		if ! systemctl restart quadlet-sync.service; then
 			log "WARNING: quadlet-sync.service failed; continuing first boot for debugging access"
+		fi
+		if systemctl list-unit-files lan-gateway-apply.service >/dev/null 2>&1; then
+			if ! systemctl restart lan-gateway-apply.service; then
+				log "WARNING: lan-gateway-apply.service failed; continuing first boot for debugging access"
+			fi
 		fi
 		if systemctl list-unit-files provisioned-firewall-inbound.service >/dev/null 2>&1; then
 			if ! systemctl restart provisioned-firewall-inbound.service; then

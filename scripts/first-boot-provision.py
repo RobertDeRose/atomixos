@@ -3,6 +3,7 @@ import argparse
 import errno
 import email.policy
 import html
+import ipaddress
 import io
 import json
 import math
@@ -44,9 +45,16 @@ BOOTSTRAP_DOWNLOAD_TOKEN_TTL_SECONDS = 300.0
 BOOTSTRAP_MAX_DOWNLOAD_TOKENS = 32
 RUNTIME_METADATA_FILENAME = "quadlet-runtime.json"
 FIREWALL_INBOUND_FILENAME = "firewall-inbound.json"
+LAN_SETTINGS_FILENAME = "lan-settings.json"
 CONTAINER_SUFFIX = ".container"
 QUADLET_SUFFIXES = {".build", ".container", ".image", ".kube", ".network", ".pod", ".volume"}
 BOOTSTRAP_LOGO_PATH = Path(__file__).resolve().parent.parent / "share" / "atomixos" / "atomixos.png"
+DEFAULT_LAN_GATEWAY_CIDR = "172.20.30.1/24"
+DEFAULT_LAN_DHCP_START = "172.20.30.10"
+DEFAULT_LAN_DHCP_END = "172.20.30.254"
+DEFAULT_LAN_DOMAIN = "local"
+DEFAULT_LAN_GATEWAY_ALIASES = ["atomixos"]
+DEFAULT_LAN_HOSTNAME_PATTERN = ""
 
 
 class ProvisionError(RuntimeError):
@@ -101,6 +109,20 @@ def require_string_list(value, path: str):
     return result
 
 
+def require_optional_string_list(value, path: str):
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ProvisionError(f"expected array at {path}")
+
+    result = []
+    for idx, item in enumerate(value):
+        if not isinstance(item, str) or not item.strip():
+            raise ProvisionError(f"expected non-empty string at {path}[{idx}]")
+        result.append(item.strip())
+    return result
+
+
 def require_bool(value, path: str):
     if not isinstance(value, bool):
         raise ProvisionError(f"expected boolean at {path}")
@@ -117,6 +139,85 @@ def require_port_list(value, path: str):
             raise ProvisionError(f"expected port integer in range 1..65535 at {path}[{idx}]")
         ports.append(item)
     return ports
+
+
+def require_dns_name(value, path: str):
+    name = require_string(value, path).lower().rstrip(".")
+    if not name:
+        raise ProvisionError(f"expected non-empty string at {path}")
+
+    labels = name.split(".")
+    for label in labels:
+        if not label or len(label) > 63:
+            raise ProvisionError(f"invalid DNS name at {path}: {value!r}")
+        if not label[0].isalnum() or not label[-1].isalnum():
+            raise ProvisionError(f"invalid DNS name at {path}: {value!r}")
+        for char in label:
+            if not (char.isalnum() or char == "-"):
+                raise ProvisionError(f"invalid DNS name at {path}: {value!r}")
+    return name
+
+
+def load_lan_settings(lan_value, path: str = "lan"):
+    if lan_value is None:
+        lan_value = {}
+
+    lan = require_allowed_keys(
+        lan_value,
+        path,
+        {"gateway_cidr", "dhcp_start", "dhcp_end", "domain", "hostname_pattern", "gateway_aliases"},
+    )
+
+    gateway_cidr = require_string(lan.get("gateway_cidr", DEFAULT_LAN_GATEWAY_CIDR), f"{path}.gateway_cidr")
+    try:
+        gateway = ipaddress.IPv4Interface(gateway_cidr)
+    except ValueError as exc:
+        raise ProvisionError(f"invalid IPv4 CIDR at {path}.gateway_cidr: {gateway_cidr}") from exc
+    if gateway.network.prefixlen != 24:
+        raise ProvisionError(f"{path}.gateway_cidr must use a /24 subnet")
+
+    dhcp_start_raw = require_string(lan.get("dhcp_start", DEFAULT_LAN_DHCP_START), f"{path}.dhcp_start")
+    dhcp_end_raw = require_string(lan.get("dhcp_end", DEFAULT_LAN_DHCP_END), f"{path}.dhcp_end")
+    try:
+        dhcp_start = ipaddress.IPv4Address(dhcp_start_raw)
+        dhcp_end = ipaddress.IPv4Address(dhcp_end_raw)
+    except ValueError as exc:
+        raise ProvisionError(f"invalid IPv4 address in {path}.dhcp_start or {path}.dhcp_end") from exc
+
+    if dhcp_start not in gateway.network or dhcp_end not in gateway.network:
+        raise ProvisionError(f"{path}.dhcp_start and {path}.dhcp_end must be inside {gateway.network}")
+    if dhcp_start > dhcp_end:
+        raise ProvisionError(f"{path}.dhcp_start must be less than or equal to {path}.dhcp_end")
+    if dhcp_start == gateway.ip or dhcp_end == gateway.ip:
+        raise ProvisionError(f"{path}.dhcp_start and {path}.dhcp_end must not equal the gateway IP")
+
+    domain = require_dns_name(lan.get("domain", DEFAULT_LAN_DOMAIN), f"{path}.domain")
+    hostname_pattern = require_string(
+        lan.get("hostname_pattern", DEFAULT_LAN_HOSTNAME_PATTERN) or DEFAULT_LAN_HOSTNAME_PATTERN,
+        f"{path}.hostname_pattern",
+    ) if lan.get("hostname_pattern") not in (None, "") else DEFAULT_LAN_HOSTNAME_PATTERN
+    if hostname_pattern:
+        if "{mac}" not in hostname_pattern:
+            raise ProvisionError(f"{path}.hostname_pattern must include {{mac}}")
+        pattern_probe = hostname_pattern.replace("{mac}", "001122334455")
+        require_dns_name(pattern_probe, f"{path}.hostname_pattern")
+
+    gateway_aliases = require_optional_string_list(lan.get("gateway_aliases"), f"{path}.gateway_aliases")
+    if not gateway_aliases:
+        gateway_aliases = list(DEFAULT_LAN_GATEWAY_ALIASES)
+    gateway_aliases = [require_dns_name(alias, f"{path}.gateway_aliases") for alias in gateway_aliases]
+
+    return {
+        "gateway_cidr": str(gateway),
+        "gateway_ip": str(gateway.ip),
+        "subnet_cidr": str(gateway.network),
+        "netmask": str(gateway.netmask),
+        "dhcp_start": str(dhcp_start),
+        "dhcp_end": str(dhcp_end),
+        "domain": domain,
+        "hostname_pattern": hostname_pattern,
+        "gateway_aliases": list(dict.fromkeys(gateway_aliases)),
+    }
 
 
 def ensure_dir(path: Path):
@@ -292,7 +393,7 @@ def load_config(config_path: Path, config_root: Path = DEFAULT_CONFIG_DIR):
     root = require_allowed_keys(
         data,
         "config",
-        {"version", "admin", "firewall", "health", "container"},
+        {"version", "admin", "firewall", "health", "lan", "container"},
         {"version", "admin", "firewall", "health", "container"},
     )
 
@@ -320,6 +421,8 @@ def load_config(config_path: Path, config_root: Path = DEFAULT_CONFIG_DIR):
     health = require_allowed_keys(root.get("health"), "health", {"required"}, {"required"})
     required_units = require_string_list(health.get("required"), "health.required")
 
+    lan_settings = load_lan_settings(root.get("lan"))
+
     container = require_mapping(root.get("container"), "container")
     rendered_units, runtime_units, warnings = render_containers(container, config_root)
     if not rendered_units:
@@ -332,6 +435,7 @@ def load_config(config_path: Path, config_root: Path = DEFAULT_CONFIG_DIR):
     return {
         "ssh_keys": ssh_keys,
         "firewall_inbound": firewall_inbound,
+        "lan_settings": lan_settings,
         "required_units": required_units,
         "rendered_units": rendered_units,
         "runtime": {
@@ -539,6 +643,10 @@ def write_imported_state(parsed: dict, prepared_config: Path, prepared_files: Pa
     firewall_path = config_root / FIREWALL_INBOUND_FILENAME
     firewall_path.write_text(json.dumps(parsed["firewall_inbound"], indent=2) + "\n")
     os.chmod(firewall_path, 0o600)
+
+    lan_settings_path = config_root / LAN_SETTINGS_FILENAME
+    lan_settings_path.write_text(json.dumps(parsed["lan_settings"], indent=2) + "\n")
+    os.chmod(lan_settings_path, 0o600)
 
     runtime_path = config_root / RUNTIME_METADATA_FILENAME
     runtime_path.write_text(json.dumps(parsed["runtime"], indent=2) + "\n")
@@ -812,6 +920,18 @@ BOOTSTRAP_HTML = """<!doctype html>
           <textarea class=\"short\" name=\"wan_tcp\">443</textarea>
           <label>WAN UDP ports (one per line)</label>
           <textarea class=\"short\" name=\"wan_udp\">1194</textarea>
+          <label>LAN gateway CIDR</label>
+          <textarea class=\"short\" name=\"gateway_cidr\">172.20.30.1/24</textarea>
+          <label>LAN DHCP start</label>
+          <textarea class=\"short\" name=\"dhcp_start\">172.20.30.10</textarea>
+          <label>LAN DHCP end</label>
+          <textarea class=\"short\" name=\"dhcp_end\">172.20.30.254</textarea>
+          <label>LAN default domain</label>
+          <textarea class=\"short\" name=\"lan_domain\">local</textarea>
+          <label>Gateway aliases (one per line)</label>
+          <textarea class=\"short\" name=\"gateway_aliases\">atomixos</textarea>
+          <label>Gateway hostname pattern</label>
+          <textarea class=\"short\" name=\"hostname_pattern\">atomixos-{{mac}}</textarea>
           <label>Required health units (one per line)</label>
           <textarea class=\"short\" name=\"required\"></textarea>
           <label>Container TOML snippet</label>
@@ -1005,6 +1125,16 @@ class BootstrapHandler(BaseHTTPRequestHandler):
                 ssh_keys = [line.strip() for line in form.get("ssh_keys", "").splitlines() if line.strip()]
                 tcp_ports = [int(line.strip()) for line in form.get("wan_tcp", "").splitlines() if line.strip()]
                 udp_ports = [int(line.strip()) for line in form.get("wan_udp", "").splitlines() if line.strip()]
+                gateway_cidr = form.get("gateway_cidr", DEFAULT_LAN_GATEWAY_CIDR).strip() or DEFAULT_LAN_GATEWAY_CIDR
+                dhcp_start = form.get("dhcp_start", DEFAULT_LAN_DHCP_START).strip() or DEFAULT_LAN_DHCP_START
+                dhcp_end = form.get("dhcp_end", DEFAULT_LAN_DHCP_END).strip() or DEFAULT_LAN_DHCP_END
+                lan_domain = form.get("lan_domain", DEFAULT_LAN_DOMAIN).strip() or DEFAULT_LAN_DOMAIN
+                gateway_aliases = [
+                    line.strip() for line in form.get("gateway_aliases", "").splitlines() if line.strip()
+                ]
+                hostname_pattern = (
+                    form.get("hostname_pattern", DEFAULT_LAN_HOSTNAME_PATTERN).strip() or DEFAULT_LAN_HOSTNAME_PATTERN
+                )
                 quadlet = form.get("quadlet", "").strip()
                 required = [line.strip() for line in form.get("required", "").splitlines() if line.strip()]
                 if not required:
@@ -1015,6 +1145,17 @@ class BootstrapHandler(BaseHTTPRequestHandler):
                 if udp_ports:
                     firewall_lines.append(f"udp = {json.dumps(udp_ports)}")
                 firewall_text = "\n".join(firewall_lines)
+                lan_lines = [
+                    "[lan]",
+                    f'gateway_cidr = {json.dumps(gateway_cidr)}',
+                    f'dhcp_start = {json.dumps(dhcp_start)}',
+                    f'dhcp_end = {json.dumps(dhcp_end)}',
+                    f'domain = {json.dumps(lan_domain)}',
+                    f'gateway_aliases = {json.dumps(gateway_aliases or DEFAULT_LAN_GATEWAY_ALIASES)}',
+                ]
+                if hostname_pattern:
+                    lan_lines.append(f'hostname_pattern = {json.dumps(hostname_pattern)}')
+                lan_text = "\n".join(lan_lines)
                 config_text = textwrap.dedent(
                     f"""
                     version = 1
@@ -1023,6 +1164,8 @@ class BootstrapHandler(BaseHTTPRequestHandler):
                     ssh_keys = {json.dumps(ssh_keys)}
 
                     {firewall_text}
+
+                    {lan_text}
 
                     [health]
                     required = {json.dumps(required)}

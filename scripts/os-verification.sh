@@ -8,8 +8,24 @@ set -euo pipefail
 SUSTAIN_DURATION="${ATOMIXOS_VERIFICATION_SUSTAIN_DURATION:-60}"
 CHECK_INTERVAL="${ATOMIXOS_VERIFICATION_CHECK_INTERVAL:-5}"
 HEALTH_REQUIRED_FILE="/data/config/health-required.json"
+LAN_SETTINGS_FILE="/data/config/lan-settings.json"
 
 log() { echo "[os-verification] $*"; }
+
+read_gateway_ip() {
+	if [ ! -f "$LAN_SETTINGS_FILE" ]; then
+		printf '%s\n' '172.20.30.1'
+		return 0
+	fi
+	python3 - <<'PY'
+import json
+from pathlib import Path
+
+path = Path("/data/config/lan-settings.json")
+payload = json.loads(path.read_text())
+print(payload.get("gateway_ip", "172.20.30.1"))
+PY
+}
 
 read_required_units() {
 	if [ ! -f "$HEALTH_REQUIRED_FILE" ]; then
@@ -104,12 +120,13 @@ else
 	SYSTEM_OK=false
 fi
 
-# Check eth1 is 172.20.30.1 (LAN)
+# Check eth1 is the configured LAN gateway IP
+EXPECTED_ETH1_IP="$(read_gateway_ip)"
 ETH1_IP=$(ip -4 addr show eth1 2>/dev/null | grep -oP 'inet \K[\d.]+' || true)
-if [ "$ETH1_IP" = "172.20.30.1" ]; then
-	log "  OK eth1 is 172.20.30.1"
+if [ "$ETH1_IP" = "$EXPECTED_ETH1_IP" ]; then
+	log "  OK eth1 is $EXPECTED_ETH1_IP"
 else
-	log "  FAIL eth1 is not 172.20.30.1 (got: $ETH1_IP)"
+	log "  FAIL eth1 is not $EXPECTED_ETH1_IP (got: $ETH1_IP)"
 	SYSTEM_OK=false
 fi
 

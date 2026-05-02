@@ -39,10 +39,8 @@ in
         ct state established,related accept
 
         # -- eth1 (LAN) rules --
-        iifname "eth1" udp dport { 67, 68 } accept  comment "DHCP"
-        iifname "eth1" udp dport 123 accept          comment "NTP"
-        iifname "eth1" tcp dport 22 accept           comment "SSH"
-        iifname "eth1" tcp dport 8080 accept         comment "Bootstrap UI"
+        iifname "eth1" udp dport { 53, 67, 68, 123 } accept  comment "LAN infra"
+        iifname "eth1" tcp dport { 22, 53, 8080 } accept     comment "LAN infra"
 
         # -- tun0 (VPN) rules --
         iifname "tun0" tcp dport 22 accept   comment "SSH over VPN"

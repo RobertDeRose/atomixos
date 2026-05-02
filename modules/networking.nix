@@ -81,7 +81,6 @@
       Name = "eth1";
     };
     networkConfig = {
-      Address = "172.20.30.1/24";
       DHCPServer = false; # dnsmasq handles DHCP
       IPv6AcceptRA = false;
       # The LAN USB NIC may be unplugged at boot. Still assign the gateway IP so
