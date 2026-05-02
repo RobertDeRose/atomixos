@@ -40,7 +40,6 @@ in
     description = "Sync provisioned Quadlet units";
     after = [
       "data.mount"
-      "multi-user.target"
       "network-online.target"
       "chronyd.service"
     ];
