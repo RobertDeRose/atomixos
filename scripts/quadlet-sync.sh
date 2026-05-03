@@ -3,12 +3,32 @@ set -euo pipefail
 
 log() { echo "[quadlet-sync] $*" >&2; }
 
+invalid_runtime_metadata() {
+	log "Invalid runtime metadata: $RUNTIME_METADATA_FILE"
+	exit 1
+}
+
+validate_runtime_metadata() {
+	if ! jq -e '
+		type == "object"
+		and (.units | type == "array")
+		and all(.units[];
+			type == "object"
+			and (.mode | type == "string")
+			and ((.service // "") | type == "string")
+		)
+	' "$RUNTIME_METADATA_FILE" >/dev/null 2>&1; then
+		invalid_runtime_metadata
+	fi
+	return 0
+}
+
 runtime_metadata_query() {
 	local filter="$1"
 	shift
-	if ! jq -er "$@" "$filter" "$RUNTIME_METADATA_FILE"; then
-		log "Invalid runtime metadata: $RUNTIME_METADATA_FILE"
-		exit 1
+	validate_runtime_metadata
+	if ! jq -r "$@" "$filter" "$RUNTIME_METADATA_FILE"; then
+		invalid_runtime_metadata
 	fi
 }
 
@@ -40,7 +60,7 @@ run_as_appsvc() {
 }
 
 has_rootless_units() {
-	runtime_metadata_query 'if type == "object" and (.units | type == "array") then any(.units[]; .mode == "rootless") else error("invalid runtime metadata") end' >/dev/null
+	[ "$(runtime_metadata_query 'any(.units[]; .mode == "rootless")')" = "true" ]
 }
 
 prepare_rootless_runtime() {
