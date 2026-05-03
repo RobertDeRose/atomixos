@@ -83,8 +83,9 @@
     networkConfig = {
       DHCPServer = false; # dnsmasq handles DHCP
       IPv6AcceptRA = false;
-      # The LAN USB NIC may be unplugged at boot. Still assign the gateway IP so
-      # dnsmasq/chrony can bind and the interface is ready when a client appears.
+      # The LAN USB NIC may be unplugged at boot. Keep the interface configured
+      # without carrier so the gateway IP from the 20-lan drop-in managed by
+      # lan-gateway-apply is still present for dnsmasq/chrony when clients appear.
       ConfigureWithoutCarrier = true;
     };
   };
