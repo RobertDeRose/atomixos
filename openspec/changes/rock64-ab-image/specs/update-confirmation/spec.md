@@ -13,7 +13,8 @@ network reachability for slot confirmation.
 - **WHEN** `os-verification.service` runs after boot on a pending slot
 - **THEN** it checks that `dnsmasq.service` and `chronyd.service` are active
 - **AND** it checks that `eth0` has a WAN IPv4 address
-- **AND** it checks that `eth1` is `172.20.30.1`
+- **AND** it checks that `eth1` matches the provisioned LAN gateway IP from `/data/config/lan-settings.json`
+- **AND** it falls back to `172.20.30.1` when no valid provisioned LAN settings exist
 
 #### Scenario: Service exits early for already-good slots
 
