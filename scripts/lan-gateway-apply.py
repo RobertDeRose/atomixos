@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 import contextlib
+import ipaddress
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -37,6 +39,7 @@ REQUIRED_STRING_FIELDS = (
     "dhcp_end",
     "domain",
 )
+DNS_LABEL_PATTERN = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
 
 
 def replace_file(path: Path, content: str) -> bool:
@@ -86,6 +89,51 @@ def host_names(alias: str, domain: str) -> list[str]:
     return list(dict.fromkeys(names))
 
 
+def parse_ipv4_interface(value: str, key: str) -> ipaddress.IPv4Interface:
+    try:
+        return ipaddress.IPv4Interface(value)
+    except ipaddress.AddressValueError as exc:
+        msg = f"{key} must be a valid IPv4 interface in {CONFIG_FILE}: {value!r}"
+        raise ValueError(msg) from exc
+    except ipaddress.NetmaskValueError as exc:
+        msg = f"{key} must be a valid IPv4 interface in {CONFIG_FILE}: {value!r}"
+        raise ValueError(msg) from exc
+
+
+def parse_ipv4_address(value: str, key: str) -> ipaddress.IPv4Address:
+    try:
+        return ipaddress.IPv4Address(value)
+    except ipaddress.AddressValueError as exc:
+        msg = f"{key} must be a valid IPv4 address in {CONFIG_FILE}: {value!r}"
+        raise ValueError(msg) from exc
+
+
+def parse_ipv4_network(value: str, key: str) -> ipaddress.IPv4Network:
+    try:
+        return ipaddress.IPv4Network(value, strict=True)
+    except ipaddress.AddressValueError as exc:
+        msg = f"{key} must be a valid IPv4 network in {CONFIG_FILE}: {value!r}"
+        raise ValueError(msg) from exc
+    except ipaddress.NetmaskValueError as exc:
+        msg = f"{key} must be a valid IPv4 network in {CONFIG_FILE}: {value!r}"
+        raise ValueError(msg) from exc
+    except ValueError as exc:
+        msg = f"{key} must be a valid IPv4 network in {CONFIG_FILE}: {value!r}"
+        raise ValueError(msg) from exc
+
+
+def validate_dns_name(value: str, key: str) -> str:
+    if len(value) > 253:
+        msg = f"{key} must be a valid DNS name in {CONFIG_FILE}: {value!r}"
+        raise ValueError(msg)
+
+    labels = value.split(".")
+    if not labels or any(not label or not DNS_LABEL_PATTERN.fullmatch(label) for label in labels):
+        msg = f"{key} must be a valid DNS name in {CONFIG_FILE}: {value!r}"
+        raise ValueError(msg)
+    return value
+
+
 def require_string(payload: dict[str, object], key: str) -> str:
     if key not in payload:
         msg = f"missing required key '{key}' in {CONFIG_FILE}"
@@ -133,6 +181,48 @@ def load_settings() -> dict[str, object]:
         payload[key] = require_string(payload, key)
     payload["hostname_pattern"] = optional_string(payload, "hostname_pattern")
     payload["gateway_aliases"] = gateway_aliases(payload)
+
+    gateway = parse_ipv4_interface(payload["gateway_cidr"], "gateway_cidr")
+    gateway_ip = parse_ipv4_address(payload["gateway_ip"], "gateway_ip")
+    subnet = parse_ipv4_network(payload["subnet_cidr"], "subnet_cidr")
+    dhcp_start = parse_ipv4_address(payload["dhcp_start"], "dhcp_start")
+    dhcp_end = parse_ipv4_address(payload["dhcp_end"], "dhcp_end")
+    parse_ipv4_network(f"0.0.0.0/{payload['netmask']}", "netmask")
+    domain = validate_dns_name(payload["domain"], "domain")
+
+    hostname_pattern = payload["hostname_pattern"]
+    if hostname_pattern:
+        if "{mac}" not in hostname_pattern:
+            msg = f"hostname_pattern must include '{{mac}}' in {CONFIG_FILE}"
+            raise ValueError(msg)
+        validate_dns_name(hostname_pattern.replace("{mac}", "001122334455"), "hostname_pattern")
+
+    aliases = [validate_dns_name(alias, "gateway_aliases") for alias in payload["gateway_aliases"]]
+
+    if gateway.ip != gateway_ip:
+        msg = f"gateway_ip must match gateway_cidr in {CONFIG_FILE}"
+        raise ValueError(msg)
+    if gateway.network != subnet:
+        msg = f"subnet_cidr must match gateway_cidr in {CONFIG_FILE}"
+        raise ValueError(msg)
+    if str(gateway.netmask) != payload["netmask"]:
+        msg = f"netmask must match gateway_cidr in {CONFIG_FILE}"
+        raise ValueError(msg)
+    if dhcp_start not in subnet or dhcp_end not in subnet:
+        msg = f"dhcp_start and dhcp_end must be inside subnet_cidr in {CONFIG_FILE}"
+        raise ValueError(msg)
+    if int(dhcp_start) > int(dhcp_end):
+        msg = f"dhcp_start must be less than or equal to dhcp_end in {CONFIG_FILE}"
+        raise ValueError(msg)
+
+    payload["gateway_cidr"] = str(gateway)
+    payload["gateway_ip"] = str(gateway_ip)
+    payload["subnet_cidr"] = str(subnet)
+    payload["netmask"] = str(gateway.netmask)
+    payload["dhcp_start"] = str(dhcp_start)
+    payload["dhcp_end"] = str(dhcp_end)
+    payload["domain"] = domain
+    payload["gateway_aliases"] = aliases
     return payload
 
 

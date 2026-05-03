@@ -182,6 +182,9 @@ nixos-lib.runTest {
     gateway.succeed("cat > /data/config/firewall-inbound.json <<'EOF'\n{\"tcp\": [443], \"udp\": [1194]}\nEOF")
     gateway.succeed("systemctl start provisioned-firewall-inbound.service")
     gateway.fail("ATOMIXOS_FIREWALL_RULE_COMMENT='bad\"comment' ${pkgs.python3Minimal}/bin/python3 ${../../scripts/provisioned-firewall-inbound.py}")
+    gateway.succeed("printf '{bad json\n' >/tmp/bad-firewall.json")
+    gateway.fail("ATOMIXOS_FIREWALL_INBOUND_FILE=/tmp/bad-firewall.json ${pkgs.python3Minimal}/bin/python3 ${../../scripts/provisioned-firewall-inbound.py} >/tmp/bad-firewall.out 2>/tmp/bad-firewall.err")
+    gateway.succeed("grep -F '[provisioned-firewall-inbound] invalid JSON in /tmp/bad-firewall.json:' /tmp/bad-firewall.err")
 
     probe.start()
     probe.wait_for_unit("multi-user.target")

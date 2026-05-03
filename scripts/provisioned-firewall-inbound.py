@@ -3,6 +3,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -47,11 +48,27 @@ def validate_rule_comment(comment: str) -> str:
     return comment
 
 
+def load_payload() -> dict[str, object]:
+    try:
+        payload = json.loads(CONFIG_FILE.read_text())
+    except OSError as exc:
+        msg = f"unable to read {CONFIG_FILE}: {exc}"
+        raise ValueError(msg) from exc
+    except json.JSONDecodeError as exc:
+        msg = f"invalid JSON in {CONFIG_FILE}: {exc.msg}"
+        raise ValueError(msg) from exc
+
+    if not isinstance(payload, dict):
+        msg = f"{CONFIG_FILE} must contain a JSON object"
+        raise ValueError(msg)
+    return dict(payload)
+
+
 def main() -> int:
     if not CONFIG_FILE.exists():
         return 0
 
-    payload = json.loads(CONFIG_FILE.read_text())
+    payload = load_payload()
     rule_comment = validate_rule_comment(RULE_COMMENT)
     wan_interface = validate_interface_name(WAN_INTERFACE)
     existing = subprocess.run(
@@ -86,4 +103,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except ValueError as exc:
+        print(f"[provisioned-firewall-inbound] {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
