@@ -25,7 +25,6 @@ in
     after = [
       "data.mount"
       "lan-gateway-apply.service"
-      "multi-user.target"
       "rauc.service"
     ];
     wants = [
