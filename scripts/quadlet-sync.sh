@@ -1,7 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-log() { echo "[quadlet-sync] $*"; }
+log() { echo "[quadlet-sync] $*" >&2; }
+
+runtime_metadata_query() {
+	local filter="$1"
+	shift
+	if ! jq -er "$@" "$filter" "$RUNTIME_METADATA_FILE"; then
+		log "Invalid runtime metadata: $RUNTIME_METADATA_FILE"
+		exit 1
+	fi
+}
 
 CONFIG_ROOT="/data/config"
 QUADLET_ACTIVE_DIR="/etc/containers/systemd"
@@ -31,7 +40,7 @@ run_as_appsvc() {
 }
 
 has_rootless_units() {
-	jq -e 'any(.units[]?; .mode == "rootless")' "$RUNTIME_METADATA_FILE" >/dev/null
+	runtime_metadata_query 'if type == "object" and (.units | type == "array") then any(.units[]; .mode == "rootless") else error("invalid runtime metadata") end' >/dev/null
 }
 
 prepare_rootless_runtime() {
@@ -46,7 +55,9 @@ prepare_rootless_runtime() {
 
 list_units_by_mode() {
 	local mode="$1"
-	jq -r --arg mode "$mode" '.units[]? | select(.mode == $mode and (.service // "") != "") | .service' "$RUNTIME_METADATA_FILE"
+	# shellcheck disable=SC2016
+	local filter='.units[] | select(.mode == $mode and (.service // "") != "") | .service'
+	runtime_metadata_query "$filter" --arg mode "$mode"
 }
 
 if [ ! -f "$CONFIG_ROOT/config.toml" ]; then

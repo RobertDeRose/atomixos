@@ -185,6 +185,9 @@ nixos-lib.runTest {
     gateway.succeed("printf '{bad json\n' >/tmp/bad-firewall.json")
     gateway.fail("ATOMIXOS_FIREWALL_INBOUND_FILE=/tmp/bad-firewall.json ${pkgs.python3Minimal}/bin/python3 ${../../scripts/provisioned-firewall-inbound.py} >/tmp/bad-firewall.out 2>/tmp/bad-firewall.err")
     gateway.succeed("grep -F '[provisioned-firewall-inbound] invalid JSON in /tmp/bad-firewall.json:' /tmp/bad-firewall.err")
+    gateway.succeed("cat > /tmp/bad-nft <<'EOF'\n#!/usr/bin/env bash\necho broken nft >&2\nexit 1\nEOF\nchmod +x /tmp/bad-nft")
+    gateway.fail("ATOMIXOS_NFT=/tmp/bad-nft ${pkgs.python3Minimal}/bin/python3 ${../../scripts/provisioned-firewall-inbound.py} >/tmp/bad-nft.out 2>/tmp/bad-nft.err")
+    gateway.succeed("grep -F '[provisioned-firewall-inbound] nft command failed: broken nft' /tmp/bad-nft.err")
 
     probe.start()
     probe.wait_for_unit("multi-user.target")

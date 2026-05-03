@@ -64,6 +64,24 @@ def load_payload() -> dict[str, object]:
     return dict(payload)
 
 
+def run_nft(*args: str, input_text: str | None = None) -> subprocess.CompletedProcess[str]:
+    try:
+        return subprocess.run(
+            [NFT, *args],
+            capture_output=True,
+            check=True,
+            input=input_text,
+            text=True,
+        )
+    except FileNotFoundError as exc:
+        msg = f"unable to execute nft command {NFT!r}: {exc}"
+        raise ValueError(msg) from exc
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or f"exit status {exc.returncode}").strip()
+        msg = f"nft command failed: {detail}"
+        raise ValueError(msg) from exc
+
+
 def main() -> int:
     if not CONFIG_FILE.exists():
         return 0
@@ -71,12 +89,7 @@ def main() -> int:
     payload = load_payload()
     rule_comment = validate_rule_comment(RULE_COMMENT)
     wan_interface = validate_interface_name(WAN_INTERFACE)
-    existing = subprocess.run(
-        [NFT, "-a", "list", "chain", "inet", "filter", "input"],
-        capture_output=True,
-        check=False,
-        text=True,
-    )
+    existing = run_nft("-a", "list", "chain", "inet", "filter", "input")
 
     commands: list[str] = []
     for line in existing.stdout.splitlines():
@@ -97,7 +110,7 @@ def main() -> int:
         )
 
     if commands:
-        subprocess.run([NFT, "-f", "-"], input="\n".join(commands), text=True, check=True)
+        run_nft("-f", "-", input_text="\n".join(commands))
 
     return 0
 

@@ -10,7 +10,7 @@ CHECK_INTERVAL="${ATOMIXOS_VERIFICATION_CHECK_INTERVAL:-5}"
 HEALTH_REQUIRED_FILE="/data/config/health-required.json"
 LAN_SETTINGS_FILE="/data/config/lan-settings.json"
 
-log() { echo "[os-verification] $*"; }
+log() { echo "[os-verification] $*" >&2; }
 
 read_gateway_ip() {
 	if [ ! -f "$LAN_SETTINGS_FILE" ]; then
@@ -24,7 +24,12 @@ read_required_units() {
 	if [ ! -f "$HEALTH_REQUIRED_FILE" ]; then
 		return 0
 	fi
-	jq -r '.[]' "$HEALTH_REQUIRED_FILE"
+	local required_units
+	if ! required_units="$(jq -er 'if type == "array" then .[] else error("expected array") end' "$HEALTH_REQUIRED_FILE" 2>/dev/null)"; then
+		log "Invalid required unit manifest: $HEALTH_REQUIRED_FILE"
+		return 1
+	fi
+	printf '%s\n' "$required_units"
 }
 
 current_boot_slot() {
@@ -112,6 +117,8 @@ fi
 
 log "System health checks passed"
 
+REQUIRED_UNITS="$(read_required_units)"
+
 log "Checking required provisioned units..."
 while IFS= read -r required_unit; do
 	[ -n "$required_unit" ] || continue
@@ -121,7 +128,7 @@ while IFS= read -r required_unit; do
 		log "  FAIL ${required_unit}.service is NOT active"
 		exit 1
 	fi
-done < <(read_required_units)
+done <<<"$REQUIRED_UNITS"
 
 # ── Step 3: Sustained health check (60s) ──
 log "Starting sustained health check (${SUSTAIN_DURATION}s)..."
@@ -143,7 +150,7 @@ while [ "$ELAPSED" -lt "$SUSTAIN_DURATION" ]; do
 			log "FAIL: ${required_unit}.service stopped during sustained check"
 			exit 1
 		fi
-	done < <(read_required_units)
+	done <<<"$REQUIRED_UNITS"
 done
 
 log "Sustained health check passed (${SUSTAIN_DURATION}s)"

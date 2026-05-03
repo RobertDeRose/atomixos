@@ -217,6 +217,10 @@ nixos-lib.runTest {
     gateway.fail("PATH=${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH ATOMIXOS_TEST_INVALID_STATUS=1 ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=1 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ${verificationScript} >/tmp/os-verification-invalid-status.log 2>&1")
     gateway.succeed("grep 'Refusing to mark slot good without a parseable RAUC status' /tmp/os-verification-invalid-status.log")
     gateway.succeed("test \"$(cat /var/lib/rauc/state.A)\" = pending")
+    gateway.succeed("printf '[\"traefik\"\n' >/data/config/health-required.json")
+    gateway.fail("PATH=${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=1 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ${verificationScript} >/tmp/os-verification-health-required.log 2>&1")
+    gateway.succeed("grep 'Invalid required unit manifest: /data/config/health-required.json' /tmp/os-verification-health-required.log")
+    gateway.succeed("test \"$(cat /var/lib/rauc/state.A)\" = pending")
 
     gateway.log("os-verification confirmation test passed — slot marked good after health checks")
   '';

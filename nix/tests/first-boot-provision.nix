@@ -140,6 +140,9 @@ nixos-lib.runTest {
     gateway.succeed("grep 'continuing so the provisioned system remains debuggable' /tmp/quadlet-sync/output.log")
     gateway.succeed("cat > /tmp/quadlet-sync/bin/first-boot-provision <<'EOF'\n#!/usr/bin/env bash\nset -euo pipefail\nif [ \"$1\" = \"sync-quadlet\" ]; then\n  exit 1\nfi\necho unexpected first-boot-provision invocation >&2\nexit 1\nEOF\nchmod +x /tmp/quadlet-sync/bin/first-boot-provision")
     gateway.fail("ATOMIXOS_ALLOW_UNSAFE_PATH=1 PATH=/tmp/quadlet-sync/bin:$PATH quadlet-sync >/tmp/quadlet-sync/fatal.log 2>&1")
+    gateway.succeed("printf '{bad json\n' >/data/config/quadlet-runtime.json")
+    gateway.fail("quadlet-sync >/tmp/quadlet-sync/invalid-runtime.log 2>&1")
+    gateway.succeed("grep 'Invalid runtime metadata: /data/config/quadlet-runtime.json' /tmp/quadlet-sync/invalid-runtime.log")
 
     gateway.succeed("rm -rf /tmp/bootstrap-root")
     gateway.succeed("printf '{bad json\n' >/tmp/lan-apply/bad-lan-settings.json")
