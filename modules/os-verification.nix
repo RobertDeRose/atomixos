@@ -26,10 +26,12 @@ in
       "data.mount"
       "lan-gateway-apply.service"
       "multi-user.target"
+      "rauc.service"
     ];
     wants = [
       "data.mount"
       "lan-gateway-apply.service"
+      "rauc.service"
     ];
     wantedBy = [ "multi-user.target" ];
 

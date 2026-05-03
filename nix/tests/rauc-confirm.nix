@@ -116,8 +116,12 @@ nixos-lib.runTest {
           "network-online.target"
           "dnsmasq.service"
           "chronyd.service"
+          "rauc.service"
         ];
-        wants = [ "network-online.target" ];
+        wants = [
+          "network-online.target"
+          "rauc.service"
+        ];
         # Do NOT add wantedBy — we start it manually in the test script
         # so we can set up preconditions first.
 
