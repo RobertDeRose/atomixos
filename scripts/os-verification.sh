@@ -24,12 +24,11 @@ read_required_units() {
 	if [ ! -f "$HEALTH_REQUIRED_FILE" ]; then
 		return 0
 	fi
-	local required_units
-	if ! required_units="$(jq -er 'if type == "array" then .[] else error("expected array") end' "$HEALTH_REQUIRED_FILE" 2>/dev/null)"; then
+	if ! jq -e 'type == "array"' "$HEALTH_REQUIRED_FILE" >/dev/null 2>&1; then
 		log "Invalid required unit manifest: $HEALTH_REQUIRED_FILE"
 		return 1
 	fi
-	printf '%s\n' "$required_units"
+	jq -r '.[]' "$HEALTH_REQUIRED_FILE"
 }
 
 current_boot_slot() {

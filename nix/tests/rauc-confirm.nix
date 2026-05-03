@@ -221,6 +221,11 @@ nixos-lib.runTest {
     gateway.fail("PATH=${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=1 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ${verificationScript} >/tmp/os-verification-health-required.log 2>&1")
     gateway.succeed("grep 'Invalid required unit manifest: /data/config/health-required.json' /tmp/os-verification-health-required.log")
     gateway.succeed("test \"$(cat /var/lib/rauc/state.A)\" = pending")
+    gateway.succeed("printf 'pending\n' > /var/lib/rauc/state.A")
+    gateway.succeed("printf '[]\n' >/data/config/health-required.json")
+    gateway.succeed("PATH=${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=1 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ${verificationScript} >/tmp/os-verification-empty-required.log 2>&1")
+    gateway.succeed("grep 'All checks passed, marking slot as good: boot.0' /tmp/os-verification-empty-required.log")
+    gateway.succeed("test \"$(cat /var/lib/rauc/state.A)\" = good")
 
     gateway.log("os-verification confirmation test passed — slot marked good after health checks")
   '';

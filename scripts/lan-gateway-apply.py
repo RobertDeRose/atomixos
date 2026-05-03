@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import contextlib
 import ipaddress
 import json
 import os
@@ -78,8 +77,17 @@ def read_mac_suffix(interface: str) -> str:
 
 
 def run_command(args: list[str]) -> None:
-    with contextlib.suppress(OSError):
-        subprocess.run(args, check=False)
+    try:
+        subprocess.run(args, check=True, capture_output=True, text=True)
+    except FileNotFoundError as exc:
+        msg = f"command failed: {' '.join(args)}: {exc}"
+        raise ValueError(msg) from exc
+    except subprocess.CalledProcessError as exc:
+        stderr = (exc.stderr or "").strip()
+        stdout = (exc.stdout or "").strip()
+        detail = stderr or stdout or f"exit status {exc.returncode}"
+        msg = f"command failed: {' '.join(args)}: {detail}"
+        raise ValueError(msg) from exc
 
 
 def host_names(alias: str, domain: str) -> list[str]:
@@ -213,6 +221,9 @@ def load_settings() -> dict[str, object]:
         raise ValueError(msg)
     if int(dhcp_start) > int(dhcp_end):
         msg = f"dhcp_start must be less than or equal to dhcp_end in {CONFIG_FILE}"
+        raise ValueError(msg)
+    if int(dhcp_start) <= int(gateway_ip) <= int(dhcp_end):
+        msg = f"dhcp_start and dhcp_end must not include gateway_ip in {CONFIG_FILE}"
         raise ValueError(msg)
 
     payload["gateway_cidr"] = str(gateway)
