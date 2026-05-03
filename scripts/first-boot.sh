@@ -25,7 +25,13 @@ read_bootstrap_host() {
 		return 0
 	fi
 
-	jq -r --arg default "$BOOTSTRAP_HOST" '.gateway_ip // $default' "$LAN_SETTINGS_FILE" 2>/dev/null || printf '%s\n' "$BOOTSTRAP_HOST"
+	jq -er '
+		.gateway_ip
+		| select(
+			type == "string"
+			and test("^(25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})(\\.(25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})){3}$")
+		)
+	' "$LAN_SETTINGS_FILE" 2>/dev/null || printf '%s\n' "$BOOTSTRAP_HOST"
 }
 
 enable_dev_ssh_on_wan() {

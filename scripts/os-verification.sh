@@ -17,7 +17,13 @@ read_gateway_ip() {
 		printf '%s\n' '172.20.30.1'
 		return 0
 	fi
-	jq -er '.gateway_ip // "172.20.30.1"' "$LAN_SETTINGS_FILE" 2>/dev/null || printf '%s\n' '172.20.30.1'
+	jq -er '
+		.gateway_ip
+		| select(
+			type == "string"
+			and test("^(25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})(\\.(25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})){3}$")
+		)
+	' "$LAN_SETTINGS_FILE" 2>/dev/null || printf '%s\n' '172.20.30.1'
 }
 
 read_required_units() {
@@ -25,6 +31,10 @@ read_required_units() {
 		return 0
 	fi
 	if ! jq -e 'type == "array"' "$HEALTH_REQUIRED_FILE" >/dev/null 2>&1; then
+		log "Invalid required unit manifest: $HEALTH_REQUIRED_FILE"
+		return 1
+	fi
+	if ! jq -e 'all(.[]; type == "string" and length > 0)' "$HEALTH_REQUIRED_FILE" >/dev/null 2>&1; then
 		log "Invalid required unit manifest: $HEALTH_REQUIRED_FILE"
 		return 1
 	fi
