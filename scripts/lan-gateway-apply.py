@@ -3,6 +3,7 @@ import contextlib
 import json
 import os
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -26,6 +27,15 @@ DEFAULT_DNSMASQ_SETTINGS = (
     "local-service\n"
     "no-resolv\n"
     "port=53\n"
+)
+REQUIRED_STRING_FIELDS = (
+    "gateway_cidr",
+    "gateway_ip",
+    "subnet_cidr",
+    "netmask",
+    "dhcp_start",
+    "dhcp_end",
+    "domain",
 )
 
 
@@ -76,11 +86,61 @@ def host_names(alias: str, domain: str) -> list[str]:
     return list(dict.fromkeys(names))
 
 
+def require_string(payload: dict[str, object], key: str) -> str:
+    if key not in payload:
+        msg = f"missing required key '{key}' in {CONFIG_FILE}"
+        raise ValueError(msg)
+
+    value = payload[key]
+    if not isinstance(value, str) or not value:
+        msg = f"{key} must be a non-empty string in {CONFIG_FILE}"
+        raise ValueError(msg)
+    return value
+
+
+def optional_string(payload: dict[str, object], key: str) -> str:
+    value = payload.get(key, "")
+    if not isinstance(value, str):
+        msg = f"{key} must be a string in {CONFIG_FILE}"
+        raise ValueError(msg)
+    return value
+
+
+def gateway_aliases(payload: dict[str, object]) -> list[str]:
+    aliases = payload.get("gateway_aliases", [])
+    if not isinstance(aliases, list) or any(not isinstance(alias, str) or not alias for alias in aliases):
+        msg = f"gateway_aliases must be a list of non-empty strings in {CONFIG_FILE}"
+        raise ValueError(msg)
+    return aliases
+
+
+def load_settings() -> dict[str, object]:
+    try:
+        raw_payload = json.loads(CONFIG_FILE.read_text())
+    except OSError as exc:
+        msg = f"unable to read {CONFIG_FILE}: {exc}"
+        raise ValueError(msg) from exc
+    except json.JSONDecodeError as exc:
+        msg = f"invalid JSON in {CONFIG_FILE}: {exc.msg}"
+        raise ValueError(msg) from exc
+
+    if not isinstance(raw_payload, dict):
+        msg = f"{CONFIG_FILE} must contain a JSON object"
+        raise ValueError(msg)
+
+    payload = dict(raw_payload)
+    for key in REQUIRED_STRING_FIELDS:
+        payload[key] = require_string(payload, key)
+    payload["hostname_pattern"] = optional_string(payload, "hostname_pattern")
+    payload["gateway_aliases"] = gateway_aliases(payload)
+    return payload
+
+
 def main() -> int:
     if not CONFIG_FILE.exists():
         return 0
 
-    payload = json.loads(CONFIG_FILE.read_text())
+    payload = load_settings()
 
     gateway_cidr = payload["gateway_cidr"]
     gateway_ip = payload["gateway_ip"]
@@ -163,4 +223,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except ValueError as exc:
+        print(f"[lan-gateway-apply] {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc

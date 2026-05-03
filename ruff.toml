@@ -22,7 +22,7 @@ select = [
   # flake8-bugbear,
   "B",
   # flake8-comprehensions
-  # 825"C4",
+  # "C4",
   # pydocstyle
   # "D",
   # pycodestyle Errors

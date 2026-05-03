@@ -20,7 +20,7 @@ run_as_appsvc() {
 	local bus_address="unix:path=$runtime_dir/bus"
 	local path="/run/wrappers/bin:/run/current-system/sw/bin"
 	if [ "${ATOMIXOS_ALLOW_UNSAFE_PATH:-0}" = "1" ] && [ -n "${PATH:-}" ]; then
-		path="$PATH:$path"
+		path="$path:$PATH"
 	fi
 	runuser -u "$APP_RUNTIME_USER" -- env \
 		HOME="$APP_RUNTIME_HOME" \
