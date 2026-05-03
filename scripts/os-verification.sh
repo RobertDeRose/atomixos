@@ -45,18 +45,7 @@ RAUC_STATUS_JSON="$(rauc status --output-format=json 2>/dev/null || true)"
 SLOT_STATUS=$(printf '%s\n' "$RAUC_STATUS_JSON" | jq -r '.booted // empty' 2>/dev/null || true)
 if [ -z "$SLOT_STATUS" ]; then
 	log "Could not determine RAUC slot status"
-	# On first boot or non-RAUC system, fall back to the explicit boot slot.
-	BOOT_SLOT="$(current_boot_slot || true)"
-	if [ -z "$BOOT_SLOT" ]; then
-		log "Could not determine boot slot from /proc/cmdline"
-		exit 1
-	fi
-	log "Assuming first boot, marking good: $BOOT_SLOT"
-	if rauc status mark-good "$BOOT_SLOT"; then
-		log "Slot marked good during fallback verification path"
-		exit 0
-	fi
-	log "Failed to mark slot good during fallback verification path"
+	log "Refusing to mark slot good without a parseable RAUC status"
 	exit 1
 fi
 

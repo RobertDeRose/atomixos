@@ -25,6 +25,13 @@ let
   raucStub = pkgs.writeShellScriptBin "rauc" ''
     set -euo pipefail
 
+    if [ "''${ATOMIXOS_TEST_INVALID_STATUS:-0}" = "1" ] \
+      && [ "''${1:-}" = "status" ] \
+      && [ "''${2:-}" = "--output-format=json" ]; then
+      printf '{invalid json\n'
+      exit 0
+    fi
+
     if [ "''${1:-}" = "status" ] && [ "''${2:-}" = "mark-good" ]; then
       if [ "''${ATOMIXOS_TEST_FAIL_MARK_GOOD:-0}" = "1" ]; then
         exit 1
@@ -206,6 +213,10 @@ nixos-lib.runTest {
     gateway.succeed("printf '{bad json\n' >/data/config/lan-settings.json")
     gateway.succeed("PATH=${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=1 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ${verificationScript} >/tmp/os-verification-malformed.log 2>&1")
     gateway.succeed("grep 'All checks passed, marking slot as good: boot.0' /tmp/os-verification-malformed.log")
+    gateway.succeed("printf 'pending\n' > /var/lib/rauc/state.A")
+    gateway.fail("PATH=${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH ATOMIXOS_TEST_INVALID_STATUS=1 ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=1 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ${verificationScript} >/tmp/os-verification-invalid-status.log 2>&1")
+    gateway.succeed("grep 'Refusing to mark slot good without a parseable RAUC status' /tmp/os-verification-invalid-status.log")
+    gateway.succeed("test \"$(cat /var/lib/rauc/state.A)\" = pending")
 
     gateway.log("os-verification confirmation test passed — slot marked good after health checks")
   '';
