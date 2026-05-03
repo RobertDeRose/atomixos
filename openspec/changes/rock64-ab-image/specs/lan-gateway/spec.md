@@ -35,12 +35,18 @@ eth0 (onboard NIC) SHALL be configured as a DHCP client to obtain a WAN address 
 
 ### Requirement: eth1 is configured as LAN interface with static IP
 
-eth1 (USB NIC) SHALL be configured with a static IP address of 172.20.30.1/24.
+eth1 (USB NIC) SHALL be configured with the provisioned LAN gateway IP and prefix. If no valid provisioned LAN config
+exists, it SHALL fall back to `172.20.30.1/24`.
 
 #### Scenario: eth1 has correct static address
 
-- **WHEN** the Rock64 boots with a USB NIC plugged in
-- **THEN** eth1 has IP address 172.20.30.1 with netmask 255.255.255.0
+- **WHEN** the Rock64 boots with a USB NIC plugged in and a valid LAN config is present
+- **THEN** eth1 has the provisioned gateway IP and prefix
+
+#### Scenario: eth1 falls back to default static address
+
+- **WHEN** the Rock64 boots with no valid provisioned LAN config
+- **THEN** eth1 has IP address `172.20.30.1` with netmask `255.255.255.0`
 
 ### Requirement: IP forwarding is disabled
 
@@ -54,13 +60,13 @@ interfaces. This provides the EN18031 compliance boundary for legacy LAN devices
 
 ### Requirement: DHCP server runs on LAN interface
 
-dnsmasq SHALL be configured to serve DHCP on eth1 (LAN) only. The DHCP pool SHALL serve addresses in the 172.20.30.0/24
-range (e.g., 172.20.30.10-172.20.30.254), reserving lower addresses for static assignments.
+dnsmasq SHALL be configured to serve DHCP on eth1 (LAN) only. The DHCP pool SHALL use the provisioned LAN DHCP range,
+reserving lower addresses for static assignments.
 
 #### Scenario: LAN device obtains IP via DHCP
 
 - **WHEN** a device is connected to the switch on the LAN
-- **THEN** it receives an IP address in the 172.20.30.10-172.20.30.254 range from the Rock64's DHCP server
+- **THEN** it receives an IP address in the provisioned DHCP range from the Rock64's DHCP server
 
 #### Scenario: DHCP only serves LAN
 
@@ -79,7 +85,7 @@ to LAN devices on eth1). NTP service SHALL only accept clients from the 172.20.3
 
 #### Scenario: LAN device syncs time from Rock64
 
-- **WHEN** a LAN device queries NTP at 172.20.30.1
+- **WHEN** a LAN device queries NTP at the provisioned LAN gateway IP
 - **THEN** chrony responds with the current time
 
 #### Scenario: NTP rejects non-LAN clients
@@ -91,13 +97,13 @@ to LAN devices on eth1). NTP service SHALL only accept clients from the 172.20.3
 
 nftables SHALL be configured with the following rules:
 
-**eth0 (WAN) inbound**: ALLOW tcp/443 (HTTPS), ALLOW udp/1194 (OpenVPN), ALLOW established/related, DROP all else.
-tcp/22 (SSH) is allowed only if the flag file `/data/config/ssh-wan-enabled` exists.
+**eth0 (WAN) inbound**: ALLOW TCP/443 (HTTPS), ALLOW UDP/1194 (OpenVPN), ALLOW established/related, DROP all else.
+TCP/22 (SSH) is allowed only if the flag file `/data/config/ssh-wan-enabled` exists.
 
-**eth1 (LAN) inbound**: ALLOW udp/67-68 (DHCP), ALLOW udp/123 (NTP), ALLOW tcp/22 (SSH), ALLOW established/related, DROP
+**eth1 (LAN) inbound**: ALLOW UDP/67-68 (DHCP), ALLOW UDP/123 (NTP), ALLOW TCP/22 (SSH), ALLOW established/related, DROP
 all else.
 
-**tun0 (VPN) inbound**: ALLOW tcp/22 (SSH), ALLOW established/related, DROP all else.
+**tun0 (VPN) inbound**: ALLOW TCP/22 (SSH), ALLOW established/related, DROP all else.
 
 **FORWARD chain**: DROP all (no inter-interface routing).
 

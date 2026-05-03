@@ -28,11 +28,19 @@ The WAN interface acquires its address via DHCP v4. IPv6 RA is disabled. The DHC
 
 ### ADDED: eth1 as LAN (static IP)
 
-The LAN interface has a static IP of `172.20.30.1/24`. It does not run a DHCP client.
+The LAN interface has a static IP from the provisioned LAN config. When no provisioned LAN config exists or it is
+malformed, the fallback static IP is `172.20.30.1/24`. It does not run a DHCP client.
 
 #### Scenario: LAN has static IP
 
 - Given the device has booted
+- And `/data/config/lan-settings.json` contains `gateway_ip`
+- Then `ip addr show eth1` shows the configured `gateway_ip` with its provisioned prefix
+
+#### Scenario: LAN uses fallback static IP
+
+- Given the device has booted
+- And no valid provisioned LAN config is available
 - Then `ip addr show eth1` shows `172.20.30.1/24`
 
 ### ADDED: IP forwarding disabled
@@ -48,16 +56,16 @@ with no exceptions. This creates a hard network boundary compliant with EN18031.
 
 ### ADDED: DHCP server on LAN
 
-dnsmasq runs on eth1 only. It assigns addresses from `172.20.30.10` to `172.20.30.254` with a 24-hour lease and serves
+dnsmasq runs on eth1 only. It assigns addresses from the provisioned DHCP range with a 24-hour lease and serves
 gateway-local DNS names without forwarding queries upstream.
 
 #### Scenario: LAN client gets DHCP lease
 
 - Given a client is connected to eth1
 - When it sends a DHCP discover
-- Then it receives an address in the `172.20.30.10-254` range
-- And the gateway is `172.20.30.1`
-- And the DNS server is `172.20.30.1`
+- Then it receives an address in the provisioned DHCP range
+- And the gateway is the provisioned `gateway_ip`
+- And the DNS server is the provisioned `gateway_ip`
 
 #### Scenario: LAN DNS stays local-only
 
@@ -73,7 +81,7 @@ chrony acts as both an NTP client (syncing from `pool.ntp.org` via WAN) and an N
 
 #### Scenario: LAN client syncs time
 
-- Given a client on the LAN queries NTP at `172.20.30.1`
+- Given a client on the LAN queries NTP at the provisioned `gateway_ip`
 - Then it receives a valid time response
 - And chrony is synced to an upstream NTP pool
 
