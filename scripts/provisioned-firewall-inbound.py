@@ -11,6 +11,7 @@ RULE_COMMENT = os.environ.get("ATOMIXOS_FIREWALL_RULE_COMMENT", "ATOMIXOS_PROVIS
 WAN_INTERFACE = os.environ.get("ATOMIXOS_FIREWALL_WAN_INTERFACE", "eth0")
 NFT = os.environ.get("ATOMIXOS_NFT", "nft")
 INTERFACE_PATTERN = re.compile(r"^[A-Za-z0-9_.:-]+$")
+RULE_COMMENT_PATTERN = re.compile(r"^[ -~]+$")
 
 
 def validate_ports(value: object, path: str) -> list[int]:
@@ -36,11 +37,22 @@ def validate_interface_name(name: str) -> str:
     return name
 
 
+def validate_rule_comment(comment: str) -> str:
+    if not comment:
+        msg = "invalid rule comment: empty"
+        raise ValueError(msg)
+    if len(comment) > 128 or '"' in comment or not RULE_COMMENT_PATTERN.fullmatch(comment):
+        msg = f"invalid rule comment: {comment!r}"
+        raise ValueError(msg)
+    return comment
+
+
 def main() -> int:
     if not CONFIG_FILE.exists():
         return 0
 
     payload = json.loads(CONFIG_FILE.read_text())
+    rule_comment = validate_rule_comment(RULE_COMMENT)
     wan_interface = validate_interface_name(WAN_INTERFACE)
     existing = subprocess.run(
         [NFT, "-a", "list", "chain", "inet", "filter", "input"],
@@ -51,7 +63,7 @@ def main() -> int:
 
     commands: list[str] = []
     for line in existing.stdout.splitlines():
-        if RULE_COMMENT not in line:
+        if rule_comment not in line:
             continue
         match = re.search(r"handle (\d+)$", line)
         if match:
@@ -64,7 +76,7 @@ def main() -> int:
         joined = ", ".join(str(port) for port in ports)
         commands.append(
             f'add rule inet filter input iifname "{wan_interface}" {proto} dport {{ {joined} }} '
-            f'accept comment "{RULE_COMMENT}"'
+            f'accept comment "{rule_comment}"'
         )
 
     if commands:

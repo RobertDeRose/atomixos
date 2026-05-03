@@ -69,7 +69,7 @@ in
       Type = "oneshot";
       ExecStartPre = "${pkgs.chrony}/bin/chronyc waitsync 0 1";
       ExecStart = quadletSyncScript;
-      TimeoutStartSec = "infinity";
+      TimeoutStartSec = 300;
     };
   };
 

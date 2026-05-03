@@ -22,6 +22,8 @@ in
       # Only listen on LAN interface
       interface = "eth1";
       bind-dynamic = true; # Wait for eth1 to appear (unlike bind-interfaces which fails immediately)
+      local-service = true;
+      no-resolv = true;
 
       conf-file = "/etc/dnsmasq.d/atomixos-lan.conf";
 
@@ -66,6 +68,7 @@ in
     domain=local
     expand-hosts
     addn-hosts=/etc/atomixos/dnsmasq-hosts
+    local=/local/
     port=53
   '';
 

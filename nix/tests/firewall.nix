@@ -181,6 +181,7 @@ nixos-lib.runTest {
     gateway.wait_for_unit("nftables.service")
     gateway.succeed("cat > /data/config/firewall-inbound.json <<'EOF'\n{\"tcp\": [443], \"udp\": [1194]}\nEOF")
     gateway.succeed("systemctl start provisioned-firewall-inbound.service")
+    gateway.fail("ATOMIXOS_FIREWALL_RULE_COMMENT='bad\"comment' ${pkgs.python3Minimal}/bin/python3 ${../../scripts/provisioned-firewall-inbound.py}")
 
     probe.start()
     probe.wait_for_unit("multi-user.target")

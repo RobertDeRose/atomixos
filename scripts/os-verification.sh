@@ -17,7 +17,7 @@ read_gateway_ip() {
 		printf '%s\n' '172.20.30.1'
 		return 0
 	fi
-	jq -r '.gateway_ip // "172.20.30.1"' "$LAN_SETTINGS_FILE"
+	jq -er '.gateway_ip // "172.20.30.1"' "$LAN_SETTINGS_FILE" 2>/dev/null || printf '%s\n' '172.20.30.1'
 }
 
 read_required_units() {

@@ -202,6 +202,10 @@ nixos-lib.runTest {
     gateway.wait_for_unit("rauc.service")
     gateway.fail("PATH=${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH ATOMIXOS_TEST_FAIL_MARK_GOOD=1 ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=1 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ${verificationScript} >/tmp/os-verification-fail.log 2>&1")
     gateway.succeed("grep 'Failed to mark slot good after successful health checks' /tmp/os-verification-fail.log")
+    gateway.succeed("mkdir -p /data/config")
+    gateway.succeed("printf '{bad json\n' >/data/config/lan-settings.json")
+    gateway.succeed("PATH=${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=1 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ${verificationScript} >/tmp/os-verification-malformed.log 2>&1")
+    gateway.succeed("grep 'All checks passed, marking slot as good: boot.0' /tmp/os-verification-malformed.log")
 
     gateway.log("os-verification confirmation test passed — slot marked good after health checks")
   '';
