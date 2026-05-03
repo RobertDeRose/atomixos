@@ -48,8 +48,8 @@ with no exceptions. This creates a hard network boundary compliant with EN18031.
 
 ### ADDED: DHCP server on LAN
 
-dnsmasq runs as a DHCP server on eth1 only. It assigns addresses from `172.20.30.10` to `172.20.30.254` with a 24-hour
-lease. DNS forwarding is disabled (`port=0`).
+dnsmasq runs on eth1 only. It assigns addresses from `172.20.30.10` to `172.20.30.254` with a 24-hour lease and serves
+gateway-local DNS names without forwarding queries upstream.
 
 #### Scenario: LAN client gets DHCP lease
 
@@ -57,7 +57,14 @@ lease. DNS forwarding is disabled (`port=0`).
 - When it sends a DHCP discover
 - Then it receives an address in the `172.20.30.10-254` range
 - And the gateway is `172.20.30.1`
-- And no DNS server is provided (empty option)
+- And the DNS server is `172.20.30.1`
+
+#### Scenario: LAN DNS stays local-only
+
+- Given a client on the LAN queries the gateway DNS server
+- When the query is for a configured gateway-local name
+- Then dnsmasq returns the local gateway address
+- And dnsmasq does not forward unknown names to upstream resolvers
 
 ### ADDED: NTP server on LAN
 

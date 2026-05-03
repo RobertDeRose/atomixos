@@ -9,8 +9,6 @@ APP_RUNTIME_USER="appsvc"
 APP_RUNTIME_HOME="/var/lib/appsvc"
 ROOTLESS_QUADLET_DIR="$APP_RUNTIME_HOME/.config/containers/systemd"
 RUNTIME_METADATA_FILE="$CONFIG_ROOT/quadlet-runtime.json"
-APP_RUNTIME_SHELL="/run/current-system/sw/bin/sh"
-
 appsvc_uid() {
 	id -u "$APP_RUNTIME_USER"
 }
@@ -24,7 +22,12 @@ run_as_appsvc() {
 	if [ "${ATOMIXOS_ALLOW_UNSAFE_PATH:-0}" = "1" ] && [ -n "${PATH:-}" ]; then
 		path="$PATH:$path"
 	fi
-	runuser -u "$APP_RUNTIME_USER" -- "$APP_RUNTIME_SHELL" -c "HOME=\"$APP_RUNTIME_HOME\" PATH=\"$path\" XDG_RUNTIME_DIR=\"$runtime_dir\" DBUS_SESSION_BUS_ADDRESS=\"$bus_address\" $*"
+	runuser -u "$APP_RUNTIME_USER" -- env \
+		HOME="$APP_RUNTIME_HOME" \
+		PATH="$path" \
+		XDG_RUNTIME_DIR="$runtime_dir" \
+		DBUS_SESSION_BUS_ADDRESS="$bus_address" \
+		"$@"
 }
 
 has_rootless_units() {
@@ -38,7 +41,7 @@ prepare_rootless_runtime() {
 	chown -R "$APP_RUNTIME_USER:$APP_RUNTIME_USER" "$APP_RUNTIME_HOME"
 	loginctl enable-linger "$APP_RUNTIME_USER"
 	systemctl start "user@$uid.service"
-	run_as_appsvc "systemctl --user daemon-reload"
+	run_as_appsvc systemctl --user daemon-reload
 }
 
 list_units_by_mode() {
@@ -60,7 +63,7 @@ fi
 if has_rootless_units; then
 	prepare_rootless_runtime
 	first-boot-provision sync-quadlet "$CONFIG_ROOT" "$QUADLET_ACTIVE_DIR" "$ROOTLESS_QUADLET_DIR"
-	run_as_appsvc "systemctl --user daemon-reload"
+	run_as_appsvc systemctl --user daemon-reload
 else
 	first-boot-provision sync-quadlet "$CONFIG_ROOT" "$QUADLET_ACTIVE_DIR" "$ROOTLESS_QUADLET_DIR"
 fi
@@ -82,7 +85,7 @@ if has_rootless_units; then
 	while IFS= read -r service_name; do
 		[ -n "$service_name" ] || continue
 		log "Starting rootless $service_name"
-		if ! run_as_appsvc "systemctl --user start '$service_name'"; then
+		if ! run_as_appsvc systemctl --user start "$service_name"; then
 			log "Failed to start rootless $service_name"
 			failed_units+=("$service_name")
 		fi

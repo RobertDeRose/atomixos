@@ -277,9 +277,9 @@ Flag file: `/data/config/ssh-wan-enabled`
 | Interface      | `eth1` (bind-interfaces)                     |
 | DHCP range     | `172.20.30.10` -- `172.20.30.254`, 24h lease |
 | Gateway option | `172.20.30.1`                                |
-| DNS option     | (empty -- no DNS forwarding)                 |
+| DNS option     | `172.20.30.1` (gateway-local DNS only)       |
 | NTP option     | `172.20.30.1`                                |
-| DNS port       | `0` (disabled)                               |
+| DNS port       | `53` (local-only, no upstream forwarding)    |
 
 **chrony configuration:**
 

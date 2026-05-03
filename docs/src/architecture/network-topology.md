@@ -35,7 +35,7 @@ flowchart LR
 - Static IP: `172.20.30.1/24`
 - Runs dnsmasq DHCP server: pool `172.20.30.10` -- `172.20.30.254`, 24h lease
 - Runs chrony NTP server: serves time to `172.20.30.0/24` only
-- DNS forwarding is disabled (`port=0` in dnsmasq)
+- Runs gateway-local DNS only: dnsmasq serves local names on `53` and does not forward upstream
 
 ## Isolation Model
 
