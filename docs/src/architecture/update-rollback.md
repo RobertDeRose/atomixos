@@ -12,7 +12,7 @@ sequenceDiagram
     participant Boot as U-Boot
     participant Verify as os-verification.service
 
-    Upgrade->>RAUC: Poll update server and install new bundle
+    Upgrade->>RAUC: Poll update server with compact X-Device-ID and install new bundle
     RAUC->>RAUC: Write boot + rootfs to the inactive slot pair
     RAUC->>Boot: Set BOOT_ORDER=B A and BOOT_B_LEFT=3
     Boot->>Boot: Reboot into updated slot and decrement BOOT_B_LEFT
@@ -38,16 +38,16 @@ U-Boot maintains three environment variables for slot selection:
 | `BOOT_A_LEFT` | Remaining boot attempts for slot A | `3`     |
 | `BOOT_B_LEFT` | Remaining boot attempts for slot B | `3`     |
 
-On each boot, the `boot.scr` script:
+On each boot, U-Boot RAUC bootmeth selects the slot and decrements the boot attempt counter before loading
+`boot.scr`. The script:
 
-1. Reads `BOOT_ORDER` to determine which slot to try first
-2. Checks if the preferred slot has attempts remaining (`BOOT_x_LEFT > 0`)
-3. Decrements the counter and saves the environment (`saveenv`)
-4. Loads kernel, initrd, and DTB from that slot's boot partition
-5. Sets `root=PARTLABEL=rootfs-a` (or `rootfs-b`) and boots
+1. Reads the bootmeth-provided boot partition and root partition variables
+2. Sets `rauc.slot` and `atomixos.lowerdev` for the selected slot
+3. Loads kernel, initrd, and DTB from that slot's boot partition
+4. Boots with `root=fstab` so initrd mounts the selected squashfs by lower device
 
-If a slot's counter reaches 0, it is skipped and the next slot in `BOOT_ORDER` is tried. This ensures automatic rollback
-after 3 consecutive boot failures.
+If a slot's counter reaches 0, RAUC bootmeth skips it and tries the next slot in `BOOT_ORDER`. This ensures automatic
+rollback after 3 consecutive boot failures.
 
 ## Health Check Details
 
@@ -73,9 +73,8 @@ The RK3328 hardware watchdog (`dw_wdt`) integration is implemented with these ta
 - **Runtime watchdog**: 30 seconds -- if systemd hangs, the device reboots
 - **Reboot watchdog**: 10 minutes -- if a reboot hangs, the watchdog forces a hard reset
 
-When enabled, both scenarios feed into the boot-count rollback path: the reboot increments
-the failure count, and after 3
-failures the previous slot is restored.
+These target settings are not enabled in the current release. When enabled later, both scenarios feed into the boot-count
+rollback path: repeated unsuccessful boots decrement the selected slot counter until U-Boot returns to the previous slot.
 
 ## Update Polling
 
@@ -85,6 +84,6 @@ The `os-upgrade.service` runs on a systemd timer:
 - Subsequent checks: every 1 hour (configurable)
 - Random delay: up to 10 minutes (prevents thundering herd across fleet)
 
-The service queries the update server with the device's MAC address and current version. If a newer bundle is available,
-it downloads to `/data`, installs via `rauc install`, and reboots. The architecture is designed to be swappable with
-hawkBit for server-push updates.
+The service queries the update server with the compact lowercase 12-hex eth0 MAC as `X-Device-ID` and the current
+version. If a newer bundle is available, it downloads to `/data`, installs via `rauc install`, and reboots. The hawkBit
+path is reserved for future implementation and is not an operational update mode in the current image.

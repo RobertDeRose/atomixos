@@ -94,50 +94,69 @@ check_service() {
 	fi
 }
 
+check_interface_ipv4() {
+	local iface="$1"
+	local description="$2"
+	local ip_addr
+	ip_addr=$(ip -4 addr show "$iface" 2>/dev/null | grep -oP 'inet \K[\d.]+' || true)
+	if [ -n "$ip_addr" ]; then
+		log "  OK $description: $ip_addr"
+		return 0
+	else
+		log "  FAIL $description"
+		return 1
+	fi
+}
+
+check_lan_gateway_ip() {
+	local expected_ip eth1_ip
+	expected_ip="$(read_gateway_ip)"
+	eth1_ip=$(ip -4 addr show eth1 2>/dev/null | grep -oP 'inet \K[\d.]+' || true)
+	if [ "$eth1_ip" = "$expected_ip" ]; then
+		log "  OK eth1 is $expected_ip"
+		return 0
+	else
+		log "  FAIL eth1 is not $expected_ip (got: $eth1_ip)"
+		return 1
+	fi
+}
+
+check_required_units() {
+	local required_units="$1"
+	local required_unit
+	while IFS= read -r required_unit; do
+		[ -n "$required_unit" ] || continue
+		if systemctl is-active --quiet "${required_unit}.service" 2>/dev/null; then
+			log "  OK ${required_unit}.service is active"
+		else
+			log "  FAIL ${required_unit}.service is NOT active"
+			return 1
+		fi
+	done <<<"$required_units"
+}
+
+run_health_checks() {
+	local required_units="$1"
+	local system_ok=true
+
+	check_service "dnsmasq.service" || system_ok=false
+	check_service "chronyd.service" || system_ok=false
+	check_interface_ipv4 "eth0" "eth0 has WAN address" || system_ok=false
+	check_lan_gateway_ip || system_ok=false
+	check_required_units "$required_units" || system_ok=false
+
+	[ "$system_ok" = "true" ]
+}
+
 log "Checking system services..."
-SYSTEM_OK=true
+REQUIRED_UNITS="$(read_required_units)"
 
-check_service "dnsmasq.service" || SYSTEM_OK=false
-check_service "chronyd.service" || SYSTEM_OK=false
-
-# Check eth0 has an IP (WAN)
-ETH0_IP=$(ip -4 addr show eth0 2>/dev/null | grep -oP 'inet \K[\d.]+' || true)
-if [ -n "$ETH0_IP" ]; then
-	log "  OK eth0 has WAN address: $ETH0_IP"
-else
-	log "  FAIL eth0 has no WAN address"
-	SYSTEM_OK=false
-fi
-
-# Check eth1 is the configured LAN gateway IP
-EXPECTED_ETH1_IP="$(read_gateway_ip)"
-ETH1_IP=$(ip -4 addr show eth1 2>/dev/null | grep -oP 'inet \K[\d.]+' || true)
-if [ "$ETH1_IP" = "$EXPECTED_ETH1_IP" ]; then
-	log "  OK eth1 is $EXPECTED_ETH1_IP"
-else
-	log "  FAIL eth1 is not $EXPECTED_ETH1_IP (got: $ETH1_IP)"
-	SYSTEM_OK=false
-fi
-
-if [ "$SYSTEM_OK" != "true" ]; then
+if ! run_health_checks "$REQUIRED_UNITS"; then
 	log "FAIL: System health checks failed"
 	exit 1
 fi
 
 log "System health checks passed"
-
-REQUIRED_UNITS="$(read_required_units)"
-
-log "Checking required provisioned units..."
-while IFS= read -r required_unit; do
-	[ -n "$required_unit" ] || continue
-	if systemctl is-active --quiet "${required_unit}.service" 2>/dev/null; then
-		log "  OK ${required_unit}.service is active"
-	else
-		log "  FAIL ${required_unit}.service is NOT active"
-		exit 1
-	fi
-done <<<"$REQUIRED_UNITS"
 
 # ── Step 3: Sustained health check (60s) ──
 log "Starting sustained health check (${SUSTAIN_DURATION}s)..."
@@ -147,19 +166,10 @@ while [ "$ELAPSED" -lt "$SUSTAIN_DURATION" ]; do
 	sleep "$CHECK_INTERVAL"
 	ELAPSED=$((ELAPSED + CHECK_INTERVAL))
 
-	# Check system services still up
-	if ! systemctl is-active --quiet "dnsmasq.service" 2>/dev/null; then
-		log "FAIL: dnsmasq stopped during sustained check"
+	if ! run_health_checks "$REQUIRED_UNITS"; then
+		log "FAIL: System health regressed during sustained check"
 		exit 1
 	fi
-
-	while IFS= read -r required_unit; do
-		[ -n "$required_unit" ] || continue
-		if ! systemctl is-active --quiet "${required_unit}.service" 2>/dev/null; then
-			log "FAIL: ${required_unit}.service stopped during sustained check"
-			exit 1
-		fi
-	done <<<"$REQUIRED_UNITS"
 done
 
 log "Sustained health check passed (${SUSTAIN_DURATION}s)"

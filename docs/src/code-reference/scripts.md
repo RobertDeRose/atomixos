@@ -53,8 +53,9 @@ Assembles the flashable disk image.
 | `@uboot@`                           | U-Boot package    |
 | `@imageName@`                       | Output filename   |
 
-**Steps:** Create sparse image, write U-Boot at raw offsets, zero U-Boot environment regions, create GPT with sfdisk,
-create vfat boot partitions (mtools), write squashfs to rootfs-a.
+**Steps:** Create sparse image, write U-Boot at raw offsets, create GPT with slot A partitions (`boot-a`, `rootfs-a`),
+create the slot A vfat boot partition with mtools, and write squashfs to `rootfs-a`. Slot B and `/data` are created by
+initrd `systemd-repart` on first boot.
 
 ---
 
@@ -81,21 +82,19 @@ RAUC bootloader backend.
 
 **Location:** `scripts/boot.cmd`
 
-U-Boot boot script implementing A/B slot selection with boot-count rollback. Compiled to `boot.scr` by `mkimage`.
+U-Boot boot script loaded after RAUC bootmeth selects the slot and decrements the boot-count. Compiled to `boot.scr` by
+`mkimage`.
 
 **Key logic:**
 
 1. Echo build ID (squashfs store hash) to console for identification
 2. If the reset button (Linux `gpiochip3` line 4, U-Boot GPIO `100`) is held low for 10 seconds, run `ums 0 mmc 1`
    so the Rock64 OTG port exposes the full eMMC to a host computer
-3. Set defaults: `BOOT_ORDER="A B"`, `BOOT_A_LEFT=3`, `BOOT_B_LEFT=3`
-4. Auto-detect boot device number from `devnum`
-5. Override `ramdisk_addr_r=0x08000000` (avoids kernel overlap)
-6. Check for `slot_good` flag file on the active slot's boot FAT partition — if found, restore `BOOT_x_LEFT=3`,
-   `saveenv`, and delete the flag via `fatrm`
-7. Iterate `BOOT_ORDER`; for each slot with remaining attempts: decrement counter, `saveenv`, load kernel/initrd/DTB
-   from boot partition, set `root=PARTLABEL=rootfs-x`, `booti`
-8. If no slot bootable: print error and drop to U-Boot shell (changed from `reset` to allow debugging)
+3. Auto-detect boot device number from `devnum`
+4. Override `ramdisk_addr_r=0x08000000` (avoids kernel overlap)
+5. Read RAUC bootmeth variables for selected boot/root partitions
+6. Set `rauc.slot` and `atomixos.lowerdev`
+7. Load kernel/initrd/DTB from the selected boot partition, set `root=fstab`, and `booti`
 
 **Console:** `ttyS2,1500000` (Rock64 UART2)
 
@@ -103,15 +102,14 @@ U-Boot boot script implementing A/B slot selection with boot-count rollback. Com
 
 **Location:** `scripts/fw_env.config`
 
-Configuration for `fw_setenv` / `fw_printenv` (userspace U-Boot env tools). **No longer installed to `/etc/` on the
-device** — kept in the repo for reference and debugging only. Raw eMMC writes from Linux brick NCard eMMC modules;
-the FAT flag file approach is used instead (see boot.cmd).
+Configuration for `fw_setenv` / `fw_printenv` (userspace U-Boot env tools). The installed Rock64 config points to the
+single SPI flash environment exposed through `/dev/mtd0`.
 
-| Entry       | Offset     | Size             |
-|-------------|------------|------------------|
-| Primary env | `0x3F8000` | `0x8000` (32 KB) |
+| Entry       | Device      | Offset     | Size     | Erase size |
+|-------------|-------------|------------|----------|------------|
+| Primary env | `/dev/mtd0` | `0x140000` | `0x2000` | `0x1000`   |
 
-Device: `/dev/mmcblk1` — single copy only (no `CONFIG_ENV_REDUNDANT` in Rock64 U-Boot)
+The old raw eMMC environment offsets are not used.
 
 ### os-verification.sh
 
@@ -125,9 +123,10 @@ Post-update health check. Runs after every boot (except first).
 2. `dnsmasq.service` is active
 3. `chronyd.service` is active
 4. `eth0` has a WAN IP
-5. `eth1` has `172.20.30.1`
-6. Sustained 60s check (every 5s): dnsmasq still active
-7. On success: `rauc status mark-good`
+5. `eth1` has the provisioned gateway IP, falling back to `172.20.30.1`
+6. Provisioned required units from `/data/config/health-required.json` are active
+7. Sustained 60s check (every 5s): all service, network, and required-unit checks still pass
+8. On success: `rauc status mark-good`
 
 **Logging:** Emits progress and failure details through normal service output,
 which is captured by `journald` and forwarded to `/data/logs` by `rsyslog`.
@@ -144,7 +143,7 @@ OTA update polling script. Checks for new RAUC bundles and installs them.
 
 **Steps:**
 
-1. Get current version from `rauc status` and device ID from eth0 MAC
+1. Get current version from `rauc status` and compact lowercase 12-hex device ID from eth0 MAC
 2. Query `$URL/api/v1/updates/latest` with version and device headers
 3. If newer version found: download to `/data/config/bundles/`, `rauc install`, reboot
 4. Non-fatal on network errors (timer retries later)
@@ -164,8 +163,10 @@ First-boot provisioning/import/bootstrap flow plus boot confirmation.
 2. Discover provisioning input from fresh-flash `/boot/config.toml`, USB media, or the LAN bootstrap console
 3. Validate and import the config into `/data/config/`
 4. Render and sync rootful and rootless Quadlet units
-5. Mark the current RAUC slot good when RAUC is enabled
-6. Write timestamp to `/data/.completed_first_boot`
+5. Restart Quadlet sync, LAN apply, and provisioned firewall apply services; fail before slot confirmation if LAN or
+   firewall apply fails
+6. Mark the current RAUC slot good when RAUC is enabled
+7. Write timestamp to `/data/.completed_first_boot`
 
 ### ssh-wan-toggle.sh
 

@@ -18,13 +18,20 @@ system is healthy before committing the RAUC slot. No external network dependenc
 
 ### ADDED: Sustained health check
 
-After initial checks pass, the service monitors for 60 seconds (checking every 5 seconds) to catch restart loops and
-transient failures.
+After initial checks pass, the service monitors for 60 seconds (checking every 5 seconds) to catch restart loops,
+transient service failures, network regressions, and required provisioned-unit failures.
 
 #### Scenario: Restart loop detected
 
 - Given `dnsmasq.service` passes the initial check
 - But it crashes and restarts during the 60-second sustain window
+- Then the sustained health check fails
+- And the slot is not committed
+
+#### Scenario: Network or required unit regression detected
+
+- Given eth0, eth1, and provisioned required units pass the initial check
+- But one check fails during the 60-second sustain window
 - Then the sustained health check fails
 - And the slot is not committed
 
