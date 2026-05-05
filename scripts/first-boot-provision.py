@@ -206,8 +206,8 @@ def load_lan_settings(lan_value, path: str = "lan"):
     if dhcp_start > dhcp_end:
         message = f"{path}.dhcp_start must be less than or equal to {path}.dhcp_end"
         raise provision_error(message)
-    if dhcp_start == gateway.ip or dhcp_end == gateway.ip:
-        message = f"{path}.dhcp_start and {path}.dhcp_end must not equal the gateway IP"
+    if dhcp_start <= gateway.ip <= dhcp_end:
+        message = f"{path}.dhcp_start and {path}.dhcp_end must not include the gateway IP"
         raise provision_error(message)
 
     domain = require_dns_name(lan.get("domain", DEFAULT_LAN_DOMAIN), f"{path}.domain")
