@@ -58,6 +58,13 @@ write_dev_health_requirements() {
 	chmod 600 "$health_file"
 }
 
+has_required_units() {
+	local health_file="$CONFIG_ROOT/health-required.json"
+
+	[ -f "$health_file" ] || return 1
+	jq -e 'type == "array" and length > 0' "$health_file" >/dev/null 2>&1
+}
+
 ensure_rauc_env() {
 	if fw_printenv BOOT_ORDER >/dev/null 2>&1; then
 		return 0
@@ -152,22 +159,32 @@ bootstrap_web_console() {
 sync_quadlet_units() {
 	if command -v systemctl >/dev/null 2>&1; then
 		if ! systemctl restart quadlet-sync.service; then
-			log "WARNING: quadlet-sync.service failed; continuing first boot for debugging access"
+			if has_required_units; then
+				log "ERROR: quadlet-sync.service failed with required provisioned units"
+				return 1
+			fi
+			log "WARNING: quadlet-sync.service failed with no required provisioned units"
 		fi
 		if systemctl list-unit-files lan-gateway-apply.service >/dev/null 2>&1; then
 			if ! systemctl restart lan-gateway-apply.service; then
-				log "WARNING: lan-gateway-apply.service failed; continuing first boot for debugging access"
+				log "ERROR: lan-gateway-apply.service failed"
+				return 1
 			fi
 		fi
 		if systemctl list-unit-files provisioned-firewall-inbound.service >/dev/null 2>&1; then
 			if ! systemctl restart provisioned-firewall-inbound.service; then
-				log "WARNING: provisioned-firewall-inbound.service failed; continuing first boot for debugging access"
+				log "ERROR: provisioned-firewall-inbound.service failed"
+				return 1
 			fi
 		fi
 	else
 		mkdir -p "$QUADLET_ACTIVE_DIR"
 		if ! first-boot-provision sync-quadlet "$CONFIG_ROOT" "$QUADLET_ACTIVE_DIR" "$APP_RUNTIME_QUADLET_DIR"; then
-			log "WARNING: quadlet sync failed; continuing first boot for debugging access"
+			if has_required_units; then
+				log "ERROR: quadlet sync failed with required provisioned units"
+				return 1
+			fi
+			log "WARNING: quadlet sync failed with no required provisioned units"
 		fi
 	fi
 }

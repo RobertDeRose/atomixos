@@ -56,7 +56,7 @@ nixos-lib.runTest {
     gateway.succeed("cat > /testbin/rauc <<'EOF'\n#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\n' \"$*\" >>/test-state/rauc.log\nif [ \"$1\" = status ] && [ \"$2\" = mark-good ]; then\n  exit 0\nfi\necho unexpected rauc invocation >&2\nexit 1\nEOF\nchmod +x /testbin/rauc")
     gateway.succeed("cat > /testbin/fw_printenv <<'EOF'\n#!/usr/bin/env bash\nexit 0\nEOF\nchmod +x /testbin/fw_printenv")
     gateway.succeed("cat > /testbin/fw_setenv <<'EOF'\n#!/usr/bin/env bash\nprintf 'fw_setenv %s\n' \"$*\" >>/test-state/fw-setenv.log\nEOF\nchmod +x /testbin/fw_setenv")
-    gateway.succeed("cat > /testbin/systemctl <<'EOF'\n#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\n' \"$*\" >>/test-state/systemctl.log\ncase \"$1\" in\n  restart) exit 0 ;;&\n  list-unit-files) exit 1 ;;&\n  *) echo unexpected systemctl invocation >&2; exit 1 ;;&\nesac\nEOF\nchmod +x /testbin/systemctl")
+    gateway.succeed("cat > /testbin/systemctl <<'EOF'\n#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\n' \"$*\" >>/test-state/systemctl.log\ncase \"$1\" in\n  restart)\n    if [ \"''${ATOMIXOS_TEST_FAIL_SERVICE:-}\" = \"$2\" ]; then\n      exit 1\n    fi\n    exit 0\n    ;;&\n  list-unit-files)\n    if [ \"''${ATOMIXOS_TEST_LIST_APPLY_SERVICES:-0}\" = 1 ]; then\n      case \"$2\" in\n        lan-gateway-apply.service|provisioned-firewall-inbound.service) exit 0 ;;&\n      esac\n    fi\n    exit 1\n    ;;&\n  *) echo unexpected systemctl invocation >&2; exit 1 ;;&\nesac\nEOF\nchmod +x /testbin/systemctl")
     gateway.succeed("cat > /testbin/mount <<'EOF'\n#!/usr/bin/env bash\nset -euo pipefail\nargs=(\"$@\")\nargc=''${#args[@]}\nsource_path=''${args[$((argc-2))]}\ntarget=''${args[$((argc-1))]}\ncase \"$source_path\" in\n  /test-usb/*) cp -R \"$source_path/.\" \"$target/\" ;;\n  *) echo unexpected mount source: $source_path >&2; exit 1 ;;\nesac\nprintf '%s -> %s\n' \"$source_path\" \"$target\" >>/test-state/mount.log\nEOF\nchmod +x /testbin/mount")
     gateway.succeed("cat > /testbin/umount <<'EOF'\n#!/usr/bin/env bash\nset -euo pipefail\nrm -rf \"$1\"/*\nprintf '%s\n' \"$1\" >>/test-state/umount.log\nEOF\nchmod +x /testbin/umount")
     gateway.succeed("cat > /testbin/first-boot-provision <<'EOF'\n#!/usr/bin/env bash\nexec /run/current-system/sw/bin/first-boot-provision \"$@\"\nEOF\nchmod +x /testbin/first-boot-provision")
@@ -136,6 +136,13 @@ nixos-lib.runTest {
     gateway.succeed("test -f /tmp/dev-fallback-root/ssh-wan-enabled")
     gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nassert json.loads(Path('/tmp/dev-fallback-root/health-required.json').read_text()) == []\nPY")
     gateway.succeed("test -f /tmp/dev-fallback-sentinel")
+
+    gateway.succeed("rm -rf /tmp/bootcases/lan-apply-fail /tmp/config-roots/lan-apply-fail /test-state && mkdir -p /tmp/bootcases/lan-apply-fail /tmp/config-roots/lan-apply-fail /test-state /etc/atomixos")
+    gateway.succeed("cp /tmp/config-template.toml /boot/config.toml && : >/etc/atomixos/fresh-flash")
+    gateway.fail("env PATH=/testbin:/run/current-system/sw/bin ATOMIXOS_CONFIG_ROOT=/tmp/config-roots/lan-apply-fail ATOMIXOS_FIRST_BOOT_SENTINEL=/tmp/bootcases/lan-apply-fail/sentinel ATOMIXOS_BOOT_SLOT=boot.a ATOMIXOS_USB_SEARCH_DIRS='/test-usb' ATOMIXOS_BOOTSTRAP_HOST=127.0.0.1 ATOMIXOS_BOOTSTRAP_PORT=18080 ATOMIXOS_INITRD_MARKER=/etc/atomixos/fresh-flash ATOMIXOS_BOOT_CONFIG_PATH=/boot/config.toml ATOMIXOS_TEST_LIST_APPLY_SERVICES=1 ATOMIXOS_TEST_FAIL_SERVICE=lan-gateway-apply.service first-boot >/tmp/lan-apply-fail.log 2>&1")
+    gateway.succeed("test ! -f /tmp/bootcases/lan-apply-fail/sentinel")
+    gateway.succeed("test ! -f /test-state/rauc.log")
+    gateway.succeed("grep 'ERROR: lan-gateway-apply.service failed' /tmp/lan-apply-fail.log")
 
     gateway.log("first-boot source discovery test passed")
   '';
