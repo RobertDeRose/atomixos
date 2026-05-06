@@ -66,8 +66,8 @@ atomically to the target slot pair.
 
 ### ADDED: Update polling service
 
-The `os-upgrade.service` polls an update server on a timer, downloads new bundles, and installs them via RAUC. It is
-designed to be replaced with `rauc-hawkbit-updater` for server-push updates.
+The `os-upgrade.service` polls an update server on a timer, downloads new bundles, and installs them via RAUC. The
+hawkBit path is reserved for future server-push updates.
 
 #### Scenario: Polling finds new version
 
@@ -79,14 +79,15 @@ designed to be replaced with `rauc-hawkbit-updater` for server-push updates.
 
 ### ADDED: Swappable with hawkBit
 
-The `os-upgrade` module has a `useHawkbit` option that switches from the polling service to `rauc-hawkbit-updater`. This
-is disabled by default.
+The `os-upgrade` module has a `useHawkbit` option that disables the polling service and installs the
+`rauc-hawkbit-updater` package. AtomixOS does not configure an operational hawkBit service in the current image.
 
 #### Scenario: hawkBit mode
 
 - Given `os-upgrade.useHawkbit = true`
 - Then the `os-upgrade` polling timer is not created
 - And `rauc-hawkbit-updater` package is included in the system
+- And no configured `rauc-hawkbit-updater` systemd service is created by AtomixOS
 
 ### ADDED: NixOS RAUC module
 
