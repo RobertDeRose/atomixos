@@ -15,6 +15,9 @@
 - [Provisioning](./provisioning.md)
   - [Flashable Disk Image](./provisioning/flash-image.md)
   - [LAN Range Configuration](./provisioning/lan-range.md)
+- [Firmware Data Flow](./data-flow.md)
+- [Runtime Boundaries](./runtime-boundaries.md)
+- [Operational Unknowns](./unknowns.md)
 
 ## Operations
 

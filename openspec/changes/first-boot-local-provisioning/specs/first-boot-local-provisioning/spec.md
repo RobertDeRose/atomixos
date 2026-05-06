@@ -49,13 +49,32 @@ reprovisioning SHALL use USB seed discovery followed by the bootstrap web consol
 ### Requirement: config.toml defines bounded provisioning data
 
 The local provisioning artifact SHALL be a single `config.toml` file containing only the bounded appliance provisioning
-contract: admin SSH keys, explicit health requirements, and structured Quadlet definitions.
+contract: admin SSH keys, provisioned firewall inbound policy, optional LAN settings, explicit health requirements, and
+structured Quadlet definitions.
 
 #### Scenario: Minimum valid config.toml includes admin access and stack definition
 
 - **WHEN** a `config.toml` file is accepted for import
-- **THEN** it includes at least one admin SSH key, at least one Quadlet-defined application or
-  service unit, and explicit health requirements
+- **THEN** it includes at least one admin SSH key, a `[firewall.inbound]` table with at least one TCP or UDP port,
+  at least one Quadlet-defined application or service unit, and explicit health requirements
+
+### Requirement: Provisioning renders firewall and LAN runtime state
+
+The device SHALL render accepted provisioning input into JSON runtime state under `/data/config/`. Firewall inbound state
+SHALL be written to `/data/config/firewall-inbound.json` as optional `tcp` and `udp` arrays of integer ports in
+`1..65535`. LAN state SHALL be written to `/data/config/lan-settings.json` with the validated gateway CIDR, gateway IP,
+subnet CIDR, netmask, DHCP range, DNS domain, hostname pattern, and gateway aliases.
+
+#### Scenario: Firewall inbound config is bounded
+
+- **WHEN** provisioning imports `[firewall.inbound]` with TCP or UDP ports
+- **THEN** the persisted firewall JSON contains only normalized integer port arrays
+- **AND** `provisioned-firewall-inbound.service` applies those ports only as WAN inbound rules
+
+#### Scenario: LAN range excludes gateway
+
+- **WHEN** provisioning imports `[lan]` with a gateway CIDR and DHCP range
+- **THEN** the DHCP range is rejected unless it is inside the gateway `/24`, ordered, and excludes the gateway IP
 
 ### Requirement: config.toml expresses containers as structured TOML
 
@@ -107,17 +126,43 @@ under `/etc/containers/systemd/`, while rootless application units SHALL sync un
 - **THEN** the system syncs rootful and rootless units into their respective active Quadlet paths, reloads systemd, and
   starts the rendered services from those active paths
 
-### Requirement: First boot only blocks on provisioning import and validation
+### Requirement: First boot blocks on required runtime apply steps
 
-The first-boot completion gate SHALL require a discovered `config.toml` to be imported and validated successfully, but
-it SHALL NOT remain blocked solely because Quadlet sync or container activation fails afterward on the subsequent boot.
-Those later failures SHALL remain debuggable from a provisioned login.
+The first-boot completion gate SHALL require a discovered `config.toml` to import and validate successfully, then apply
+the rendered runtime state before committing the RAUC slot. `lan-gateway-apply.service` and
+`provisioned-firewall-inbound.service` failures SHALL prevent the completion sentinel and RAUC `mark-good`. Quadlet sync
+failure SHALL be fatal when `/data/config/health-required.json` names required provisioned units.
 
-#### Scenario: Valid provisioning completes first boot even when Quadlet activation fails later
+#### Scenario: Runtime apply failure prevents slot commit
 
 - **WHEN** a discovered `config.toml` imports and validates successfully
-- **AND** Quadlet sync or service startup fails afterward
-- **THEN** first boot still completes its provisioning gate and leaves the device accessible for debugging
+- **AND** LAN gateway apply or provisioned firewall apply fails
+- **THEN** first boot does not write the completion sentinel
+- **AND** the RAUC slot is not marked good
+
+#### Scenario: Required Quadlet failure prevents slot commit
+
+- **WHEN** a discovered `config.toml` imports and validates successfully
+- **AND** Quadlet sync fails while health requirements name provisioned units
+- **THEN** first boot does not write the completion sentinel
+- **AND** the RAUC slot is not marked good
+
+### Requirement: Quadlet runtime constraints are explicit
+
+Provisioned containers SHALL be rendered into canonical Quadlet files before activation. Rootful containers require
+`privileged = true` and SHALL be forced to `Network=host`. Rootless containers SHALL run as the managed app user, use
+`Network=pasta`, and have non-loopback published ports rewritten to `127.0.0.1`. Runtime metadata SHALL be persisted to
+`/data/config/quadlet-runtime.json`.
+
+#### Scenario: Rootless published ports bind to loopback
+
+- **WHEN** a rootless provisioned container declares `PublishPort = ["10080:80"]`
+- **THEN** the rendered Quadlet contains `PublishPort=127.0.0.1:10080:80`
+
+#### Scenario: Privileged containers use host networking
+
+- **WHEN** a provisioned container declares `privileged = true`
+- **THEN** the rendered Quadlet contains `Network=host`
 
 ### Requirement: Bootstrap web console supports upload and basic form generation
 
@@ -139,6 +184,13 @@ basic form for admin SSH keys and application stack provisioning.
 
 The bootstrap service SHALL expose a constrained local API endpoint that accepts a complete `config.toml` payload or a
 supported config bundle for programmatic local import using the same validation and persistence path as the web console.
+The programmatic endpoint SHALL be `POST /api/config` and return JSON success or validation-error responses.
+
+#### Scenario: Programmatic upload returns JSON
+
+- **WHEN** a local client POSTs `config.toml` to `/api/config`
+- **THEN** the bootstrap service validates and imports the payload
+- **AND** the response is JSON indicating success or the validation error
 
 ### Requirement: Bootstrap web console is exposed only on the LAN bootstrap endpoint
 
