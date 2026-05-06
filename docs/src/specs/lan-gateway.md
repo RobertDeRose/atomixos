@@ -7,7 +7,8 @@
 ### ADDED: Deterministic NIC naming
 
 The onboard RK3328 GMAC is always named `eth0` via a systemd `.link` file matching the platform path
-(`platform-ff540000.ethernet`). USB Ethernet adapters and WiFi dongles receive kernel-assigned names.
+(`platform-ff540000.ethernet`). USB Ethernet adapters receive kernel-assigned names. USB WiFi dongles are unsupported
+until specific hardware and firmware are selected.
 
 #### Scenario: Onboard Ethernet is eth0
 
@@ -76,8 +77,9 @@ gateway-local DNS names without forwarding queries upstream.
 
 ### ADDED: NTP server on LAN
 
-chrony acts as both an NTP client (syncing from `pool.ntp.org` via WAN) and an NTP server for LAN clients. Only the
-`172.20.30.0/24` subnet is allowed to query.
+chrony acts as both an NTP client (syncing from `pool.ntp.org` via WAN) and an NTP server for LAN clients. The
+provisioned LAN subnet is allowed to query. When no valid provisioned LAN config exists, the fallback subnet is
+`172.20.30.0/24`.
 
 #### Scenario: LAN client syncs time
 
@@ -95,14 +97,28 @@ chrony acts as both an NTP client (syncing from `pool.ntp.org` via WAN) and an N
 
 The firewall uses nftables with per-interface rules:
 
-| Interface  | Allowed Inbound                                 |
-|------------|-------------------------------------------------|
-| eth0 (WAN) | TCP 443, UDP 1194, established/related          |
-| eth1 (LAN) | UDP 67-68, UDP 123, TCP 22, established/related |
-| tun0 (VPN) | TCP 22, established/related                     |
-| FORWARD    | DROP all                                        |
+| Interface  | Allowed Inbound                                                           |
+|------------|---------------------------------------------------------------------------|
+| eth0 (WAN) | established/related; provisioned inbound only                             |
+| eth1 (LAN) | UDP 53, UDP 67-68, UDP 123, TCP 22, TCP 53, TCP 8080, established/related |
+| tun0 (VPN) | TCP 22, established/related                                               |
+| FORWARD    | DROP all                                                                  |
 
-SSH on WAN is controlled by a dynamic nftables rule toggled via `/data/config/ssh-wan-enabled`.
+WAN application and VPN ports are opened only from `/data/config/firewall-inbound.json` by
+`provisioned-firewall-inbound.service`. SSH on WAN is controlled by a dynamic nftables rule toggled via
+`/data/config/ssh-wan-enabled`.
+
+#### Scenario: WAN ports are closed before provisioning
+
+- Given no provisioned firewall state exists
+- When a connection is attempted to eth0 on TCP 443 or UDP 1194
+- Then the packet is dropped
+
+#### Scenario: Provisioned WAN ports are allowed
+
+- Given `/data/config/firewall-inbound.json` includes TCP 443 and UDP 1194
+- And `provisioned-firewall-inbound.service` has applied it
+- Then inbound traffic on eth0 TCP 443 and UDP 1194 is accepted
 
 #### Scenario: WAN SSH blocked by default
 
@@ -130,4 +146,4 @@ updates, and is used as the `X-Device-ID` header when polling for updates.
 
 - Given `eth0` has MAC `aa:bb:cc:dd:ee:ff`
 - When `os-upgrade.service` polls for updates
-- Then the request includes `X-Device-ID: aa:bb:cc:dd:ee:ff`
+- Then the request includes `X-Device-ID: aabbccddeeff`

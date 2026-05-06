@@ -3,8 +3,9 @@
 # This test:
 # 1. Boots a gateway node with firewall rules modelled on firewall.nix
 # 2. Boots a single probe node on BOTH VLANs (1 and 2)
-# 3. Verifies imported WAN rules allow HTTPS (443) and OpenVPN (1194)
-# 4. Verifies LAN allows DHCP (67-68), NTP (123), SSH (22), and bootstrap UI (8080)
+# 3. Verifies WAN HTTPS (443) and OpenVPN (1194) are closed before provisioning
+# 4. Verifies imported WAN rules allow HTTPS (443) and OpenVPN (1194)
+# 5. Verifies LAN allows DNS (53), DHCP (67-68), NTP (123), SSH (22), and bootstrap UI (8080)
 # 5. Verifies SSH is blocked on WAN by default
 # 6. Verifies no forwarding between interfaces
 #
@@ -90,10 +91,8 @@ nixos-lib.runTest {
             iifname "eth0" accept
 
             # -- eth2 (LAN / VLAN 2) rules --
-            iifname "eth2" udp dport { 67, 68 } accept  comment "DHCP"
-            iifname "eth2" udp dport 123 accept          comment "NTP"
-            iifname "eth2" tcp dport 22 accept           comment "SSH"
-            iifname "eth2" tcp dport 8080 accept         comment "Bootstrap UI"
+            iifname "eth2" udp dport { 53, 67, 68, 123 } accept  comment "LAN infra"
+            iifname "eth2" tcp dport { 22, 53, 8080 } accept     comment "LAN infra"
 
             # Everything else is dropped by default policy
           }
@@ -179,14 +178,13 @@ nixos-lib.runTest {
     gateway.start()
     gateway.wait_for_unit("multi-user.target")
     gateway.wait_for_unit("nftables.service")
-    gateway.succeed("cat > /data/config/firewall-inbound.json <<'EOF'\n{\"tcp\": [443], \"udp\": [1194]}\nEOF")
-    gateway.succeed("systemctl start provisioned-firewall-inbound.service")
     gateway.fail("ATOMIXOS_FIREWALL_RULE_COMMENT='bad\"comment' ${pkgs.python3Minimal}/bin/python3 ${../../scripts/provisioned-firewall-inbound.py}")
     gateway.succeed("printf '{bad json\n' >/tmp/bad-firewall.json")
     gateway.fail("ATOMIXOS_FIREWALL_INBOUND_FILE=/tmp/bad-firewall.json ${pkgs.python3Minimal}/bin/python3 ${../../scripts/provisioned-firewall-inbound.py} >/tmp/bad-firewall.out 2>/tmp/bad-firewall.err")
     gateway.succeed("grep -F '[provisioned-firewall-inbound] invalid JSON in /tmp/bad-firewall.json:' /tmp/bad-firewall.err")
+    gateway.succeed("printf '{\"tcp\":[443]}\n' >/tmp/good-firewall.json")
     gateway.succeed("cat > /tmp/bad-nft <<'EOF'\n#!/usr/bin/env bash\necho broken nft >&2\nexit 1\nEOF\nchmod +x /tmp/bad-nft")
-    gateway.fail("ATOMIXOS_NFT=/tmp/bad-nft ${pkgs.python3Minimal}/bin/python3 ${../../scripts/provisioned-firewall-inbound.py} >/tmp/bad-nft.out 2>/tmp/bad-nft.err")
+    gateway.fail("ATOMIXOS_FIREWALL_INBOUND_FILE=/tmp/good-firewall.json ATOMIXOS_NFT=/tmp/bad-nft ${pkgs.python3Minimal}/bin/python3 ${../../scripts/provisioned-firewall-inbound.py} >/tmp/bad-nft.out 2>/tmp/bad-nft.err")
     gateway.succeed("grep -F '[provisioned-firewall-inbound] nft command failed: broken nft' /tmp/bad-nft.err")
 
     probe.start()
@@ -204,7 +202,9 @@ nixos-lib.runTest {
     # and -u for UDP listeners
     gateway.succeed("ncat -lk 443 >/dev/null 2>&1 &")       # HTTPS (TCP)
     gateway.succeed("ncat -lk 22 >/dev/null 2>&1 &")        # SSH (TCP)
+    gateway.succeed("ncat -lk 53 >/dev/null 2>&1 &")        # DNS (TCP)
     gateway.succeed("ncat -lu 1194 >/dev/null 2>&1 &")      # OpenVPN (UDP)
+    gateway.succeed("ncat -lu 53 >/dev/null 2>&1 &")        # DNS (UDP)
     gateway.succeed("ncat -lu 123 >/dev/null 2>&1 &")       # NTP (UDP)
     gateway.succeed("ncat -lu 67 >/dev/null 2>&1 &")        # DHCP (UDP)
     gateway.succeed("ncat -lk 8080 >/dev/null 2>&1 &")      # Unlisted port (should be blocked)
@@ -215,9 +215,21 @@ nixos-lib.runTest {
     # Verify TCP listeners are actually running
     gateway.succeed("ss -tlnp | grep ':443'")
     gateway.succeed("ss -tlnp | grep ':22'")
+    gateway.succeed("ss -tlnp | grep ':53'")
 
     # ── Phase 1: WAN rules (probe eth1 → gateway eth1) ──
     gateway.log("Phase 1: Testing WAN firewall rules")
+
+    # HTTPS (443/tcp) — BLOCKED on WAN before provisioning
+    probe.fail("nc -z -w 3 192.168.1.1 443")
+
+    gateway.fail("nft list chain inet filter input | grep 'iifname \\\"eth1\\\" tcp dport 443'")
+    gateway.fail("nft list chain inet filter input | grep 'iifname \\\"eth1\\\" udp dport 1194'")
+
+    gateway.succeed("cat > /data/config/firewall-inbound.json <<'EOF'\n{\"tcp\": [443], \"udp\": [1194]}\nEOF")
+    gateway.succeed("systemctl start provisioned-firewall-inbound.service")
+    gateway.succeed("nft list chain inet filter input | grep 'iifname \\\"eth1\\\" tcp dport 443'")
+    gateway.succeed("nft list chain inet filter input | grep 'iifname \\\"eth1\\\" udp dport 1194'")
 
     # HTTPS (443/tcp) — ALLOWED on WAN
     probe.succeed("nc -z -w 3 192.168.1.1 443")
@@ -240,6 +252,10 @@ nixos-lib.runTest {
     # SSH (22/tcp) — ALLOWED on LAN
     probe.succeed("nc -z -w 3 172.20.30.1 22")
 
+    # DNS (53/tcp and 53/udp) — ALLOWED on LAN
+    probe.succeed("nc -z -w 3 172.20.30.1 53")
+    probe.succeed("echo test | ncat -u -w 3 172.20.30.1 53")
+
     # NTP (123/udp) — ALLOWED on LAN
     probe.succeed("echo test | ncat -u -w 3 172.20.30.1 123")
 
@@ -252,7 +268,7 @@ nixos-lib.runTest {
     # HTTPS (443/tcp) — BLOCKED on LAN (only allowed on WAN)
     probe.fail("nc -z -w 3 172.20.30.1 443")
 
-    gateway.log("Phase 2 PASSED: LAN allows SSH+NTP+DHCP+bootstrap, blocks HTTPS")
+    gateway.log("Phase 2 PASSED: LAN allows SSH+DNS+NTP+DHCP+bootstrap, blocks HTTPS")
 
     # ── Phase 3: No forwarding ──
     gateway.log("Phase 3: Testing forward chain (drop all)")

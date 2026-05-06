@@ -6,8 +6,8 @@
 
 The NixOS configuration SHALL disable systemd predictable interface names and use systemd-networkd `.link` files to
 assign deterministic names: onboard RK3328 GMAC SHALL be `eth0`, USB ethernet adapters SHALL be `eth1`, `eth2`, etc.,
-and WiFi dongles SHALL be `wlan0`, `wlan1`, etc. The onboard NIC SHALL be matched by its hardware platform path
-(`platform-ff540000.ethernet`).
+    The onboard NIC SHALL be matched by its hardware platform path (`platform-ff540000.ethernet`). USB WiFi dongles are
+    not part of the current Rock64 support contract.
 
 #### Scenario: Onboard NIC is always eth0
 
@@ -18,11 +18,6 @@ and WiFi dongles SHALL be `wlan0`, `wlan1`, etc. The onboard NIC SHALL be matche
 
 - **WHEN** a USB ethernet adapter is plugged into the Rock64
 - **THEN** it is assigned the next available `ethN` name (e.g., `eth1`)
-
-#### Scenario: WiFi dongle is assigned wlanN name
-
-- **WHEN** a USB WiFi dongle is plugged into the Rock64
-- **THEN** it is assigned the next available `wlanN` name (e.g., `wlan0`)
 
 ### Requirement: eth0 is configured as WAN interface
 
@@ -76,7 +71,8 @@ reserving lower addresses for static assignments.
 ### Requirement: NTP server runs on LAN interface
 
 chrony SHALL be configured as both an NTP client (syncing from WAN NTP servers via eth0) and an NTP server (serving time
-to LAN devices on eth1). NTP service SHALL only accept clients from the 172.20.30.0/24 network.
+to LAN devices on eth1). NTP service SHALL accept clients from the provisioned LAN subnet. When no valid provisioned LAN
+config exists, it SHALL accept clients from the fallback `172.20.30.0/24` subnet.
 
 #### Scenario: Rock64 syncs time from WAN
 
@@ -90,27 +86,34 @@ to LAN devices on eth1). NTP service SHALL only accept clients from the 172.20.3
 
 #### Scenario: NTP rejects non-LAN clients
 
-- **WHEN** an NTP request arrives from a non-172.20.30.0/24 source
+- **WHEN** an NTP request arrives from a source outside the provisioned LAN subnet
 - **THEN** chrony does not respond
 
 ### Requirement: nftables firewall restricts traffic per interface
 
 nftables SHALL be configured with the following rules:
 
-**eth0 (WAN) inbound**: ALLOW TCP/443 (HTTPS), ALLOW UDP/1194 (OpenVPN), ALLOW established/related, DROP all else.
-TCP/22 (SSH) is allowed only if the flag file `/data/config/ssh-wan-enabled` exists.
+**eth0 (WAN) inbound**: ALLOW established/related, DROP all else by default. Provisioned firewall state MAY add
+application or VPN ports from `/data/config/firewall-inbound.json`. TCP/22 (SSH) is allowed only if the flag file
+`/data/config/ssh-wan-enabled` exists.
 
-**eth1 (LAN) inbound**: ALLOW UDP/67-68 (DHCP), ALLOW UDP/123 (NTP), ALLOW TCP/22 (SSH), ALLOW established/related, DROP
-all else.
+**eth1 (LAN) inbound**: ALLOW UDP/53 (DNS), ALLOW UDP/67-68 (DHCP), ALLOW UDP/123 (NTP), ALLOW TCP/22 (SSH), ALLOW
+TCP/53 (DNS), ALLOW TCP/8080 (bootstrap UI), ALLOW established/related, DROP all else.
 
 **tun0 (VPN) inbound**: ALLOW TCP/22 (SSH), ALLOW established/related, DROP all else.
 
 **FORWARD chain**: DROP all (no inter-interface routing).
 
-#### Scenario: HTTPS is allowed on WAN
+#### Scenario: WAN application ports are provisioned
 
-- **WHEN** an HTTPS connection is made to eth0 on port 443
-- **THEN** the connection is accepted
+- **WHEN** `/data/config/firewall-inbound.json` contains TCP/443
+- **AND** `provisioned-firewall-inbound.service` applies the provisioned state
+- **THEN** HTTPS connections to eth0 on port 443 are accepted
+
+#### Scenario: WAN application ports are closed before provisioning
+
+- **WHEN** no provisioned firewall state allows TCP/443 or UDP/1194
+- **THEN** new inbound connections to eth0 on TCP/443 and UDP/1194 are dropped
 
 #### Scenario: SSH is blocked on WAN by default
 
@@ -125,6 +128,16 @@ all else.
 #### Scenario: SSH is always allowed on LAN
 
 - **WHEN** an SSH connection is attempted to eth1 on port 22
+- **THEN** the connection is accepted
+
+#### Scenario: DNS is allowed on LAN
+
+- **WHEN** a DNS query is sent to eth1 on TCP/53 or UDP/53
+- **THEN** the packet is accepted
+
+#### Scenario: Bootstrap UI is allowed on LAN
+
+- **WHEN** a connection is made to eth1 on TCP/8080
 - **THEN** the connection is accepted
 
 #### Scenario: SSH is allowed over VPN
@@ -155,8 +168,8 @@ production design, this flag is an explicit operator-controlled toggle rather th
 ### Requirement: Device identity uses eth0 MAC address
 
 The device identity SHALL be derived from the MAC address of eth0 (onboard NIC). This address SHALL be readable from
-`/sys/class/net/eth0/address` and used as the unique device identifier for update confirmation, fleet management, and
-device registration.
+`/sys/class/net/eth0/address`, normalized to compact lowercase 12-hex format, and used as the unique device identifier
+for update confirmation, fleet management, and device registration.
 
 #### Scenario: Device ID is consistent across reboots
 

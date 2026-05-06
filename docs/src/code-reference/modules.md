@@ -150,16 +150,16 @@ it into `journald` and then through the buffered `rsyslog` path.
 
 **Kernel configuration:**
 
-| Category    | Drivers                                                          | Build           |
-|-------------|------------------------------------------------------------------|-----------------|
-| eMMC        | `MMC_DW`, `MMC_DW_ROCKCHIP`                                      | built-in (`=y`) |
-| Ethernet    | `STMMAC_ETH`, `DWMAC_ROCKCHIP`                                   | built-in        |
-| USB         | `DWC2`, `USB_XHCI_HCD`, `USB_EHCI_HCD`, `USB_OHCI_HCD`           | built-in        |
-| Watchdog    | `DW_WATCHDOG`                                                    | built-in        |
-| Filesystems | `SQUASHFS`, `SQUASHFS_ZSTD`, `F2FS_FS`, `OVERLAY_FS`             | built-in        |
-| WiFi        | `RTL8XXXU`, `ATH9K_HTC`, `MT76_USB`, `MT7601U`, `RTW88`, `RTW89` | module (`=m`)   |
-| Bluetooth   | `BT`, `BT_HCIBTUSB`                                              | module          |
-| USB Serial  | `FTDI_SIO`, `CP210X`                                             | module          |
+| Category     | Drivers                                                   | Build           |
+|--------------|-----------------------------------------------------------|-----------------|
+| eMMC         | `MMC_DW`, `MMC_DW_ROCKCHIP`                               | built-in (`=y`) |
+| Ethernet     | `STMMAC_ETH`, `DWMAC_ROCKCHIP`                            | built-in        |
+| USB          | `DWC2`, `USB_XHCI_HCD`, `USB_EHCI_HCD`, `USB_OHCI_HCD`    | built-in        |
+| Watchdog     | `DW_WATCHDOG`                                             | built-in        |
+| Filesystems  | `SQUASHFS`, `SQUASHFS_ZSTD`, `F2FS_FS`, `OVERLAY_FS`      | built-in        |
+| USB Ethernet | `USB_RTL8152`, `USB_NET_AX88179_178A`, `USB_NET_CDCETHER` | module (`=m`)   |
+| USB Serial   | `FTDI_SIO`, `CP210X`                                      | module          |
+| WiFi/BT      | `WLAN`, `CFG80211`, `MAC80211`, `RFKILL`, `BT`            | unsupported     |
 
 **RAUC slot mapping:**
 
@@ -230,7 +230,7 @@ atomixos.rauc = {
 |------------------|----------------------------------------------|--------------------------------------------|
 | `10-onboard-eth` | Platform `platform-ff540000.ethernet`        | Name = `eth0`                              |
 | `20-usb-eth`     | Drivers `r8152`, `ax88179_178a`, `cdc_ether` | Enabled as modules in Rock64 kernel config |
-| `30-wifi`        | WiFi drivers                                 | Kernel default                             |
+| WiFi             | Unsupported until hardware selection         | not part of current Rock64 image           |
 
 **Network files:**
 
@@ -249,11 +249,11 @@ atomixos.rauc = {
 
 **nftables rules (inet filter):**
 
-| Chain     | Policy | Rules                                                                                                    |
-|-----------|--------|----------------------------------------------------------------------------------------------------------|
-| `input`   | drop   | lo: accept; established: accept; eth0: TCP 443, UDP 1194; eth1: UDP 67-68, UDP 123, TCP 22; tun0: TCP 22 |
-| `forward` | drop   | (no exceptions)                                                                                          |
-| `output`  | accept |                                                                                                          |
+| Chain     | Policy | Rules                                                                                                     |
+|-----------|--------|-----------------------------------------------------------------------------------------------------------|
+| `input`   | drop   | lo: accept; established: accept; eth1: UDP 53, UDP 67-68, UDP 123, TCP 22, TCP 53, TCP 8080; tun0: TCP 22 |
+| `forward` | drop   | (no exceptions)                                                                                           |
+| `output`  | accept |                                                                                                           |
 
 **Dynamic SSH toggle services:**
 
@@ -264,6 +264,9 @@ atomixos.rauc = {
 
 Flag file: `/data/config/ssh-wan-enabled`
 
+**Provisioned WAN inbound:** `/data/config/firewall-inbound.json` is applied by `provisioned-firewall-inbound.service`.
+The baseline eth0 policy remains closed for TCP/443 and UDP/1194 until those ports are provisioned.
+
 ---
 
 ## lan-gateway.nix
@@ -272,22 +275,22 @@ Flag file: `/data/config/ssh-wan-enabled`
 
 **dnsmasq configuration:**
 
-| Setting        | Value                                        |
-|----------------|----------------------------------------------|
-| Interface      | `eth1` (bind-interfaces)                     |
-| DHCP range     | `172.20.30.10` -- `172.20.30.254`, 24h lease |
-| Gateway option | `172.20.30.1`                                |
-| DNS option     | `172.20.30.1` (gateway-local DNS only)       |
-| NTP option     | `172.20.30.1`                                |
-| DNS port       | `53` (local-only, no upstream forwarding)    |
+| Setting        | Value                                                                    |
+|----------------|--------------------------------------------------------------------------|
+| Interface      | `eth1` (`bind-dynamic`)                                                  |
+| DHCP range     | provisioned range, fallback `172.20.30.10` -- `172.20.30.254`, 24h lease |
+| Gateway option | provisioned gateway IP, fallback `172.20.30.1`                           |
+| DNS option     | provisioned gateway IP (gateway-local DNS only)                          |
+| NTP option     | provisioned gateway IP                                                   |
+| DNS port       | `53` (local-only, no upstream forwarding)                                |
 
 **chrony configuration:**
 
-| Setting  | Value                      |
-|----------|----------------------------|
-| Upstream | `pool pool.ntp.org iburst` |
-| Serve to | `172.20.30.0/24` only      |
-| Fallback | `local stratum 10`         |
+| Setting  | Value                                             |
+|----------|---------------------------------------------------|
+| Upstream | `pool pool.ntp.org iburst`                        |
+| Serve to | provisioned LAN subnet, fallback `172.20.30.0/24` |
+| Fallback | `local stratum 10`                                |
 
 ---
 
@@ -351,13 +354,16 @@ path records lifecycle markers to the journal through normal service stdout.
 
 **Custom NixOS options (`os-upgrade.*`):**
 
-| Option            | Type   | Default                      | Description                    |
-|-------------------|--------|------------------------------|--------------------------------|
-| `useHawkbit`      | bool   | `false`                      | Switch to rauc-hawkbit-updater |
-| `pollingInterval` | string | `"1h"`                       | Timer interval                 |
-| `serverUrl`       | string | `"http://localhost/updates"` | Update server URL              |
+| Option            | Type   | Default                      | Description                              |
+|-------------------|--------|------------------------------|------------------------------------------|
+| `useHawkbit`      | bool   | `false`                      | Reserve hawkBit path and install package |
+| `pollingInterval` | string | `"1h"`                       | Timer interval                           |
+| `serverUrl`       | string | `"http://localhost/updates"` | Update server URL                        |
 
 **Timer:** `OnBootSec=5min`, `OnUnitActiveSec=<pollingInterval>`, `RandomizedDelaySec=10min`
+
+When `useHawkbit = true`, AtomixOS disables the polling service and installs `rauc-hawkbit-updater`, but does not
+configure an operational hawkBit systemd service in the current image.
 
 ---
 
