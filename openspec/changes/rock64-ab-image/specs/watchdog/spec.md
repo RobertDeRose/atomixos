@@ -2,43 +2,39 @@
 
 ## ADDED Requirements
 
-### Requirement: Hardware watchdog is enabled via systemd
+### Requirement: Hardware watchdog target is defined but deferred
 
-The NixOS configuration SHALL enable the RK3328 hardware watchdog via systemd's `RuntimeWatchdogSec` setting. systemd
-SHALL kick the watchdog at the configured interval. If systemd stops kicking (hang, panic, deadlock), the hardware
-watchdog SHALL reset the device.
+The NixOS configuration SHALL keep RK3328 hardware watchdog manager settings disabled for the current release while
+Rock64 boot reliability is validated. The deferred target settings are `RuntimeWatchdogSec=30s` and
+`RebootWatchdogSec=10min`.
 
 #### Scenario: Watchdog fires on system hang
 
-- **WHEN** the system hangs (kernel panic, deadlock, or systemd becomes unresponsive) for longer than the configured
-  watchdog timeout
-- **THEN** the hardware watchdog triggers a hard reset of the device
+- **WHEN** the current release boots
+- **THEN** `RuntimeWatchdogSec` is not set by the AtomixOS watchdog module
 
 #### Scenario: Normal operation does not trigger watchdog
 
-- **WHEN** the system is running normally with systemd healthy
-- **THEN** systemd kicks the watchdog before the timeout expires and no reset occurs
+- **WHEN** boot-stability validation approves active watchdog enforcement
+- **THEN** the deferred target is to set `RuntimeWatchdogSec=30s`
 
-### Requirement: Reboot watchdog prevents reboot hangs
+### Requirement: Reboot watchdog target is deferred
 
-The NixOS configuration SHALL set `RebootWatchdogSec` to ensure that if a reboot sequence itself hangs, the hardware
-watchdog forces a hard reset.
+The NixOS configuration SHALL not set `RebootWatchdogSec` in the current release. The deferred target is `10min`.
 
 #### Scenario: Hung reboot is recovered
 
-- **WHEN** a reboot command is issued but the shutdown sequence hangs
-- **THEN** the reboot watchdog fires after the configured timeout and forces a hard reset
+- **WHEN** the current release boots
+- **THEN** `RebootWatchdogSec` is not set by the AtomixOS watchdog module
 
 ### Requirement: Watchdog timeout is configured appropriately
 
-`RuntimeWatchdogSec` SHALL be set to `30s` and `RebootWatchdogSec` SHALL be set to `10min`. These values SHALL be
-configurable in the NixOS module.
+The deferred target values SHALL remain documented as `RuntimeWatchdogSec=30s` and `RebootWatchdogSec=10min`.
 
 #### Scenario: Watchdog configuration values are applied
 
-- **WHEN** the device boots and systemd reads its configuration
-- **THEN** `RuntimeWatchdogSec` is `30s` and `RebootWatchdogSec` is `10min` as reported by `systemctl show -p
-  RuntimeWatchdogUSec -p RebootWatchdogUSec`
+- **WHEN** the device boots the current release
+- **THEN** the watchdog module leaves `systemd.settings.Manager = { }`
 
 ### Requirement: Watchdog reset interacts with boot-count rollback
 

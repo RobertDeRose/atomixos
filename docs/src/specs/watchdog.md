@@ -4,31 +4,30 @@
 
 ## Requirements
 
-Current status: implementation is present, but the Rock64 runtime watchdog is intentionally disabled during development.
-The scenarios below describe the target behavior once re-enabled.
+Current status: implementation hooks are present, but the Rock64 runtime watchdog is intentionally disabled during
+development. The scenarios below define the current release behavior and the deferred target settings.
 
-### ADDED: Hardware watchdog via systemd
+### ADDED: Hardware watchdog target is deferred
 
-The RK3328's hardware watchdog (`dw_wdt`) is managed by systemd. If systemd fails to kick the watchdog within the
-configured timeout, the hardware forces a reboot.
+The RK3328 hardware watchdog (`dw_wdt`) target is documented, but systemd manager watchdog settings are not enabled in
+the current release.
 
 #### Scenario: Watchdog triggers on hang
 
-- Given `RuntimeWatchdogSec=30s` is configured
-- When systemd stops sending keepalives (e.g., PID 1 hang)
-- Then the hardware watchdog triggers after 30 seconds
-- And the device reboots
+- Given the current Rock64 image boots
+- Then AtomixOS leaves `RuntimeWatchdogSec` unset
+- And the deferred target remains `RuntimeWatchdogSec=30s`
 
 ### ADDED: Reboot watchdog
 
-A separate reboot watchdog (`RebootWatchdogSec`) prevents the device from hanging during a reboot sequence (e.g.,
-waiting for services to stop).
+A separate reboot watchdog (`RebootWatchdogSec`) remains deferred until Rock64 boot reliability validation approves active
+watchdog enforcement.
 
 #### Scenario: Reboot hang recovery
 
-- Given `RebootWatchdogSec=10min` is configured
-- When a reboot takes longer than 10 minutes
-- Then the hardware watchdog forces a hard reset
+- Given the current Rock64 image boots
+- Then AtomixOS leaves `RebootWatchdogSec` unset
+- And the deferred target remains `RebootWatchdogSec=10min`
 
 ### ADDED: Configurable timeouts
 
@@ -36,8 +35,8 @@ The watchdog timeouts are set in `modules/watchdog.nix`:
 
 ```nix
 systemd.settings.Manager = {
-  RuntimeWatchdogSec = "30s";
-  RebootWatchdogSec = "10min";
+  # RuntimeWatchdogSec = "30s";
+  # RebootWatchdogSec = "10min";
 };
 ```
 
