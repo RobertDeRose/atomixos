@@ -1,7 +1,7 @@
 # NixOS test: verify nftables firewall rules on WAN, LAN, and VPN interfaces.
 #
 # This test:
-# 1. Boots a gateway node with firewall rules modelled on firewall.nix
+# 1. Boots a gateway node with production firewall.nix imported
 # 2. Boots a single probe node on BOTH VLANs (1 and 2)
 # 3. Verifies WAN HTTPS (443) and OpenVPN (1194) are closed before provisioning
 # 4. Verifies imported WAN rules allow HTTPS (443) and OpenVPN (1194)
@@ -13,9 +13,9 @@
 # The probe node has vlans = [1 2] so it gets eth1 (VLAN 1 / WAN) and
 # eth2 (VLAN 2 / LAN), allowing it to test both sides from one VM.
 #
-# NixOS test VMs always have eth0 as a management backdoor.  With
-# vlans = [1 2], the VLAN interfaces become eth1 and eth2.  We therefore
-# define test-local nftables rules mapping:
+# NixOS test VMs always have eth0 as a management backdoor. With
+# vlans = [1 2], the VLAN interfaces become eth1 and eth2. The test
+# imports production firewall.nix and overrides only interface names:
 #   eth1 = WAN (production eth0)
 #   eth2 = LAN (production eth1)
 #
@@ -39,7 +39,10 @@ nixos-lib.runTest {
   nodes.gateway =
     { config, lib, ... }:
     {
-      imports = [ qemuModule ];
+      imports = [
+        qemuModule
+        ../../modules/firewall.nix
+      ];
 
       virtualisation = {
         vlans = [
@@ -72,39 +75,12 @@ nixos-lib.runTest {
         "net.ipv6.conf.all.forwarding" = 0;
       };
 
-      # -- Nftables matching production structure (adapted for test) ---
-      networking.firewall.enable = false;
-      networking.nftables.enable = true;
-      networking.nftables.tables.filter = {
-        family = "inet";
-        content = ''
-          chain input {
-            type filter hook input priority 0; policy drop;
-
-            # Allow loopback
-            iif "lo" accept
-
-            # Allow established/related
-            ct state established,related accept
-
-            # Allow NixOS test driver backdoor
-            iifname "eth0" accept
-
-            # -- eth2 (LAN / VLAN 2) rules --
-            iifname "eth2" udp dport { 53, 67, 68, 123 } accept  comment "LAN infra"
-            iifname "eth2" tcp dport { 22, 53, 8080 } accept     comment "LAN infra"
-
-            # Everything else is dropped by default policy
-          }
-
-          chain forward {
-            type filter hook forward priority 0; policy drop;
-            # No forwarding between interfaces
-          }
-
-          chain output {
-            type filter hook output priority 0; policy accept;
-          }
+      atonic.firewall = {
+        wanInterface = "eth1";
+        lanInterface = "eth2";
+        extraInputRules = ''
+          # Allow NixOS test driver backdoor.
+          iifname "eth0" accept
         '';
       };
 
@@ -121,23 +97,7 @@ nixos-lib.runTest {
         pkgs.python3Minimal
       ];
 
-      systemd.services.provisioned-firewall-inbound = {
-        description = "Apply provisioned WAN inbound firewall rules (test)";
-        after = [ "nftables.service" ];
-        wantedBy = [ "multi-user.target" ];
-        path = [
-          pkgs.nftables
-          pkgs.python3Minimal
-        ];
-        serviceConfig = {
-          Type = "oneshot";
-          Environment = "ATOMIXOS_FIREWALL_WAN_INTERFACE=eth1";
-          ExecStart = pkgs.writeScript "test-provisioned-firewall-inbound" ''
-            #!${pkgs.python3Minimal}/bin/python3
-            ${builtins.readFile ../../scripts/provisioned-firewall-inbound.py}
-          '';
-        };
-      };
+      systemd.services.provisioned-firewall-inbound.unitConfig.ConditionPathExists = lib.mkForce "";
     };
 
   # Single probe node on BOTH VLANs — tests WAN and LAN rules from one VM.

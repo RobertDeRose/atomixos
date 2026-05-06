@@ -8,6 +8,8 @@
 }:
 
 let
+  cfg = config.atonic.firewall;
+
   sshWanToggle = pkgs.writeShellScript "ssh-wan-toggle" (
     builtins.readFile ../scripts/ssh-wan-toggle.sh
   );
@@ -22,111 +24,136 @@ let
   '';
 in
 {
-  # ── Enable nftables ──────────────────────────────────────────────────────────
+  options.atonic.firewall = {
+    wanInterface = lib.mkOption {
+      type = lib.types.str;
+      default = "eth0";
+      description = "WAN interface name used by nftables and provisioned inbound rules.";
+    };
 
-  networking.firewall.enable = false; # Disable NixOS default iptables firewall
-  networking.nftables.enable = true;
+    lanInterface = lib.mkOption {
+      type = lib.types.str;
+      default = "eth1";
+      description = "LAN interface name used by nftables rules.";
+    };
 
-  networking.nftables.tables.filter = {
-    family = "inet";
-    content = ''
-      chain input {
-        type filter hook input priority 0; policy drop;
-
-        # Allow loopback
-        iif "lo" accept
-
-        # Allow established/related connections on all interfaces
-        ct state established,related accept
-
-        # -- eth1 (LAN) rules --
-        iifname "eth1" udp dport { 53, 67, 68, 123 } accept  comment "LAN infra"
-        iifname "eth1" tcp dport { 22, 53, 8080 } accept     comment "LAN infra"
-
-        # -- tun0 (VPN) rules --
-        iifname "tun0" tcp dport 22 accept   comment "SSH over VPN"
-
-        # Everything else is dropped by default policy
-      }
-
-      chain forward {
-        type filter hook forward priority 0; policy drop;
-        # No forwarding between interfaces — EN18031 compliance boundary
-      }
-
-      chain output {
-        type filter hook output priority 0; policy accept;
-      }
-    '';
-  };
-
-  # ── Dynamic SSH-on-WAN toggle ────────────────────────────────────────────────
-  #
-  # SSH on eth0 is controlled by the presence of /data/config/ssh-wan-enabled
-  # A systemd service checks this flag and adds/removes the nftables rule.
-
-  systemd.services.ssh-wan-toggle = {
-    description = "Toggle SSH access on WAN based on flag file";
-    after = [
-      "nftables.service"
-      "network-online.target"
-    ];
-    wants = [
-      "nftables.service"
-      "network-online.target"
-    ];
-    wantedBy = [ "multi-user.target" ];
-
-    path = [ pkgs.nftables ];
-
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      ExecStart = sshWanToggle;
+    extraInputRules = lib.mkOption {
+      type = lib.types.lines;
+      default = "";
+      description = "Additional input-chain rules for test-only backdoors or deployment-specific allowances.";
     };
   };
 
-  # Also provide a reload path so the flag can be toggled at runtime
-  systemd.services.ssh-wan-reload = {
-    description = "Reload SSH-on-WAN firewall rule";
-    after = [ "ssh-wan-toggle.service" ];
+  config = {
+    # ── Enable nftables ────────────────────────────────────────────────────────
 
-    path = [
-      pkgs.nftables
-      pkgs.gawk
-    ];
+    networking.firewall.enable = false; # Disable NixOS default iptables firewall
+    networking.nftables.enable = true;
 
-    serviceConfig = {
-      Type = "oneshot";
-      ExecStart = sshWanReload;
+    networking.nftables.tables.filter = {
+      family = "inet";
+      content = ''
+        chain input {
+          type filter hook input priority 0; policy drop;
+
+          # Allow loopback
+          iif "lo" accept
+
+          # Allow established/related connections on all interfaces
+          ct state established,related accept
+
+          ${cfg.extraInputRules}
+
+          # -- eth1 (LAN) rules --
+          iifname "${cfg.lanInterface}" udp dport { 53, 67, 68, 123 } accept  comment "LAN infra"
+          iifname "${cfg.lanInterface}" tcp dport { 22, 53, 8080 } accept     comment "LAN infra"
+
+          # -- tun0 (VPN) rules --
+          iifname "tun0" tcp dport 22 accept   comment "SSH over VPN"
+
+          # Everything else is dropped by default policy
+        }
+
+        chain forward {
+          type filter hook forward priority 0; policy drop;
+          # No forwarding between interfaces — EN18031 compliance boundary
+        }
+
+        chain output {
+          type filter hook output priority 0; policy accept;
+        }
+      '';
     };
-  };
 
-  systemd.services.provisioned-firewall-inbound = {
-    description = "Apply provisioned WAN inbound firewall rules";
-    after = [
-      "data.mount"
-      "nftables.service"
-    ];
-    wants = [
-      "data.mount"
-      "nftables.service"
-    ];
-    wantedBy = [ "multi-user.target" ];
+    # ── Dynamic SSH-on-WAN toggle ──────────────────────────────────────────────
+    #
+    # SSH on eth0 is controlled by the presence of /data/config/ssh-wan-enabled
+    # A systemd service checks this flag and adds/removes the nftables rule.
 
-    unitConfig = {
-      ConditionPathExists = "/data/config/firewall-inbound.json";
-      RequiresMountsFor = [ "/data" ];
+    systemd.services.ssh-wan-toggle = {
+      description = "Toggle SSH access on WAN based on flag file";
+      after = [
+        "nftables.service"
+        "network-online.target"
+      ];
+      wants = [
+        "nftables.service"
+        "network-online.target"
+      ];
+      wantedBy = [ "multi-user.target" ];
+
+      path = [ pkgs.nftables ];
+
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = sshWanToggle;
+      };
     };
 
-    path = [
-      pkgs.nftables
-      pkgs.python3Minimal
-    ];
+    # Also provide a reload path so the flag can be toggled at runtime
+    systemd.services.ssh-wan-reload = {
+      description = "Reload SSH-on-WAN firewall rule";
+      after = [ "ssh-wan-toggle.service" ];
 
-    serviceConfig = {
-      Type = "oneshot";
-      ExecStart = "${provisionedFirewallInbound}/bin/provisioned-firewall-inbound";
+      path = [
+        pkgs.nftables
+        pkgs.gawk
+      ];
+
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = sshWanReload;
+      };
+    };
+
+    systemd.services.provisioned-firewall-inbound = {
+      description = "Apply provisioned WAN inbound firewall rules";
+      after = [
+        "data.mount"
+        "nftables.service"
+      ];
+      wants = [
+        "data.mount"
+        "nftables.service"
+      ];
+      wantedBy = [ "multi-user.target" ];
+
+      unitConfig = {
+        ConditionPathExists = "/data/config/firewall-inbound.json";
+        RequiresMountsFor = [ "/data" ];
+      };
+
+      path = [
+        pkgs.nftables
+        pkgs.python3Minimal
+      ];
+
+      serviceConfig = {
+        Type = "oneshot";
+        Environment = "ATOMIXOS_FIREWALL_WAN_INTERFACE=${cfg.wanInterface}";
+        ExecStart = "${provisionedFirewallInbound}/bin/provisioned-firewall-inbound";
+      };
     };
   };
 }
