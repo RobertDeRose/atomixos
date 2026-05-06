@@ -43,8 +43,8 @@ from fixed sector offsets:
 | `idbloader.img` | 64            | 32 KB       | First-stage loader (TPL + SPL) |
 | `u-boot.itb`    | 16384         | 8 MB        | U-Boot proper (FIT image)      |
 
-U-Boot environment is stored redundantly at offsets `0x3F8000` and `0x3FC000` (both 16 KB), providing power-loss
-resilience for the boot-count variables.
+U-Boot environment is stored in SPI flash exposed to Linux as `/dev/mtd0` at offset `0x140000` with size `0x2000`.
+AtomixOS uses this single SPI environment for RAUC boot variables instead of raw eMMC environment writes.
 
 ## Data Partition
 

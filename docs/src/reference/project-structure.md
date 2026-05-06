@@ -15,7 +15,7 @@ modules/
   rauc.nix                         RAUC system.conf, slot definitions
   watchdog.nix                     systemd watchdog config
   os-verification.nix              Post-update health check service
-  os-upgrade.nix                   Update polling + hawkBit toggle
+  os-upgrade.nix                   Update polling + reserved hawkBit package path
   first-boot.nix                   First-boot provisioning import + slot commit
   logging.nix                      journald ingress + buffered rsyslog durability
   boot-storage-debug.nix           Boot-partition mount helpers for debugging
@@ -54,7 +54,7 @@ scripts/
   quadlet-sync.sh                  Rootful/rootless Quadlet sync + startup
   watchdog-boot-count.sh           Boot-count decrement and rollback journal logging
   boot.cmd                         U-Boot A/B boot script source
-  fw_env.config                    U-Boot env config (reference only, not installed)
+  fw_env.config                    U-Boot SPI env config
 
 .mise/tasks/
   flash                            Flash image to disk device (macOS/Linux)

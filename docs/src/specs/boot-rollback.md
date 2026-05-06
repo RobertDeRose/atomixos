@@ -6,15 +6,15 @@
 
 ### ADDED: U-Boot tracks boot attempts per slot
 
-U-Boot maintains `BOOT_A_LEFT` and `BOOT_B_LEFT` counters (initial value: 3). On each boot attempt, the `boot.scr`
-script decrements the counter for the selected slot and saves the environment before loading the kernel.
+U-Boot maintains `BOOT_A_LEFT` and `BOOT_B_LEFT` counters (initial value: 3). RAUC bootmeth selects the slot and
+decrements the counter before loading `boot.scr`.
 
 #### Scenario: Counter decrements on boot
 
 - Given `BOOT_A_LEFT=3` and slot A is first in `BOOT_ORDER`
 - When the device boots
-- Then `BOOT_A_LEFT` is decremented to 2 before the kernel loads
-- And the environment is saved to eMMC
+- Then `BOOT_A_LEFT` is decremented to 2 before `boot.scr` loads the kernel
+- And the SPI flash environment is updated
 
 #### Scenario: Counter reaches zero
 
@@ -60,14 +60,13 @@ The failed slot's data is preserved for diagnostics but is not booted.
 - And U-Boot boots slot A (the previous working image)
 - And slot A still has its original content
 
-### ADDED: Redundant U-Boot environment
+### ADDED: SPI flash U-Boot environment
 
-The U-Boot environment is stored in two copies at known eMMC offsets (`0x3F8000` and `0x3FC000`). If power is lost
-during an environment write, the redundant copy preserves the last valid state.
+The U-Boot environment is stored in SPI flash exposed to Linux as `/dev/mtd0` at offset `0x140000` with size `0x2000`.
+AtomixOS does not store redundant U-Boot environment copies on eMMC.
 
-#### Scenario: Power loss during env write
+#### Scenario: Userspace tools address SPI env
 
-- Given `saveenv` is in progress
-- When power is lost
-- Then on next boot, U-Boot reads the valid redundant copy
-- And boot continues with consistent state
+- Given the device has booted
+- When `/etc/fw_env.config` is inspected
+- Then it points to `/dev/mtd0 0x140000 0x2000 0x1000`

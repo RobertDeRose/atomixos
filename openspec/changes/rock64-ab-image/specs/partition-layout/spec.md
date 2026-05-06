@@ -72,10 +72,11 @@ updates and rollbacks.
 
 ### Requirement: Boot configuration uses U-Boot environment for slot selection
 
-U-Boot SHALL use environment variables (`BOOT_ORDER`, `BOOT_A_LEFT`, `BOOT_B_LEFT`) to determine which boot slot to load
-the kernel from and which rootfs partition to pass as the root device to the kernel.
+U-Boot SHALL use RAUC bootmeth environment variables (`BOOT_ORDER`, `BOOT_A_LEFT`, `BOOT_B_LEFT`) to select the next boot
+slot. RAUC bootmeth SHALL provide the selected boot and root partition identities to `boot.scr`.
 
 #### Scenario: U-Boot selects correct slot pair
 
 - **WHEN** U-Boot reads `BOOT_ORDER=A B` and `BOOT_A_LEFT=3`
-- **THEN** U-Boot loads kernel and DTB from boot slot A and passes rootfs slot A's partition as the root device
+- **THEN** RAUC bootmeth selects slot A before loading `boot.scr`
+- **AND** `boot.scr` loads kernel and DTB from boot slot A and passes slot A's lower-device identity to initrd
