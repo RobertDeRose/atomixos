@@ -42,13 +42,14 @@ signed with the project's CA key.
 ### ADDED: Stripped kernel with modular USB support
 
 The kernel is configured with built-in drivers for essential hardware (eMMC, Ethernet, USB host, watchdog, squashfs,
-f2fs) and loadable modules for USB peripherals (WiFi, Bluetooth, USB-serial).
+f2fs) and loadable modules for selected USB Ethernet and USB-serial peripherals. USB WiFi is unsupported until specific
+hardware and firmware are selected.
 
 #### Scenario: Kernel has required drivers
 
 - Given the NixOS configuration is evaluated
 - Then the kernel includes `MMC_DW_ROCKCHIP=y`, `STMMAC_ETH=y`, `DW_WATCHDOG=y`, `SQUASHFS=y`
-- And WiFi drivers (RTL8XXXU, MT76_USB, etc.) are built as modules
+- And selected USB Ethernet drivers (`USB_RTL8152`, `USB_NET_AX88179_178A`, `USB_NET_CDCETHER`) are built as modules
 
 #### Scenario: USB serial works for debugging
 

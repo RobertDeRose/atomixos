@@ -10,8 +10,7 @@ require a physical Rock64 board with eMMC, serial console, and network connectiv
 - Rock64 v2 board with 16 GB eMMC module
 - USB-to-serial adapter connected to UART2 (1.5 Mbaud)
 - USB Ethernet adapter (for eth1/LAN interface)
-- USB WiFi dongle (for WiFi module testing)
-- USB Bluetooth dongle (for BT module testing)
+- Supported USB Ethernet adapter for eth1/LAN (`r8152`, `ax88179_178a`, or `cdc_ether`)
 - Built disk image (`atomixos-25.11.img`)
 - Built RAUC bundle (`rock64.raucb`)
 - Network with DHCP and internet access (for WAN/eth0)
@@ -74,20 +73,18 @@ lsblk
 - USB host controller (EHCI/OHCI/XHCI) initialized
 - Watchdog device (`dw_wdt`) registered
 
-### Test 2.2: WiFi and Bluetooth modules
+### Test 2.2: USB Ethernet module
 
 ```sh
-modprobe mt7601u    # or the appropriate driver for your dongle
+modprobe r8152      # or ax88179_178a/cdc_ether for your adapter
 ip link show
-modprobe btusb
-dmesg | grep -i bluetooth
 ```
 
 **Pass criteria**:
 
-- WiFi module loads without errors
-- A wireless interface appears in `ip link`
-- Bluetooth module loads and hci device appears in `dmesg`
+- Supported USB Ethernet module loads without errors
+- A second Ethernet interface appears in `ip link`
+- USB WiFi and Bluetooth are not part of the current image contract
 
 ## Phase 3: Network Configuration
 
@@ -155,12 +152,12 @@ ping -c 3 172.20.30.1       # should succeed
 
 ## Phase 4: Firewall Verification
 
-### Test 4.1: WAN port access
+### Test 4.1: WAN baseline port access
 
 From an external machine (or the WAN side):
 
 ```sh
-# These should succeed (connection accepted or TLS handshake)
+# These should fail until explicitly provisioned
 curl -k https://<wan-ip>:443
 nc -uz <wan-ip> 1194
 
@@ -170,8 +167,8 @@ ssh <wan-ip>
 
 **Pass criteria**:
 
-- HTTPS (443) is reachable
-- OpenVPN (1194) is reachable
+- HTTPS (443) is blocked until provisioned
+- OpenVPN (1194) is blocked until provisioned
 - SSH (22) is blocked
 
 ### Test 4.2: SSH-on-WAN toggle
@@ -327,40 +324,41 @@ ls /dev/watchdog*
 
 ### Test 8.2: Watchdog-triggered reboot
 
-> **Warning**: This test intentionally hangs systemd. Use only on test devices.
+> Deferred: active watchdog enforcement is disabled in the current release. Run this only after enabling the deferred
+> `RuntimeWatchdogSec=30s` target on a test device.
 
 ```sh
 # Freeze PID 1 (systemd) to stop watchdog kicks
 kill -STOP 1
 
-# Wait 30+ seconds -- the hardware watchdog should force a reboot
+# Wait 30+ seconds -- the hardware watchdog should force a reboot when enabled
 ```
 
 **Pass criteria**:
 
-- Device reboots within ~30 seconds of the SIGSTOP
+- With the deferred target enabled, device reboots within ~30 seconds of the SIGSTOP
 - Serial console shows watchdog reset
 - U-Boot boot-count is decremented for the current slot
 
 ## Task Checklist
 
-| #   | Test                     | Status |
-|-----|--------------------------|--------|
-| 1.1 | Flash + U-Boot output    |        |
-| 1.2 | First-boot service       |        |
-| 2.1 | eMMC + core hardware     |        |
-| 2.2 | WiFi + Bluetooth modules |        |
-| 3.1 | eth0 is onboard          |        |
-| 3.2 | DHCP server on LAN       |        |
-| 3.3 | NTP server on LAN        |        |
-| 3.4 | LAN isolation            |        |
-| 4.1 | WAN port access          |        |
-| 4.2 | SSH-on-WAN toggle        |        |
-| 5.1 | Update confirmation      |        |
-| 6.1 | SSH key auth             |        |
-| 6.2 | Serial root recovery     |        |
-| 7.1 | RAUC status              |        |
-| 7.2 | Bundle install           |        |
-| 7.3 | Boot-count rollback      |        |
-| 8.1 | Watchdog presence        |        |
-| 8.2 | Watchdog reboot          |        |
+| #   | Test                  | Status |
+|-----|-----------------------|--------|
+| 1.1 | Flash + U-Boot output |        |
+| 1.2 | First-boot service    |        |
+| 2.1 | eMMC + core hardware  |        |
+| 2.2 | USB Ethernet module   |        |
+| 3.1 | eth0 is onboard       |        |
+| 3.2 | DHCP server on LAN    |        |
+| 3.3 | NTP server on LAN     |        |
+| 3.4 | LAN isolation         |        |
+| 4.1 | WAN port access       |        |
+| 4.2 | SSH-on-WAN toggle     |        |
+| 5.1 | Update confirmation   |        |
+| 6.1 | SSH key auth          |        |
+| 6.2 | Serial root recovery  |        |
+| 7.1 | RAUC status           |        |
+| 7.2 | Bundle install        |        |
+| 7.3 | Boot-count rollback   |        |
+| 8.1 | Watchdog presence     |        |
+| 8.2 | Watchdog reboot       |        |

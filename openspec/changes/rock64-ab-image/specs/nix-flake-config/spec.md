@@ -51,17 +51,17 @@ The flake SHALL expose a signed RAUC bundle as `packages.aarch64-linux.rauc-bund
 ### Requirement: The configuration uses a stripped kernel with modular USB peripheral support
 
 The Rock64 configuration SHALL use a stripped kernel profile with RK3328-required storage, networking, USB host,
-watchdog, squashfs, f2fs, and overlay support built in. Optional USB WiFi, Bluetooth, and USB serial support SHALL be
-available as modules.
+watchdog, squashfs, f2fs, and overlay support built in. Selected USB Ethernet and USB serial support SHALL be available
+as modules. USB WiFi support is not part of the current Rock64 image until specific hardware and firmware are selected.
 
 #### Scenario: Kernel boots on Rock64 hardware
 
 - **WHEN** the built kernel and DTB are loaded by U-Boot on a Rock64 board
 - **THEN** the kernel boots and detects the required Rock64 hardware path
 
-#### Scenario: Optional USB peripherals load on demand
+#### Scenario: Optional supported USB peripherals load on demand
 
-- **WHEN** a supported USB WiFi, Bluetooth, or serial device is connected
+- **WHEN** a supported USB Ethernet or USB serial device is connected
 - **THEN** the matching kernel module can be loaded without rebuilding the image
 
 ### Requirement: The device image includes the core appliance runtime

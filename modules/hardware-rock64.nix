@@ -445,9 +445,9 @@ in
     }
   );
 
-  # Custom kernel configuration: strip to RK3328 essentials
-  # Built-in (=y): eMMC, ethernet, USB host, watchdog, squashfs, f2fs
-  # Modules (=m): WiFi, Bluetooth, USB serial (for optional USB peripherals)
+  # Custom kernel configuration: strip to RK3328 essentials.
+  # Built-in (=y): eMMC, Ethernet, USB host, watchdog, squashfs, f2fs.
+  # Modules (=m): selected USB Ethernet and USB serial peripherals.
   boot.kernelPatches = [
     {
       name = "rock64-stripped";
