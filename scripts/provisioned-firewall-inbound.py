@@ -83,12 +83,13 @@ def run_nft(*args: str, input_text: str | None = None) -> subprocess.CompletedPr
 
 
 def main() -> int:
+    rule_comment = validate_rule_comment(RULE_COMMENT)
+    wan_interface = validate_interface_name(WAN_INTERFACE)
+
     if not CONFIG_FILE.exists():
         return 0
 
     payload = load_payload()
-    rule_comment = validate_rule_comment(RULE_COMMENT)
-    wan_interface = validate_interface_name(WAN_INTERFACE)
     existing = run_nft("-a", "list", "chain", "inet", "filter", "input")
 
     commands: list[str] = []
