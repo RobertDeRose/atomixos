@@ -48,13 +48,13 @@ management flow.
 
 ### Remote Management
 
-Remote Cockpit access is intended to run from the Nixstasis environment rather than from services hosted directly on the
+Remote web access is intended to run from the Nixstasis environment rather than from services hosted directly on the
 device. The device remains responsible for SSH, LAN gateway services, update logic, and the Nixstasis client.
 
 ### Device Identity
 
-Each device is identified by the MAC address of its onboard Ethernet (eth0). This MAC is used as the `X-Device-ID`
-header when polling for updates.
+Each device is identified by the compact lowercase 12-hex MAC address of its onboard Ethernet (eth0). For example,
+`aa:bb:cc:dd:ee:ff` becomes `aabbccddeeff` in the `X-Device-ID` header when polling for updates.
 
 ## SSH Configuration
 

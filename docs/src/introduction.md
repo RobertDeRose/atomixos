@@ -7,9 +7,9 @@
 **Secure, reproducible operating system for single-board computers, with atomic A/B OTA updates, automatic rollback, and
 container-based application deployment.**
 
-AtomixOS is a purpose-built firmware platform for Rock64 (RK3328, aarch64) edge gateway devices. Each device serves as
-a network security boundary compliant with EN18031, isolating legacy LAN devices from the internet while providing
-managed access through application-layer proxying.
+AtomixOS turns compact SBC hardware into a repeatable appliance platform: immutable OS images are built from Nix,
+delivered through rollback-safe updates, and extended at runtime with operator-provisioned containers and
+optional Nixstasis-based remote management.
 
 ## Why AtomixOS?
 
@@ -50,11 +50,10 @@ AtomixOS eliminates this class of failure through:
 
 Each AtomixOS device acts as a gateway between an isolated LAN and the internet:
 
-- **WAN (eth0)**: DHCP client, accepts HTTPS (443) and OpenVPN (1194) from the internet
-- **LAN (eth1)**: Static IP, runs DHCP server (dnsmasq) and NTP server (chrony) for local devices
+- **WAN (eth0)**: DHCP client, deny-by-default inbound; application/VPN ports are provisioned explicitly
+- **LAN (eth1)**: Provisioned static IP, runs DHCP/DNS server (dnsmasq) and NTP server (chrony) for local devices
 - **No routing**: IP forwarding is disabled; LAN devices have zero internet access
-- **Application-layer proxying**: Traefik reverse proxy selectively bridges WAN and LAN while operator access remains
-  SSH-key-only and bootstrap stays LAN-local
+- **Remote management**: Nixstasis-hosted management and SSH key-only access; bootstrap stays LAN-local
 
 ## Quick Start
 

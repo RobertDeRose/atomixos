@@ -66,14 +66,13 @@ applied via the kernel config (not U-Boot patches), keeping the build simple.
 
 ## Decision 6: Watchdog strategy
 
-**Choice**: systemd hardware watchdog with 30s runtime / 10min reboot timeouts.
+**Choice**: defer active systemd hardware watchdog enforcement while keeping 30s runtime / 10min reboot timeouts as the
+target settings.
 
-**Rationale**: 30 seconds is aggressive enough to detect hangs quickly but avoids false triggers during normal operation
-(e.g., heavy container startup). The 10-minute reboot timeout is generous because clean shutdown may need time to stop
-containers.
+**Rationale**: Rock64 boot reliability validation is not complete. The target values remain documented, but the current
+release leaves `systemd.settings.Manager = { }` to avoid watchdog-triggered reset loops during development.
 
-**Integration**: Watchdog reboots feed directly into the boot-count rollback path -- a hung system on a new slot
-automatically rolls back within ~90 seconds (3 watchdog cycles).
+**Integration**: Once enabled, watchdog reboots feed directly into the boot-count rollback path.
 
 ## Decision 7: Local health-check (no phone-home)
 
@@ -88,8 +87,8 @@ availability during the critical confirmation window.
 **Choice**: Move remote web management out of the device image and support Nixstasis as an optional control plane.
 
 **Rationale**: The Nixstasis client already establishes reverse tunnels and receives short-lived SSH credentials from the
-server. Hosting Cockpit and the auth layer in Nixstasis removes first-boot registry pulls, reduces device complexity,
-and keeps the device focused on local gateway and update responsibilities.
+server. Hosting remote web management and the auth layer in Nixstasis removes first-boot registry pulls, reduces device
+complexity, and keeps the device focused on local gateway and update responsibilities.
 
 **Trade-off**: Remote management now depends on successful Nixstasis enrollment and tunnel establishment. Local recovery
 falls back to SSH rather than an on-device HTTPS UI.
@@ -107,7 +106,8 @@ failures.
 **Choice**: Disable IP forwarding at the kernel level. The nftables `FORWARD` chain drops all packets.
 
 **Rationale**: EN18031 requires a hard network boundary. LAN devices must not be able to reach the internet.
-Application-layer proxying through Traefik is the only controlled path between WAN and LAN.
+WAN application or VPN ports are opened only by provisioned firewall state. Packet forwarding between WAN and LAN stays
+disabled.
 
 ## Decision 11: NIC naming via .link files
 
@@ -129,8 +129,9 @@ NixOS `networking.nftables` module provides native integration.
 **Choice**: Design the update system to be swappable between polling and hawkBit push models.
 
 **Rationale**: The initial deployment uses simple HTTP polling (`os-upgrade.service`). As the fleet scales, migration to
-hawkBit provides centralized update management, rollout policies, and device inventory. The `os-upgrade.useHawkbit`
-option makes this a configuration change, not an architectural change.
+hawkBit can provide centralized update management, rollout policies, and device inventory. The `os-upgrade.useHawkbit`
+option currently reserves this path and installs the package, but AtomixOS does not configure an operational hawkBit
+service yet.
 
 ## Decision 14: QEMU testing target
 
@@ -143,11 +144,12 @@ selection using files.
 
 ## Decision 15: EN18031 authentication
 
-**Choice**: Hybrid approach -- OIDC (Microsoft Entra) as primary web auth, local password as fallback, SSH key-only for
-remote access.
+**Choice**: no default passwords, locked local root/admin passwords, SSH key-only access, serial break-glass recovery,
+and Nixstasis-hosted remote management.
 
-**Rationale**: OIDC provides SSO and audit logging when internet is available. The local password ensures access when
-the device is offline or on the LAN. SSH key-only prevents brute-force attacks on the management interface.
+**Rationale**: The base image does not host the web management/authentication stack. SSH key-only access and locked
+passwords prevent brute-force attacks on the device, while Nixstasis handles remote management credentials outside the
+device image.
 
 ## Decision 16: Squashfs closure optimization
 
@@ -183,6 +185,6 @@ than fully persistent journal storage.
 | U-Boot env corruption                 | Single-copy environment storage; corruption is handled through normal recovery and reprovisioning flows                                                                               |
 | 1 GB rootfs slot too small            | Current closure is ~300-400 MB; aggressive optimization keeps headroom                                                                                                                |
 | Missing or empty health-required list | `first-boot.service` commits only when RAUC is enabled; `os-verification` uses gateway health checks alone unless `/data/config/health-required.json` names additional required units |
-| Cockpit/Traefik container failure     | OpenVPN in rootfs provides alternate remote access                                                                                                                                    |
+| Provisioned application failure       | OpenVPN in rootfs and SSH key-only access provide alternate recovery paths                                                                                                            |
 | No delta updates                      | Full-image updates are ~300 MB; acceptable on broadband WAN connections                                                                                                               |
 | No automatic WAN SSH                  | Deliberate security constraint; manual flag file required                                                                                                                             |
