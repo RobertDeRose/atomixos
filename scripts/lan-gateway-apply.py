@@ -23,12 +23,6 @@ NETWORK_FILE = Path(
 ETC_HOSTS_FILE = Path(os.environ.get("ATOMIXOS_ETC_HOSTS_FILE", "/etc/hosts"))
 LAN_INTERFACE = os.environ.get("ATOMIXOS_LAN_INTERFACE", "eth1")
 SYS_CLASS_NET_DIR = Path(os.environ.get("ATOMIXOS_SYS_CLASS_NET_DIR", "/sys/class/net"))
-DEFAULT_DNSMASQ_SETTINGS = (
-    "bind-dynamic\n"
-    "local-service\n"
-    "no-resolv\n"
-    "port=53\n"
-)
 REQUIRED_STRING_FIELDS = (
     "gateway_cidr",
     "gateway_ip",
@@ -272,9 +266,7 @@ def main() -> int:
 
     dnsmasq_changed = replace_file(
         DNSMASQ_CONFIG_FILE,
-        f"interface={LAN_INTERFACE}\n"
-        + DEFAULT_DNSMASQ_SETTINGS
-        + f"dhcp-range={dhcp_start},{dhcp_end},{netmask},24h\n"
+        f"dhcp-range={dhcp_start},{dhcp_end},{netmask},24h\n"
         + f"dhcp-option=3,{gateway_ip}\n"
         + f"dhcp-option=6,{gateway_ip}\n"
         + f"dhcp-option=42,{gateway_ip}\n"
