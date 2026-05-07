@@ -52,7 +52,7 @@ nixos-lib.runTest {
     gateway.start()
     gateway.wait_for_unit("multi-user.target")
 
-    gateway.succeed("cat > /tmp/config.toml <<'EOF'\nversion = 1\n\n[admin]\nssh_keys = [\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBootstrapKey admin@example\"]\n\n[firewall.inbound]\n\n[firewall.inbound.wan]\ntcp = [80, 443]\nudp = [1194]\n\n[firewall.inbound.lan]\ntcp = [443]\n\n[lan]\ngateway_cidr = \"10.44.0.1/24\"\ndhcp_start = \"10.44.0.10\"\ndhcp_end = \"10.44.0.200\"\ndomain = \"lab\"\ngateway_aliases = [\"atomixos\", \"gateway.lab\"]\nhostname_pattern = \"gateway-{mac}\"\n\n[health]\nrequired = [\"edgeproxy\", \"myapp\"]\n\n[container.edgeproxy]\nprivileged = true\n\n[container.edgeproxy.Unit]\nDescription = \"Edge Proxy\"\n\n[container.edgeproxy.Container]\nImage = \"ghcr.io/example/edgeproxy:latest\"\nEnvironment = [\"A=1\", \"B=2\"]\nExec = [\"--serve\", \"--port=8080\"]\n\n[container.edgeproxy.Install]\nWantedBy = [\"multi-user.target\"]\n\n[container.myapp]\nprivileged = false\n\n[container.myapp.Unit]\nDescription = \"My App\"\n\n[container.myapp.Container]\nImage = \"ghcr.io/example/myapp:latest\"\nNetwork = [\"frontend\"]\nPublishPort = [\"10080:80\", \"192.168.1.20:10081:81\"]\nVolume = [\"''${FILES_DIR}/app/config.yaml:/app/config.yaml:ro\", \"''${CONFIG_DIR}/local.env:/app/local.env:ro\"]\n\n[container.myapp.Install]\nWantedBy = [\"default.target\"]\nEOF")
+    gateway.succeed("cat > /tmp/config.toml <<'EOF'\nversion = 1\n\n[admin]\nssh_keys = [\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBootstrapKey admin@example\"]\n\n[firewall.inbound]\n\n[firewall.inbound.wan]\ntcp = [80, 443]\nudp = [1194]\n\n[firewall.inbound.lan]\ntcp = [443]\n\n[os_upgrade]\nserver_url = \"https://updates.example.test\"\n\n[lan]\ngateway_cidr = \"10.44.0.1/24\"\ndhcp_start = \"10.44.0.10\"\ndhcp_end = \"10.44.0.200\"\ndomain = \"lab\"\ngateway_aliases = [\"atomixos\", \"gateway.lab\"]\nhostname_pattern = \"gateway-{mac}\"\n\n[health]\nrequired = [\"edgeproxy\", \"myapp\"]\n\n[container.edgeproxy]\nprivileged = true\n\n[container.edgeproxy.Unit]\nDescription = \"Edge Proxy\"\n\n[container.edgeproxy.Container]\nImage = \"ghcr.io/example/edgeproxy:latest\"\nEnvironment = [\"A=1\", \"B=2\"]\nExec = [\"--serve\", \"--port=8080\"]\n\n[container.edgeproxy.Install]\nWantedBy = [\"multi-user.target\"]\n\n[container.myapp]\nprivileged = false\n\n[container.myapp.Unit]\nDescription = \"My App\"\n\n[container.myapp.Container]\nImage = \"ghcr.io/example/myapp:latest\"\nNetwork = [\"frontend\"]\nPublishPort = [\"10080:80\", \"192.168.1.20:10081:81\"]\nVolume = [\"''${FILES_DIR}/app/config.yaml:/app/config.yaml:ro\", \"''${CONFIG_DIR}/local.env:/app/local.env:ro\"]\n\n[container.myapp.Install]\nWantedBy = [\"default.target\"]\nEOF")
 
     gateway.succeed("printf 'KEY=VALUE\n' >/tmp/local.env")
     gateway.succeed("cat > /tmp/invalid-config.toml <<'EOF'\nversion = 1\n\n[admin]\nssh_keys = [\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBootstrapKey admin@example\"]\n\n[firewall.inbound]\n\n[firewall.inbound.wan]\ntcp = [443]\n\n[health]\nrequired = [\"missing-service\"]\n\n[container.myapp]\nprivileged = false\n\n[container.myapp.Container]\nImage = \"ghcr.io/example/myapp:latest\"\nEOF")
@@ -69,12 +69,13 @@ nixos-lib.runTest {
     gateway.succeed("test -f /data/config/health-required.json")
     gateway.succeed("test -f /data/config/firewall-inbound.json")
     gateway.succeed("test -f /data/config/lan-settings.json")
+    gateway.succeed("test -f /data/config/os-upgrade.json")
     gateway.succeed("test -f /data/config/quadlet-runtime.json")
     gateway.succeed("test -f /data/config/quadlet/edgeproxy.container")
     gateway.succeed("test -f /data/config/quadlet/myapp.container")
     gateway.succeed("test -f /etc/containers/systemd/edgeproxy.container")
     gateway.succeed("test -f /var/lib/appsvc/.config/containers/systemd/myapp.container")
-    gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\n\nrequired = json.loads(Path('/data/config/health-required.json').read_text())\nassert required == ['edgeproxy', 'myapp'], required\nfirewall = json.loads(Path('/data/config/firewall-inbound.json').read_text())\nassert firewall == {\n    'wan': {'tcp': [80, 443], 'udp': [1194]},\n    'lan': {'tcp': [443]},\n}, firewall\nlan = json.loads(Path('/data/config/lan-settings.json').read_text())\nassert lan == {\n    'gateway_cidr': '10.44.0.1/24',\n    'gateway_ip': '10.44.0.1',\n    'subnet_cidr': '10.44.0.0/24',\n    'netmask': '255.255.255.0',\n    'dhcp_start': '10.44.0.10',\n    'dhcp_end': '10.44.0.200',\n    'domain': 'lab',\n    'hostname_pattern': 'gateway-{mac}',\n    'gateway_aliases': ['atomixos', 'gateway.lab'],\n}, lan\nruntime = json.loads(Path('/data/config/quadlet-runtime.json').read_text())\nassert runtime['app_user'] == 'appsvc', runtime\nassert runtime['rootless_network'] == 'pasta', runtime\nassert runtime['units'] == [\n    {'name': 'edgeproxy', 'filename': 'edgeproxy.container', 'service': 'edgeproxy.service', 'mode': 'rootful'},\n    {'name': 'myapp', 'filename': 'myapp.container', 'service': 'myapp.service', 'mode': 'rootless'},\n], runtime['units']\nPY")
+    gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\n\nrequired = json.loads(Path('/data/config/health-required.json').read_text())\nassert required == ['edgeproxy', 'myapp'], required\nfirewall = json.loads(Path('/data/config/firewall-inbound.json').read_text())\nassert firewall == {\n    'wan': {'tcp': [80, 443], 'udp': [1194]},\n    'lan': {'tcp': [443]},\n}, firewall\nos_upgrade = json.loads(Path('/data/config/os-upgrade.json').read_text())\nassert os_upgrade == {'server_url': 'https://updates.example.test'}, os_upgrade\nlan = json.loads(Path('/data/config/lan-settings.json').read_text())\nassert lan == {\n    'gateway_cidr': '10.44.0.1/24',\n    'gateway_ip': '10.44.0.1',\n    'subnet_cidr': '10.44.0.0/24',\n    'netmask': '255.255.255.0',\n    'dhcp_start': '10.44.0.10',\n    'dhcp_end': '10.44.0.200',\n    'domain': 'lab',\n    'hostname_pattern': 'gateway-{mac}',\n    'gateway_aliases': ['atomixos', 'gateway.lab'],\n}, lan\nruntime = json.loads(Path('/data/config/quadlet-runtime.json').read_text())\nassert runtime['app_user'] == 'appsvc', runtime\nassert runtime['rootless_network'] == 'pasta', runtime\nassert runtime['units'] == [\n    {'name': 'edgeproxy', 'filename': 'edgeproxy.container', 'service': 'edgeproxy.service', 'mode': 'rootful'},\n    {'name': 'myapp', 'filename': 'myapp.container', 'service': 'myapp.service', 'mode': 'rootless'},\n], runtime['units']\nPY")
     gateway.succeed("grep -c '^Environment=' /data/config/quadlet/edgeproxy.container | grep '^2$'")
     gateway.succeed("grep -c '^Exec=' /data/config/quadlet/edgeproxy.container | grep '^2$'")
     gateway.succeed("grep '^Network=host$' /data/config/quadlet/edgeproxy.container")
@@ -190,6 +191,7 @@ nixos-lib.runTest {
     gateway.succeed("grep 'downloadAppliedConfig()' /tmp/bootstrap-response.html")
     gateway.succeed("grep 'version = 1' /tmp/bootstrap-response.html")
     gateway.succeed("grep 'ghcr.io/example/edgeproxy:latest' /tmp/bootstrap-response.html")
+    gateway.succeed("kill -0 $(cat /tmp/bootstrap.pid)")
     gateway.succeed("rm -rf /tmp/bootstrap-root-api && mkdir -p /tmp/bootstrap-root-api")
     gateway.succeed("kill $(cat /tmp/bootstrap.pid)")
     gateway.succeed("first-boot-provision serve /tmp/bootstrap-root-api /tmp/bootstrap-output-api.toml --host 127.0.0.1 --port 18080 >/tmp/bootstrap.log 2>&1 & echo $! >/tmp/bootstrap.pid")
@@ -199,6 +201,7 @@ nixos-lib.runTest {
     gateway.succeed("test -f /tmp/bootstrap-root-api/config.toml")
     gateway.succeed("test -f /tmp/bootstrap-root-api/ssh-authorized-keys/admin")
     gateway.succeed("test -f /tmp/bootstrap-root-api/health-required.json")
+    gateway.succeed("kill -0 $(cat /tmp/bootstrap.pid)")
     gateway.succeed("kill $(cat /tmp/bootstrap.pid)")
 
     gateway.succeed("rm -rf /tmp/bootstrap-root-generate && mkdir -p /tmp/bootstrap-root-generate")
@@ -210,7 +213,7 @@ nixos-lib.runTest {
     gateway.succeed("grep 'downloadAppliedConfig()' /tmp/bootstrap-generate-response.html")
     gateway.succeed("grep 'version = 1' /tmp/bootstrap-generate-response.html")
     gateway.succeed("grep 'ghcr.io/example/myapp:latest' /tmp/bootstrap-generate-response.html")
-    gateway.succeed("python3 - <<'PY'\nimport json\nimport tomllib\nfrom pathlib import Path\n\nconfig = tomllib.loads(Path('/tmp/bootstrap-root-generate/config.toml').read_text())\nassert config['health']['required'] == ['myapp'], config['health']['required']\nrequired = json.loads(Path('/tmp/bootstrap-root-generate/health-required.json').read_text())\nassert required == ['myapp'], required\nPY")
+    gateway.succeed("python3 - <<'PY'\nimport json\nimport tomllib\nfrom pathlib import Path\n\nconfig = tomllib.loads(Path('/tmp/bootstrap-root-generate/config.toml').read_text())\nassert config['health']['required'] == ['myapp'], config['health']['required']\nassert 'os_upgrade' not in config, config\nrequired = json.loads(Path('/tmp/bootstrap-root-generate/health-required.json').read_text())\nassert required == ['myapp'], required\nPY")
     gateway.succeed("kill $(cat /tmp/bootstrap.pid)")
 
     gateway.succeed("rm -rf /tmp/bootstrap-root-invalid && mkdir -p /tmp/bootstrap-root-invalid")

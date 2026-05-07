@@ -19,6 +19,10 @@
 
 let
   firstBootScript = pkgs.writeShellScript "first-boot" (builtins.readFile ../scripts/first-boot.sh);
+  bootstrapReloadScript = pkgs.writeShellScript "bootstrap-reload" ''
+    set -euo pipefail
+    ${pkgs.systemd}/bin/systemctl try-restart atomixos-bootstrap.service
+  '';
   quadletSyncScript = pkgs.writeShellScript "quadlet-sync" (
     builtins.readFile ../scripts/quadlet-sync.sh
   );
@@ -94,6 +98,7 @@ in
         pkgs.coreutils
         pkgs.gzip
         pkgs.jq
+        pkgs.procps
         pkgs.systemd
         pkgs.python3Minimal
         pkgs.zstd
@@ -106,6 +111,35 @@ in
       Type = "oneshot";
       ExecStart = firstBootScript;
       RemainAfterExit = true;
+    };
+  };
+
+  systemd.services.atomixos-bootstrap = {
+    description = "AtomixOS bootstrap web console";
+    after = [ "data.mount" "network-online.target" ];
+    wants = [ "data.mount" "network-online.target" ];
+    wantedBy = [ "multi-user.target" ];
+
+    unitConfig.RequiresMountsFor = [ "/data" ];
+
+    path = [
+      pkgs.coreutils
+      pkgs.gzip
+      pkgs.jq
+      pkgs.python3Minimal
+      pkgs.systemd
+      pkgs.zstd
+      provisionCli
+    ];
+
+    serviceConfig = {
+      Type = "simple";
+      Restart = "always";
+      RestartSec = 2;
+      Environment = [
+        "ATOMIXOS_BOOTSTRAP_POST_APPLY=${bootstrapReloadScript}"
+      ];
+      ExecStart = "${provisionCli}/bin/first-boot-provision serve /data/config --host 172.20.30.1 --port 8080";
     };
   };
 }

@@ -42,6 +42,7 @@ BOOTSTRAP_LAN_HOST = "172.20.30.1"
 RUNTIME_METADATA_FILENAME = "quadlet-runtime.json"
 FIREWALL_INBOUND_FILENAME = "firewall-inbound.json"
 LAN_SETTINGS_FILENAME = "lan-settings.json"
+OS_UPGRADE_FILENAME = "os-upgrade.json"
 CONTAINER_SUFFIX = ".container"
 QUADLET_SUFFIXES = {".build", ".container", ".image", ".kube", ".network", ".pod", ".volume"}
 BOOTSTRAP_LOGO_PATH = Path(__file__).resolve().parent.parent / "share" / "atomixos" / "atomixos.png"
@@ -52,6 +53,7 @@ DEFAULT_LAN_DOMAIN = "local"
 DEFAULT_LAN_GATEWAY_ALIASES = ["atomixos"]
 DEFAULT_LAN_HOSTNAME_PATTERN = ""
 SCHEMA_ENV = "ATOMIXOS_CONFIG_SCHEMA"
+BOOTSTRAP_POST_APPLY_ENV = "ATOMIXOS_BOOTSTRAP_POST_APPLY"
 
 
 class ProvisionError(RuntimeError):
@@ -562,7 +564,7 @@ def load_config(config_path: Path, config_root: Path = DEFAULT_CONFIG_DIR):
     root = require_allowed_keys(
         data,
         "config",
-        {"version", "admin", "firewall", "health", "lan", "container"},
+        {"version", "admin", "firewall", "health", "lan", "os_upgrade", "container"},
         {"version", "admin", "firewall", "health", "container"},
     )
 
@@ -610,6 +612,13 @@ def load_config(config_path: Path, config_root: Path = DEFAULT_CONFIG_DIR):
 
     lan_settings = load_lan_settings(root.get("lan"))
 
+    os_upgrade_settings = None
+    if root.get("os_upgrade") is not None:
+        os_upgrade = require_allowed_keys(root.get("os_upgrade"), "os_upgrade", {"server_url"}, {"server_url"})
+        os_upgrade_settings = {
+            "server_url": require_string(os_upgrade.get("server_url"), "os_upgrade.server_url")
+        }
+
     container = require_mapping(root.get("container"), "container")
     rendered_units, runtime_units, warnings = render_containers(container, config_root)
     if not rendered_units:
@@ -625,6 +634,7 @@ def load_config(config_path: Path, config_root: Path = DEFAULT_CONFIG_DIR):
         "ssh_keys": ssh_keys,
         "firewall_inbound": firewall_inbound,
         "lan_settings": lan_settings,
+        "os_upgrade": os_upgrade_settings,
         "required_units": required_units,
         "rendered_units": rendered_units,
         "runtime": {
@@ -832,6 +842,13 @@ def write_imported_state(parsed: dict, prepared_config: Path, prepared_files: Pa
     lan_settings_path = config_root / LAN_SETTINGS_FILENAME
     lan_settings_path.write_text(json.dumps(parsed["lan_settings"], indent=2) + "\n")
     lan_settings_path.chmod(0o600)
+
+    os_upgrade_path = config_root / OS_UPGRADE_FILENAME
+    if parsed["os_upgrade"] is None:
+        os_upgrade_path.unlink(missing_ok=True)
+    else:
+        os_upgrade_path.write_text(json.dumps(parsed["os_upgrade"], indent=2) + "\n")
+        os_upgrade_path.chmod(0o600)
 
     runtime_path = config_root / RUNTIME_METADATA_FILENAME
     runtime_path.write_text(json.dumps(parsed["runtime"], indent=2) + "\n")
@@ -1146,6 +1163,8 @@ BOOTSTRAP_HTML = """<!doctype html>
           <textarea class=\"short\" name=\"lan_tcp\"></textarea>
           <label>LAN UDP ports (one per line, blank keeps LAN open)</label>
           <textarea class=\"short\" name=\"lan_udp\"></textarea>
+          <label>Update server URL (blank disables OTA polling)</label>
+          <textarea class=\"short\" name=\"os_upgrade_server_url\"></textarea>
           <label>LAN gateway CIDR</label>
           <textarea class=\"short\" name=\"gateway_cidr\">172.20.30.1/24</textarea>
           <label>LAN DHCP start</label>
@@ -1194,11 +1213,24 @@ class BootstrapHandler(BaseHTTPRequestHandler):
             return
         Path(output_path).write_text("applied\n")
 
+    def _run_post_apply(self):
+        command = os.environ.get(BOOTSTRAP_POST_APPLY_ENV)
+        if not command:
+            return
+        try:
+            subprocess.run([command], capture_output=True, text=True, check=True)
+        except FileNotFoundError as exc:
+            raise provision_error(f"unable to execute post-apply command {command!r}: {exc}") from exc
+        except subprocess.CalledProcessError as exc:
+            detail = (exc.stderr or exc.stdout or f"exit status {exc.returncode}").strip()
+            raise provision_error(f"post-apply command failed: {detail}") from exc
+
     def _write_payload(self, payload: bytes, filename: str = "config.toml"):
         temp_bundle, prepared_config, prepared_files = prepare_source_bytes(payload, filename)
         try:
             parsed = load_config(prepared_config, Path(self.config_root))
             write_imported_state(parsed, prepared_config, prepared_files, Path(self.config_root))
+            self._run_post_apply()
             return prepared_config.read_text()
         finally:
             temp_bundle.cleanup()
@@ -1302,6 +1334,7 @@ class BootstrapHandler(BaseHTTPRequestHandler):
                 wan_udp_ports = [int(line.strip()) for line in form.get("wan_udp", "").splitlines() if line.strip()]
                 lan_tcp_ports = [int(line.strip()) for line in form.get("lan_tcp", "").splitlines() if line.strip()]
                 lan_udp_ports = [int(line.strip()) for line in form.get("lan_udp", "").splitlines() if line.strip()]
+                os_upgrade_server_url = form.get("os_upgrade_server_url", "").strip()
                 gateway_cidr = form.get("gateway_cidr", DEFAULT_LAN_GATEWAY_CIDR).strip() or DEFAULT_LAN_GATEWAY_CIDR
                 dhcp_start = form.get("dhcp_start", DEFAULT_LAN_DHCP_START).strip() or DEFAULT_LAN_DHCP_START
                 dhcp_end = form.get("dhcp_end", DEFAULT_LAN_DHCP_END).strip() or DEFAULT_LAN_DHCP_END
@@ -1341,6 +1374,14 @@ class BootstrapHandler(BaseHTTPRequestHandler):
                 if hostname_pattern:
                     lan_lines.append(f'hostname_pattern = {json.dumps(hostname_pattern)}')
                 lan_text = "\n".join(lan_lines)
+                os_upgrade_text = ""
+                if os_upgrade_server_url:
+                    os_upgrade_text = textwrap.dedent(
+                        f"""
+                        [os_upgrade]
+                        server_url = {json.dumps(os_upgrade_server_url)}
+                        """
+                    ).strip()
                 config_text = textwrap.dedent(
                     f"""
                     version = 1
@@ -1351,6 +1392,8 @@ class BootstrapHandler(BaseHTTPRequestHandler):
                     {firewall_text}
 
                     {lan_text}
+
+                    {os_upgrade_text}
 
                     [health]
                     required = {json.dumps(required)}
@@ -1388,9 +1431,9 @@ class BootstrapHandler(BaseHTTPRequestHandler):
         sys.stderr.write("[bootstrap] " + (fmt % args) + "\n")
 
 
-def serve_bootstrap(config_root: Path, output_path: Path, host: str, port: int):
+def serve_bootstrap(config_root: Path, output_path: Path | None, host: str, port: int):
     BootstrapHandler.config_root = str(config_root)
-    BootstrapHandler.output_path = str(output_path)
+    BootstrapHandler.output_path = str(output_path) if output_path else None
     waiting_for_bind = False
     while True:
         try:
@@ -1425,7 +1468,7 @@ def main():
 
     serve_parser = sub.add_parser("serve")
     serve_parser.add_argument("config_root")
-    serve_parser.add_argument("output")
+    serve_parser.add_argument("output", nargs="?")
     serve_parser.add_argument("--host", default=BOOTSTRAP_LAN_HOST)
     serve_parser.add_argument("--port", type=int, default=8080)
 
@@ -1445,7 +1488,12 @@ def main():
                 Path(args.rootless_target) if args.rootless_target else None,
             )
         elif args.command == "serve":
-            serve_bootstrap(Path(args.config_root), Path(args.output), args.host, args.port)
+            serve_bootstrap(
+                Path(args.config_root),
+                Path(args.output) if args.output else None,
+                args.host,
+                args.port,
+            )
     except ProvisionError as exc:
         print(str(exc), file=sys.stderr)
         return 1

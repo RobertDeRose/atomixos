@@ -98,8 +98,8 @@ application or VPN ports from `/data/config/firewall-inbound.json` under the `wa
 if the flag file `/data/config/ssh-wan-enabled` exists.
 
 **eth1 (LAN) inbound**: ALLOW all inbound traffic by default. If provisioned firewall state includes a `lan` scope with
-TCP or UDP ports in `/data/config/firewall-inbound.json`, LAN SHALL switch from the default-open rule to an explicit
-allowlist containing only those provisioned LAN ports.
+TCP or UDP ports in `/data/config/firewall-inbound.json`, the provisioned LAN ports SHALL be appended to the
+platform-required LAN ports instead of replacing them.
 
 **tun0 (VPN) inbound**: ALLOW TCP/22 (SSH), ALLOW established/related, DROP all else.
 
@@ -117,10 +117,17 @@ allowlist containing only those provisioned LAN ports.
 - **AND** `provisioned-firewall-inbound.service` applies the provisioned state
 - **THEN** inbound connections to eth1 on TCP 443 are accepted
 
-#### Scenario: LAN remains open without restrictive scope
+#### Scenario: LAN remains open without explicit LAN scope
 
 - **WHEN** `/data/config/firewall-inbound.json` does not contain a `lan` scope with any ports
 - **THEN** inbound connections to eth1 remain accepted by the default LAN-open rule
+
+#### Scenario: Provisioned LAN ports append to required platform ports
+
+- **WHEN** `/data/config/firewall-inbound.json` contains `lan.tcp = [443]`
+- **AND** `provisioned-firewall-inbound.service` applies the provisioned state
+- **THEN** inbound connections to eth1 on TCP 443 are accepted
+- **AND** the platform-required LAN ports remain accepted
 
 #### Scenario: WAN application ports are closed before provisioning
 

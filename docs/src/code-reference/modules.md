@@ -266,7 +266,7 @@ Flag file: `/data/config/ssh-wan-enabled`
 
 **Provisioned inbound:** `/data/config/firewall-inbound.json` is applied by `provisioned-firewall-inbound.service`.
 The file may contain `wan` and `lan` scopes. `wan` opens selected TCP/UDP ports on the WAN interface. `lan`, when
-present with any ports, replaces the default-open LAN rule with an explicit TCP/UDP allowlist on the LAN interface.
+present with any ports, appends those ports to the platform-required LAN ports on the LAN interface.
 
 ---
 
@@ -359,9 +359,12 @@ path records lifecycle markers to the journal through normal service stdout.
 |-------------------|--------|------------------------------|------------------------------------------|
 | `useHawkbit`      | bool   | `false`                      | Reserve hawkBit path and install package |
 | `pollingInterval` | string | `"1h"`                       | Timer interval                           |
-| `serverUrl`       | string | `"http://localhost/updates"` | Update server URL                        |
+| `serverUrl`       | string | `""`                         | Optional fallback update server URL      |
 
 **Timer:** `OnBootSec=5min`, `OnUnitActiveSec=<pollingInterval>`, `RandomizedDelaySec=10min`
+
+`os-upgrade.service` prefers the provisioned `/data/config/os-upgrade.json` value and exits successfully without polling
+when neither the provisioned config nor the legacy fallback URL is set.
 
 When `useHawkbit = true`, AtomixOS disables the polling service and installs `rauc-hawkbit-updater`, but does not
 configure an operational hawkBit systemd service in the current image.
@@ -370,7 +373,7 @@ configure an operational hawkBit systemd service in the current image.
 
 ## first-boot.nix
 
-**Purpose**: One-time first-boot provisioning and optional slot confirmation.
+**Purpose**: One-time first-boot provisioning and optional slot confirmation, plus a persistent LAN bootstrap console.
 
 | Setting   | Value                                                                     |
 |-----------|---------------------------------------------------------------------------|
@@ -380,6 +383,9 @@ configure an operational hawkBit systemd service in the current image.
 | Effect    | provision config, optionally `rauc status mark-good`, then write sentinel |
 
 Mutually exclusive with `os-verification.service` via the sentinel file.
+
+`atomixos-bootstrap.service` runs `first-boot-provision serve` on the LAN bootstrap endpoint and remains available after
+provisioning so operators can recover or reprovision without re-imaging.
 
 ---
 

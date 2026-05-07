@@ -111,25 +111,13 @@ cleanup_seed_source() {
 }
 
 bootstrap_web_console() {
-	local temp_config
-	local host
-	temp_config="$(mktemp /run/atomixos-bootstrap-config.XXXXXX.toml)"
-	rm -f "$temp_config"
-	host="$(read_bootstrap_host)"
-	log "Starting bootstrap web console on $host:$BOOTSTRAP_PORT"
-	first-boot-provision serve "$CONFIG_ROOT" "$temp_config" --host "$host" --port "$BOOTSTRAP_PORT" &
-	local server_pid=$!
-	while kill -0 "$server_pid" >/dev/null 2>&1; do
-		if [ -f "$temp_config" ]; then
-			kill "$server_pid" >/dev/null 2>&1 || true
-			wait "$server_pid" 2>/dev/null || true
-			rm -f "$temp_config"
+	log "Waiting for provisioning via bootstrap web console"
+	while true; do
+		if has_valid_provisioning; then
 			return 0
 		fi
 		sleep 1
 	done
-	rm -f "$temp_config"
-	return 1
 }
 
 sync_quadlet_units() {

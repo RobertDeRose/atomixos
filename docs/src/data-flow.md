@@ -25,6 +25,7 @@ Persisted outputs are:
 | Admin SSH keys           | `/data/config/ssh-authorized-keys/admin` |
 | WAN inbound policy       | `/data/config/firewall-inbound.json`     |
 | LAN runtime settings     | `/data/config/lan-settings.json`         |
+| OS upgrade settings      | `/data/config/os-upgrade.json`           |
 | Required health units    | `/data/config/health-required.json`      |
 | Rendered Quadlets        | `/data/config/quadlet/*.container`       |
 | Quadlet runtime metadata | `/data/config/quadlet-runtime.json`      |
@@ -35,8 +36,10 @@ fails.
 
 ## Update Flow
 
-`os-upgrade.service` sends the compact lowercase 12-hex eth0 MAC in `X-Device-ID`, compares available bundle metadata
-with the booted version, downloads the bundle to `/data`, installs it with RAUC, and reboots into the newly selected slot.
+`os-upgrade.service` reads `/data/config/os-upgrade.json` when present, falls back to the module-configured update URL for
+legacy deployments, and skips polling cleanly when no update server is configured. When polling is configured, it sends
+the compact lowercase 12-hex eth0 MAC in `X-Device-ID`, compares available bundle metadata with the booted version,
+downloads the bundle to `/data`, installs it with RAUC, and reboots into the newly selected slot.
 
 `os-verification.service` commits a slot only after service, network, LAN, and required-unit checks remain healthy through
 the sustained verification window.
@@ -46,8 +49,8 @@ the sustained verification window.
 `lan-gateway-apply.service` consumes `/data/config/lan-settings.json`, writes the eth1 network drop-in, updates dnsmasq
 and chrony runtime snippets, and restarts the affected services. `provisioned-firewall-inbound.service` consumes
 `/data/config/firewall-inbound.json` and applies the requested WAN and LAN nftables rules for the configured scopes.
-WAN remains deny-by-default unless explicitly opened. LAN is open by default unless an explicit `lan` scope is present,
-in which case the service replaces the default-open rule with the configured allowlist.
+WAN remains deny-by-default unless explicitly opened. LAN is open by default, and an explicit `lan` scope appends
+operator-selected ports to the platform-required LAN ports instead of replacing them.
 
 ## Application Runtime Flow
 

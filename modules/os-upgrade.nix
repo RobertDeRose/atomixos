@@ -10,6 +10,7 @@
 let
   cfg = config.os-upgrade;
   raucEnabled = config.atomixos.rauc.enable;
+  osUpgradeConfigFile = "/data/config/os-upgrade.json";
 
   upgradeScript = pkgs.writeShellScript "os-upgrade" (builtins.readFile ../scripts/os-upgrade.sh);
 in
@@ -31,8 +32,8 @@ in
 
     serverUrl = lib.mkOption {
       type = lib.types.str;
-      default = "http://localhost/updates";
-      description = "URL of the update server";
+      default = "";
+      description = "Optional fallback URL of the update server";
     };
   };
 
@@ -55,12 +56,12 @@ in
         pkgs.coreutils
       ];
 
-      environment = {
-        OS_UPGRADE_URL = cfg.serverUrl;
-      };
-
       serviceConfig = {
         Type = "oneshot";
+        Environment = [
+          "ATOMIXOS_OS_UPGRADE_CONFIG=${osUpgradeConfigFile}"
+          "OS_UPGRADE_URL=${cfg.serverUrl}"
+        ];
         ExecStart = upgradeScript;
         TimeoutStartSec = 900; # 15 minutes (download can be slow)
 

@@ -13,6 +13,8 @@ LAN_DEFAULT_OPEN_COMMENT = "ATOMIXOS_LAN_DEFAULT_OPEN"
 WAN_INTERFACE = os.environ.get("ATOMIXOS_FIREWALL_WAN_INTERFACE", "eth0")
 LAN_INTERFACE = os.environ.get("ATOMIXOS_FIREWALL_LAN_INTERFACE", "eth1")
 NFT = os.environ.get("ATOMIXOS_NFT", "nft")
+LAN_REQUIRED_TCP = {22, 53, 8080}
+LAN_REQUIRED_UDP = {53, 67, 68, 123}
 INTERFACE_PATTERN = re.compile(r"^[A-Za-z0-9_.:-]+$")
 RULE_COMMENT_PATTERN = re.compile(r"^[ -~]+$")
 
@@ -120,6 +122,9 @@ def main() -> int:
             raise ValueError(msg)
         for proto in ("tcp", "udp"):
             ports = validate_ports(scope_payload.get(proto), f"firewall-inbound.{scope_name}.{proto}")
+            if scope_name == "lan" and ports:
+                required_ports = LAN_REQUIRED_TCP if proto == "tcp" else LAN_REQUIRED_UDP
+                ports = sorted(set(ports) | required_ports)
             if not ports:
                 continue
             if scope_name == "lan":

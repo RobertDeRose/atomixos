@@ -219,22 +219,19 @@ nixos-lib.runTest {
 
     gateway.succeed("cat > /data/config/firewall-inbound.json <<'EOF'\n{\"wan\": {\"tcp\": [443], \"udp\": [1194]}, \"lan\": {\"tcp\": [443]}}\nEOF")
     gateway.succeed("systemctl start provisioned-firewall-inbound.service")
-    gateway.succeed("nft list chain inet filter input | grep 'iifname \\\"eth2\\\" tcp dport 443'")
+    gateway.succeed("nft list chain inet filter input | grep 'iifname \\\"eth2\\\" tcp dport'")
 
     # HTTPS (443/tcp) — ALLOWED on LAN when provisioned
     probe.succeed("nc -z -w 3 172.20.30.1 443")
 
-    # All non-allowlisted LAN ports are blocked once restrictive LAN mode is active.
-    probe.fail("nc -z -w 3 172.20.30.1 22")
-    probe.fail("nc -z -w 3 172.20.30.1 53")
-    gateway.fail("nft list chain inet filter input | grep 'iifname \\\"eth2\\\" udp dport 53'")
-    gateway.fail("nft list chain inet filter input | grep 'iifname \\\"eth2\\\" udp dport 123'")
-    gateway.fail("nft list chain inet filter input | grep 'iifname \\\"eth2\\\" udp dport 67'")
-    probe.fail("nc -z -w 3 172.20.30.1 8080")
+    # Platform-required LAN ports remain open and provisioned ports are appended.
+    probe.succeed("nc -z -w 3 172.20.30.1 22")
+    probe.succeed("nc -z -w 3 172.20.30.1 53")
+    probe.succeed("nc -z -w 3 172.20.30.1 8080")
     # Unlisted port (9090/tcp) — BLOCKED on LAN when explicit LAN rules are provisioned
     probe.fail("nc -z -w 3 172.20.30.1 9090")
 
-    gateway.log("Phase 2 PASSED: explicit LAN scope switches to allowlisted ports only")
+    gateway.log("Phase 2 PASSED: explicit LAN scope appends to platform-required ports")
 
     # ── Phase 3: No forwarding ──
     gateway.log("Phase 3: Testing forward chain (drop all)")

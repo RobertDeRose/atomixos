@@ -49,9 +49,9 @@ reprovisioning SHALL use USB seed discovery followed by the bootstrap web consol
 ### Requirement: config.toml defines bounded provisioning data
 
 The local provisioning artifact SHALL be a single `config.toml` file containing only the bounded appliance provisioning
-contract: admin SSH keys, provisioned LAN and WAN firewall inbound policy, optional LAN settings, explicit health
-requirements, and structured Quadlet definitions. The accepted structure SHALL be defined by a machine-readable schema
-that the import path validates before semantic normalization.
+contract: admin SSH keys, provisioned LAN and WAN firewall inbound policy, optional LAN settings, optional OS upgrade
+settings, explicit health requirements, and structured Quadlet definitions. The accepted structure SHALL be defined by a
+machine-readable schema that the import path validates before semantic normalization.
 
 #### Scenario: Minimum valid config.toml includes admin access and stack definition
 
@@ -64,10 +64,10 @@ that the import path validates before semantic normalization.
 The device SHALL render accepted provisioning input into JSON runtime state under `/data/config/`. Firewall inbound state
 SHALL be written to `/data/config/firewall-inbound.json` as optional `wan` and `lan` objects, each containing optional
 `tcp` and `udp` arrays of integer ports in `1..65535`. If the `lan` object is omitted or contains no ports, LAN remains
-open by default. If the `lan` object contains any ports, LAN SHALL switch to an explicit allowlist using only those
-ports. LAN state SHALL be written to `/data/config/lan-settings.json`
-with the validated gateway CIDR, gateway IP, subnet CIDR, netmask, DHCP range, DNS domain, hostname pattern, and
-gateway aliases.
+open by default. If the `lan` object contains any ports, those ports SHALL be appended to the platform-required LAN
+ports. LAN state SHALL be written to `/data/config/lan-settings.json` with the validated gateway CIDR, gateway IP,
+subnet CIDR, netmask, DHCP range, DNS domain, hostname pattern, and gateway aliases. Optional OS upgrade state SHALL be
+written to `/data/config/os-upgrade.json` when `[os_upgrade]` is present.
 
 #### Scenario: Firewall inbound config is bounded
 
@@ -172,7 +172,7 @@ Provisioned containers SHALL be rendered into canonical Quadlet files before act
 
 When no provisioning seed file is found, the device SHALL start a constrained local bootstrap web console. The console
 SHALL support uploading an existing `config.toml` or supported config bundle, and generating a new `config.toml` from a
-basic form for admin SSH keys and application stack provisioning.
+basic form for admin SSH keys, optional OS update server configuration, and application stack provisioning.
 
 #### Scenario: Generated config is shown back to the operator after apply
 
@@ -199,13 +199,19 @@ The programmatic endpoint SHALL be `POST /api/config` and return JSON success or
 ### Requirement: Bootstrap web console is exposed only on the LAN bootstrap endpoint
 
 The bootstrap web console SHALL bind to the LAN bootstrap address and remain reachable only from the LAN interface. The
-default local endpoint SHALL be `172.20.30.1:8080`.
+default local endpoint SHALL be `172.20.30.1:8080`, and the bootstrap service SHALL remain available after provisioning
+to support local recovery or reprovisioning.
 
 #### Scenario: Bootstrap console listens on the LAN bootstrap endpoint
 
 - **WHEN** the device starts the bootstrap web console
 - **THEN** it listens on `172.20.30.1:8080` and is reachable from the LAN interface without opening the same endpoint on
   WAN
+
+#### Scenario: Bootstrap console remains available after provisioning
+
+- **WHEN** a valid provisioning config has already been applied
+- **THEN** the bootstrap console continues listening on the LAN bootstrap endpoint for recovery or reprovisioning
 
 #### Scenario: Existing config.toml can be uploaded through the bootstrap console
 

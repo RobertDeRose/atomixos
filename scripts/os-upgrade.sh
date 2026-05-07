@@ -3,12 +3,14 @@
 # Designed to be run periodically by a systemd timer.
 #
 # Environment:
-#   OS_UPGRADE_URL — base URL of the update server (default: http://localhost/updates)
+#   ATOMIXOS_OS_UPGRADE_CONFIG — provisioned JSON config with server_url
+#   OS_UPGRADE_URL — fallback update server base URL for legacy deployments
 #
 # Dependencies (must be on PATH): rauc, curl, jq, systemctl
 set -euo pipefail
 
-UPDATE_URL="${OS_UPGRADE_URL:-http://localhost/updates}"
+OS_UPGRADE_CONFIG="${ATOMIXOS_OS_UPGRADE_CONFIG:-/data/config/os-upgrade.json}"
+UPDATE_URL=""
 DEVICE_ID=$(cat /sys/class/net/eth0/address 2>/dev/null | tr -d ':' || echo "unknown")
 BUNDLE_DIR="/data/config/bundles"
 CURRENT_VERSION=$(rauc status --output-format=json 2>/dev/null | jq -r '
@@ -20,6 +22,19 @@ CURRENT_VERSION=$(rauc status --output-format=json 2>/dev/null | jq -r '
 ' || echo "unknown")
 
 log() { echo "[os-upgrade] $*"; }
+
+if [ -f "$OS_UPGRADE_CONFIG" ]; then
+	UPDATE_URL="$(jq -r '.server_url // empty' "$OS_UPGRADE_CONFIG" 2>/dev/null || true)"
+fi
+
+if [ -z "$UPDATE_URL" ]; then
+	UPDATE_URL="${OS_UPGRADE_URL:-}"
+fi
+
+if [ -z "$UPDATE_URL" ]; then
+	log "No update server configured; skipping"
+	exit 0
+fi
 
 current_boot_slot() {
 	local arg
@@ -59,13 +74,18 @@ target_boot_slot_from_status() {
 log "Checking for updates (current version: $CURRENT_VERSION, device: $DEVICE_ID)..."
 
 # Query update server for latest version
-RESPONSE=$(curl -sf -m 30 \
+RESPONSE=$(curl -sfL -m 30 \
 	-H "X-Device-ID: $DEVICE_ID" \
 	-H "X-Current-Version: $CURRENT_VERSION" \
 	"$UPDATE_URL/api/v1/updates/latest" 2>/dev/null) || {
 	log "Failed to reach update server at $UPDATE_URL"
 	exit 0 # Not an error — we'll try again next interval
 }
+
+if ! printf '%s\n' "$RESPONSE" | jq -e 'type == "object"' >/dev/null 2>&1; then
+	log "Invalid update server response from $UPDATE_URL"
+	exit 0
+fi
 
 LATEST_VERSION=$(echo "$RESPONSE" | jq -r '.version // empty')
 BUNDLE_URL=$(echo "$RESPONSE" | jq -r '.bundle_url // empty')

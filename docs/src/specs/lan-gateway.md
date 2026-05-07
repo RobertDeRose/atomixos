@@ -106,7 +106,8 @@ The firewall uses nftables with per-interface rules:
 
 WAN application and VPN ports are opened only from `/data/config/firewall-inbound.json` by
 `provisioned-firewall-inbound.service`. SSH on WAN is controlled by a dynamic nftables rule toggled via
-`/data/config/ssh-wan-enabled`.
+`/data/config/ssh-wan-enabled`. Provisioned `lan` ports are appended to the platform-required LAN ports instead of
+replacing them.
 
 #### Scenario: WAN ports are closed before provisioning
 
