@@ -30,9 +30,6 @@ let
   ubootEnvTools = self.packages.${pkgs.stdenv.hostPlatform.system}.uboot-env-tools;
   firstBootEnv = {
     ATOMIXOS_RAUC_ENABLE = if config.atomixos.rauc.enable then "1" else "0";
-  }
-  // lib.optionalAttrs developmentMode {
-    ATOMIXOS_DEV_ENABLE_SSH_WAN = "1";
   };
 in
 {

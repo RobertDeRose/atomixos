@@ -34,30 +34,6 @@ read_bootstrap_host() {
 	' "$LAN_SETTINGS_FILE" 2>/dev/null || printf '%s\n' "$BOOTSTRAP_HOST"
 }
 
-enable_dev_ssh_on_wan() {
-	local flag_file="$CONFIG_ROOT/ssh-wan-enabled"
-
-	if [ "${ATOMIXOS_DEV_ENABLE_SSH_WAN:-}" != "1" ] || [ -f "$flag_file" ]; then
-		return 0
-	fi
-
-	mkdir -p "$(dirname "$flag_file")"
-	log "Enabling SSH on WAN for development image"
-	: >"$flag_file"
-}
-
-write_dev_health_requirements() {
-	local health_file="$CONFIG_ROOT/health-required.json"
-
-	if [ "${ATOMIXOS_DEV_ENABLE_SSH_WAN:-}" != "1" ] || [ -f "$health_file" ]; then
-		return 0
-	fi
-
-	mkdir -p "$CONFIG_ROOT"
-	printf '%s\n' '[]' >"$health_file"
-	chmod 600 "$health_file"
-}
-
 has_required_units() {
 	local health_file="$CONFIG_ROOT/health-required.json"
 
@@ -236,10 +212,6 @@ discover_and_import_provisioning() {
 	sync_quadlet_units
 }
 
-should_allow_dev_fallback() {
-	[ "${ATOMIXOS_DEV_ENABLE_SSH_WAN:-}" = "1" ]
-}
-
 SENTINEL="${ATOMIXOS_FIRST_BOOT_SENTINEL:-/data/.completed_first_boot}"
 
 # Guard (belt-and-suspenders alongside systemd ConditionPathExists)
@@ -250,25 +222,13 @@ fi
 
 BOOT_SLOT="$(current_boot_slot || true)"
 
-used_dev_fallback=false
-
 if ! discover_and_import_provisioning; then
-	if should_allow_dev_fallback; then
-		log "Provisioning seed not found; using development fallback"
-		enable_dev_ssh_on_wan
-		write_dev_health_requirements
-		used_dev_fallback=true
-	else
-		log "ERROR: provisioning seed not found"
-		exit 1
-	fi
-	if [ "$used_dev_fallback" != true ] && ! has_valid_provisioning; then
-		log "ERROR: imported provisioning is invalid"
-		exit 1
-	fi
+	log "ERROR: provisioning seed not found"
+	exit 1
 fi
 
-if [ "$used_dev_fallback" != true ] && ! has_valid_provisioning; then
+
+if ! has_valid_provisioning; then
 	log "ERROR: resulting provisioning is invalid"
 	exit 1
 fi
