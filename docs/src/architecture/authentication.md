@@ -21,10 +21,6 @@ Persisted device-local state lives on `/data`:
 - **VPN (tun0)**: Key-only authentication via SSH public key
 - **WAN (eth0)**: Disabled by default; enabled only when `/data/config/ssh-wan-enabled` flag file exists
 
-When `DEVELOPMENT=1` is enabled at build time, first boot can still seed
-`/data/config/ssh-wan-enabled` to simplify SSH testing, but SSH remains
-key-only.
-
 ### Physical Recovery
 
 Rock64 keeps a separate physical break-glass path. If `_RUT_OH_=1` is set in

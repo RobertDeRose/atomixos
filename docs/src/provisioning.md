@@ -43,6 +43,6 @@ files, admin SSH authorized keys, and other provisioning-derived runtime inputs.
 
 ## USB Recovery Mode
 
-If the reset button is held from power-on for 10 seconds, U-Boot enters USB
+If the reset button is held from power-on for 5 seconds, U-Boot enters USB
 mass storage mode instead of booting Linux. The
 Rock64 OTG USB port then exposes the full eMMC as a removable disk, allowing the host to write a fresh image directly.

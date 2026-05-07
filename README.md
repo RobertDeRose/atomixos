@@ -293,7 +293,7 @@ The image includes U-Boot plus slot A (`boot-a` + `rootfs-a`). It leaves the rem
 `systemd-repart` can create slot B (`boot-b` + `rootfs-b`) and `/data` on first boot before the live system mounts it.
 
 Recovery mode: hold the reset button before power-on and keep holding for
-10 seconds. U-Boot will expose the on-board eMMC as
+5 seconds. U-Boot will expose the on-board eMMC as
 a USB mass storage device over the Rock64 OTG USB port so you can reflash it directly from a host machine.
 
 ## mise Task Reference

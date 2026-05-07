@@ -88,7 +88,7 @@ U-Boot boot script loaded after RAUC bootmeth selects the slot and decrements th
 **Key logic:**
 
 1. Echo build ID (squashfs store hash) to console for identification
-2. If the reset button (Linux `gpiochip3` line 4, U-Boot GPIO `100`) is held low for 10 seconds, run `ums 0 mmc 1`
+2. If the reset button (Linux `gpiochip3` line 4, U-Boot GPIO `100`) is held low for 5 seconds, run `ums 0 mmc 1`
    so the Rock64 OTG port exposes the full eMMC to a host computer
 3. Auto-detect boot device number from `devnum`
 4. Override `ramdisk_addr_r=0x08000000` (avoids kernel overlap)

@@ -9,7 +9,7 @@
   - [Network Topology](./architecture/network-topology.md)
   - [Update & Rollback Flow](./architecture/update-rollback.md)
   - [Authentication (EN18031)](./architecture/authentication.md)
-  - [Nixstasis Enrollment](./architecture/nixstasis-enrollment.md)
+  - [Nixstasis Enrollment](./architecture/overwatch-enrollment.md)
 - [Building](./building.md)
 - [Testing](./testing.md)
 - [Provisioning](./provisioning.md)

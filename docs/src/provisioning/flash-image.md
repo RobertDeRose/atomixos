@@ -94,19 +94,6 @@ treats `/boot/config.toml` as a seed on a true fresh flash, reprovisioning uses
 USB `config.toml` first and then falls back to the bootstrap UI instead of
 replaying an old `/boot/config.toml`.
 
-For local development only, you can opt into a build-time development mode with
-a gitignored `.env` file:
-
-```sh
-cat > .env <<'EOF'
-DEVELOPMENT=1
-EOF
-```
-
-When `DEVELOPMENT=1` is set during the image build, first boot only enables the
-existing WAN SSH flag on `/data/config/ssh-wan-enabled` for easier testing.
-Operator access still comes from normal SSH-key provisioning.
-
 The image keeps both `root` and `admin` passwords locked. On Rock64,
 `_RUT_OH_=1` enables a deterministic serial-only root recovery path on UART2
 (`ttyS2`, 1.5 Mbaud) for the next boot.
