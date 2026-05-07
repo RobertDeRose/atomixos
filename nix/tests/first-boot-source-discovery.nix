@@ -105,7 +105,7 @@ nixos-lib.runTest {
     gateway.wait_until_succeeds("test ! -e /proc/$(cat /tmp/bootstrap-case.pid)", timeout = 60)
     gateway.succeed("grep 'Configuration applied' /tmp/bootstrap-response.html")
     gateway.succeed("grep 'Download applied config.toml' /tmp/bootstrap-response.html")
-    gateway.succeed("grep 'waiting for bootstrap address 172.20.30.1' /tmp/bootstrap-case.log")
+    gateway.succeed("grep 'Starting bootstrap web console on 172.20.30.1:18080' /tmp/bootstrap-case.log")
     gateway.succeed("rm -rf /tmp/bootstrap-invalid-lan-root /test-state && mkdir -p /tmp/bootstrap-invalid-lan-root /test-state")
     gateway.succeed("rm -f /boot/config.toml /etc/atomixos/fresh-flash /tmp/bootstrap-invalid-lan-sentinel")
     gateway.succeed("rm -rf /test-usb/usb-a/* /test-usb/usb-b/*")
