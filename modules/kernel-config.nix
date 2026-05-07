@@ -199,7 +199,9 @@ let
     NVIDIA_CORESIGHT_PMU_ARCH_SYSTEM_PMU = lib.mkForce no;
     ARM_DMC620_PMU = lib.mkForce no;
     PHY_ROCKCHIP_INNO_USB2 = lib.mkForce yes;
+    PHY_ROCKCHIP_INNO_USB3 = lib.mkForce yes;
     PHY_ROCKCHIP_NANENG_COMBO_PHY = lib.mkForce yes;
+    PHY_ROCKCHIP_USB = lib.mkForce yes;
     PHY_ROCKCHIP_INNO_HDMI = lib.mkForce no;
     PHY_ROCKCHIP_INNO_DSIDPHY = lib.mkForce no;
     PHY_ROCKCHIP_SAMSUNG_HDPTX = lib.mkForce no;

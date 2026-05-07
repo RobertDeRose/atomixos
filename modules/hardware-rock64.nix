@@ -11,6 +11,19 @@
 let
   kernelConfig = import ./kernel-config.nix { inherit lib; };
   ubootEnvTools = self.packages.${pkgs.stdenv.hostPlatform.system}.uboot-env-tools;
+  rtl815xFirmware = pkgs.runCommand "rtl815x-firmware" { } ''
+    mkdir -p "$out/lib/firmware/rtl_nic"
+
+    for fw in \
+      rtl8153a-2.fw \
+      rtl8153a-3.fw \
+      rtl8153a-4.fw \
+      rtl8153b-2.fw \
+      rtl8153c-1.fw
+    do
+      install -m0644 "${pkgs.linux-firmware}/lib/firmware/rtl_nic/$fw" "$out/lib/firmware/rtl_nic/$fw"
+    done
+  '';
   bootToUms = pkgs.writeShellScriptBin "boot_to_ums" ''
     set -euo pipefail
 
@@ -467,10 +480,12 @@ in
 
   # Only include firmware for hardware we actually use.
   # enableRedistributableFirmware = true would pull in ALL linux-firmware (~700 MB).
-  # The RK3328 SoC doesn't need runtime firmware for its built-in peripherals
-  # (eMMC, Ethernet, USB). WiFi dongle firmware will be added selectively
-  # when specific USB WiFi hardware is chosen.
+  # The RK3328 SoC doesn't need runtime firmware for its built-in peripherals,
+  # but Realtek RTL8153 USB NIC revisions can request rtl_nic patch blobs.
+  # Keep the image small by including only the specific r8152 firmware files we
+  # need instead of all of linux-firmware.
   hardware.enableRedistributableFirmware = lib.mkForce false;
+  hardware.firmware = [ rtl815xFirmware ];
 
   # The root filesystem is a squashfs partition selected by U-Boot
   # The actual root device is passed via kernel command line by U-Boot boot script
