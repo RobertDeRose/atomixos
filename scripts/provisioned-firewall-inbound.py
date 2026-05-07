@@ -9,7 +9,9 @@ from pathlib import Path
 
 CONFIG_FILE = Path(os.environ.get("ATOMIXOS_FIREWALL_INBOUND_FILE", "/data/config/firewall-inbound.json"))
 RULE_COMMENT = os.environ.get("ATOMIXOS_FIREWALL_RULE_COMMENT", "ATOMIXOS_PROVISIONED_INBOUND")
+LAN_DEFAULT_OPEN_COMMENT = "ATOMIXOS_LAN_DEFAULT_OPEN"
 WAN_INTERFACE = os.environ.get("ATOMIXOS_FIREWALL_WAN_INTERFACE", "eth0")
+LAN_INTERFACE = os.environ.get("ATOMIXOS_FIREWALL_LAN_INTERFACE", "eth1")
 NFT = os.environ.get("ATOMIXOS_NFT", "nft")
 INTERFACE_PATTERN = re.compile(r"^[A-Za-z0-9_.:-]+$")
 RULE_COMMENT_PATTERN = re.compile(r"^[ -~]+$")
@@ -85,6 +87,8 @@ def run_nft(*args: str, input_text: str | None = None) -> subprocess.CompletedPr
 def main() -> int:
     rule_comment = validate_rule_comment(RULE_COMMENT)
     wan_interface = validate_interface_name(WAN_INTERFACE)
+    lan_interface = validate_interface_name(LAN_INTERFACE)
+    lan_default_open_comment = validate_rule_comment(LAN_DEFAULT_OPEN_COMMENT)
 
     if not CONFIG_FILE.exists():
         return 0
@@ -94,20 +98,41 @@ def main() -> int:
 
     commands: list[str] = []
     for line in existing.stdout.splitlines():
-        if rule_comment not in line:
+        if rule_comment not in line and lan_default_open_comment not in line:
             continue
         match = re.search(r"handle (\d+)$", line)
         if match:
             commands.append(f"delete rule inet filter input handle {match.group(1)}")
 
-    for proto in ("tcp", "udp"):
-        ports = validate_ports(payload.get(proto), f"firewall-inbound.{proto}")
-        if not ports:
+    if any(key in payload for key in ("wan", "lan")):
+        scoped_payload = payload
+    else:
+        scoped_payload = {"wan": payload}
+
+    restrictive_lan = False
+
+    for scope_name, interface in (("wan", wan_interface), ("lan", lan_interface)):
+        scope_payload = scoped_payload.get(scope_name)
+        if scope_payload is None:
             continue
-        joined = ", ".join(str(port) for port in ports)
+        if not isinstance(scope_payload, dict):
+            msg = f"{CONFIG_FILE} {scope_name!r} entry must contain a JSON object"
+            raise ValueError(msg)
+        for proto in ("tcp", "udp"):
+            ports = validate_ports(scope_payload.get(proto), f"firewall-inbound.{scope_name}.{proto}")
+            if not ports:
+                continue
+            if scope_name == "lan":
+                restrictive_lan = True
+            joined = ", ".join(str(port) for port in ports)
+            commands.append(
+                f'add rule inet filter input iifname "{interface}" {proto} dport {{ {joined} }} '
+                f'accept comment "{rule_comment}"'
+            )
+
+    if not restrictive_lan:
         commands.append(
-            f'add rule inet filter input iifname "{wan_interface}" {proto} dport {{ {joined} }} '
-            f'accept comment "{rule_comment}"'
+            f'add rule inet filter input iifname "{lan_interface}" accept comment "{lan_default_open_comment}"'
         )
 
     if commands:

@@ -65,8 +65,7 @@ in
           ${cfg.extraInputRules}
 
           # -- eth1 (LAN) rules --
-          iifname "${cfg.lanInterface}" udp dport { 53, 67, 68, 123 } accept  comment "LAN infra"
-          iifname "${cfg.lanInterface}" tcp dport { 22, 53, 8080 } accept     comment "LAN infra"
+          iifname "${cfg.lanInterface}" accept comment "ATOMIXOS_LAN_DEFAULT_OPEN"
 
           # -- tun0 (VPN) rules --
           iifname "tun0" tcp dport 22 accept   comment "SSH over VPN"
@@ -128,7 +127,7 @@ in
     };
 
     systemd.services.provisioned-firewall-inbound = {
-      description = "Apply provisioned WAN inbound firewall rules";
+      description = "Apply provisioned LAN and WAN inbound firewall rules";
       after = [
         "data.mount"
         "nftables.service"
@@ -151,7 +150,10 @@ in
 
       serviceConfig = {
         Type = "oneshot";
-        Environment = "ATOMIXOS_FIREWALL_WAN_INTERFACE=${cfg.wanInterface}";
+        Environment = [
+          "ATOMIXOS_FIREWALL_WAN_INTERFACE=${cfg.wanInterface}"
+          "ATOMIXOS_FIREWALL_LAN_INTERFACE=${cfg.lanInterface}"
+        ];
         ExecStart = "${provisionedFirewallInbound}/bin/provisioned-firewall-inbound";
       };
     };

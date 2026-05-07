@@ -142,7 +142,7 @@ nixos-lib.runTest {
     gateway.succeed("printf '{bad json\n' >/tmp/bad-firewall.json")
     gateway.fail("ATOMIXOS_FIREWALL_INBOUND_FILE=/tmp/bad-firewall.json ${pkgs.python3Minimal}/bin/python3 ${../../scripts/provisioned-firewall-inbound.py} >/tmp/bad-firewall.out 2>/tmp/bad-firewall.err")
     gateway.succeed("grep -F '[provisioned-firewall-inbound] invalid JSON in /tmp/bad-firewall.json:' /tmp/bad-firewall.err")
-    gateway.succeed("printf '{\"tcp\":[443]}\n' >/tmp/good-firewall.json")
+    gateway.succeed("printf '{\"wan\":{\"tcp\":[443]},\"lan\":{\"tcp\":[443]}}\n' >/tmp/good-firewall.json")
     gateway.succeed("cat > /tmp/bad-nft <<'EOF'\n#!/usr/bin/env bash\necho broken nft >&2\nexit 1\nEOF\nchmod +x /tmp/bad-nft")
     gateway.fail("ATOMIXOS_FIREWALL_INBOUND_FILE=/tmp/good-firewall.json ATOMIXOS_NFT=/tmp/bad-nft ${pkgs.python3Minimal}/bin/python3 ${../../scripts/provisioned-firewall-inbound.py} >/tmp/bad-nft.out 2>/tmp/bad-nft.err")
     gateway.succeed("grep -F '[provisioned-firewall-inbound] nft command failed: broken nft' /tmp/bad-nft.err")
@@ -167,7 +167,8 @@ nixos-lib.runTest {
     gateway.succeed("ncat -lu 53 >/dev/null 2>&1 &")        # DNS (UDP)
     gateway.succeed("ncat -lu 123 >/dev/null 2>&1 &")       # NTP (UDP)
     gateway.succeed("ncat -lu 67 >/dev/null 2>&1 &")        # DHCP (UDP)
-    gateway.succeed("ncat -lk 8080 >/dev/null 2>&1 &")      # Unlisted port (should be blocked)
+    gateway.succeed("ncat -lk 8080 >/dev/null 2>&1 &")      # Bootstrap UI / LAN test port
+    gateway.succeed("ncat -lk 9090 >/dev/null 2>&1 &")      # Restrictive LAN deny test port
 
     import time
     time.sleep(2)
@@ -176,6 +177,11 @@ nixos-lib.runTest {
     gateway.succeed("ss -tlnp | grep ':443'")
     gateway.succeed("ss -tlnp | grep ':22'")
     gateway.succeed("ss -tlnp | grep ':53'")
+
+    # ── Phase 0: LAN defaults to open before restrictive provisioning ──
+    gateway.log("Phase 0: Testing LAN default-open firewall rule")
+    probe.succeed("nc -z -w 3 172.20.30.1 9090")
+    gateway.log("Phase 0 PASSED: LAN is open before explicit restrictive provisioning")
 
     # ── Phase 1: WAN rules (probe eth1 → gateway eth1) ──
     gateway.log("Phase 1: Testing WAN firewall rules")
@@ -186,7 +192,7 @@ nixos-lib.runTest {
     gateway.fail("nft list chain inet filter input | grep 'iifname \\\"eth1\\\" tcp dport 443'")
     gateway.fail("nft list chain inet filter input | grep 'iifname \\\"eth1\\\" udp dport 1194'")
 
-    gateway.succeed("cat > /data/config/firewall-inbound.json <<'EOF'\n{\"tcp\": [443], \"udp\": [1194]}\nEOF")
+    gateway.succeed("cat > /data/config/firewall-inbound.json <<'EOF'\n{\"wan\": {\"tcp\": [443], \"udp\": [1194]}}\nEOF")
     gateway.succeed("systemctl start provisioned-firewall-inbound.service")
     gateway.succeed("nft list chain inet filter input | grep 'iifname \\\"eth1\\\" tcp dport 443'")
     gateway.succeed("nft list chain inet filter input | grep 'iifname \\\"eth1\\\" udp dport 1194'")
@@ -195,7 +201,6 @@ nixos-lib.runTest {
     probe.succeed("nc -z -w 3 192.168.1.1 443")
 
     # OpenVPN (1194/udp) — ALLOWED on WAN
-    # Use ncat to send a UDP packet and verify it's not rejected
     probe.succeed("echo test | ncat -u -w 3 192.168.1.1 1194")
 
     # SSH (22/tcp) — BLOCKED on WAN by default (no flag file)
@@ -204,31 +209,32 @@ nixos-lib.runTest {
     # Random port (8080/tcp) — BLOCKED on WAN
     probe.fail("nc -z -w 3 192.168.1.1 8080")
 
+    # LAN remains open while no restrictive LAN scope is provisioned
+    probe.succeed("nc -z -w 3 172.20.30.1 9090")
+
     gateway.log("Phase 1 PASSED: WAN allows HTTPS+OpenVPN, blocks SSH+other")
 
     # ── Phase 2: LAN rules (probe eth2 → gateway eth2) ──
-    gateway.log("Phase 2: Testing LAN firewall rules")
+    gateway.log("Phase 2: Testing restrictive LAN firewall rules")
 
-    # SSH (22/tcp) — ALLOWED on LAN
-    probe.succeed("nc -z -w 3 172.20.30.1 22")
+    gateway.succeed("cat > /data/config/firewall-inbound.json <<'EOF'\n{\"wan\": {\"tcp\": [443], \"udp\": [1194]}, \"lan\": {\"tcp\": [443]}}\nEOF")
+    gateway.succeed("systemctl start provisioned-firewall-inbound.service")
+    gateway.succeed("nft list chain inet filter input | grep 'iifname \\\"eth2\\\" tcp dport 443'")
 
-    # DNS (53/tcp and 53/udp) — ALLOWED on LAN
-    probe.succeed("nc -z -w 3 172.20.30.1 53")
-    probe.succeed("echo test | ncat -u -w 3 172.20.30.1 53")
+    # HTTPS (443/tcp) — ALLOWED on LAN when provisioned
+    probe.succeed("nc -z -w 3 172.20.30.1 443")
 
-    # NTP (123/udp) — ALLOWED on LAN
-    probe.succeed("echo test | ncat -u -w 3 172.20.30.1 123")
+    # All non-allowlisted LAN ports are blocked once restrictive LAN mode is active.
+    probe.fail("nc -z -w 3 172.20.30.1 22")
+    probe.fail("nc -z -w 3 172.20.30.1 53")
+    gateway.fail("nft list chain inet filter input | grep 'iifname \\\"eth2\\\" udp dport 53'")
+    gateway.fail("nft list chain inet filter input | grep 'iifname \\\"eth2\\\" udp dport 123'")
+    gateway.fail("nft list chain inet filter input | grep 'iifname \\\"eth2\\\" udp dport 67'")
+    probe.fail("nc -z -w 3 172.20.30.1 8080")
+    # Unlisted port (9090/tcp) — BLOCKED on LAN when explicit LAN rules are provisioned
+    probe.fail("nc -z -w 3 172.20.30.1 9090")
 
-    # DHCP (67/udp) — ALLOWED on LAN
-    probe.succeed("echo test | ncat -u -w 3 172.20.30.1 67")
-
-    # Bootstrap UI (8080/tcp) — ALLOWED on LAN
-    probe.succeed("nc -z -w 3 172.20.30.1 8080")
-
-    # HTTPS (443/tcp) — BLOCKED on LAN (only allowed on WAN)
-    probe.fail("nc -z -w 3 172.20.30.1 443")
-
-    gateway.log("Phase 2 PASSED: LAN allows SSH+DNS+NTP+DHCP+bootstrap, blocks HTTPS")
+    gateway.log("Phase 2 PASSED: explicit LAN scope switches to allowlisted ports only")
 
     # ── Phase 3: No forwarding ──
     gateway.log("Phase 3: Testing forward chain (drop all)")

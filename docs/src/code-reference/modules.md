@@ -251,7 +251,7 @@ atomixos.rauc = {
 
 | Chain     | Policy | Rules                                                                                                     |
 |-----------|--------|-----------------------------------------------------------------------------------------------------------|
-| `input`   | drop   | lo: accept; established: accept; eth1: UDP 53, UDP 67-68, UDP 123, TCP 22, TCP 53, TCP 8080; tun0: TCP 22 |
+| `input`   | drop   | lo: accept; established: accept; eth1: accept by default; tun0: TCP 22 |
 | `forward` | drop   | (no exceptions)                                                                                           |
 | `output`  | accept |                                                                                                           |
 
@@ -264,8 +264,9 @@ atomixos.rauc = {
 
 Flag file: `/data/config/ssh-wan-enabled`
 
-**Provisioned WAN inbound:** `/data/config/firewall-inbound.json` is applied by `provisioned-firewall-inbound.service`.
-The baseline eth0 policy remains closed for TCP/443 and UDP/1194 until those ports are provisioned.
+**Provisioned inbound:** `/data/config/firewall-inbound.json` is applied by `provisioned-firewall-inbound.service`.
+The file may contain `wan` and `lan` scopes. `wan` opens selected TCP/UDP ports on the WAN interface. `lan`, when
+present with any ports, replaces the default-open LAN rule with an explicit TCP/UDP allowlist on the LAN interface.
 
 ---
 

@@ -94,11 +94,12 @@ config exists, it SHALL accept clients from the fallback `172.20.30.0/24` subnet
 nftables SHALL be configured with the following rules:
 
 **eth0 (WAN) inbound**: ALLOW established/related, DROP all else by default. Provisioned firewall state MAY add
-application or VPN ports from `/data/config/firewall-inbound.json`. TCP/22 (SSH) is allowed only if the flag file
-`/data/config/ssh-wan-enabled` exists.
+application or VPN ports from `/data/config/firewall-inbound.json` under the `wan` scope. TCP/22 (SSH) is allowed only
+if the flag file `/data/config/ssh-wan-enabled` exists.
 
-**eth1 (LAN) inbound**: ALLOW UDP/53 (DNS), ALLOW UDP/67-68 (DHCP), ALLOW UDP/123 (NTP), ALLOW TCP/22 (SSH), ALLOW
-TCP/53 (DNS), ALLOW TCP/8080 (bootstrap UI), ALLOW established/related, DROP all else.
+**eth1 (LAN) inbound**: ALLOW all inbound traffic by default. If provisioned firewall state includes a `lan` scope with
+TCP or UDP ports in `/data/config/firewall-inbound.json`, LAN SHALL switch from the default-open rule to an explicit
+allowlist containing only those provisioned LAN ports.
 
 **tun0 (VPN) inbound**: ALLOW TCP/22 (SSH), ALLOW established/related, DROP all else.
 
@@ -106,9 +107,20 @@ TCP/53 (DNS), ALLOW TCP/8080 (bootstrap UI), ALLOW established/related, DROP all
 
 #### Scenario: WAN application ports are provisioned
 
-- **WHEN** `/data/config/firewall-inbound.json` contains TCP/443
+- **WHEN** `/data/config/firewall-inbound.json` contains `wan.tcp = [443]`
 - **AND** `provisioned-firewall-inbound.service` applies the provisioned state
 - **THEN** HTTPS connections to eth0 on port 443 are accepted
+
+#### Scenario: LAN application ports are provisioned
+
+- **WHEN** `/data/config/firewall-inbound.json` contains `lan.tcp = [443]`
+- **AND** `provisioned-firewall-inbound.service` applies the provisioned state
+- **THEN** inbound connections to eth1 on TCP 443 are accepted
+
+#### Scenario: LAN remains open without restrictive scope
+
+- **WHEN** `/data/config/firewall-inbound.json` does not contain a `lan` scope with any ports
+- **THEN** inbound connections to eth1 remain accepted by the default LAN-open rule
 
 #### Scenario: WAN application ports are closed before provisioning
 
@@ -135,7 +147,7 @@ TCP/53 (DNS), ALLOW TCP/8080 (bootstrap UI), ALLOW established/related, DROP all
 - **WHEN** a DNS query is sent to eth1 on TCP/53 or UDP/53
 - **THEN** the packet is accepted
 
-#### Scenario: Bootstrap UI is allowed on LAN
+#### Scenario: Bootstrap UI is allowed on LAN by default
 
 - **WHEN** a connection is made to eth1 on TCP/8080
 - **THEN** the connection is accepted
