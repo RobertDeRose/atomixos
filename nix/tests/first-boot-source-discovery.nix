@@ -12,6 +12,7 @@ let
     mkdir -p "$out/bin" "$out/share/atomixos"
     install -m0755 ${../../scripts/first-boot-provision.py} "$out/bin/first-boot-provision"
     install -m0644 ${../../docs/src/atomixos.png} "$out/share/atomixos/atomixos.png"
+    install -m0644 ${../../schemas/config.schema.json} "$out/share/atomixos/config.schema.json"
   '';
 in
 nixos-lib.runTest {
@@ -51,7 +52,7 @@ nixos-lib.runTest {
     gateway.start()
     gateway.wait_for_unit("multi-user.target")
 
-    gateway.succeed("cat > /tmp/config-template.toml <<'EOF'\nversion = 1\n\n[admin]\nssh_keys = [\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKey admin@example\"]\n\n[firewall.inbound]\ntcp = [443]\n\n[health]\nrequired = [\"demo\"]\n\n[container.demo]\nprivileged = true\n\n[container.demo.Container]\nImage = \"docker.io/library/nginx:latest\"\n\n[container.demo.Install]\nWantedBy = [\"multi-user.target\"]\nEOF")
+    gateway.succeed("cat > /tmp/config-template.toml <<'EOF'\nversion = 1\n\n[admin]\nssh_keys = [\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKey admin@example\"]\n\n[firewall.inbound]\n\n[firewall.inbound.wan]\ntcp = [443]\n\n[health]\nrequired = [\"demo\"]\n\n[container.demo]\nprivileged = true\n\n[container.demo.Container]\nImage = \"docker.io/library/nginx:latest\"\n\n[container.demo.Install]\nWantedBy = [\"multi-user.target\"]\nEOF")
 
     gateway.succeed("cat > /testbin/rauc <<'EOF'\n#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\n' \"$*\" >>/test-state/rauc.log\nif [ \"$1\" = status ] && [ \"$2\" = mark-good ]; then\n  exit 0\nfi\necho unexpected rauc invocation >&2\nexit 1\nEOF\nchmod +x /testbin/rauc")
     gateway.succeed("cat > /testbin/fw_printenv <<'EOF'\n#!/usr/bin/env bash\nexit 0\nEOF\nchmod +x /testbin/fw_printenv")

@@ -1,0 +1,203 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atomixos.dev/schemas/config.schema.json",
+  "title": "AtomixOS config.toml",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "admin",
+    "firewall",
+    "health",
+    "container"
+  ],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "enum": [1]
+    },
+    "admin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ssh_keys"],
+      "properties": {
+        "ssh_keys": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "firewall": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["inbound"],
+      "properties": {
+        "inbound": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/portMap"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "wan": {
+                  "$ref": "#/$defs/portMap"
+                },
+                "lan": {
+                  "$ref": "#/$defs/lanPortMap"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "lan": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "gateway_cidr": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dhcp_start": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dhcp_end": {
+          "type": "string",
+          "minLength": 1
+        },
+        "domain": {
+          "type": "string",
+          "minLength": 1
+        },
+        "hostname_pattern": {
+          "type": "string"
+        },
+        "gateway_aliases": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "health": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required"],
+      "properties": {
+        "required": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "container": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9_-]+$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/containerDefinition"
+      }
+    }
+  },
+  "$defs": {
+    "port": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535
+    },
+    "portList": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/port"
+      }
+    },
+    "portMap": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tcp": {
+          "$ref": "#/$defs/portList"
+        },
+        "udp": {
+          "$ref": "#/$defs/portList"
+        }
+      }
+    },
+    "lanPortMap": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tcp": {
+          "$ref": "#/$defs/portList"
+        },
+        "udp": {
+          "$ref": "#/$defs/portList"
+        }
+      }
+    },
+    "scalar": {
+      "type": [
+        "string",
+        "integer",
+        "boolean"
+      ]
+    },
+    "scalarOrScalarArray": {
+      "type": [
+        "string",
+        "integer",
+        "boolean",
+        "array"
+      ],
+      "items": {
+        "$ref": "#/$defs/scalar"
+      },
+      "minItems": 1
+    },
+    "quadletSection": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/scalarOrScalarArray"
+      }
+    },
+    "containerDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "privileged",
+        "Container"
+      ],
+      "properties": {
+        "privileged": {
+          "type": "boolean"
+        },
+        "Unit": {
+          "$ref": "#/$defs/quadletSection"
+        },
+        "Container": {
+          "$ref": "#/$defs/quadletSection"
+        },
+        "Install": {
+          "$ref": "#/$defs/quadletSection"
+        }
+      }
+    }
+  }
+}

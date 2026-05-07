@@ -49,27 +49,31 @@ reprovisioning SHALL use USB seed discovery followed by the bootstrap web consol
 ### Requirement: config.toml defines bounded provisioning data
 
 The local provisioning artifact SHALL be a single `config.toml` file containing only the bounded appliance provisioning
-contract: admin SSH keys, provisioned firewall inbound policy, optional LAN settings, explicit health requirements, and
-structured Quadlet definitions.
+contract: admin SSH keys, provisioned LAN and WAN firewall inbound policy, optional LAN settings, explicit health
+requirements, and structured Quadlet definitions. The accepted structure SHALL be defined by a machine-readable schema
+that the import path validates before semantic normalization.
 
 #### Scenario: Minimum valid config.toml includes admin access and stack definition
 
 - **WHEN** a `config.toml` file is accepted for import
-- **THEN** it includes at least one admin SSH key, a `[firewall.inbound]` table with at least one TCP or UDP port,
-  at least one Quadlet-defined application or service unit, and explicit health requirements
+- **THEN** it includes at least one admin SSH key, a `[firewall.inbound]` table, at least one Quadlet-defined
+  application or service unit, and explicit health requirements
 
 ### Requirement: Provisioning renders firewall and LAN runtime state
 
 The device SHALL render accepted provisioning input into JSON runtime state under `/data/config/`. Firewall inbound state
-SHALL be written to `/data/config/firewall-inbound.json` as optional `tcp` and `udp` arrays of integer ports in
-`1..65535`. LAN state SHALL be written to `/data/config/lan-settings.json` with the validated gateway CIDR, gateway IP,
-subnet CIDR, netmask, DHCP range, DNS domain, hostname pattern, and gateway aliases.
+SHALL be written to `/data/config/firewall-inbound.json` as optional `wan` and `lan` objects, each containing optional
+`tcp` and `udp` arrays of integer ports in `1..65535`. If the `lan` object is omitted or contains no ports, LAN remains
+open by default. If the `lan` object contains any ports, LAN SHALL switch to an explicit allowlist using only those
+ports. LAN state SHALL be written to `/data/config/lan-settings.json`
+with the validated gateway CIDR, gateway IP, subnet CIDR, netmask, DHCP range, DNS domain, hostname pattern, and
+gateway aliases.
 
 #### Scenario: Firewall inbound config is bounded
 
-- **WHEN** provisioning imports `[firewall.inbound]` with TCP or UDP ports
-- **THEN** the persisted firewall JSON contains only normalized integer port arrays
-- **AND** `provisioned-firewall-inbound.service` applies those ports only as WAN inbound rules
+- **WHEN** provisioning imports `[firewall.inbound.wan]` or `[firewall.inbound.lan]` with TCP or UDP ports
+- **THEN** the persisted firewall JSON contains only normalized integer port arrays under those scopes
+- **AND** `provisioned-firewall-inbound.service` applies those ports to the matching interface rules for WAN and LAN
 
 #### Scenario: LAN range excludes gateway
 

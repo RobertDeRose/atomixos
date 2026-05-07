@@ -25,6 +25,8 @@ version = 1
 ssh_keys = ["ssh-ed25519 ..."]
 
 [firewall.inbound]
+
+[firewall.inbound.wan]
 tcp = [443]
 udp = [1194]
 
@@ -47,23 +49,31 @@ Image = "ghcr.io/example/myapp:latest"
 PublishPort = ["10080:8080"]
 ```
 
-`[firewall.inbound]` is required and must contain at least one TCP or UDP port. `[lan]` is optional; omitted fields use
-the fallback LAN gateway contract.
+`[firewall.inbound]` is required. WAN ports stay deny-by-default unless listed. LAN stays open by default; if
+`[firewall.inbound.lan]` is present with any ports, LAN switches to an explicit allowlist for only those ports.
+`[lan]` is optional; omitted fields use the fallback LAN gateway contract. The machine-readable schema is committed at
+`schemas/config.schema.json` and the import path validates against it before semantic checks.
 
 ## Firewall JSON
 
-`/data/config/firewall-inbound.json` is a JSON object with optional `tcp` and `udp` arrays of integer ports in
-`1..65535`.
+`/data/config/firewall-inbound.json` is a JSON object with optional `wan` and `lan` objects. Each scope may contain
+optional `tcp` and `udp` arrays of integer ports in `1..65535`.
 
 ```json
 {
-  "tcp": [443],
-  "udp": [1194]
+  "wan": {
+    "tcp": [443],
+    "udp": [1194]
+  },
+  "lan": {
+    "tcp": [443]
+  }
 }
 ```
 
-Provisioned rules are added only on WAN `eth0`. The baseline firewall remains deny-by-default for new eth0 inbound
-traffic and drops all forwarding.
+Provisioned rules are added to WAN `eth0` or LAN `eth1` only when the matching scope is present. WAN remains
+deny-by-default for new inbound traffic. LAN is open by default, but an explicit `lan` scope replaces that default-open
+rule with the configured allowlist. Forwarding remains dropped.
 
 ## LAN JSON
 

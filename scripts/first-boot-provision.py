@@ -8,6 +8,7 @@ import ipaddress
 import json
 import os
 import pwd
+import re
 import shutil
 import subprocess
 import sys
@@ -50,6 +51,7 @@ DEFAULT_LAN_DHCP_END = "172.20.30.254"
 DEFAULT_LAN_DOMAIN = "local"
 DEFAULT_LAN_GATEWAY_ALIASES = ["atomixos"]
 DEFAULT_LAN_HOSTNAME_PATTERN = ""
+SCHEMA_ENV = "ATOMIXOS_CONFIG_SCHEMA"
 
 
 class ProvisionError(RuntimeError):
@@ -58,6 +60,145 @@ class ProvisionError(RuntimeError):
 
 def provision_error(message: str) -> ProvisionError:
     return ProvisionError(message)
+
+
+def load_config_schema():
+    candidates = []
+    env_path = os.environ.get(SCHEMA_ENV)
+    if env_path:
+        candidates.append(Path(env_path))
+
+    script_path = Path(__file__).resolve()
+    candidates.extend(
+        [
+            script_path.parent.parent / "share" / "atomixos" / "config.schema.json",
+            script_path.parent.parent / "schemas" / "config.schema.json",
+        ]
+    )
+
+    for candidate in candidates:
+        if candidate.is_file():
+            try:
+                return json.loads(candidate.read_text())
+            except json.JSONDecodeError as exc:
+                message = f"invalid config schema in {candidate}: {exc}"
+                raise provision_error(message) from exc
+
+    searched = ", ".join(str(candidate) for candidate in candidates)
+    message = f"unable to find config schema (checked: {searched})"
+    raise provision_error(message)
+
+
+CONFIG_SCHEMA = load_config_schema()
+
+
+def resolve_schema_ref(schema: dict, ref: str):
+    if not ref.startswith("#/"):
+        message = f"unsupported schema ref: {ref}"
+        raise provision_error(message)
+
+    target = schema
+    for part in ref[2:].split("/"):
+        if not isinstance(target, dict) or part not in target:
+            message = f"unresolvable schema ref: {ref}"
+            raise provision_error(message)
+        target = target[part]
+    return target
+
+
+def validate_schema_property_name(name: str, schema: dict, path: str):
+    expected_type = schema.get("type")
+    if expected_type == "string" and not isinstance(name, str):
+        raise provision_error(f"expected string property name at {path}")
+    pattern = schema.get("pattern")
+    if pattern and not re.fullmatch(pattern, name):
+        raise provision_error(f"invalid property name at {path}: {name!r}")
+
+
+def validate_against_schema(value, schema: dict, path: str, root_schema: dict):
+    if "$ref" in schema:
+        validate_against_schema(value, resolve_schema_ref(root_schema, schema["$ref"]), path, root_schema)
+        return
+
+    if "anyOf" in schema:
+        for option in schema["anyOf"]:
+            try:
+                validate_against_schema(value, option, path, root_schema)
+                return
+            except ProvisionError:
+                continue
+        raise provision_error(f"value at {path} does not match any allowed schema")
+
+    expected_type = schema.get("type")
+    if expected_type is not None:
+        allowed_types = expected_type if isinstance(expected_type, list) else [expected_type]
+        matches_type = False
+        for allowed in allowed_types:
+            if allowed == "object" and isinstance(value, dict):
+                matches_type = True
+            elif allowed == "array" and isinstance(value, list):
+                matches_type = True
+            elif allowed == "string" and isinstance(value, str):
+                matches_type = True
+            elif allowed == "integer" and isinstance(value, int) and not isinstance(value, bool):
+                matches_type = True
+            elif allowed == "boolean" and isinstance(value, bool):
+                matches_type = True
+        if not matches_type:
+            names = ", ".join(allowed_types)
+            raise provision_error(f"expected {names} at {path}")
+
+    if "enum" in schema and value not in schema["enum"]:
+        raise provision_error(f"unexpected value at {path}: {value!r}")
+
+    if isinstance(value, dict):
+        min_properties = schema.get("minProperties")
+        if min_properties is not None and len(value) < min_properties:
+            raise provision_error(f"expected at least {min_properties} keys at {path}")
+
+        required = set(schema.get("required", []))
+        missing = required - set(value)
+        if missing:
+            keys = ", ".join(sorted(missing))
+            raise provision_error(f"missing required keys at {path}: {keys}")
+
+        property_names = schema.get("propertyNames")
+        if property_names is not None:
+            for key in value:
+                validate_schema_property_name(key, property_names, path)
+
+        properties = schema.get("properties", {})
+        additional = schema.get("additionalProperties", True)
+        for key, item in value.items():
+            item_path = f"{path}.{key}"
+            if key in properties:
+                validate_against_schema(item, properties[key], item_path, root_schema)
+            elif additional is False:
+                raise provision_error(f"unsupported keys at {path}: {key}")
+            elif isinstance(additional, dict):
+                validate_against_schema(item, additional, item_path, root_schema)
+
+    if isinstance(value, list):
+        min_items = schema.get("minItems")
+        if min_items is not None and len(value) < min_items:
+            raise provision_error(f"expected at least {min_items} items at {path}")
+        item_schema = schema.get("items")
+        if item_schema is not None:
+            for idx, item in enumerate(value):
+                validate_against_schema(item, item_schema, f"{path}[{idx}]", root_schema)
+
+    if isinstance(value, str):
+        min_length = schema.get("minLength")
+        if min_length is not None and len(value) < min_length:
+            raise provision_error(f"expected non-empty string at {path}")
+
+    if isinstance(value, int) and not isinstance(value, bool):
+        minimum = schema.get("minimum")
+        maximum = schema.get("maximum")
+        if minimum is not None and value < minimum:
+            raise provision_error(f"expected integer >= {minimum} at {path}")
+        if maximum is not None and value > maximum:
+            raise provision_error(f"expected integer <= {maximum} at {path}")
 
 
 def validate_name(name: str) -> str:
@@ -139,8 +280,8 @@ def require_bool(value, path: str):
 
 
 def require_port_list(value, path: str):
-    if not isinstance(value, list) or not value:
-        message = f"expected non-empty array at {path}"
+    if not isinstance(value, list):
+        message = f"expected array at {path}"
         raise provision_error(message)
 
     ports = []
@@ -416,6 +557,8 @@ def load_config(config_path: Path, config_root: Path = DEFAULT_CONFIG_DIR):
         message = f"invalid TOML in {config_path}: {exc}"
         raise provision_error(message) from exc
 
+    validate_against_schema(data, CONFIG_SCHEMA, "config", CONFIG_SCHEMA)
+
     root = require_allowed_keys(
         data,
         "config",
@@ -432,19 +575,35 @@ def load_config(config_path: Path, config_root: Path = DEFAULT_CONFIG_DIR):
     ssh_keys = require_string_list(admin.get("ssh_keys"), "admin.ssh_keys")
 
     firewall = require_allowed_keys(root.get("firewall"), "firewall", {"inbound"}, {"inbound"})
-    inbound = require_allowed_keys(
-        firewall.get("inbound"),
-        "firewall.inbound",
-        {"tcp", "udp"},
-    )
-    if "tcp" not in inbound and "udp" not in inbound:
-        message = "firewall.inbound must define tcp and/or udp"
-        raise provision_error(message)
-    firewall_inbound = {}
-    if "tcp" in inbound:
-        firewall_inbound["tcp"] = require_port_list(inbound.get("tcp"), "firewall.inbound.tcp")
-    if "udp" in inbound:
-        firewall_inbound["udp"] = require_port_list(inbound.get("udp"), "firewall.inbound.udp")
+    inbound_value = require_mapping(firewall.get("inbound"), "firewall.inbound")
+
+    def normalize_firewall_scope(scope_value, scope_path: str):
+        scope = require_allowed_keys(scope_value, scope_path, {"tcp", "udp"})
+        normalized = {}
+        if "tcp" in scope:
+            tcp_ports = require_port_list(scope.get("tcp"), f"{scope_path}.tcp")
+            if tcp_ports:
+                normalized["tcp"] = tcp_ports
+        if "udp" in scope:
+            udp_ports = require_port_list(scope.get("udp"), f"{scope_path}.udp")
+            if udp_ports:
+                normalized["udp"] = udp_ports
+        return normalized
+
+    if any(key in inbound_value for key in ("wan", "lan")):
+        inbound = require_allowed_keys(inbound_value, "firewall.inbound", {"wan", "lan"})
+        firewall_inbound = {}
+        if "wan" in inbound:
+            wan_scope = normalize_firewall_scope(inbound.get("wan"), "firewall.inbound.wan")
+            if wan_scope:
+                firewall_inbound["wan"] = wan_scope
+        if "lan" in inbound:
+            lan_scope = normalize_firewall_scope(inbound.get("lan"), "firewall.inbound.lan")
+            if lan_scope:
+                firewall_inbound["lan"] = lan_scope
+    else:
+        wan_scope = normalize_firewall_scope(inbound_value, "firewall.inbound")
+        firewall_inbound = {"wan": wan_scope} if wan_scope else {}
 
     health = require_allowed_keys(root.get("health"), "health", {"required"}, {"required"})
     required_units = require_string_list(health.get("required"), "health.required")
@@ -983,6 +1142,10 @@ BOOTSTRAP_HTML = """<!doctype html>
           <textarea class=\"short\" name=\"wan_tcp\">443</textarea>
           <label>WAN UDP ports (one per line)</label>
           <textarea class=\"short\" name=\"wan_udp\">1194</textarea>
+          <label>LAN TCP ports (one per line, blank keeps LAN open)</label>
+          <textarea class=\"short\" name=\"lan_tcp\"></textarea>
+          <label>LAN UDP ports (one per line, blank keeps LAN open)</label>
+          <textarea class=\"short\" name=\"lan_udp\"></textarea>
           <label>LAN gateway CIDR</label>
           <textarea class=\"short\" name=\"gateway_cidr\">172.20.30.1/24</textarea>
           <label>LAN DHCP start</label>
@@ -1135,8 +1298,10 @@ class BootstrapHandler(BaseHTTPRequestHandler):
                     filename = "config.toml"
             elif self.path == "/generate":
                 ssh_keys = [line.strip() for line in form.get("ssh_keys", "").splitlines() if line.strip()]
-                tcp_ports = [int(line.strip()) for line in form.get("wan_tcp", "").splitlines() if line.strip()]
-                udp_ports = [int(line.strip()) for line in form.get("wan_udp", "").splitlines() if line.strip()]
+                wan_tcp_ports = [int(line.strip()) for line in form.get("wan_tcp", "").splitlines() if line.strip()]
+                wan_udp_ports = [int(line.strip()) for line in form.get("wan_udp", "").splitlines() if line.strip()]
+                lan_tcp_ports = [int(line.strip()) for line in form.get("lan_tcp", "").splitlines() if line.strip()]
+                lan_udp_ports = [int(line.strip()) for line in form.get("lan_udp", "").splitlines() if line.strip()]
                 gateway_cidr = form.get("gateway_cidr", DEFAULT_LAN_GATEWAY_CIDR).strip() or DEFAULT_LAN_GATEWAY_CIDR
                 dhcp_start = form.get("dhcp_start", DEFAULT_LAN_DHCP_START).strip() or DEFAULT_LAN_DHCP_START
                 dhcp_end = form.get("dhcp_end", DEFAULT_LAN_DHCP_END).strip() or DEFAULT_LAN_DHCP_END
@@ -1152,10 +1317,18 @@ class BootstrapHandler(BaseHTTPRequestHandler):
                 if not required:
                     required = generated_required_units(quadlet)
                 firewall_lines = ["[firewall.inbound]"]
-                if tcp_ports:
-                    firewall_lines.append(f"tcp = {json.dumps(tcp_ports)}")
-                if udp_ports:
-                    firewall_lines.append(f"udp = {json.dumps(udp_ports)}")
+                if wan_tcp_ports or wan_udp_ports:
+                    firewall_lines.extend(["", "[firewall.inbound.wan]"])
+                    if wan_tcp_ports:
+                        firewall_lines.append(f"tcp = {json.dumps(wan_tcp_ports)}")
+                    if wan_udp_ports:
+                        firewall_lines.append(f"udp = {json.dumps(wan_udp_ports)}")
+                if lan_tcp_ports or lan_udp_ports:
+                    firewall_lines.extend(["", "[firewall.inbound.lan]"])
+                    if lan_tcp_ports:
+                        firewall_lines.append(f"tcp = {json.dumps(lan_tcp_ports)}")
+                    if lan_udp_ports:
+                        firewall_lines.append(f"udp = {json.dumps(lan_udp_ports)}")
                 firewall_text = "\n".join(firewall_lines)
                 lan_lines = [
                     "[lan]",

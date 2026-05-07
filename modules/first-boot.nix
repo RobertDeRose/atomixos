@@ -26,6 +26,7 @@ let
     mkdir -p "$out/bin" "$out/share/atomixos"
     install -m0755 ${../scripts/first-boot-provision.py} "$out/bin/first-boot-provision"
     install -m0644 ${../docs/src/atomixos.png} "$out/share/atomixos/atomixos.png"
+    install -m0644 ${../schemas/config.schema.json} "$out/share/atomixos/config.schema.json"
   '';
   ubootEnvTools = self.packages.${pkgs.stdenv.hostPlatform.system}.uboot-env-tools;
   firstBootEnv = {
