@@ -7,6 +7,21 @@
   ...
 }:
 
+let
+  chronyWanOnlineScript = pkgs.writeShellScript "chrony-wan-online" ''
+    [ "$IFACE" = "eth0" ] || exit 0
+    echo "[chrony-wan-online] bringing chrony online for $IFACE"
+    ${pkgs.systemd}/bin/systemctl start chronyd.service
+    for _ in $(seq 1 10); do
+      if ${pkgs.chrony}/bin/chronyc tracking >/dev/null 2>&1; then
+        break
+      fi
+      sleep 1
+    done
+    ${pkgs.chrony}/bin/chronyc online
+    ${pkgs.chrony}/bin/chronyc burst 4/4
+  '';
+in
 {
   # ── Disable predictable interface names ──────────────────────────────────────
 
@@ -16,6 +31,34 @@
 
   networking.useNetworkd = true;
   systemd.network.enable = true;
+
+  services.networkd-dispatcher = {
+    enable = true;
+    rules.chrony-wan-online = {
+      onState = [ "routable" ];
+      script = "IFACE=\"$IFACE\" ${chronyWanOnlineScript}";
+    };
+  };
+
+  systemd.services.chrony-wan-online-startup = {
+    description = "Bring chrony online when WAN is already routable";
+    after = [
+      "chronyd.service"
+      "networkd-dispatcher.service"
+    ];
+    wants = [
+      "chronyd.service"
+      "networkd-dispatcher.service"
+    ];
+    wantedBy = [ "multi-user.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = pkgs.writeShellScript "chrony-wan-online-startup" ''
+        ${pkgs.systemd}/bin/networkctl status eth0 --no-pager | ${pkgs.gnugrep}/bin/grep 'State: routable' >/dev/null || exit 0
+        IFACE=eth0 ${chronyWanOnlineScript}
+      '';
+    };
+  };
 
   # Don't let network-online.target block boot indefinitely. The device must
   # boot and confirm its RAUC slot even without WAN connectivity. "any" means
