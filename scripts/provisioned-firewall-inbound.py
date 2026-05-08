@@ -106,10 +106,7 @@ def main() -> int:
         if match:
             commands.append(f"delete rule inet filter input handle {match.group(1)}")
 
-    if any(key in payload for key in ("wan", "lan")):
-        scoped_payload = payload
-    else:
-        scoped_payload = {"wan": payload}
+    scoped_payload = payload if any(key in payload for key in ("wan", "lan")) else {"wan": payload}
 
     restrictive_lan = False
 

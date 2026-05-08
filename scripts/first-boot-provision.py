@@ -111,10 +111,12 @@ def resolve_schema_ref(schema: dict, ref: str):
 def validate_schema_property_name(name: str, schema: dict, path: str):
     expected_type = schema.get("type")
     if expected_type == "string" and not isinstance(name, str):
-        raise provision_error(f"expected string property name at {path}")
+        msg = f"expected string property name at {path}"
+        raise provision_error(msg)
     pattern = schema.get("pattern")
     if pattern and not re.fullmatch(pattern, name):
-        raise provision_error(f"invalid property name at {path}: {name!r}")
+        msg = f"invalid property name at {path}: {name!r}"
+        raise provision_error(msg)
 
 
 def validate_against_schema(value, schema: dict, path: str, root_schema: dict):
@@ -129,40 +131,45 @@ def validate_against_schema(value, schema: dict, path: str, root_schema: dict):
                 return
             except ProvisionError:
                 continue
-        raise provision_error(f"value at {path} does not match any allowed schema")
+        msg = f"value at {path} does not match any allowed schema"
+        raise provision_error(msg)
 
     expected_type = schema.get("type")
     if expected_type is not None:
         allowed_types = expected_type if isinstance(expected_type, list) else [expected_type]
         matches_type = False
+        type_checks = {
+            "object": lambda v: isinstance(v, dict),
+            "array": lambda v: isinstance(v, list),
+            "string": lambda v: isinstance(v, str),
+            "integer": lambda v: isinstance(v, int) and not isinstance(v, bool),
+            "boolean": lambda v: isinstance(v, bool),
+        }
         for allowed in allowed_types:
-            if allowed == "object" and isinstance(value, dict):
-                matches_type = True
-            elif allowed == "array" and isinstance(value, list):
-                matches_type = True
-            elif allowed == "string" and isinstance(value, str):
-                matches_type = True
-            elif allowed == "integer" and isinstance(value, int) and not isinstance(value, bool):
-                matches_type = True
-            elif allowed == "boolean" and isinstance(value, bool):
+            check = type_checks.get(allowed)
+            if check and check(value):
                 matches_type = True
         if not matches_type:
             names = ", ".join(allowed_types)
-            raise provision_error(f"expected {names} at {path}")
+            msg = f"expected {names} at {path}"
+            raise provision_error(msg)
 
     if "enum" in schema and value not in schema["enum"]:
-        raise provision_error(f"unexpected value at {path}: {value!r}")
+        msg = f"unexpected value at {path}: {value!r}"
+        raise provision_error(msg)
 
     if isinstance(value, dict):
         min_properties = schema.get("minProperties")
         if min_properties is not None and len(value) < min_properties:
-            raise provision_error(f"expected at least {min_properties} keys at {path}")
+            msg = f"expected at least {min_properties} keys at {path}"
+            raise provision_error(msg)
 
         required = set(schema.get("required", []))
         missing = required - set(value)
         if missing:
             keys = ", ".join(sorted(missing))
-            raise provision_error(f"missing required keys at {path}: {keys}")
+            msg = f"missing required keys at {path}: {keys}"
+            raise provision_error(msg)
 
         property_names = schema.get("propertyNames")
         if property_names is not None:
@@ -176,14 +183,16 @@ def validate_against_schema(value, schema: dict, path: str, root_schema: dict):
             if key in properties:
                 validate_against_schema(item, properties[key], item_path, root_schema)
             elif additional is False:
-                raise provision_error(f"unsupported keys at {path}: {key}")
+                msg = f"unsupported keys at {path}: {key}"
+                raise provision_error(msg)
             elif isinstance(additional, dict):
                 validate_against_schema(item, additional, item_path, root_schema)
 
     if isinstance(value, list):
         min_items = schema.get("minItems")
         if min_items is not None and len(value) < min_items:
-            raise provision_error(f"expected at least {min_items} items at {path}")
+            msg = f"expected at least {min_items} items at {path}"
+            raise provision_error(msg)
         item_schema = schema.get("items")
         if item_schema is not None:
             for idx, item in enumerate(value):
@@ -192,15 +201,18 @@ def validate_against_schema(value, schema: dict, path: str, root_schema: dict):
     if isinstance(value, str):
         min_length = schema.get("minLength")
         if min_length is not None and len(value) < min_length:
-            raise provision_error(f"expected non-empty string at {path}")
+            msg = f"expected non-empty string at {path}"
+            raise provision_error(msg)
 
     if isinstance(value, int) and not isinstance(value, bool):
         minimum = schema.get("minimum")
         maximum = schema.get("maximum")
         if minimum is not None and value < minimum:
-            raise provision_error(f"expected integer >= {minimum} at {path}")
+            msg = f"expected integer >= {minimum} at {path}"
+            raise provision_error(msg)
         if maximum is not None and value > maximum:
-            raise provision_error(f"expected integer <= {maximum} at {path}")
+            msg = f"expected integer <= {maximum} at {path}"
+            raise provision_error(msg)
 
 
 def validate_name(name: str) -> str:
