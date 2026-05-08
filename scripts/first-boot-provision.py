@@ -54,6 +54,7 @@ DEFAULT_LAN_GATEWAY_ALIASES = ["atomixos"]
 DEFAULT_LAN_HOSTNAME_PATTERN = ""
 SCHEMA_ENV = "ATOMIXOS_CONFIG_SCHEMA"
 BOOTSTRAP_POST_APPLY_ENV = "ATOMIXOS_BOOTSTRAP_POST_APPLY"
+BOOTSTRAP_POST_RESPONSE_ENV = "ATOMIXOS_BOOTSTRAP_POST_RESPONSE"
 
 
 class ProvisionError(RuntimeError):
@@ -1225,6 +1226,12 @@ class BootstrapHandler(BaseHTTPRequestHandler):
             detail = (exc.stderr or exc.stdout or f"exit status {exc.returncode}").strip()
             raise provision_error(f"post-apply command failed: {detail}") from exc
 
+    def _run_post_response_async(self):
+        command = os.environ.get(BOOTSTRAP_POST_RESPONSE_ENV)
+        if not command:
+            return
+        subprocess.Popen([command], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
     def _write_payload(self, payload: bytes, filename: str = "config.toml"):
         temp_bundle, prepared_config, prepared_files = prepare_source_bytes(payload, filename)
         try:
@@ -1313,6 +1320,7 @@ class BootstrapHandler(BaseHTTPRequestHandler):
 
             self._send_json(200, {"ok": True, "message": "Configuration applied."})
             self._mark_applied()
+            self._run_post_response_async()
             return
 
         form = self._read_form()
@@ -1423,6 +1431,7 @@ class BootstrapHandler(BaseHTTPRequestHandler):
             ),
         )
         self._mark_applied()
+        self._run_post_response_async()
 
     def log_message(self, fmt, *args):
         if fmt == '"%s" %s %s' and args:
