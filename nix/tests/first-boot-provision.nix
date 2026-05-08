@@ -213,14 +213,6 @@ nixos-lib.runTest {
     gateway.wait_until_succeeds("test -f /tmp/bootstrap-post-response-hook-ran", timeout=30)
     gateway.wait_until_fails("kill -0 $(cat /tmp/bootstrap.pid)", timeout=30)
 
-    gateway.succeed("rm -rf /tmp/bootstrap-root-api-fail && mkdir -p /tmp/bootstrap-root-api-fail")
-    gateway.succeed("cat > /tmp/bootstrap-post-apply-fail <<'EOF'\n#!/usr/bin/env bash\nset -euo pipefail\necho apply failed >&2\nexit 1\nEOF\nchmod +x /tmp/bootstrap-post-apply-fail")
-    gateway.succeed("ATOMIXOS_BOOTSTRAP_POST_APPLY=/tmp/bootstrap-post-apply-fail first-boot-provision serve /tmp/bootstrap-root-api-fail /tmp/bootstrap-output-api-fail.toml --host 127.0.0.1 --port 18080 >/tmp/bootstrap.log 2>&1 & echo $! >/tmp/bootstrap.pid")
-    gateway.wait_until_succeeds("ss -tln | grep ':18080'", timeout=30)
-    gateway.succeed("test \"$(curl -sS -o /tmp/bootstrap-api-fail-response.json -w '%{http_code}' -H 'Content-Type: text/plain; charset=utf-8' --data-binary @/tmp/config.toml http://127.0.0.1:18080/api/config)\" = 400")
-    gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\n\npayload = json.loads(Path('/tmp/bootstrap-api-fail-response.json').read_text())\nassert payload == {'ok': False, 'error': 'post-apply command failed: apply failed'}, payload\nPY")
-    gateway.succeed("kill $(cat /tmp/bootstrap.pid)")
-
     gateway.succeed("rm -rf /tmp/bootstrap-root-generate && mkdir -p /tmp/bootstrap-root-generate")
     gateway.succeed("first-boot-provision serve /tmp/bootstrap-root-generate /tmp/bootstrap-output-generate.toml --host 127.0.0.1 --port 18080 >/tmp/bootstrap.log 2>&1 & echo $! >/tmp/bootstrap.pid")
     gateway.wait_until_succeeds("ss -tln | grep ':18080'", timeout=30)

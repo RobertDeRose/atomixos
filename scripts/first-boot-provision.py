@@ -53,7 +53,6 @@ DEFAULT_LAN_DOMAIN = "local"
 DEFAULT_LAN_GATEWAY_ALIASES = ["atomixos"]
 DEFAULT_LAN_HOSTNAME_PATTERN = ""
 SCHEMA_ENV = "ATOMIXOS_CONFIG_SCHEMA"
-BOOTSTRAP_POST_APPLY_ENV = "ATOMIXOS_BOOTSTRAP_POST_APPLY"
 BOOTSTRAP_POST_RESPONSE_ENV = "ATOMIXOS_BOOTSTRAP_POST_RESPONSE"
 
 
@@ -1214,18 +1213,6 @@ class BootstrapHandler(BaseHTTPRequestHandler):
             return
         Path(output_path).write_text("applied\n")
 
-    def _run_post_apply(self):
-        command = os.environ.get(BOOTSTRAP_POST_APPLY_ENV)
-        if not command:
-            return
-        try:
-            subprocess.run([command], capture_output=True, text=True, check=True)
-        except FileNotFoundError as exc:
-            raise provision_error(f"unable to execute post-apply command {command!r}: {exc}") from exc
-        except subprocess.CalledProcessError as exc:
-            detail = (exc.stderr or exc.stdout or f"exit status {exc.returncode}").strip()
-            raise provision_error(f"post-apply command failed: {detail}") from exc
-
     def _run_post_response_async(self):
         command = os.environ.get(BOOTSTRAP_POST_RESPONSE_ENV)
         if not command:
@@ -1237,7 +1224,6 @@ class BootstrapHandler(BaseHTTPRequestHandler):
         try:
             parsed = load_config(prepared_config, Path(self.config_root))
             write_imported_state(parsed, prepared_config, prepared_files, Path(self.config_root))
-            self._run_post_apply()
             return prepared_config.read_text()
         finally:
             temp_bundle.cleanup()

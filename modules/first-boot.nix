@@ -19,7 +19,7 @@
 
 let
   firstBootScript = pkgs.writeShellScript "first-boot" (builtins.readFile ../scripts/first-boot.sh);
-  bootstrapApplyScript = pkgs.writeShellScript "bootstrap-apply" ''
+  bootstrapPostResponseScript = pkgs.writeShellScript "bootstrap-post-response" ''
     set -euo pipefail
     ${pkgs.systemd}/bin/systemctl restart quadlet-sync.service
     if ${pkgs.systemd}/bin/systemctl list-unit-files lan-gateway-apply.service >/dev/null 2>&1; then
@@ -28,9 +28,6 @@ let
     if ${pkgs.systemd}/bin/systemctl list-unit-files provisioned-firewall-inbound.service >/dev/null 2>&1; then
       ${pkgs.systemd}/bin/systemctl restart provisioned-firewall-inbound.service
     fi
-  '';
-  bootstrapReloadScript = pkgs.writeShellScript "bootstrap-reload" ''
-    set -euo pipefail
     ${pkgs.systemd}/bin/systemctl try-restart atomixos-bootstrap.service
   '';
   quadletSyncScript = pkgs.writeShellScript "quadlet-sync" (
@@ -147,8 +144,7 @@ in
       Restart = "always";
       RestartSec = 2;
       Environment = [
-        "ATOMIXOS_BOOTSTRAP_POST_APPLY=${bootstrapApplyScript}"
-        "ATOMIXOS_BOOTSTRAP_POST_RESPONSE=${bootstrapReloadScript}"
+        "ATOMIXOS_BOOTSTRAP_POST_RESPONSE=${bootstrapPostResponseScript}"
       ];
       ExecStart = "${provisionCli}/bin/first-boot-provision serve /data/config --host 172.20.30.1 --port 8080";
     };
