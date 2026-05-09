@@ -36,6 +36,7 @@
 ## Design
 
 - [Design Decisions](./design-decisions.md)
+- [Planned Features](./planned-features.md)
 
 ## Reference
 
