@@ -46,6 +46,7 @@ OS_UPGRADE_FILENAME = "os-upgrade.json"
 CONTAINER_SUFFIX = ".container"
 NETWORK_SUFFIX = ".network"
 VOLUME_SUFFIX = ".volume"
+BUILD_SUFFIX = ".build"
 QUADLET_SUFFIXES = {".build", ".container", ".image", ".kube", ".network", ".pod", ".volume"}
 BOOTSTRAP_LOGO_PATH = Path(__file__).resolve().parent.parent / "share" / "atomixos" / "atomixos.png"
 DEFAULT_LAN_GATEWAY_CIDR = "172.20.30.1/24"
@@ -636,6 +637,41 @@ def render_volumes(volume_table: dict, config_root: Path):
     return rendered, runtime_units
 
 
+def render_builds(build_table: dict, config_root: Path):
+    rendered = {}
+    runtime_units = []
+    if not build_table:
+        return rendered, runtime_units
+
+    for build_name, raw_sections in build_table.items():
+        validate_name(build_name)
+        build_path = f"build.{build_name}"
+        sections = require_allowed_keys(
+            raw_sections,
+            build_path,
+            {"Build"},
+            {"Build"},
+        )
+        build_directives = normalize_directives(
+            require_mapping(sections.get("Build"), f"{build_path}.Build"),
+            f"{build_path}.Build",
+        )
+
+        lines = render_section("Build", build_directives, config_root)
+        filename = f"{build_name}{BUILD_SUFFIX}"
+        rendered[filename] = "\n".join(lines).rstrip() + "\n"
+        runtime_units.append(
+            {
+                "name": build_name,
+                "filename": filename,
+                "service": f"{build_name}-build.service",
+                "mode": "rootful",
+            }
+        )
+
+    return rendered, runtime_units
+
+
 def load_config(config_path: Path, config_root: Path = DEFAULT_CONFIG_DIR):
     try:
         data = tomllib.loads(config_path.read_text())
@@ -648,7 +684,7 @@ def load_config(config_path: Path, config_root: Path = DEFAULT_CONFIG_DIR):
     root = require_allowed_keys(
         data,
         "config",
-        {"version", "admin", "firewall", "health", "lan", "os_upgrade", "container", "network", "volume"},
+        {"version", "admin", "firewall", "health", "lan", "os_upgrade", "container", "network", "volume", "build"},
         {"version", "admin", "firewall", "health", "container"},
     )
 
@@ -724,6 +760,14 @@ def load_config(config_path: Path, config_root: Path = DEFAULT_CONFIG_DIR):
         )
         rendered_units.update(rendered_volumes)
         runtime_units.extend(volume_runtime)
+
+    build_table = root.get("build")
+    if build_table is not None:
+        rendered_builds, build_runtime = render_builds(
+            require_mapping(build_table, "build"), config_root
+        )
+        rendered_units.update(rendered_builds)
+        runtime_units.extend(build_runtime)
 
     for unit in required_units:
         if unit not in container:

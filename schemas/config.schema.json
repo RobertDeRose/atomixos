@@ -145,6 +145,16 @@
       "additionalProperties": {
         "$ref": "#/$defs/volumeDefinition"
       }
+    },
+    "build": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9_-]+$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/buildDefinition"
+      }
     }
   },
   "$defs": {
@@ -250,6 +260,18 @@
       ],
       "properties": {
         "Volume": {
+          "$ref": "#/$defs/quadletSection"
+        }
+      }
+    },
+    "buildDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "Build"
+      ],
+      "properties": {
+        "Build": {
           "$ref": "#/$defs/quadletSection"
         }
       }
