@@ -57,7 +57,7 @@ local linters = new Mapping<String, Step> {
 }
 
 default_branch = "main"
-exclude = List("**/mermaid.min.js")
+exclude = List("**/mermaid.min.js", "**/.opencode/*")
 fail_fast = false
 
 hooks {

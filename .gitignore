@@ -32,7 +32,6 @@ Thumbs.db
 book/
 
 # AI Agents
-.opencode
 .playwright-mcp/
 bkup/
 
