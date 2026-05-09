@@ -44,6 +44,8 @@ FIREWALL_INBOUND_FILENAME = "firewall-inbound.json"
 LAN_SETTINGS_FILENAME = "lan-settings.json"
 OS_UPGRADE_FILENAME = "os-upgrade.json"
 CONTAINER_SUFFIX = ".container"
+NETWORK_SUFFIX = ".network"
+VOLUME_SUFFIX = ".volume"
 QUADLET_SUFFIXES = {".build", ".container", ".image", ".kube", ".network", ".pod", ".volume"}
 BOOTSTRAP_LOGO_PATH = Path(__file__).resolve().parent.parent / "share" / "atomixos" / "atomixos.png"
 DEFAULT_LAN_GATEWAY_CIDR = "172.20.30.1/24"
@@ -564,6 +566,76 @@ def render_containers(container_table: dict, config_root: Path):
     return rendered, runtime_units, warnings
 
 
+def render_networks(network_table: dict, config_root: Path):
+    rendered = {}
+    runtime_units = []
+    if not network_table:
+        return rendered, runtime_units
+
+    for network_name, raw_sections in network_table.items():
+        validate_name(network_name)
+        network_path = f"network.{network_name}"
+        sections = require_allowed_keys(
+            raw_sections,
+            network_path,
+            {"Network"},
+            {"Network"},
+        )
+        network_directives = normalize_directives(
+            require_mapping(sections.get("Network"), f"{network_path}.Network"),
+            f"{network_path}.Network",
+        )
+
+        lines = render_section("Network", network_directives, config_root)
+        filename = f"{network_name}{NETWORK_SUFFIX}"
+        rendered[filename] = "\n".join(lines).rstrip() + "\n"
+        runtime_units.append(
+            {
+                "name": network_name,
+                "filename": filename,
+                "service": f"{network_name}-network.service",
+                "mode": "rootful",
+            }
+        )
+
+    return rendered, runtime_units
+
+
+def render_volumes(volume_table: dict, config_root: Path):
+    rendered = {}
+    runtime_units = []
+    if not volume_table:
+        return rendered, runtime_units
+
+    for volume_name, raw_sections in volume_table.items():
+        validate_name(volume_name)
+        volume_path = f"volume.{volume_name}"
+        sections = require_allowed_keys(
+            raw_sections,
+            volume_path,
+            {"Volume"},
+            {"Volume"},
+        )
+        volume_directives = normalize_directives(
+            require_mapping(sections.get("Volume"), f"{volume_path}.Volume"),
+            f"{volume_path}.Volume",
+        )
+
+        lines = render_section("Volume", volume_directives, config_root)
+        filename = f"{volume_name}{VOLUME_SUFFIX}"
+        rendered[filename] = "\n".join(lines).rstrip() + "\n"
+        runtime_units.append(
+            {
+                "name": volume_name,
+                "filename": filename,
+                "service": f"{volume_name}-volume.service",
+                "mode": "rootful",
+            }
+        )
+
+    return rendered, runtime_units
+
+
 def load_config(config_path: Path, config_root: Path = DEFAULT_CONFIG_DIR):
     try:
         data = tomllib.loads(config_path.read_text())
@@ -576,7 +648,7 @@ def load_config(config_path: Path, config_root: Path = DEFAULT_CONFIG_DIR):
     root = require_allowed_keys(
         data,
         "config",
-        {"version", "admin", "firewall", "health", "lan", "os_upgrade", "container"},
+        {"version", "admin", "firewall", "health", "lan", "os_upgrade", "container", "network", "volume"},
         {"version", "admin", "firewall", "health", "container"},
     )
 
@@ -636,6 +708,22 @@ def load_config(config_path: Path, config_root: Path = DEFAULT_CONFIG_DIR):
     if not rendered_units:
         message = "config.toml must define at least one Quadlet unit"
         raise provision_error(message)
+
+    network_table = root.get("network")
+    if network_table is not None:
+        rendered_networks, network_runtime = render_networks(
+            require_mapping(network_table, "network"), config_root
+        )
+        rendered_units.update(rendered_networks)
+        runtime_units.extend(network_runtime)
+
+    volume_table = root.get("volume")
+    if volume_table is not None:
+        rendered_volumes, volume_runtime = render_volumes(
+            require_mapping(volume_table, "volume"), config_root
+        )
+        rendered_units.update(rendered_volumes)
+        runtime_units.extend(volume_runtime)
 
     for unit in required_units:
         if unit not in container:

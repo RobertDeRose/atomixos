@@ -125,6 +125,26 @@
       "additionalProperties": {
         "$ref": "#/$defs/containerDefinition"
       }
+    },
+    "network": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9_-]+$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/networkDefinition"
+      }
+    },
+    "volume": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9_-]+$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/volumeDefinition"
+      }
     }
   },
   "$defs": {
@@ -206,6 +226,30 @@
           "$ref": "#/$defs/quadletSection"
         },
         "Install": {
+          "$ref": "#/$defs/quadletSection"
+        }
+      }
+    },
+    "networkDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "Network"
+      ],
+      "properties": {
+        "Network": {
+          "$ref": "#/$defs/quadletSection"
+        }
+      }
+    },
+    "volumeDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "Volume"
+      ],
+      "properties": {
+        "Volume": {
           "$ref": "#/$defs/quadletSection"
         }
       }
