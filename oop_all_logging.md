@@ -2,7 +2,10 @@
 
 ## Context
 
-We investigated how to persist very-early boot forensic information, especially initrd failures, without relying on the current approach of mounting the boot FAT partition in initrd and writing custom marker files on every boot.
+We investigated how to persist very-early boot forensic information,
+especially initrd failures, without relying on the current approach of
+mounting the boot FAT partition in initrd and writing custom marker
+files on every boot.
 
 ## Current State
 
@@ -40,7 +43,8 @@ Important implications:
 
 - initrd units run in the initrd manager, not the host OS manager.
 - after `initrd-switch-root.service`, the host manager takes over
-- failed initrd units can still appear in `systemctl --failed` until reset, because systemd keeps failed units in memory for introspection
+- failed initrd units can still appear in `systemctl --failed` until
+  reset, because systemd keeps failed units in memory for introspection
 - there is no special unit setting that means “this is an initrd unit, do not show failure after switch-root”
 
 What `reset-failed` does:
@@ -69,7 +73,9 @@ Proposed approach:
 
 - write initrd forensic events only to `/run` during initrd
 - do not try to mount `/boot` on the normal initrd success path
-- add an initrd service that flushes the buffered log to `/boot/forensics` only on failure, for example when initrd reaches `emergency.target`
+- add an initrd service that flushes the buffered log to
+  `/boot/forensics` only on failure, for example when initrd reaches
+  `emergency.target`
 
 Why this is attractive:
 
@@ -112,7 +118,9 @@ What is gained:
 - removes dependency on mounting the boot FAT partition too early
 - makes persisted initrd markers more meaningful, because they now indicate an actual initrd failure path
 
-This is a narrower guarantee than “always write a marker on every boot”, but that broader goal is not currently working anyway.
+This is a narrower guarantee than "always write a marker on
+every boot", but that broader goal is not currently working
+anyway.
 
 ## Existing Implementations And Guidance
 
@@ -151,7 +159,9 @@ Important guidance from the docs:
 - no sleeping/interrupt-driven behavior
 - avoid ordinary locking and heavyweight kernel services
 
-This strongly suggests that low-level persistence is better handled by `pstore` than by ad hoc initrd shell units mounting writable filesystems.
+This strongly suggests that low-level persistence is better
+handled by `pstore` than by ad hoc initrd shell units mounting
+writable filesystems.
 
 ### Early Console
 
@@ -169,7 +179,9 @@ Systemd documentation strongly supports:
 - using initrd targets correctly
 - using `emergency.target` for recoverable failure handling
 
-It does not suggest that custom initrd services should routinely mount arbitrary writable filesystems and append logs there during every boot.
+It does not suggest that custom initrd services should
+routinely mount arbitrary writable filesystems and append logs
+there during every boot.
 
 ## NixOS-Specific Findings
 
@@ -203,4 +215,6 @@ Use a layered approach:
 - There is no special systemd unit flag that makes initrd failures disappear properly after switch-root.
 - Existing kernel guidance points toward `pstore` for true crash persistence.
 - Existing systemd guidance points toward `emergency.target` for recoverable initrd failure hooks.
-- If we keep the custom forensic breadcrumb approach, buffering to `/run` and flushing only on failure is the most reasonable next design.
+- If we keep the custom forensic breadcrumb approach, buffering
+  to `/run` and flushing only on failure is the most reasonable
+  next design.

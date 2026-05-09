@@ -68,13 +68,13 @@ kernel-assigned names (e.g., `eth1`, `eth2`).
 
 ## Firewall Summary
 
-| Interface  | Direction | Allowed Ports                                        |
-|------------|-----------|------------------------------------------------------|
-| eth0 (WAN) | Inbound   | provisioned firewall ports only                      |
-| eth0 (WAN) | Inbound   | TCP 22 (SSH) -- only with flag file                  |
+| Interface  | Direction | Allowed Ports                                                            |
+|------------|-----------|--------------------------------------------------------------------------|
+| eth0 (WAN) | Inbound   | provisioned firewall ports only                                          |
+| eth0 (WAN) | Inbound   | TCP 22 (SSH) -- only with flag file                                      |
 | eth1 (LAN) | Inbound   | open by default; explicit `lan` scope switches to allowlisted ports only |
-| tun0 (VPN) | Inbound   | TCP 22 (SSH)                                         |
-| any        | Forward   | DROP (no exceptions)                                 |
+| tun0 (VPN) | Inbound   | TCP 22 (SSH)                                                             |
+| any        | Forward   | DROP (no exceptions)                                                     |
 
 Provisioned WAN and optional restrictive LAN ports come from `/data/config/firewall-inbound.json`. SSH on WAN is
 controlled by the presence of `/data/config/ssh-wan-enabled`. See the [Firewall module](../code-reference/modules.md#firewallnix) for

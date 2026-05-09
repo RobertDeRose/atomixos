@@ -249,11 +249,11 @@ atomixos.rauc = {
 
 **nftables rules (inet filter):**
 
-| Chain     | Policy | Rules                                                                                                     |
-|-----------|--------|-----------------------------------------------------------------------------------------------------------|
+| Chain     | Policy | Rules                                                                  |
+|-----------|--------|------------------------------------------------------------------------|
 | `input`   | drop   | lo: accept; established: accept; eth1: accept by default; tun0: TCP 22 |
-| `forward` | drop   | (no exceptions)                                                                                           |
-| `output`  | accept |                                                                                                           |
+| `forward` | drop   | (no exceptions)                                                        |
+| `output`  | accept |                                                                        |
 
 **Dynamic SSH toggle services:**
 
@@ -355,11 +355,11 @@ path records lifecycle markers to the journal through normal service stdout.
 
 **Custom NixOS options (`os-upgrade.*`):**
 
-| Option            | Type   | Default                      | Description                              |
-|-------------------|--------|------------------------------|------------------------------------------|
-| `useHawkbit`      | bool   | `false`                      | Reserve hawkBit path and install package |
-| `pollingInterval` | string | `"1h"`                       | Timer interval                           |
-| `serverUrl`       | string | `""`                         | Optional fallback update server URL      |
+| Option            | Type   | Default | Description                              |
+|-------------------|--------|---------|------------------------------------------|
+| `useHawkbit`      | bool   | `false` | Reserve hawkBit path and install package |
+| `pollingInterval` | string | `"1h"`  | Timer interval                           |
+| `serverUrl`       | string | `""`    | Optional fallback update server URL      |
 
 **Timer:** `OnBootSec=5min`, `OnUnitActiveSec=<pollingInterval>`, `RandomizedDelaySec=10min`
 
