@@ -1,0 +1,74 @@
+version = 1
+
+[admin]
+ssh_keys = ["<SSH_PUBLIC_KEY>"]
+
+[firewall.inbound.wan]
+tcp = [80, 443]
+
+[health]
+required = ["caddy-gateway", "cockpit-ws"]
+
+# -- Networks --------------------------------------------------------
+
+[network.management]
+[network.management.Network]
+Subnet = "10.89.1.0/24"
+
+# -- Volumes ---------------------------------------------------------
+
+[volume.caddy-data]
+[volume.caddy-data.Volume]
+Driver = "local"
+
+# -- Builds ----------------------------------------------------------
+
+[build.cockpit-ws]
+[build.cockpit-ws.Build]
+File = "${FILES_DIR}/cockpit/Containerfile"
+ImageTag = "localhost/cockpit-ws:latest"
+
+# -- Containers ------------------------------------------------------
+
+[container.caddy-gateway]
+privileged = true
+
+[container.caddy-gateway.Unit]
+Description = "Caddy gateway with AuthCrunch OIDC"
+
+[container.caddy-gateway.Container]
+Image = "ghcr.io/authcrunch/authcrunch:latest"
+Environment = [
+  "AZURE_TENANT_ID=<AZURE_TENANT_ID>",
+  "AZURE_CLIENT_ID=<AZURE_CLIENT_ID>",
+  "AZURE_CLIENT_SECRET=<AZURE_CLIENT_SECRET>",
+  "JWT_SHARED_KEY=<JWT_SHARED_KEY>",
+]
+Volume = [
+  "${FILES_DIR}/caddy/Caddyfile:/etc/caddy/Caddyfile:ro",
+  "caddy-data:/data",
+]
+
+[container.caddy-gateway.Install]
+WantedBy = ["multi-user.target"]
+
+[container.cockpit-ws]
+privileged = true
+
+[container.cockpit-ws.Unit]
+Description = "Cockpit web console with bearer auth"
+After = ["cockpit-ws-build.service"]
+
+[container.cockpit-ws.Container]
+Image = "localhost/cockpit-ws:latest"
+Environment = [
+  "JWT_SHARED_KEY=<JWT_SHARED_KEY>",
+]
+Volume = [
+  "${FILES_DIR}/cockpit/cockpit.conf:/etc/cockpit/cockpit.conf:ro",
+  "${FILES_DIR}/cockpit/cockpit-bearer-auth:/usr/local/bin/cockpit-bearer-auth:ro",
+  "/run/podman/podman.sock:/run/podman/podman.sock",
+]
+
+[container.cockpit-ws.Install]
+WantedBy = ["multi-user.target"]

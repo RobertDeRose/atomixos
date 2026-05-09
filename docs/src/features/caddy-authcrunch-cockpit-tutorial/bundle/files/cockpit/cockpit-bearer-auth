@@ -1,0 +1,181 @@
+#!/usr/bin/python3
+# cockpit-bearer-auth -- cockpit [bearer] authentication command
+#
+# Validates AuthCrunch JWT tokens (HS256) and maps roles to local users.
+# Launched by cockpit-ws when a request includes an Authorization: Bearer
+# header. Communicates with cockpit-ws using the cockpit protocol on fd 1,
+# then execs cockpit-bridge as the authenticated user.
+#
+# Environment:
+#   JWT_SHARED_KEY  -- shared HMAC-SHA256 signing key (required)
+#
+# Role mapping:
+#   authp/admin  -> admin   (sudoless device administrator)
+#   authp/user   -> viewer  (restricted read-only user)
+
+import base64
+import hashlib
+import hmac
+import json
+import os
+import sys
+import time
+
+ROLE_MAP = {
+    "authp/admin": "admin",
+    "authp/user": "viewer",
+}
+DEFAULT_USER = "viewer"
+
+
+def send_frame(content):
+    """Send a cockpit protocol frame on fd 1."""
+    data = json.dumps(content).encode()
+    os.write(1, str(len(data) + 1).encode())
+    os.write(1, b"\n\n")
+    os.write(1, data)
+
+
+def read_size(fd):
+    """Read the size prefix of a cockpit protocol frame."""
+    size = 0
+    seen = 0
+    while True:
+        t = os.read(fd, 1)
+        if not t:
+            return 0
+        if t == b"\n":
+            break
+        size = (size * 10) + int(t)
+        seen += 1
+        if seen > 7:
+            raise ValueError("invalid frame: size too long")
+    return size
+
+
+def read_frame(fd):
+    """Read a complete cockpit protocol frame."""
+    size = read_size(fd)
+    data = b""
+    while size > 0:
+        d = os.read(fd, size)
+        if not d:
+            raise ValueError("unexpected EOF reading frame")
+        size -= len(d)
+        data += d
+    return data.decode()
+
+
+def send_problem_init(problem, message):
+    """Send an init command indicating authentication failure."""
+    cmd = {"command": "init", "problem": problem}
+    if message:
+        cmd["message"] = message
+    send_frame(cmd)
+
+
+def base64url_decode(s):
+    """Decode base64url without padding."""
+    s += "=" * (4 - len(s) % 4)
+    return base64.urlsafe_b64decode(s)
+
+
+def verify_jwt(token, key):
+    """Verify an HS256 JWT and return the payload claims.
+
+    Only HS256 is supported. The token must not be expired.
+    """
+    parts = token.split(".")
+    if len(parts) != 3:
+        raise ValueError("malformed JWT: expected 3 parts")
+
+    header = json.loads(base64url_decode(parts[0]))
+    if header.get("alg") != "HS256":
+        raise ValueError(f"unsupported JWT algorithm: {header.get('alg')}")
+
+    signing_input = f"{parts[0]}.{parts[1]}".encode()
+    expected_sig = base64url_decode(parts[2])
+    actual_sig = hmac.new(key.encode(), signing_input, hashlib.sha256).digest()
+
+    if not hmac.compare_digest(expected_sig, actual_sig):
+        raise ValueError("JWT signature verification failed")
+
+    payload = json.loads(base64url_decode(parts[1]))
+
+    exp = payload.get("exp")
+    if exp is not None and time.time() > exp:
+        raise ValueError("JWT has expired")
+
+    return payload
+
+
+def map_user(payload):
+    """Map JWT roles to a local system user.
+
+    AuthCrunch stores roles in the 'roles' claim as a list of strings.
+    The first matching role in ROLE_MAP determines the local user.
+    Falls back to DEFAULT_USER if no roles match.
+    """
+    roles = payload.get("roles", [])
+    if isinstance(roles, str):
+        roles = [roles]
+
+    for role in roles:
+        if role in ROLE_MAP:
+            return ROLE_MAP[role]
+
+    return DEFAULT_USER
+
+
+def main(args):
+    host = args[1] if len(args) > 1 else "localhost"
+
+    key = os.environ.get("JWT_SHARED_KEY")
+    if not key:
+        send_problem_init("internal-error", "JWT_SHARED_KEY not set")
+        sys.exit(1)
+
+    # Request credentials from cockpit-ws
+    send_frame({
+        "command": "authorize",
+        "cookie": f"session{os.getpid()}{time.time()}",
+        "challenge": "*",
+    })
+
+    # Read the response
+    try:
+        data = read_frame(1)
+        cmd = json.loads(data)
+        response = cmd.get("response", "")
+    except (ValueError, json.JSONDecodeError) as exc:
+        send_problem_init("internal-error", str(exc))
+        sys.exit(1)
+
+    # Extract bearer token from response
+    # Response format: "Bearer <token>"
+    prefix = "Bearer "
+    if not response.startswith(prefix):
+        send_problem_init("authentication-failed", "expected Bearer token")
+        sys.exit(1)
+
+    token = response[len(prefix):]
+
+    # Validate JWT
+    try:
+        payload = verify_jwt(token, key)
+    except ValueError as exc:
+        send_problem_init("authentication-failed", str(exc))
+        sys.exit(1)
+
+    # Map roles to local user
+    user = map_user(payload)
+
+    # Exec cockpit-bridge as the mapped user
+    os.execlp(
+        "runuser", "runuser", "-u", user, "--",
+        "cockpit-bridge",
+    )
+
+
+if __name__ == "__main__":
+    main(sys.argv)

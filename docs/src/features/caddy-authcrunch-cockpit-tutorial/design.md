@@ -179,6 +179,9 @@ provides a foundation for moving to bridge networking later.
     https_port 443
     admin off
 
+    order authenticate before respond
+    order authorize before basicauth
+
     security {
         oauth identity provider azure {
             realm azure
@@ -195,26 +198,28 @@ provides a foundation for moving to bridge networking later.
             enable identity provider azure
 
             transform user {
-                match origin azure
+                match realm azure
                 action add role authp/user
             }
 
             transform user {
-                match origin azure
-                match roles "<ENTRA_ADMIN_GROUP_NAME>"
+                match realm azure
+                match roles <ENTRA_ADMIN_GROUP_NAME>
                 action add role authp/admin
             }
         }
 
         authorization policy mgmt-policy {
             set auth url /auth/
-            crypto key sign-verify {env.JWT_SHARED_KEY}
+            crypto key verify {env.JWT_SHARED_KEY}
             allow roles authp/admin authp/user
+            validate bearer header
+            inject headers with claims
         }
     }
 }
 
-:443 {
+<GATEWAY_DOMAIN> {
     route /auth* {
         authenticate with myportal
     }
