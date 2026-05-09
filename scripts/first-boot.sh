@@ -11,7 +11,6 @@ log() { echo "[first-boot] $*"; }
 CONFIG_ROOT="${ATOMIXOS_CONFIG_ROOT:-/data/config}"
 CONFIG_TOML="$CONFIG_ROOT/config.toml"
 QUADLET_ACTIVE_DIR="${ATOMIXOS_QUADLET_ACTIVE_DIR:-/etc/containers/systemd}"
-BOOTSTRAP_PORT="${ATOMIXOS_BOOTSTRAP_PORT:-8080}"
 BOOTSTRAP_HOST="${ATOMIXOS_BOOTSTRAP_HOST:-172.20.30.1}"
 INITRD_MARKER="${ATOMIXOS_INITRD_MARKER:-/etc/atomixos/fresh-flash}"
 BOOT_CONFIG_PATH="${ATOMIXOS_BOOT_CONFIG_PATH:-/boot/config.toml}"
@@ -214,7 +213,6 @@ if ! discover_and_import_provisioning; then
 	log "ERROR: provisioning seed not found"
 	exit 1
 fi
-
 
 if ! has_valid_provisioning; then
 	log "ERROR: resulting provisioning is invalid"

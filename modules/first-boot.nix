@@ -123,8 +123,14 @@ in
 
   systemd.services.atomixos-bootstrap = {
     description = "AtomixOS bootstrap web console";
-    after = [ "data.mount" "network-online.target" ];
-    wants = [ "data.mount" "network-online.target" ];
+    after = [
+      "data.mount"
+      "network-online.target"
+    ];
+    wants = [
+      "data.mount"
+      "network-online.target"
+    ];
     wantedBy = [ "multi-user.target" ];
 
     unitConfig.RequiresMountsFor = [ "/data" ];
