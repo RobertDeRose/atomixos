@@ -4,7 +4,7 @@ import "package://github.com/jdx/hk/releases/download/v1.41.0/hk@1.41.0#/Builtin
 local commit_message_validation: Step = new Step {
   check =
     #"""
-    perl -0pi -e "s/[ \t]+\$//mg; s/(?<=\S) {2,}/ /g; s/\A([^\n]*\n)\n*(?=.)/$1\n/s" {{commit_msg_file}}
+    perl -0pi -e "s/[ \t]+\$//mg; s/(?<=\S) {2,}/ /g; s/\A([^\n]*\n)\n{2,}(?=.)/$1\n\n/s" {{commit_msg_file}}
     perl -0ne 'BEGIN { $/ = undef } exit 1 if /\A[^\n]*\n\n\n/ || /\A[^\n]*\n[^\n]/' {{commit_msg_file}}
     typos {{commit_msg_file}}
     commitlint --edit {{commit_msg_file}}
