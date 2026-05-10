@@ -3,8 +3,9 @@
 #
 # Validates AuthCrunch JWT tokens (HS256) and maps roles to local users.
 # Launched by cockpit-ws when a request includes an Authorization: Bearer
-# header. Communicates with cockpit-ws using the cockpit protocol on fd 1,
-# then execs cockpit-bridge as the authenticated user.
+# header. Communicates with cockpit-ws using the cockpit protocol on
+# stdin (read) and stdout (write), then execs cockpit-bridge as the
+# authenticated user.
 #
 # Environment:
 #   JWT_SHARED_KEY  -- shared HMAC-SHA256 signing key (required)
@@ -103,7 +104,9 @@ def verify_jwt(token, key):
     payload = json.loads(base64url_decode(parts[1]))
 
     exp = payload.get("exp")
-    if exp is not None and time.time() > exp:
+    if exp is None:
+        raise ValueError("JWT missing required exp claim")
+    if time.time() > exp:
         raise ValueError("JWT has expired")
 
     return payload
@@ -144,7 +147,7 @@ def main(args):
 
     # Read the response
     try:
-        data = read_frame(1)
+        data = read_frame(0)
         cmd = json.loads(data)
         response = cmd.get("response", "")
     except (ValueError, json.JSONDecodeError) as exc:

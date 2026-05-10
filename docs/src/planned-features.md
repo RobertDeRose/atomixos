@@ -82,7 +82,7 @@ Quadlet containers on a persistent `/data` partition.
 
 ### `caddy-authcrunch-cockpit-tutorial`
 
-- Status: planned
+- Status: in-progress
 - Overview: Create a comprehensive tutorial section in the documentation that provides a
   fully working `config.toml` bundle deploying Caddy with the AuthCrunch plugin for
   Microsoft Entra OIDC authentication, JWT token generation with OIDC group-to-role

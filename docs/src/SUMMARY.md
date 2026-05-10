@@ -19,6 +19,10 @@
 - [Runtime Boundaries](./runtime-boundaries.md)
 - [Operational Unknowns](./unknowns.md)
 
+## Tutorials
+
+- [OIDC-Authenticated Device Management](./tutorials/oidc-device-management.md)
+
 ## Operations
 
 - [Hardware Testing](./hardware-testing.md)

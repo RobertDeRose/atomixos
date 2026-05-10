@@ -100,7 +100,7 @@ the `podman` group, giving it socket access.
 ## Bundle Structure
 
 ```text
-config.toml
+config.example.toml
 files/
   caddy/
     Caddyfile
@@ -238,7 +238,7 @@ provides a foundation for moving to bridge networking later.
 AllowUnencrypted = true
 LoginTo = false
 ProtocolHeader = X-Forwarded-Proto
-Origins = https://gateway.example.com
+Origins = https://<GATEWAY_DOMAIN>
 UrlRoot = /cockpit/
 
 [bearer]
@@ -329,7 +329,7 @@ Existing dependencies are satisfied. One new capability is required:
 ## Affected Documentation
 
 - `docs/src/SUMMARY.md` -- add tutorial entry under new Tutorials section
-- `docs/src/planned-features.md` -- update status to `in-spec`
+- `docs/src/planned-features.md` -- update status to `in-progress`
 - New: `docs/src/features/caddy-authcrunch-cockpit-tutorial/design.md` (this file)
 - New: `docs/src/features/caddy-authcrunch-cockpit-tutorial/tasks.md`
 - New: tutorial page under `docs/src/tutorials/`
