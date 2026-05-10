@@ -4,15 +4,16 @@
 
 A documentation-only tutorial that provides a fully working `config.toml` bundle
 demonstrating Caddy with the AuthCrunch plugin for Microsoft Entra OIDC authentication,
-JWT-based group-to-role mapping, and Cockpit-ws for device management -- all provisioned
-through AtomixOS's existing config.toml system.
+provider-swap guidance for Google and other OIDC providers, JWT-based group-to-role
+mapping, and Cockpit-ws for device management -- all provisioned through AtomixOS's
+existing config.toml system.
 
 ## Goal
 
-An operator can copy the tutorial config, substitute their Azure and domain values, build
-a config bundle, and provision an AtomixOS device with a working OIDC-authenticated
-management stack. The tutorial exercises every major config.toml feature: containers,
-networks, volumes, builds, bundle files, and token substitution.
+An operator can copy the tutorial config, substitute their identity-provider and domain
+values, build a config bundle, and provision an AtomixOS device with a working
+OIDC-authenticated management stack. The tutorial exercises every major config.toml
+feature: containers, networks, volumes, builds, bundle files, and token substitution.
 
 ## Architecture
 
@@ -261,6 +262,16 @@ The tutorial must document these Azure portal steps:
 6. Create Entra security groups (e.g., `AtomixOS-Admins`, `AtomixOS-Users`)
 7. Assign users to groups
 
+## Alternate OIDC Providers
+
+The default bundle uses Entra, but the tutorial also documents the provider-specific
+values that change for Google and other OIDC providers:
+
+- AuthCrunch `oauth identity provider` name, realm, and driver
+- callback URI path (`/auth/oauth2/<provider>/authorization-code-callback`)
+- environment variables for client ID/client secret
+- transform rules used to assign `authp/admin` and `authp/user`
+
 ## Constraints
 
 - Must use only config.toml features that exist today or are added as part of this
@@ -276,7 +287,7 @@ The tutorial must document these Azure portal steps:
 - Production-hardening (certificate pinning, secret rotation, HA)
 - Native host Cockpit service packaging
 - Custom PAM module or Cockpit bearer-token authentication
-- SAML or non-Entra OIDC providers (tutorial focuses on Entra)
+- SAML providers (tutorial focuses on OIDC)
 
 ## Success Criteria
 

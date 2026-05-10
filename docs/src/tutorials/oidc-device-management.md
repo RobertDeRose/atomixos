@@ -18,7 +18,12 @@ and Caddy only exposes the Cockpit management console to admin users.
 
 ## Prerequisites
 
-### Azure App Registration
+The example bundle uses Microsoft Entra by default because Entra group claims
+map cleanly to admin/user roles. You can use any AuthCrunch-supported OIDC
+provider by changing the Caddyfile identity provider block, callback URI, and
+role mapping rules.
+
+### Microsoft Entra App Registration
 
 1. In the Azure portal, open **Microsoft Entra ID** > **App registrations**
 2. Select **New registration**
@@ -37,6 +42,42 @@ and Caddy only exposes the Cockpit management console to admin users.
    - `AtomixOS-Admins` -- full device administration
    - `AtomixOS-Users` -- read-only monitoring access
 8. Assign users to the appropriate groups
+
+### Google OAuth Client
+
+For Google, create an OAuth client in Google Cloud Console instead of an Entra
+app registration:
+
+1. Open **APIs & Services** > **Credentials**
+2. Create an **OAuth client ID** for a web application
+3. Add this authorized redirect URI:
+
+   ```text
+   https://<GATEWAY_DOMAIN>/auth/oauth2/google/authorization-code-callback
+   ```
+
+4. Note the client ID and client secret
+5. Decide how to assign admin access. Common options are a Google Workspace
+   group claim, a hosted-domain claim, or an explicit email allow-list in the
+   AuthCrunch transform rules.
+
+Then replace the Entra identity provider block in the Caddyfile with a Google
+provider block. The exact AuthCrunch driver options may vary by AuthCrunch
+version; the important values are the provider name (`google`), realm
+(`google`), client ID, client secret, and callback URI path.
+
+```caddyfile
+oauth identity provider google {
+	realm google
+	driver google
+	client_id {env.GOOGLE_CLIENT_ID}
+	client_secret {env.GOOGLE_CLIENT_SECRET}
+	scopes openid email profile
+}
+```
+
+Also update `enable identity provider azure` to `enable identity provider
+google` and update transform rules from `match realm azure` to `match realm
 
 ## Architecture
 
@@ -101,6 +142,10 @@ Replace these values before provisioning:
 | `<JWT_SHARED_KEY>`         | config.toml             | Shared HMAC-SHA256 signing key       |
 | `<GATEWAY_DOMAIN>`         | Caddyfile, cockpit.conf | Public domain name of the device     |
 | `<ENTRA_ADMIN_GROUP_NAME>` | Caddyfile               | Entra group name for admin role      |
+
+If you switch to Google or another provider, replace the Azure placeholders
+with that provider's client ID/secret variables and update the Caddyfile
+environment entries accordingly.
 
 Generate the JWT shared key with:
 

@@ -37,3 +37,4 @@ bkup/
 
 # AtomixOS files
 config.toml
+!example/**/config.toml

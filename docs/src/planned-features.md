@@ -107,6 +107,8 @@ Quadlet containers on a persistent `/data` partition.
   - Quadlet volume definition for persistent Caddy state
   - Bundle `files/` directory with Caddyfile and cockpit.conf
   - Clear documentation of Azure App Registration prerequisites
+  - Clear documentation of how to swap the Caddyfile identity provider block for Google
+    or another OIDC provider
   - Clear documentation of the authentication flow and role-based access
 - Constraints:
   - Must use only config.toml features that exist today or are added as part of this
@@ -120,7 +122,7 @@ Quadlet containers on a persistent `/data` partition.
 - Non-goals:
   - Modifying the AtomixOS base image to include Cockpit or cockpit-podman
   - Production-hardening the example (certificate pinning, secret rotation, HA)
-  - SAML or non-Entra OIDC providers (tutorial focuses on Entra)
+  - SAML providers (tutorial focuses on OIDC)
 - Success criteria:
   - An operator can copy the tutorial config, substitute their Azure/domain values, flash
     a device, and have a working OIDC-authenticated Caddy + Cockpit stack
