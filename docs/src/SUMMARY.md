@@ -2,7 +2,9 @@
 
 [Introduction](./introduction.md)
 
-## User Guide
+<!-- rumdl-disable MD025 -->
+
+# User Guide
 
 - [Architecture](./architecture.md)
   - [Partition Layout](./architecture/partition-layout.md)
@@ -19,15 +21,15 @@
 - [Runtime Boundaries](./runtime-boundaries.md)
 - [Operational Unknowns](./unknowns.md)
 
-## Tutorials
+# Tutorials
 
 - [OIDC-Authenticated Device Management](./tutorials/oidc-device-management.md)
 
-## Operations
+# Operations
 
 - [Hardware Testing](./hardware-testing.md)
 
-## Specifications
+# Specifications
 
 - [Nix Flake Configuration](./specs/nix-flake-config.md)
 - [Partition Layout](./specs/partition-layout.md)
@@ -37,12 +39,12 @@
 - [Update Confirmation](./specs/update-confirmation.md)
 - [LAN Gateway](./specs/lan-gateway.md)
 
-## Design
+# Design
 
 - [Design Decisions](./design-decisions.md)
 - [Planned Features](./planned-features.md)
 
-## Reference
+# Reference
 
 - [Task Reference](./reference/tasks.md)
 - [Flake Outputs](./reference/flake-outputs.md)
