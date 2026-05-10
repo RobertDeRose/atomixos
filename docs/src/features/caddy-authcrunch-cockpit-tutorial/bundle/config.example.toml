@@ -53,7 +53,7 @@ Volume = [
 WantedBy = ["multi-user.target"]
 
 [container.cockpit-ws]
-privileged = true
+privileged = false
 
 [container.cockpit-ws.Unit]
 Description = "Cockpit web console with bearer auth"
@@ -67,8 +67,8 @@ Environment = [
 Volume = [
   "${FILES_DIR}/cockpit/cockpit.conf:/etc/cockpit/cockpit.conf:ro",
   "${FILES_DIR}/cockpit/cockpit-bearer-auth:/usr/local/bin/cockpit-bearer-auth:ro",
-  "/run/podman/podman.sock:/run/podman/podman.sock",
 ]
+PublishPort = ["9090:9090"]
 
 [container.cockpit-ws.Install]
 WantedBy = ["multi-user.target"]

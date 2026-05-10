@@ -128,8 +128,8 @@ The config defines two rootful containers, a network, a volume, and a build:
 
 Key points:
 
-- Both containers are `privileged = true`: Caddy needs ports 80/443 (privileged),
-  and Cockpit-ws needs host-level access for system management
+- Caddy is `privileged = true` (rootful) because it binds ports 80/443;
+  cockpit-ws is rootless and published on `127.0.0.1:9090` via pasta networking
 - The `cockpit-ws` container depends on its build service via `After`
 - The `${FILES_DIR}` token is replaced at provision time with the path to
   the extracted bundle files

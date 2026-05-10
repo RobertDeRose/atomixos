@@ -116,18 +116,20 @@ files/
 
 ### Containers
 
-| Container     | Image                                         | Privileged | Network       | Purpose                  |
-|---------------|-----------------------------------------------|------------|---------------|--------------------------|
-| caddy-gateway | `ghcr.io/authcrunch/authcrunch:latest`        | true       | host (forced) | OIDC auth, reverse proxy |
-| cockpit-ws    | custom build from `quay.io/cockpit/ws:latest` | true       | host (forced) | Device management UI     |
+| Container     | Image                                         | Privileged | Network        | Purpose                  |
+|---------------|-----------------------------------------------|------------|----------------|--------------------------|
+| caddy-gateway | `ghcr.io/authcrunch/authcrunch:latest`        | true       | host (forced)  | OIDC auth, reverse proxy |
+| cockpit-ws    | custom build from `quay.io/cockpit/ws:latest` | false      | pasta (forced) | Device management UI     |
 
 The cockpit-ws container uses a custom Containerfile that adds Python 3 to the base
 `quay.io/cockpit/ws` image. The upstream image is Fedora minimal and does not include
 Python, which the bearer auth script requires. The custom image is built via Quadlet
 `.build` support.
 
-Both containers are rootful: Caddy binds privileged ports 80/443, and Cockpit-ws
-needs host-level access for system management (SSH sessions, D-Bus).
+Caddy is rootful because it binds privileged ports 80/443. Cockpit-ws runs rootless
+(as `appsvc`) since it only needs unprivileged port 9090 and outbound SSH; the
+provisioner publishes port 9090 to `127.0.0.1` so Caddy on host networking can
+reverse-proxy to it.
 
 ### Builds
 

@@ -68,7 +68,7 @@ them the same way it supports `.network` and `.volume`.
 - [x] Define `health.required` listing `caddy-gateway.service` and
   `cockpit-ws.service`
 - [x] Define `caddy-gateway` container (rootful, AuthCrunch image)
-- [x] Define `cockpit-ws` container (rootful, custom build image ref)
+- [x] Define `cockpit-ws` container (rootless, custom build image ref)
 - [x] Define `cockpit-ws` build section referencing Containerfile
 - [x] Define `management` network with subnet
 - [x] Define `caddy-data` volume with local driver
