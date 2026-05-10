@@ -128,8 +128,8 @@ The config defines two rootful containers, a network, a volume, and a build:
 
 Key points:
 
-- Both containers are `privileged = true` because they need host network access
-  (Caddy for ports 80/443, Cockpit for localhost:9090)
+- Both containers are `privileged = true`: Caddy needs ports 80/443 (privileged),
+  and Cockpit-ws needs host-level access for system management
 - The `cockpit-ws` container depends on its build service via `After`
 - The `${FILES_DIR}` token is replaced at provision time with the path to
   the extracted bundle files

@@ -126,8 +126,8 @@ The cockpit-ws container uses a custom Containerfile that adds Python 3 to the b
 Python, which the bearer auth script requires. The custom image is built via Quadlet
 `.build` support.
 
-Both containers are rootful because they need host network access (Caddy for ports 80/443,
-Cockpit-ws for localhost:9090 and host SSH access).
+Both containers are rootful: Caddy binds privileged ports 80/443, and Cockpit-ws
+needs host-level access for system management (SSH sessions, D-Bus).
 
 ### Builds
 
