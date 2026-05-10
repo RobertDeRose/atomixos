@@ -48,24 +48,22 @@ The AtomixOS device needs two local users that Cockpit sessions will run as:
 
 ## Architecture
 
-```text
-                     Internet
-                        |
-        ┌───────────────▼───────────────┐
-        │  Caddy + AuthCrunch           │
-        │  (ports 80, 443)              │
-        │                               │
-        │  /auth*  → OIDC portal        │
-        │  /cockpit/* → reverse proxy   │
-        └───────────────┬───────────────┘
-                        │ localhost:9090
-        ┌───────────────▼───────────────┐
-        │  Cockpit-ws                   │
-        │  (bearer token auth)          │
-        │                               │
-        │  JWT → local user mapping     │
-        │  → cockpit-bridge             │
-        └───────────────────────────────┘
+```mermaid
+graph TD
+    internet((Internet)) -- "ports 80, 443" --> caddy
+
+    subgraph caddy["Caddy + AuthCrunch"]
+        ca1["/auth* → OIDC portal"]
+        ca2["/cockpit/* → reverse proxy"]
+    end
+
+    caddy -- "localhost:9090" --> cockpit
+
+    subgraph cockpit["Cockpit-ws"]
+        co1["bearer token auth"]
+        co2["JWT → local user mapping"]
+        co3["→ cockpit-bridge"]
+    end
 ```
 
 ### Authentication Flow

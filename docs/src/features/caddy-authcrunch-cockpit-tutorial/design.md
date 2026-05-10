@@ -18,32 +18,34 @@ networks, volumes, builds, bundle files, and token substitution.
 
 ### Container Topology
 
-```text
-┌─────────────────────────────────────────────────────────┐
-│  AtomixOS device (host network)                        │
-│                                                         │
-│  ┌──────────────────────────┐                           │
-│  │  caddy-gateway           │  rootful, host network    │
-│  │  (AuthCrunch)            │  ports 80, 443            │
-│  │                          │                           │
-│  │  - Entra OIDC login      │                           │
-│  │  - JWT issuance          │                           │
-│  │  - role-based authz      │                           │
-│  │  - reverse proxy         │                           │
-│  └──────────┬───────────────┘                           │
-│             │ reverse_proxy localhost:9090               │
-│  ┌──────────▼───────────────┐                           │
-│  │  cockpit-ws              │  rootful, host network    │
-│  │                          │  port 9090 (localhost)     │
-│  │  - bearer token auth     │                           │
-│  │  - system management     │                           │
-│  │  - podman socket access  │                           │
-│  └──────────────────────────┘                           │
-│                                                         │
-│  Podman socket: /run/podman/podman.sock                  │
-│  Caddy state:   caddy-data volume                       │
-│  Caddy network: management network                      │
-└─────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph device["AtomixOS device (host network)"]
+        subgraph caddy["caddy-gateway<br/>(AuthCrunch)"]
+            direction TB
+            c1["Entra OIDC login"]
+            c2["JWT issuance"]
+            c3["role-based authz"]
+            c4["reverse proxy"]
+        end
+
+        subgraph cockpit["cockpit-ws"]
+            direction TB
+            k1["bearer token auth"]
+            k2["system management"]
+            k3["podman socket access"]
+        end
+
+        caddy -- "reverse_proxy localhost:9090" --> cockpit
+
+        socket["/run/podman/podman.sock"]
+        caddydata["caddy-data volume"]
+        mgmtnet["management network"]
+    end
+
+    internet((Internet)) -- "ports 80, 443" --> caddy
+    cockpit -. "mount" .-> socket
+    caddy -. "mount" .-> caddydata
 ```
 
 ### Authentication Flow
