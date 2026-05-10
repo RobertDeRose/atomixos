@@ -4,3 +4,5 @@ iif = "iif"
 # Linux kernel config options (Chrome OS, Heterogeneous System Architecture)
 CROS = "CROS"
 HSA = "HSA"
+# Cockpit storage module package name
+storaged = "storaged"

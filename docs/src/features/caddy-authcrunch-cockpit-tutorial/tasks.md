@@ -3,15 +3,15 @@
 ## T000 -- Feature spec review
 
 - [x] Review `design.md` for completeness and accuracy
-- [x] Confirm bearer token auth approach with cockpit authentication.md
+- [x] Confirm Caddy-gated `--local-session` approach for Cockpit
 - [x] Confirm AuthCrunch Caddyfile syntax against current docs
-- [x] Resolve open design questions (bearer auth, custom image, `.build` support)
+- [x] Resolve open design questions (Cockpit auth boundary, custom image, `.build` support)
 
 ## T00A -- Add Quadlet `.build` support
 
 This is a new infrastructure prerequisite discovered during spec review.
-The cockpit-ws container requires a custom image (adds Python 3 to Fedora
-minimal base). Quadlet supports `.build` units; config.toml needs to support
+The cockpit-ws container requires a custom image (adds Cockpit management modules
+to the Fedora minimal base). Quadlet supports `.build` units; config.toml needs to support
 them the same way it supports `.network` and `.volume`.
 
 - [x] Add `buildDefinition` to `schemas/config.schema.json` (`$defs`)
@@ -27,26 +27,23 @@ them the same way it supports `.network` and `.volume`.
 ## T00B -- Write cockpit-ws Containerfile
 
 - [x] Create `files/cockpit/Containerfile` based on `quay.io/cockpit/ws:latest`
-- [x] Add `python3` via `dnf install --setopt=install_weak_deps=False`
-- [ ] Verify the built image has Python 3 available
+- [x] Add Cockpit bridge and management modules via `dnf install --setopt=install_weak_deps=False`
+- [ ] Verify the built image has the required Cockpit modules available
 - [x] Keep the Containerfile minimal (single RUN layer)
 
-## T001 -- Write the bearer auth script
+## T001 -- Use Caddy-gated local session auth
 
-- [x] Create `cockpit-bearer-auth` Python script using only stdlib
-- [x] Implement cockpit authorize protocol (read challenge, send response)
-- [x] Implement HS256 JWT validation against `JWT_SHARED_KEY` env var
-- [x] Extract user email and roles from JWT claims
-- [x] Map `authp/admin` to `admin` user, `authp/user` to `viewer` user
-- [x] Exec `cockpit-bridge` as the mapped user
-- [ ] Test the script standalone with a crafted JWT
+- [x] Remove custom bearer auth script from the example bundle
+- [x] Use Caddy/AuthCrunch as the only public authentication boundary
+- [x] Run Cockpit with `--local-session` behind Caddy
+- [x] Restrict `/cockpit/*` to `authp/admin`
 
 ## T002 -- Write the Caddyfile
 
 - [x] Configure Entra OIDC identity provider with placeholder values
 - [x] Configure authentication portal with JWT signing
 - [x] Configure user transforms for group-to-role mapping
-- [x] Configure authorization policy for management routes
+- [x] Configure authorization policies for admin and user routes
 - [x] Configure reverse proxy to cockpit-ws at localhost:9090
 - [x] Configure `/auth*` route for authentication portal
 - [x] Configure `/cockpit/*` route with authorization policy
@@ -55,10 +52,8 @@ them the same way it supports `.network` and `.volume`.
 ## T003 -- Write cockpit.conf
 
 - [x] Configure `[WebService]` section for reverse proxy mode
-- [x] Configure `[bearer]` section pointing to the auth script
 - [x] Configure `Origins` with placeholder domain
 - [x] Configure `UrlRoot` for `/cockpit/` path prefix
-- [x] Set appropriate idle timeout
 
 ## T004 -- Write config.toml
 
@@ -68,15 +63,15 @@ them the same way it supports `.network` and `.volume`.
 - [x] Define `health.required` listing `caddy-gateway.service` and
   `cockpit-ws.service`
 - [x] Define `caddy-gateway` container (rootful, AuthCrunch image)
-- [x] Define `cockpit-ws` container (rootless, custom build image ref)
+- [x] Define `cockpit-ws` container (rootful, custom build image ref)
 - [x] Define `cockpit-ws` build section referencing Containerfile
 - [x] Define `management` network with subnet
 - [x] Define `caddy-data` volume with local driver
 - [x] Configure `Environment` keys with placeholder values
   (`AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`,
   `JWT_SHARED_KEY`)
-- [x] Configure `Volume` mounts for Caddyfile, cockpit.conf, bearer auth
-  script using `${FILES_DIR}` tokens
+- [x] Configure `Volume` mounts for Caddyfile, cockpit.conf, and host management sockets
+  using `${FILES_DIR}` tokens where appropriate
 - [x] Configure Podman socket mount for cockpit-ws container
 - [x] Verify all placeholder values are obvious (`<AZURE_TENANT_ID>`, etc.)
 
@@ -101,13 +96,11 @@ duplicate coverage without exercising new logic.
 - [x] Present the complete config.toml with annotations
 - [x] Present the Caddyfile with annotations
 - [x] Present cockpit.conf with annotations
-- [x] Present the bearer auth script with annotations
 - [x] Present the Containerfile with annotations
 - [x] Document the bundle directory structure
 - [x] Document how to build and apply the bundle
-- [x] Document role mapping (admin group -> sudoless admin,
-  user group -> generic user)
-- [x] Document cockpit-podman requirements and NixOS module sketch
+- [x] Document role mapping (`authp/admin` for Cockpit, `authp/user` for app routes)
+- [x] Document cockpit-podman container/socket integration and native-host alternative
 - [x] Document security considerations and production hardening notes
 - [x] Add placeholders table listing all values that must be substituted
 
@@ -132,5 +125,4 @@ duplicate coverage without exercising new logic.
 ### Items deferred to hardware validation
 
 - T00A: Validate `.build` Quadlet units trigger image build on daemon-reload
-- T00B: Verify built image has Python 3 available
-- T001: Test bearer auth script standalone with crafted JWT
+- T00B: Verify built image has the required Cockpit modules available

@@ -31,9 +31,9 @@ graph TD
 
         subgraph cockpit["cockpit-ws"]
             direction TB
-            k1["bearer token auth"]
-            k2["system management"]
-            k3["podman socket access"]
+            k1["--local-session"]
+            k2["cockpit-bridge"]
+            k3["host socket mounts"]
         end
 
         caddy -- "reverse_proxy localhost:9090" --> cockpit
@@ -59,83 +59,60 @@ graph TD
 5. AuthCrunch issues a local JWT cookie with the mapped roles
 6. Caddy's authorization policy validates the JWT and allows the request
 7. Caddy reverse-proxies to cockpit-ws at `localhost:9090`
-8. Cockpit-ws receives the request with the `Authorization: Bearer <token>` header
-9. Cockpit's `[bearer]` auth section invokes a token verification command
-10. The verification command validates the JWT signature, extracts the user identity,
-    and starts a cockpit-bridge session as the mapped local user
+8. Cockpit-ws runs with `--local-session` and does not perform a second login
+9. The local cockpit-bridge session uses mounted host sockets for system and
+   Podman management
 
-### Bearer Token Bridge
+### Caddy-Gated Local Session
 
-Cockpit supports pluggable authentication via `cockpit.conf` sections. The `[bearer]`
-section specifies a command that:
-
-1. Receives the bearer token via the cockpit authorize protocol (`*` challenge)
-2. Validates the JWT signature against the shared signing key
-3. Extracts the user identity and roles from the JWT claims
-4. Maps `authp/admin` to the `admin` system user (sudoless admin)
-5. Maps `authp/user` to a restricted `viewer` user
-6. Launches `cockpit-bridge` as the mapped user
-
-This eliminates double authentication: the user logs in once via Entra OIDC, and
-Cockpit trusts the AuthCrunch JWT.
-
-Source: [Cockpit authentication docs](https://github.com/cockpit-project/cockpit/blob/main/doc/authentication.md)
+The tutorial uses Caddy + AuthCrunch as the authentication and authorization
+boundary. Cockpit-ws runs behind Caddy with `--local-session`, so Cockpit starts
+`cockpit-bridge` directly and trusts the reverse proxy boundary. The Cockpit
+route is admin-only; user-facing applications can use a separate policy that
+allows both `authp/admin` and `authp/user`.
 
 ### Cockpit-Podman Integration
 
 The `cockpit-podman` package communicates with Podman via its REST API through
-cockpit-bridge running on the host. For this to work:
-
-1. The cockpit-ws container connects to the host's SSH or uses `--local-ssh` mode
-2. cockpit-bridge runs on the host and has access to the Podman socket
-3. cockpit-podman must be installed on the host (in the NixOS closure)
-
-On AtomixOS, the rootfs is read-only squashfs. Adding `cockpit-podman` to the NixOS
-closure is a base image change. The tutorial documents this requirement and provides a
-NixOS module sketch that operators would add to their device build.
-
-Alternative: mount the Podman socket (`/run/podman/podman.sock`) into the cockpit-ws
-container directly. Cockpit-ws in `--local-ssh` mode connects to `127.0.0.1:22` on the
-host, where cockpit-bridge can access the Podman socket natively. The `appsvc` user is in
-the `podman` group, giving it socket access.
+the Podman socket. This tutorial installs `cockpit-podman` into the custom
+Cockpit container and mounts `/run/podman/podman.sock`, so administrators can
+manage host containers after Caddy authorizes access to `/cockpit/*`.
 
 ## Bundle Structure
 
 ```text
-config.example.toml
+example/caddy-oidc/
+config.toml
 files/
   caddy/
     Caddyfile
   cockpit/
-    Containerfile             # Custom cockpit-ws image (adds Python 3)
+    Containerfile             # Custom cockpit-ws image (adds management modules)
     cockpit.conf
-    cockpit-bearer-auth       # JWT verification script
 ```
 
 ## config.toml Design
 
 ### Containers
 
-| Container     | Image                                         | Privileged | Network        | Purpose                  |
-|---------------|-----------------------------------------------|------------|----------------|--------------------------|
-| caddy-gateway | `ghcr.io/authcrunch/authcrunch:latest`        | true       | host (forced)  | OIDC auth, reverse proxy |
-| cockpit-ws    | custom build from `quay.io/cockpit/ws:latest` | false      | pasta (forced) | Device management UI     |
+| Container     | Image                                         | Privileged | Network       | Purpose                  |
+|---------------|-----------------------------------------------|------------|---------------|--------------------------|
+| caddy-gateway | `ghcr.io/authcrunch/authcrunch:latest`        | true       | host (forced) | OIDC auth, reverse proxy |
+| cockpit-ws    | custom build from `quay.io/cockpit/ws:latest` | true       | host (forced) | Device management UI     |
 
-The cockpit-ws container uses a custom Containerfile that adds Python 3 to the base
-`quay.io/cockpit/ws` image. The upstream image is Fedora minimal and does not include
-Python, which the bearer auth script requires. The custom image is built via Quadlet
-`.build` support.
+The cockpit-ws container uses a custom Containerfile that adds Cockpit bridge
+and management modules to the base `quay.io/cockpit/ws` image. The custom image
+is built via Quadlet `.build` support.
 
-Caddy is rootful because it binds privileged ports 80/443. Cockpit-ws runs rootless
-(as `appsvc`) since it only needs unprivileged port 9090 and outbound SSH; the
-provisioner publishes port 9090 to `127.0.0.1` so Caddy on host networking can
-reverse-proxy to it.
+Caddy is rootful because it binds privileged ports 80/443. Cockpit-ws is
+rootful because the example intentionally exposes a local admin session with
+host D-Bus, systemd, journal, and Podman sockets mounted into the container.
 
 ### Builds
 
-| Build      | Base Image                  | Additions | Purpose                    |
-|------------|-----------------------------|-----------|----------------------------|
-| cockpit-ws | `quay.io/cockpit/ws:latest` | `python3` | Bearer auth script runtime |
+| Build      | Base Image                  | Additions                  | Purpose               |
+|------------|-----------------------------|----------------------------|-----------------------|
+| cockpit-ws | `quay.io/cockpit/ws:latest` | Cockpit management modules | Admin console runtime |
 
 The `cockpit-ws.build` Quadlet unit builds the custom cockpit-ws image from a
 Containerfile in the bundle. This exercises the new `.build` config.toml feature.
@@ -159,21 +136,20 @@ provides a foundation for moving to bridge networking later.
 
 ### Bundle Files
 
-| File                                | Mount Target                         | Purpose                            |
-|-------------------------------------|--------------------------------------|------------------------------------|
-| `files/caddy/Caddyfile`             | `/etc/caddy/Caddyfile`               | AuthCrunch + OIDC configuration    |
-| `files/cockpit/Containerfile`       | build context                        | Custom cockpit-ws image definition |
-| `files/cockpit/cockpit.conf`        | `/etc/cockpit/cockpit.conf`          | Cockpit WebService configuration   |
-| `files/cockpit/cockpit-bearer-auth` | `/usr/local/bin/cockpit-bearer-auth` | JWT verification script            |
+| File                          | Mount Target                | Purpose                            |
+|-------------------------------|-----------------------------|------------------------------------|
+| `files/caddy/Caddyfile`       | `/etc/caddy/Caddyfile`      | AuthCrunch + OIDC configuration    |
+| `files/cockpit/Containerfile` | build context               | Custom cockpit-ws image definition |
+| `files/cockpit/cockpit.conf`  | `/etc/cockpit/cockpit.conf` | Cockpit WebService configuration   |
 
 ### Environment Variables (via Quadlet `Environment`)
 
-| Variable              | Container                 | Purpose                              |
-|-----------------------|---------------------------|--------------------------------------|
-| `AZURE_TENANT_ID`     | caddy-gateway             | Entra directory/tenant ID            |
-| `AZURE_CLIENT_ID`     | caddy-gateway             | Entra app registration client ID     |
-| `AZURE_CLIENT_SECRET` | caddy-gateway             | Entra app registration client secret |
-| `JWT_SHARED_KEY`      | caddy-gateway, cockpit-ws | Shared secret for JWT sign/verify    |
+| Variable              | Container     | Purpose                              |
+|-----------------------|---------------|--------------------------------------|
+| `AZURE_TENANT_ID`     | caddy-gateway | Entra directory/tenant ID            |
+| `AZURE_CLIENT_ID`     | caddy-gateway | Entra app registration client ID     |
+| `AZURE_CLIENT_SECRET` | caddy-gateway | Entra app registration client secret |
+| `JWT_SHARED_KEY`      | caddy-gateway | Shared secret for JWT sign/verify    |
 
 ## Caddyfile Design
 
@@ -213,10 +189,18 @@ provides a foundation for moving to bridge networking later.
             }
         }
 
-        authorization policy mgmt-policy {
+        authorization policy user-policy {
             set auth url /auth/
             crypto key verify {env.JWT_SHARED_KEY}
             allow roles authp/admin authp/user
+            validate bearer header
+            inject headers with claims
+        }
+
+        authorization policy admin-policy {
+            set auth url /auth/
+            crypto key verify {env.JWT_SHARED_KEY}
+            allow roles authp/admin
             validate bearer header
             inject headers with claims
         }
@@ -229,9 +213,16 @@ provides a foundation for moving to bridge networking later.
     }
 
     route /cockpit/* {
-        authorize with mgmt-policy
+        authorize with admin-policy
         reverse_proxy localhost:9090
     }
+
+    # Add user-facing applications here. They can use user-policy to allow
+    # both admin and user roles.
+    # route /app/* {
+    #     authorize with user-policy
+    #     reverse_proxy localhost:8080
+    # }
 }
 ```
 
@@ -244,31 +235,19 @@ LoginTo = false
 ProtocolHeader = X-Forwarded-Proto
 Origins = https://<GATEWAY_DOMAIN>
 UrlRoot = /cockpit/
-
-[bearer]
-command = /usr/local/bin/cockpit-bearer-auth
-timeout = 300
-
-[Session]
-IdleTimeout = 30
 ```
 
-## Bearer Auth Script Design
+## Cockpit Local Session Design
 
-A small Python script (`cockpit-bearer-auth`) that:
+The custom Cockpit image runs:
 
-1. Reads the cockpit protocol on stdin
-2. Sends an authorize command with `*` challenge
-3. Receives the bearer token from the response
-4. Validates the JWT using the `JWT_SHARED_KEY` environment variable
-5. Extracts user email and roles from JWT claims
-6. Maps roles to local users:
-   - `authp/admin` -> exec cockpit-bridge as `admin`
-   - `authp/user` -> exec cockpit-bridge as `viewer` (or `admin` read-only)
-7. Execs `cockpit-bridge` with appropriate user context
+```text
+cockpit-ws --no-tls --local-session /usr/bin/cockpit-bridge
+```
 
-The script uses only Python stdlib (`json`, `hmac`, `hashlib`, `base64`) for JWT
-validation (HS256), avoiding any pip dependencies.
+This deliberately disables Cockpit's own login flow. Caddy is the only public
+entry point and must authorize `/cockpit/*` with `admin-policy` before traffic
+reaches cockpit-ws.
 
 ## Azure App Registration Prerequisites
 
@@ -286,17 +265,17 @@ The tutorial must document these Azure portal steps:
 
 - Must use only config.toml features that exist today or are added as part of this
   feature (`.build` Quadlet support is a new prerequisite)
-- Both containers must be rootful (host network for port access)
+- Both containers are rootful for this example: Caddy for privileged ports and
+  Cockpit for host management socket access
 - Tutorial values (tenant ID, client ID, domain) use obvious `<PLACEHOLDER>` markers
 - Must not require changes to the AtomixOS base image schema beyond `.build` support
-- Bearer auth script must use only Python stdlib (no pip)
 - The tutorial config must pass `first-boot-provision validate`
 
 ## Non-Goals
 
 - Production-hardening (certificate pinning, secret rotation, HA)
-- Implementing cockpit-podman as a NixOS module (documented as future work)
-- Custom PAM module for JWT validation (bearer auth command is sufficient)
+- Native host Cockpit service packaging
+- Custom PAM module or Cockpit bearer-token authentication
 - SAML or non-Entra OIDC providers (tutorial focuses on Entra)
 
 ## Success Criteria
@@ -305,19 +284,19 @@ The tutorial must document these Azure portal steps:
 2. NixOS VM test imports the tutorial bundle and verifies all rendered Quadlet files
 3. Documentation clearly explains the authentication flow end-to-end
 4. Role mapping is demonstrated with two Entra groups
-5. Bearer token bridge eliminates double authentication
-6. Cockpit-podman requirements and limitations are documented honestly
+5. Caddy-gated local session eliminates double authentication
+6. Cockpit-podman container/socket integration is documented honestly
 
 ## Risks and Tradeoffs
 
-| Risk                                         | Impact                                                               | Mitigation                                                           |
-|----------------------------------------------|----------------------------------------------------------------------|----------------------------------------------------------------------|
-| AuthCrunch Caddyfile syntax changes          | Tutorial breaks on version upgrade                                   | Pin image tag in tutorial; note version tested                       |
-| Bearer auth script security                  | Shared HMAC key could be extracted from container env                | Document that production deployments should use asymmetric keys      |
-| cockpit-podman requires NixOS closure change | Operators cannot manage containers via Cockpit without image rebuild | Document the gap; provide NixOS module sketch                        |
-| Entra group claim configuration              | Groups may appear as GUIDs not names                                 | Document Azure portal Token Configuration steps                      |
-| JWT_SHARED_KEY in container env              | Secret visible in Quadlet file on disk                               | Document that production should use secret files                     |
-| cockpit/ws image lacks Python                | Bearer auth script cannot run without custom build                   | Custom Containerfile adds python3; `.build` Quadlet support required |
+| Risk                                | Impact                                                | Mitigation                                                      |
+|-------------------------------------|-------------------------------------------------------|-----------------------------------------------------------------|
+| AuthCrunch Caddyfile syntax changes | Tutorial breaks on version upgrade                    | Pin image tag in tutorial; note version tested                  |
+| Cockpit has no second login         | Caddy misconfiguration could expose an admin session  | Keep cockpit bound behind admin-policy and host-local routing   |
+| Host socket mounts are powerful     | Container compromise can manage host services/podman  | Document that Cockpit is an admin application, not a user app   |
+| Entra group claim configuration     | Groups may appear as GUIDs not names                  | Document Azure portal Token Configuration steps                 |
+| JWT_SHARED_KEY in container env     | Secret visible in Quadlet file on disk                | Document that production should use secret files                |
+| Cockpit package drift               | Container module versions may not match host services | Treat this as an example stack; native host packaging is future |
 
 ## Dependencies
 
@@ -342,7 +321,7 @@ Existing dependencies are satisfied. One new capability is required:
 
 None. All questions from the project plan have been resolved:
 
-- **Cockpit-ws auth**: Resolved via bearer token auth command (Cockpit's native
-  pluggable auth, documented in cockpit's authentication.md)
-- **Cockpit-podman**: Documented as requiring host-side installation; tutorial provides
-  NixOS module sketch; Podman socket mount is the container integration path
+- **Cockpit-ws auth**: Resolved by placing Cockpit behind Caddy/AuthCrunch and
+  running cockpit-ws with `--local-session`
+- **Cockpit-podman**: Installed in the custom Cockpit container and connected to
+  the mounted host Podman socket

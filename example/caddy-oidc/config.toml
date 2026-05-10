@@ -53,22 +53,23 @@ Volume = [
 WantedBy = ["multi-user.target"]
 
 [container.cockpit-ws]
-privileged = false
+privileged = true
 
 [container.cockpit-ws.Unit]
-Description = "Cockpit web console with bearer auth"
+Description = "Cockpit web console behind OIDC"
 After = ["cockpit-ws-build.service"]
 
 [container.cockpit-ws.Container]
 Image = "localhost/cockpit-ws:latest"
-Environment = [
-  "JWT_SHARED_KEY=<JWT_SHARED_KEY>",
-]
+PidHost = true
 Volume = [
   "${FILES_DIR}/cockpit/cockpit.conf:/etc/cockpit/cockpit.conf:ro",
-  "${FILES_DIR}/cockpit/cockpit-bearer-auth:/usr/local/bin/cockpit-bearer-auth:ro",
+  "/run/dbus/system_bus_socket:/run/dbus/system_bus_socket",
+  "/run/podman/podman.sock:/run/podman/podman.sock",
+  "/run/systemd:/run/systemd",
+  "/var/log/journal:/var/log/journal:ro",
+  "/etc/os-release:/etc/os-release:ro",
 ]
-PublishPort = ["9090:9090"]
 
 [container.cockpit-ws.Install]
 WantedBy = ["multi-user.target"]

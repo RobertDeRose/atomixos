@@ -33,10 +33,18 @@
 			}
 		}
 
-		authorization policy mgmt-policy {
+		authorization policy user-policy {
 			set auth url /auth/
 			crypto key verify {env.JWT_SHARED_KEY}
 			allow roles authp/admin authp/user
+			validate bearer header
+			inject headers with claims
+		}
+
+		authorization policy admin-policy {
+			set auth url /auth/
+			crypto key verify {env.JWT_SHARED_KEY}
+			allow roles authp/admin
 			validate bearer header
 			inject headers with claims
 		}
@@ -49,7 +57,14 @@
 	}
 
 	route /cockpit/* {
-		authorize with mgmt-policy
+		authorize with admin-policy
 		reverse_proxy localhost:9090
 	}
+
+	# Add user-facing applications here. They can use user-policy to allow
+	# both admin and user roles.
+	# route /app/* {
+	# 	authorize with user-policy
+	# 	reverse_proxy localhost:8080
+	# }
 }

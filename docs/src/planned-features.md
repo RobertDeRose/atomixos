@@ -72,11 +72,10 @@ Quadlet containers on a persistent `/data` partition.
 
 ## Resolved Questions
 
-- **Cockpit-ws authentication bridge**: Resolved via Cockpit's native `[bearer]` auth
-  section in `cockpit.conf`. A bearer token verification command receives the
-  AuthCrunch JWT, validates the HS256 signature against a shared key, maps roles to
-  local users, and execs `cockpit-bridge`. This eliminates double authentication.
-  See: cockpit authentication.md `[bearer]` section.
+- **Cockpit-ws authentication boundary**: Resolved by placing Cockpit behind
+  Caddy/AuthCrunch and running cockpit-ws with `--local-session`. Caddy is the
+  only public authentication and authorization boundary; `/cockpit/*` is
+  restricted to `authp/admin`.
 
 ## Feature Map
 
@@ -98,10 +97,10 @@ Quadlet containers on a persistent `/data` partition.
     (generic user) based on Entra security group membership
   - JWT token generation with configurable lifetime and signing key
   - Cockpit-ws container (`quay.io/cockpit/ws`) for device/container management, built
-    from a custom Containerfile that adds Python for bearer token verification
-  - Bearer token auth bridge: Cockpit's `[bearer]` section invokes a verification
-    command that validates AuthCrunch JWT (HS256), maps roles to local users, and execs
-    `cockpit-bridge` -- eliminates double authentication
+    from a custom Containerfile that adds Cockpit management modules
+  - Caddy-gated Cockpit local session: Caddy restricts `/cockpit/*` to `authp/admin`,
+    and cockpit-ws runs `--local-session` behind the proxy -- eliminates double
+    authentication
   - Quadlet `.build` support for building custom container images from Containerfiles
   - Podman module integration so operators can manage provisioned pods from Cockpit
   - Quadlet network definition for inter-container communication
@@ -114,12 +113,12 @@ Quadlet containers on a persistent `/data` partition.
     feature (containers, networks, volumes, builds, bundle files,
     `${CONFIG_DIR}`/`${FILES_DIR}` tokens)
   - Caddy must be rootful (needs host network for ports 80/443)
-  - Cockpit-ws authentication uses bearer token bridge (no double auth)
+  - Cockpit-ws uses `--local-session` behind Caddy/AuthCrunch (no double auth)
   - Must not require changes to the AtomixOS base image or schema beyond `.build`
     support
   - Tutorial values (tenant ID, client ID, domain) must use obvious placeholders
 - Non-goals:
-  - Modifying the AtomixOS base image to include cockpit-podman
+  - Modifying the AtomixOS base image to include Cockpit or cockpit-podman
   - Production-hardening the example (certificate pinning, secret rotation, HA)
   - SAML or non-Entra OIDC providers (tutorial focuses on Entra)
 - Success criteria:
@@ -127,18 +126,17 @@ Quadlet containers on a persistent `/data` partition.
     a device, and have a working OIDC-authenticated Caddy + Cockpit stack
   - The tutorial config passes `first-boot-provision validate`
   - Role mapping is demonstrated: Entra group A gets admin, group B gets user
-  - The tutorial clearly explains what cockpit-podman requires and what limitations exist
-    on the read-only AtomixOS rootfs
+  - The tutorial clearly explains the powerful host socket mounts used by the admin
+    Cockpit container
 - Risks and tradeoffs:
-  - **Cockpit-podman gap**: cockpit-podman requires host-side installation; on AtomixOS
-    this means adding it to the NixOS closure or accepting that Cockpit shows system info
-    but not container management. The tutorial should document this honestly.
+  - **Cockpit local-session risk**: Cockpit does not perform a second login. Caddy must
+    remain the only public entry point and `/cockpit/*` must remain admin-only.
   - **AuthCrunch version churn**: AuthCrunch/caddy-security evolves rapidly; Caddyfile
     syntax may change between versions.
   - **Entra group claim configuration**: Requires Azure portal configuration (Token
     Configuration > Add groups claim) that is outside AtomixOS control.
-  - **cockpit/ws image lacks Python**: Requires custom Containerfile to add Python for
-    bearer auth script; depends on new `.build` Quadlet support.
+  - **Cockpit package drift**: Container-installed Cockpit modules may not match host
+    service versions exactly; native host packaging can be added later if needed.
 - Dependencies:
   - Network and volume Quadlet support (completed: `85ec53c`)
   - Bundle file support with `${FILES_DIR}` token substitution (completed)

@@ -6,11 +6,11 @@ three components:
 - **Caddy with AuthCrunch** -- reverse proxy with Microsoft Entra OIDC login
   and JWT-based authorization
 - **Cockpit-ws** -- browser-based device management console
-- **Bearer token bridge** -- eliminates double authentication by passing
-  AuthCrunch JWTs directly to Cockpit
+- **Admin-only route policy** -- allows administrators to reach Cockpit while
+  leaving room for user-facing application routes
 
 The result is a single sign-on flow: users authenticate once through Entra ID,
-and Cockpit trusts the JWT issued by AuthCrunch.
+and Caddy only exposes the Cockpit management console to admin users.
 
 ## Contents
 
@@ -38,14 +38,6 @@ and Cockpit trusts the JWT issued by AuthCrunch.
    - `AtomixOS-Users` -- read-only monitoring access
 8. Assign users to the appropriate groups
 
-### Local Users
-
-The AtomixOS device needs two local users that Cockpit sessions will run as:
-
-- `admin` -- device administrator (created by AtomixOS provisioning)
-- `viewer` -- restricted read-only user (must be created separately or via a
-  NixOS module)
-
 ## Architecture
 
 ```mermaid
@@ -54,15 +46,16 @@ graph TD
 
     subgraph caddy["Caddy + AuthCrunch"]
         ca1["/auth* → OIDC portal"]
-        ca2["/cockpit/* → reverse proxy"]
+        ca2["/cockpit/* → admin-only reverse proxy"]
+        ca3["/app/* → user application routes"]
     end
 
     caddy -- "localhost:9090" --> cockpit
 
     subgraph cockpit["Cockpit-ws"]
-        co1["bearer token auth"]
-        co2["JWT → local user mapping"]
-        co3["→ cockpit-bridge"]
+        co1["--local-session"]
+        co2["cockpit-bridge"]
+        co3["host D-Bus and Podman sockets"]
     end
 ```
 
@@ -75,26 +68,25 @@ graph TD
    - `AtomixOS-Admins` group receives the `authp/admin` role
    - `AtomixOS-Users` group receives the `authp/user` role
 5. AuthCrunch issues a JWT cookie with the mapped roles
-6. Caddy validates the JWT and reverse-proxies to Cockpit
-7. Cockpit's bearer auth command validates the JWT signature, maps
-   `authp/admin` to the `admin` user and `authp/user` to `viewer`, then
-   launches `cockpit-bridge` as that user
+6. Caddy validates the JWT and allows `/cockpit/*` only for `authp/admin`
+7. Cockpit runs behind Caddy with `--local-session`; Cockpit performs no second
+   login and relies on Caddy for authentication and authorization
 
 ## Bundle Structure
 
 ```text
-config.example.toml
+example/caddy-oidc/
+config.toml
 files/
   caddy/
     Caddyfile
   cockpit/
     Containerfile
     cockpit.conf
-    cockpit-bearer-auth
 ```
 
-Copy this bundle, rename `config.example.toml` to `config.toml`, substitute
-the placeholder values, and provision the device.
+Substitute the placeholder values, package this directory, and provision the
+device.
 
 ## Placeholder Values
 
@@ -123,13 +115,14 @@ openssl rand -base64 32
 The config defines two rootful containers, a network, a volume, and a build:
 
 ```toml
-{{#include ../features/caddy-authcrunch-cockpit-tutorial/bundle/config.example.toml}}
+{{#include ../../../example/caddy-oidc/config.toml}}
 ```
 
 Key points:
 
-- Caddy is `privileged = true` (rootful) because it binds ports 80/443;
-  cockpit-ws is rootless and published on `127.0.0.1:9090` via pasta networking
+- Caddy is `privileged = true` because it binds ports 80/443
+- Cockpit-ws is `privileged = true` because it runs a local management session
+  with host D-Bus, systemd, journal, and Podman sockets mounted in
 - The `cockpit-ws` container depends on its build service via `After`
 - The `${FILES_DIR}` token is replaced at provision time with the path to
   the extracted bundle files
@@ -139,7 +132,7 @@ Key points:
 ### Caddyfile
 
 ```caddyfile
-{{#include ../features/caddy-authcrunch-cockpit-tutorial/bundle/files/caddy/Caddyfile}}
+{{#include ../../../example/caddy-oidc/files/caddy/Caddyfile}}
 ```
 
 Key points:
@@ -149,15 +142,14 @@ Key points:
 - The portal issues JWTs signed with the shared key
 - `transform user` blocks assign base roles (`authp/user`) and promote
   admin group members to `authp/admin`
-- The authorization policy uses `crypto key verify` (verify-only, not
-  sign-verify) and `validate bearer header` to pass the JWT downstream
-- `inject headers with claims` adds JWT claims as HTTP headers for
-  cockpit-ws
+- `admin-policy` restricts `/cockpit/*` to `authp/admin`
+- `user-policy` is provided for user-facing applications that should allow
+  both `authp/admin` and `authp/user`
 
 ### cockpit.conf
 
 ```ini
-{{#include ../features/caddy-authcrunch-cockpit-tutorial/bundle/files/cockpit/cockpit.conf}}
+{{#include ../../../example/caddy-oidc/files/cockpit/cockpit.conf}}
 ```
 
 Key points:
@@ -165,43 +157,24 @@ Key points:
 - `AllowUnencrypted = true` because TLS terminates at Caddy
 - `LoginTo = false` disables the host selector (single-device mode)
 - `UrlRoot = /cockpit/` matches the Caddy route prefix
-- The `[bearer]` section tells cockpit-ws to invoke the auth script for
-  requests with Bearer tokens
-
-### cockpit-bearer-auth
-
-```python
-{{#include ../features/caddy-authcrunch-cockpit-tutorial/bundle/files/cockpit/cockpit-bearer-auth}}
-```
-
-The script:
-
-1. Sends a `*` challenge to cockpit-ws via the cockpit authorize protocol
-2. Receives the Bearer token from the response
-3. Validates the HS256 JWT signature using `JWT_SHARED_KEY`
-4. Checks token expiration
-5. Maps `authp/admin` to the `admin` user and `authp/user` to `viewer`
-6. Execs `cockpit-bridge` as the mapped user via `runuser`
-
-Uses only Python stdlib -- no pip dependencies required.
 
 ### Containerfile
 
 ```dockerfile
-{{#include ../features/caddy-authcrunch-cockpit-tutorial/bundle/files/cockpit/Containerfile}}
+{{#include ../../../example/caddy-oidc/files/cockpit/Containerfile}}
 ```
 
-The upstream `quay.io/cockpit/ws` image is Fedora minimal without Python.
-This custom image adds `python3` so the bearer auth script can run.
+The custom image adds Cockpit's bridge and management modules, then starts
+cockpit-ws with `--local-session`. Cockpit itself does not authenticate users;
+Caddy's admin-only OIDC policy protects the route.
 
 ## Building and Applying
 
 Package the bundle as a tarball:
 
 ```bash
-cp config.example.toml config.toml
 # Edit config.toml with your values
-tar -czf config.tar.gz config.toml files/
+tar --zstd -cvf config.tar.zst -C <repo>/example/caddy-oidc .
 ```
 
 Apply to the device using the bootstrap server or USB provisioning. See
@@ -210,10 +183,12 @@ Apply to the device using the bootstrap server or USB provisioning. See
 ## Cockpit-Podman
 
 The Cockpit Podman integration (`cockpit-podman`) lets operators manage
-containers through the Cockpit UI. This requires `cockpit-podman` to be
-installed on the host (in the NixOS closure), which is a base image change.
+containers through the Cockpit UI. In this example it is installed into the
+Cockpit container and uses the mounted host Podman socket at
+`/run/podman/podman.sock`.
 
-A NixOS module sketch for adding cockpit-podman:
+A future NixOS module could make Cockpit a native host service instead of a
+containerized admin application:
 
 ```nix
 { pkgs, ... }:
