@@ -265,6 +265,13 @@ nixos-lib.runTest {
     gateway.succeed("test -f /tmp/import-bundle-zst/config.toml")
     gateway.succeed("test -f /tmp/import-bundle-zst/files/app/config.yaml")
 
+    gateway.succeed("tar --zstd -cf /tmp/config-dot.tar.zstd -C /tmp/bundle-root .")
+    gateway.succeed("first-boot-provision validate /tmp/config-dot.tar.zstd")
+    gateway.succeed("rm -rf /tmp/import-bundle-dot-zstd && mkdir -p /tmp/import-bundle-dot-zstd")
+    gateway.succeed("first-boot-provision import /tmp/config-dot.tar.zstd /tmp/import-bundle-dot-zstd")
+    gateway.succeed("test -f /tmp/import-bundle-dot-zstd/config.toml")
+    gateway.succeed("test -f /tmp/import-bundle-dot-zstd/files/app/config.yaml")
+
     gateway.fail("first-boot-provision validate /tmp/invalid-config.toml")
     gateway.fail("first-boot-provision validate /tmp/gateway-contained-config.toml >/tmp/gateway-contained.out 2>/tmp/gateway-contained.err")
     gateway.succeed("grep 'lan.dhcp_start and lan.dhcp_end must not include the gateway IP' /tmp/gateway-contained.err")

@@ -794,14 +794,14 @@ def detect_bundle_kind(source_bytes: bytes, filename: str = ""):
     lowered = filename.lower()
     if lowered.endswith((".tar.gz", ".tgz")) or source_bytes.startswith(GZIP_MAGIC):
         return "tar.gz"
-    if lowered.endswith((".tar.zst", ".tzst")) or source_bytes.startswith(ZSTD_MAGIC):
+    if lowered.endswith((".tar.zst", ".tar.zstd", ".tzst")) or source_bytes.startswith(ZSTD_MAGIC):
         return "tar.zst"
     return None
 
 
 def validate_bundle_member(name: str):
     path = Path(name)
-    if path.is_absolute() or ".." in path.parts or name in {"", "."}:
+    if path.is_absolute() or ".." in path.parts or name == "":
         message = f"invalid bundle member path: {name!r}"
         raise provision_error(message)
 
@@ -867,12 +867,17 @@ def extract_bundle_archive(source_bytes: bytes, filename: str, destination: Path
             message = f"failed to decompress .tar.zst bundle{detail}"
             raise provision_error(message) from exc
     else:
-        message = "supported bundle formats are .tar.gz, .tgz, .tar.zst, and .tzst"
+        message = "supported bundle formats are .tar.gz, .tgz, .tar.zst, .tar.zstd, and .tzst"
         raise provision_error(message)
 
     with tarfile.open(fileobj=io.BytesIO(decompressed), mode="r:") as archive:
         for member in archive.getmembers():
             validate_bundle_member(member.name)
+            if member.name == ".":
+                if member.isdir():
+                    continue
+                message = "bundle member '.' must be a directory"
+                raise provision_error(message)
             target = destination / member.name
             if member.isdir():
                 ensure_dir(target)
@@ -926,7 +931,7 @@ def prepare_source_path(source_path: Path):
     source_bytes = source_path.read_bytes()
     bundle_kind = detect_bundle_kind(source_bytes, source_path.name)
     if bundle_kind is None:
-        message = "supported import inputs are config.toml, .tar.gz/.tgz, and .tar.zst/.tzst"
+        message = "supported import inputs are config.toml, .tar.gz/.tgz, and .tar.zst/.tar.zstd/.tzst"
         raise provision_error(message)
     return prepare_bundle_from_bytes(source_bytes, source_path.name)
 
@@ -1276,8 +1281,9 @@ BOOTSTRAP_HTML = """<!doctype html>
         <img class=\"hero-mark\" src=\"/assets/atomixos.png\" alt=\"AtomixOS logo\">
         <h1>Bootstrap Console</h1>
         <p>
-          Import an existing <code>config.toml</code>, <code>config.tar.gz</code>, or
-          <code>config.tar.zst</code> bundle, or build a fresh configuration with the guided form below.
+          Import an existing <code>config.toml</code>, <code>config.tar.gz</code>,
+          <code>config.tar.zst</code>, or <code>config.tar.zstd</code> bundle, or build a fresh
+          configuration with the guided form below.
         </p>
       </section>
       <section class=\"grid\">
@@ -1288,7 +1294,7 @@ BOOTSTRAP_HTML = """<!doctype html>
           <input
             type=\"file\"
             name=\"config_file\"
-            accept=\".toml,.tar.gz,.tgz,.tar.zst,.tzst,text/plain,application/gzip,application/zstd,application/octet-stream\"
+            accept=\".toml,.tar.gz,.tgz,.tar.zst,.tar.zstd,.tzst,text/plain,application/gzip,application/zstd,application/octet-stream\"
           >
           <label>config.toml</label>
           <textarea name=\"config\">{config_text}</textarea>
