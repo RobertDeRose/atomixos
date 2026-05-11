@@ -1,0 +1,36 @@
+name: Lint
+
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_call:
+    inputs:
+      ref:
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  hk-check:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.ref != 'automation/refresh-flake-lock'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ inputs.ref != '' && inputs.ref || github.sha }}
+      - uses: cachix/install-nix-action@96951a368ba55167b55f1c916f7d416bac6505fe # v31.10.3
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+      - uses: DeterminateSystems/magic-nix-cache-action@1828eb4e5414b8dfe36daae53ea3e4b8c3fdec7a #main
+      - uses: jdx/mise-action@4444d8fd7a1b92f1821c12f435db40f58b743d26 # v4.0.1
+        with:
+          install: false
+      - name: Install tools and run linter
+        run: |
+          mise plugin install nix https://github.com/jbadeau/mise-nix.git
+          mise install
+          hk check -a
