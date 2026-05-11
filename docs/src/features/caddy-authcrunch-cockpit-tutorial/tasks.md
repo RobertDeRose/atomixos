@@ -41,6 +41,7 @@ them the same way it supports `.network` and `.volume`.
 ## T002 -- Write the Caddyfile
 
 - [x] Configure Entra OIDC identity provider with placeholder values
+- [x] Document how to swap the identity provider block for Google or another OIDC provider
 - [x] Configure authentication portal with JWT signing
 - [x] Configure user transforms for group-to-role mapping
 - [x] Configure authorization policies for admin and user routes
@@ -100,6 +101,7 @@ duplicate coverage without exercising new logic.
 - [x] Document the bundle directory structure
 - [x] Document how to build and apply the bundle
 - [x] Document role mapping (`authp/admin` for Cockpit, `authp/user` for app routes)
+- [x] Document alternate OIDC provider setup for Google and generic providers
 - [x] Document cockpit-podman container/socket integration and native-host alternative
 - [x] Document security considerations and production hardening notes
 - [x] Add placeholders table listing all values that must be substituted
@@ -118,7 +120,7 @@ duplicate coverage without exercising new logic.
 - [x] All tasks T00A-T009 completed
 - [x] Tutorial config passes `first-boot-provision validate`
 - ~NixOS VM test passes~ (T006 skipped; existing test covers code paths)
-- [ ] Documentation builds without errors
+- [x] Documentation builds without errors
 - [x] design.md and delivered behavior agree
 - [x] No unresolved design questions remain
 

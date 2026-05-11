@@ -292,9 +292,11 @@ values that change for Google and other OIDC providers:
 ## Success Criteria
 
 1. Tutorial config passes `first-boot-provision validate`
-2. NixOS VM test imports the tutorial bundle and verifies all rendered Quadlet files
+2. Existing first-boot provisioning tests cover the config.toml features used by
+   the tutorial bundle (containers, networks, volumes, builds, bundle files)
 3. Documentation clearly explains the authentication flow end-to-end
-4. Role mapping is demonstrated with two Entra groups
+4. Role mapping is demonstrated with Entra groups and provider-swap guidance is
+   included for Google and other OIDC providers
 5. Caddy-gated local session eliminates double authentication
 6. Cockpit-podman container/socket integration is documented honestly
 
@@ -327,6 +329,7 @@ Existing dependencies are satisfied. One new capability is required:
 - New: `docs/src/features/caddy-authcrunch-cockpit-tutorial/design.md` (this file)
 - New: `docs/src/features/caddy-authcrunch-cockpit-tutorial/tasks.md`
 - New: tutorial page under `docs/src/tutorials/`
+- New: directly packageable example bundle under `example/caddy-oidc/`
 
 ## Open Design Questions
 
