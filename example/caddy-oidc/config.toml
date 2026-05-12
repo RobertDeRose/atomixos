@@ -27,6 +27,7 @@ Driver = "local"
 [build.cockpit-ws.Build]
 File = "${FILES_DIR}/cockpit/Containerfile"
 ImageTag = "localhost/cockpit-ws:latest"
+Network = "host"
 
 # -- Containers ------------------------------------------------------
 

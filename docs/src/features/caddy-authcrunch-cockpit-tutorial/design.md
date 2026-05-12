@@ -117,6 +117,8 @@ host D-Bus, systemd, journal, and Podman sockets mounted into the container.
 
 The `cockpit-ws.build` Quadlet unit builds the custom cockpit-ws image from a
 Containerfile in the bundle. This exercises the new `.build` config.toml feature.
+The build uses `Network = "host"` so package installation does not depend on
+Podman's build-time netavark/nftables network setup.
 
 ### Networks
 

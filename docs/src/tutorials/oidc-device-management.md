@@ -167,8 +167,10 @@ Key points:
 
 - Caddy is `privileged = true` because it binds ports 80/443
 - Cockpit-ws is `privileged = true` because it runs a local management session
-  with host D-Bus, systemd, journal, and Podman sockets mounted in
+  with host D-Bus, systemd, journal, and Podman sockets mounted into the container
 - The `cockpit-ws` container depends on its build service via `After`
+- The `cockpit-ws` build uses `Network = "host"` to avoid Podman build-time
+  netavark/nftables setup on constrained device images
 - The `${FILES_DIR}` token is replaced at provision time with the path to
   the extracted bundle files
 - The `management` network is defined for future use when containers move
