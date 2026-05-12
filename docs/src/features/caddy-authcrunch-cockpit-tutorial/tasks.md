@@ -50,10 +50,10 @@ them the same way it supports `.network` and `.volume`.
 - [x] Configure `/cockpit/*` route with authorization policy
 - [x] Validate Caddyfile syntax against AuthCrunch docs
 
-## T003 -- Write cockpit.conf
+## T003 -- Configure Cockpit reverse proxy settings
 
-- [x] Configure `[WebService]` section for reverse proxy mode
-- [x] Configure `Origins` with placeholder domain
+- [x] Generate `/etc/cockpit/cockpit.conf` at container startup
+- [x] Configure `Origins` from the `GATEWAY_DOMAIN` environment variable
 - [x] Configure `UrlRoot` for `/cockpit/` path prefix
 
 ## T004 -- Write config.toml
@@ -71,7 +71,7 @@ them the same way it supports `.network` and `.volume`.
 - [x] Configure `Environment` keys with placeholder values
   (`AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`,
   `JWT_SHARED_KEY`)
-- [x] Configure `Volume` mounts for Caddyfile, cockpit.conf, and host management sockets
+- [x] Configure `Volume` mounts for Caddyfile and host management sockets
   using `${FILES_DIR}` tokens where appropriate
 - [x] Configure Podman socket mount for cockpit-ws container
 - [x] Verify all placeholder values are obvious (`<AZURE_TENANT_ID>`, etc.)
@@ -96,7 +96,6 @@ duplicate coverage without exercising new logic.
 - [x] Document the authentication flow with a diagram
 - [x] Present the complete config.toml with annotations
 - [x] Present the Caddyfile with annotations
-- [x] Present cockpit.conf with annotations
 - [x] Present the Containerfile with annotations
 - [x] Document the bundle directory structure
 - [x] Document how to build and apply the bundle

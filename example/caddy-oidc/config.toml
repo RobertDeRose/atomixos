@@ -40,9 +40,11 @@ Description = "Caddy gateway with AuthCrunch OIDC"
 [container.caddy-gateway.Container]
 Image = "ghcr.io/authcrunch/authcrunch:latest"
 Environment = [
+  "GATEWAY_DOMAIN=<GATEWAY_DOMAIN>",
   "AZURE_TENANT_ID=<AZURE_TENANT_ID>",
   "AZURE_CLIENT_ID=<AZURE_CLIENT_ID>",
   "AZURE_CLIENT_SECRET=<AZURE_CLIENT_SECRET>",
+  "ENTRA_ADMIN_GROUP_NAME=<ENTRA_ADMIN_GROUP_NAME>",
   "JWT_SHARED_KEY=<JWT_SHARED_KEY>",
 ]
 Volume = [
@@ -63,8 +65,10 @@ After = ["cockpit-ws-build.service"]
 [container.cockpit-ws.Container]
 Image = "localhost/cockpit-ws:latest"
 PidHost = true
+Environment = [
+  "GATEWAY_DOMAIN=<GATEWAY_DOMAIN>",
+]
 Volume = [
-  "${FILES_DIR}/cockpit/cockpit.conf:/etc/cockpit/cockpit.conf:ro",
   "/run/dbus/system_bus_socket:/run/dbus/system_bus_socket",
   "/run/podman/podman.sock:/run/podman/podman.sock",
   "/run/systemd:/run/systemd",

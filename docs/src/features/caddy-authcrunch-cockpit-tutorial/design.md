@@ -89,7 +89,6 @@ files/
     Caddyfile
   cockpit/
     Containerfile             # Custom cockpit-ws image (adds management modules)
-    cockpit.conf
 ```
 
 ## config.toml Design
@@ -139,20 +138,21 @@ provides a foundation for moving to bridge networking later.
 
 ### Bundle Files
 
-| File                          | Mount Target                | Purpose                            |
-|-------------------------------|-----------------------------|------------------------------------|
-| `files/caddy/Caddyfile`       | `/etc/caddy/Caddyfile`      | AuthCrunch + OIDC configuration    |
-| `files/cockpit/Containerfile` | build context               | Custom cockpit-ws image definition |
-| `files/cockpit/cockpit.conf`  | `/etc/cockpit/cockpit.conf` | Cockpit WebService configuration   |
+| File                          | Mount Target           | Purpose                            |
+|-------------------------------|------------------------|------------------------------------|
+| `files/caddy/Caddyfile`       | `/etc/caddy/Caddyfile` | AuthCrunch + OIDC configuration    |
+| `files/cockpit/Containerfile` | build context          | Custom cockpit-ws image definition |
 
 ### Environment Variables (via Quadlet `Environment`)
 
-| Variable              | Container     | Purpose                              |
-|-----------------------|---------------|--------------------------------------|
-| `AZURE_TENANT_ID`     | caddy-gateway | Entra directory/tenant ID            |
-| `AZURE_CLIENT_ID`     | caddy-gateway | Entra app registration client ID     |
-| `AZURE_CLIENT_SECRET` | caddy-gateway | Entra app registration client secret |
-| `JWT_SHARED_KEY`      | caddy-gateway | Shared secret for JWT sign/verify    |
+| Variable                 | Container                 | Purpose                               |
+|--------------------------|---------------------------|---------------------------------------|
+| `AZURE_TENANT_ID`        | caddy-gateway             | Entra directory/tenant ID             |
+| `AZURE_CLIENT_ID`        | caddy-gateway             | Entra app registration client ID      |
+| `AZURE_CLIENT_SECRET`    | caddy-gateway             | Entra app registration client secret  |
+| `ENTRA_ADMIN_GROUP_NAME` | caddy-gateway             | Entra group promoted to `authp/admin` |
+| `GATEWAY_DOMAIN`         | caddy-gateway, cockpit-ws | Public device domain                  |
+| `JWT_SHARED_KEY`         | caddy-gateway             | Shared secret for JWT sign/verify     |
 
 ## Caddyfile Design
 
@@ -187,7 +187,7 @@ provides a foundation for moving to bridge networking later.
 
             transform user {
                 match realm azure
-                match roles <ENTRA_ADMIN_GROUP_NAME>
+                match roles {$ENTRA_ADMIN_GROUP_NAME}
                 action add role authp/admin
             }
         }
@@ -210,7 +210,7 @@ provides a foundation for moving to bridge networking later.
     }
 }
 
-<GATEWAY_DOMAIN> {
+{$GATEWAY_DOMAIN} {
     route /auth* {
         authenticate with myportal
     }
@@ -229,17 +229,6 @@ provides a foundation for moving to bridge networking later.
 }
 ```
 
-## cockpit.conf Design
-
-```ini
-[WebService]
-AllowUnencrypted = true
-LoginTo = false
-ProtocolHeader = X-Forwarded-Proto
-Origins = https://<GATEWAY_DOMAIN>
-UrlRoot = /cockpit/
-```
-
 ## Cockpit Local Session Design
 
 The custom Cockpit image runs:
@@ -251,6 +240,10 @@ cockpit-ws --no-tls --local-session /usr/bin/cockpit-bridge
 This deliberately disables Cockpit's own login flow. Caddy is the only public
 entry point and must authorize `/cockpit/*` with `admin-policy` before traffic
 reaches cockpit-ws.
+
+The custom image writes `/etc/cockpit/cockpit.conf` at startup using
+`GATEWAY_DOMAIN` from `config.toml`, keeping all operator-editable placeholders
+in one file.
 
 ## Azure App Registration Prerequisites
 

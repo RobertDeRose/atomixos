@@ -123,25 +123,25 @@ files/
     Caddyfile
   cockpit/
     Containerfile
-    cockpit.conf
 ```
 
-Substitute the placeholder values, package this directory, and provision the
-device.
+Substitute the placeholder values in `config.toml`, package this directory, and
+provision the device. The Caddyfile and generated Cockpit configuration read
+those values from container environment variables.
 
 ## Placeholder Values
 
 Replace these values before provisioning:
 
-| Placeholder                | Where                   | Description                          |
-|----------------------------|-------------------------|--------------------------------------|
-| `<SSH_PUBLIC_KEY>`         | config.toml             | Your SSH public key for admin access |
-| `<AZURE_TENANT_ID>`        | config.toml             | Entra directory (tenant) ID          |
-| `<AZURE_CLIENT_ID>`        | config.toml             | App registration client ID           |
-| `<AZURE_CLIENT_SECRET>`    | config.toml             | App registration client secret       |
-| `<JWT_SHARED_KEY>`         | config.toml             | Shared HMAC-SHA256 signing key       |
-| `<GATEWAY_DOMAIN>`         | Caddyfile, cockpit.conf | Public domain name of the device     |
-| `<ENTRA_ADMIN_GROUP_NAME>` | Caddyfile               | Entra group name for admin role      |
+| Placeholder                | Where       | Description                          |
+|----------------------------|-------------|--------------------------------------|
+| `<SSH_PUBLIC_KEY>`         | config.toml | Your SSH public key for admin access |
+| `<AZURE_TENANT_ID>`        | config.toml | Entra directory (tenant) ID          |
+| `<AZURE_CLIENT_ID>`        | config.toml | App registration client ID           |
+| `<AZURE_CLIENT_SECRET>`    | config.toml | App registration client secret       |
+| `<JWT_SHARED_KEY>`         | config.toml | Shared HMAC-SHA256 signing key       |
+| `<GATEWAY_DOMAIN>`         | config.toml | Public domain name of the device     |
+| `<ENTRA_ADMIN_GROUP_NAME>` | config.toml | Entra group name for admin role      |
 
 If you switch to Google or another provider, replace the Azure placeholders
 with that provider's client ID/secret variables and update the Caddyfile
@@ -173,6 +173,8 @@ Key points:
   netavark/nftables setup on constrained device images
 - The `${FILES_DIR}` token is replaced at provision time with the path to
   the extracted bundle files
+- `GATEWAY_DOMAIN` is passed to both containers; Caddy uses it for the site
+  address and Cockpit uses it when generating `/etc/cockpit/cockpit.conf`
 - The `management` network is defined for future use when containers move
   off host networking
 
@@ -192,18 +194,8 @@ Key points:
 - `admin-policy` restricts `/cockpit/*` to `authp/admin`
 - `user-policy` is provided for user-facing applications that should allow
   both `authp/admin` and `authp/user`
-
-### cockpit.conf
-
-```ini
-{{#include ../../../example/caddy-oidc/files/cockpit/cockpit.conf}}
-```
-
-Key points:
-
-- `AllowUnencrypted = true` because TLS terminates at Caddy
-- `LoginTo = false` disables the host selector (single-device mode)
-- `UrlRoot = /cockpit/` matches the Caddy route prefix
+- `GATEWAY_DOMAIN` and `ENTRA_ADMIN_GROUP_NAME` come from container
+  environment variables set in `config.toml`
 
 ### Containerfile
 
@@ -213,7 +205,9 @@ Key points:
 
 The custom image adds Cockpit's bridge and management modules, then starts
 cockpit-ws with `--local-session`. Cockpit itself does not authenticate users;
-Caddy's admin-only OIDC policy protects the route.
+Caddy's admin-only OIDC policy protects the route. The startup command writes
+`/etc/cockpit/cockpit.conf` from `GATEWAY_DOMAIN`, so the example only requires
+editing `config.toml`.
 
 ## Building and Applying
 

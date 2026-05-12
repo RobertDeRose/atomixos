@@ -26,11 +26,11 @@
 				action add role authp/user
 			}
 
-			transform user {
-				match realm azure
-				match roles <ENTRA_ADMIN_GROUP_NAME>
-				action add role authp/admin
-			}
+		transform user {
+			match realm azure
+			match roles {$ENTRA_ADMIN_GROUP_NAME}
+			action add role authp/admin
+		}
 		}
 
 		authorization policy user-policy {
@@ -51,7 +51,7 @@
 	}
 }
 
-<GATEWAY_DOMAIN> {
+{$GATEWAY_DOMAIN} {
 	route /auth* {
 		authenticate with myportal
 	}
