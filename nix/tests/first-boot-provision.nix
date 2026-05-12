@@ -272,6 +272,15 @@ nixos-lib.runTest {
     gateway.succeed("test -f /tmp/import-bundle-dot-zstd/config.toml")
     gateway.succeed("test -f /tmp/import-bundle-dot-zstd/files/app/config.yaml")
 
+    gateway.succeed("rm -rf /tmp/bootstrap-root-zstd-upload && mkdir -p /tmp/bootstrap-root-zstd-upload")
+    gateway.succeed("first-boot-provision serve /tmp/bootstrap-root-zstd-upload /tmp/bootstrap-output-zstd-upload.toml --host 127.0.0.1 --port 18080 >/tmp/bootstrap.log 2>&1 & echo $! >/tmp/bootstrap.pid")
+    gateway.wait_until_succeeds("ss -tln | grep ':18080'", timeout=30)
+    gateway.succeed("curl -fsS -F config_file=@/tmp/config-dot.tar.zstd http://127.0.0.1:18080/apply >/tmp/bootstrap-zstd-upload-response.html")
+    gateway.succeed("grep 'Configuration applied' /tmp/bootstrap-zstd-upload-response.html")
+    gateway.succeed("test -f /tmp/bootstrap-root-zstd-upload/config.toml")
+    gateway.succeed("test -f /tmp/bootstrap-root-zstd-upload/files/app/config.yaml")
+    gateway.succeed("kill $(cat /tmp/bootstrap.pid)")
+
     gateway.fail("first-boot-provision validate /tmp/invalid-config.toml")
     gateway.fail("first-boot-provision validate /tmp/gateway-contained-config.toml >/tmp/gateway-contained.out 2>/tmp/gateway-contained.err")
     gateway.succeed("grep 'lan.dhcp_start and lan.dhcp_end must not include the gateway IP' /tmp/gateway-contained.err")
