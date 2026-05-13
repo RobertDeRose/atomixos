@@ -188,6 +188,12 @@ provides a foundation for moving to bridge networking later.
             crypto key sign-verify {env.JWT_SHARED_KEY}
             enable identity provider azure
 
+            ui {
+                links {
+                    "Cockpit" /cockpit/ icon "las la-server"
+                }
+            }
+
             transform user {
                 match realm azure
                 action add role authp/user
@@ -220,6 +226,9 @@ provides a foundation for moving to bridge networking later.
 
 {$GATEWAY_DOMAIN} {
     tls internal
+
+    redir / /cockpit/ 302
+    redir /cockpit /cockpit/ 302
 
     route /auth* {
         authenticate with myportal

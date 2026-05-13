@@ -220,6 +220,8 @@ Key points:
 - The `order` directives register the authenticate and authorize handlers
 - The identity provider block configures Entra OIDC via the `azure` driver
 - The portal issues JWTs signed with the shared key
+- The portal explicitly lists Cockpit as an application link; AuthCrunch does
+  not discover Caddy routes automatically
 - `transform user` blocks assign base roles (`authp/user`) and promote
   admin group members to `authp/admin`
 - `admin-policy` restricts `/cockpit/*` to `authp/admin`
@@ -227,6 +229,7 @@ Key points:
   both `authp/admin` and `authp/user`
 - `tls internal` tells Caddy to issue a certificate from its local CA instead of
   using public ACME/Let's Encrypt
+- `/` redirects to `/cockpit/`, and `/cockpit` normalizes to `/cockpit/`
 - `GATEWAY_DOMAIN` and `ENTRA_ADMIN_GROUP_NAME` come from container
   environment variables set in `config.toml`
 
