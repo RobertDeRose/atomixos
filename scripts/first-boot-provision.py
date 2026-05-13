@@ -1294,7 +1294,6 @@ BOOTSTRAP_HTML = """<!doctype html>
           <input
             type=\"file\"
             name=\"config_file\"
-            accept=\".toml,.tar.gz,.tgz,.tar.zst,.tar.zstd,.tzst,text/plain,application/gzip,application/zstd,application/octet-stream\"
           >
           <label>config.toml</label>
           <textarea name=\"config\">{config_text}</textarea>
