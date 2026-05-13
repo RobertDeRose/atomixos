@@ -95,14 +95,14 @@ files/
 
 ### Containers
 
-| Container     | Image                                         | Privileged | Network       | Purpose                  |
-|---------------|-----------------------------------------------|------------|---------------|--------------------------|
-| caddy-gateway | `ghcr.io/authcrunch/authcrunch:latest`        | true       | host (forced) | OIDC auth, reverse proxy |
-| cockpit-ws    | custom build from `quay.io/cockpit/ws:latest` | true       | host (forced) | Device management UI     |
+| Container     | Image                                            | Privileged | Network       | Purpose                  |
+|---------------|--------------------------------------------------|------------|---------------|--------------------------|
+| caddy-gateway | `ghcr.io/authcrunch/authcrunch:latest`           | true       | host (forced) | OIDC auth, reverse proxy |
+| cockpit-ws    | custom build from `quay.io/fedora/fedora:latest` | true       | host (forced) | Device management UI     |
 
-The cockpit-ws container uses a custom Containerfile that adds Cockpit bridge
-and management modules to the base `quay.io/cockpit/ws` image. The custom image
-is built via Quadlet `.build` support.
+The cockpit-ws container uses a custom Containerfile based on Fedora that installs
+`cockpit-ws`, Cockpit bridge, and management modules. The custom image is built
+via Quadlet `.build` support.
 
 Caddy is rootful because it binds privileged ports 80/443. Cockpit-ws is
 rootful because the example intentionally exposes a local admin session with
@@ -110,9 +110,9 @@ host D-Bus, systemd, journal, and Podman sockets mounted into the container.
 
 ### Builds
 
-| Build      | Base Image                  | Additions                  | Purpose               |
-|------------|-----------------------------|----------------------------|-----------------------|
-| cockpit-ws | `quay.io/cockpit/ws:latest` | Cockpit management modules | Admin console runtime |
+| Build      | Base Image                     | Additions                  | Purpose               |
+|------------|--------------------------------|----------------------------|-----------------------|
+| cockpit-ws | `quay.io/fedora/fedora:latest` | Cockpit management modules | Admin console runtime |
 
 The `cockpit-ws.build` Quadlet unit builds the custom cockpit-ws image from a
 Containerfile in the bundle. This exercises the new `.build` config.toml feature.

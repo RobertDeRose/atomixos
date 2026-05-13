@@ -96,7 +96,7 @@ Quadlet containers on a persistent `/data` partition.
   - OIDC group mapping to local roles: `authp/admin` (sudoless admin) and `authp/user`
     (generic user) based on Entra security group membership
   - JWT token generation with configurable lifetime and signing key
-  - Cockpit-ws container (`quay.io/cockpit/ws`) for device/container management, built
+  - Cockpit-ws container (`quay.io/fedora/fedora`) for device/container management, built
     from a custom Containerfile that adds Cockpit management modules
   - Caddy-gated Cockpit local session: Caddy restricts `/cockpit/*` to `authp/admin`,
     and cockpit-ws runs `--local-session` behind the proxy -- eliminates double

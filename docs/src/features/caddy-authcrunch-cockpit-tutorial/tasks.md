@@ -10,8 +10,8 @@
 ## T00A -- Add Quadlet `.build` support
 
 This is a new infrastructure prerequisite discovered during spec review.
-The cockpit-ws container requires a custom image (adds Cockpit management modules
-to the Fedora minimal base). Quadlet supports `.build` units; config.toml needs to support
+The cockpit-ws container requires a custom Fedora image that installs Cockpit
+management modules. Quadlet supports `.build` units; config.toml needs to support
 them the same way it supports `.network` and `.volume`.
 
 - [x] Add `buildDefinition` to `schemas/config.schema.json` (`$defs`)
@@ -26,7 +26,7 @@ them the same way it supports `.network` and `.volume`.
 
 ## T00B -- Write cockpit-ws Containerfile
 
-- [x] Create `files/cockpit/Containerfile` based on `quay.io/cockpit/ws:latest`
+- [x] Create `files/cockpit/Containerfile` based on `quay.io/fedora/fedora:latest`
 - [x] Add Cockpit bridge and management modules via `dnf install --setopt=install_weak_deps=False`
 - [ ] Verify the built image has the required Cockpit modules available
 - [x] Keep the Containerfile minimal (single RUN layer)

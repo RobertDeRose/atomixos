@@ -1,4 +1,4 @@
-FROM quay.io/cockpit/ws:latest
+FROM quay.io/fedora/fedora:latest
 
 RUN dnf install -y --setopt=install_weak_deps=False \
     cockpit-bridge \
@@ -6,6 +6,7 @@ RUN dnf install -y --setopt=install_weak_deps=False \
     cockpit-podman \
     cockpit-storaged \
     cockpit-system \
+    cockpit-ws \
     podman \
     && dnf clean all
 
