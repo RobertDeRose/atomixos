@@ -64,7 +64,7 @@ After = ["cockpit-ws-build.service"]
 
 [container.cockpit-ws.Container]
 Image = "localhost/cockpit-ws:latest"
-PidHost = true
+PodmanArgs = ["--pid=host"]
 Environment = [
   "GATEWAY_DOMAIN=<GATEWAY_DOMAIN>",
 ]

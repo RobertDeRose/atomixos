@@ -38,6 +38,8 @@ APP_RUNTIME_USER="appsvc"
 APP_RUNTIME_HOME="/var/lib/appsvc"
 ROOTLESS_QUADLET_DIR="$APP_RUNTIME_HOME/.config/containers/systemd"
 RUNTIME_METADATA_FILE="$CONFIG_ROOT/quadlet-runtime.json"
+CHRONY_WAIT_TIMEOUT_SECONDS="${ATOMIXOS_CHRONY_WAIT_TIMEOUT_SECONDS:-10}"
+CHRONY_WAIT_ATTEMPTS="${ATOMIXOS_CHRONY_WAIT_ATTEMPTS:-3}"
 appsvc_uid() {
 	id -u "$APP_RUNTIME_USER"
 }
@@ -57,6 +59,32 @@ run_as_appsvc() {
 		XDG_RUNTIME_DIR="$runtime_dir" \
 		DBUS_SESSION_BUS_ADDRESS="$bus_address" \
 		"$@"
+}
+
+wait_for_clock_sync() {
+	if ! command -v chronyc >/dev/null 2>&1; then
+		log "chronyc not available, skipping clock sync wait"
+		return 0
+	fi
+
+	local tracking
+	tracking="$(chronyc tracking 2>/dev/null || true)"
+	if printf '%s\n' "$tracking" | grep -q '^Leap status[[:space:]]*:[[:space:]]*Normal$'; then
+		log "Clock is already synchronized"
+		return 0
+	fi
+
+	local attempt=1
+	while [ "$attempt" -le "$CHRONY_WAIT_ATTEMPTS" ]; do
+		log "Waiting for clock synchronization (${attempt}/${CHRONY_WAIT_ATTEMPTS})"
+		if timeout "$CHRONY_WAIT_TIMEOUT_SECONDS" chronyc waitsync 1 1; then
+			log "Clock synchronized"
+			return 0
+		fi
+		attempt=$((attempt + 1))
+	done
+
+	log "WARNING: clock did not synchronize after bounded wait; continuing"
 }
 
 has_rootless_units() {
@@ -84,6 +112,8 @@ if [ ! -f "$CONFIG_ROOT/config.toml" ]; then
 	log "No provisioned config present, skipping"
 	exit 0
 fi
+
+wait_for_clock_sync
 
 mkdir -p "$QUADLET_ACTIVE_DIR"
 if [ ! -f "$RUNTIME_METADATA_FILE" ]; then

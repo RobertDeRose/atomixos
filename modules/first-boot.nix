@@ -64,7 +64,9 @@ in
     path = [
       pkgs.coreutils
       pkgs.chrony
+      pkgs.findutils
       pkgs.gzip
+      pkgs.gnugrep
       pkgs.jq
       pkgs.podman
       pkgs.python3Minimal
@@ -76,7 +78,6 @@ in
 
     serviceConfig = {
       Type = "oneshot";
-      ExecStartPre = "${pkgs.chrony}/bin/chronyc waitsync 0 1";
       ExecStart = quadletSyncScript;
       TimeoutStartSec = 300;
     };

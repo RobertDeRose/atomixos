@@ -48,6 +48,7 @@ them the same way it supports `.network` and `.volume`.
 - [x] Configure reverse proxy to cockpit-ws at localhost:9090
 - [x] Configure `/auth*` route for authentication portal
 - [x] Configure `/cockpit/*` route with authorization policy
+- [x] Configure local-only HTTPS with Caddy `tls internal`
 - [x] Validate Caddyfile syntax against AuthCrunch docs
 
 ## T003 -- Configure Cockpit reverse proxy settings
@@ -100,6 +101,7 @@ duplicate coverage without exercising new logic.
 - [x] Document the bundle directory structure
 - [x] Document how to build and apply the bundle
 - [x] Document role mapping (`authp/admin` for Cockpit, `authp/user` for app routes)
+- [x] Document local DNS and Caddy internal TLS requirements
 - [x] Document alternate OIDC provider setup for Google and generic providers
 - [x] Document cockpit-podman container/socket integration and native-host alternative
 - [x] Document security considerations and production hardening notes

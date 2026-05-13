@@ -12,6 +12,10 @@ three components:
 The result is a single sign-on flow: users authenticate once through Entra ID,
 and Caddy only exposes the Cockpit management console to admin users.
 
+This tutorial is designed for local device management on a LAN. Caddy uses its
+internal certificate authority instead of Let's Encrypt, so the device does not
+need a publicly routed domain or inbound internet access.
+
 ## Contents
 
 <!-- toc -->
@@ -83,7 +87,7 @@ google` and update transform rules from `match realm azure` to `match realm
 
 ```mermaid
 graph TD
-    internet((Internet)) -- "ports 80, 443" --> caddy
+    lan((Local LAN browser)) -- "ports 80, 443" --> caddy
 
     subgraph caddy["Caddy + AuthCrunch"]
         ca1["/auth* → OIDC portal"]
@@ -140,7 +144,7 @@ Replace these values before provisioning:
 | `<AZURE_CLIENT_ID>`        | config.toml | App registration client ID           |
 | `<AZURE_CLIENT_SECRET>`    | config.toml | App registration client secret       |
 | `<JWT_SHARED_KEY>`         | config.toml | Shared HMAC-SHA256 signing key       |
-| `<GATEWAY_DOMAIN>`         | config.toml | Public domain name of the device     |
+| `<GATEWAY_DOMAIN>`         | config.toml | Local DNS name for the device        |
 | `<ENTRA_ADMIN_GROUP_NAME>` | config.toml | Entra group name for admin role      |
 
 If you switch to Google or another provider, replace the Azure placeholders
@@ -154,6 +158,28 @@ openssl rand -base64 32
 ```
 
 ## Configuration Files
+
+## Local DNS and TLS
+
+The browser must resolve `<GATEWAY_DOMAIN>` to the device's LAN address. Use one
+of these local options:
+
+- Add a DNS record on your LAN router or development DNS server
+- Add a hosts-file entry on the workstation you use to manage the device
+- Use another local name resolution mechanism that maps the name to the device
+  IP address
+
+For example, if the gateway is reachable at `172.20.30.1`:
+
+```text
+172.20.30.1 gateway.example.com
+```
+
+Caddy serves HTTPS for this name with `tls internal`. That avoids public ACME
+validation and works even when the domain is not reachable from the internet.
+Browsers will not trust Caddy's local CA by default; either trust the Caddy root
+CA from the `caddy-data` volume on your management workstation or accept the
+browser warning for local testing.
 
 ### config.toml
 
@@ -175,6 +201,8 @@ Key points:
   the extracted bundle files
 - `GATEWAY_DOMAIN` is passed to both containers; Caddy uses it for the site
   address and Cockpit uses it when generating `/etc/cockpit/cockpit.conf`
+- Caddy uses `tls internal`, so HTTPS is local-only and does not require public
+  DNS or Let's Encrypt validation
 - The `management` network is defined for future use when containers move
   off host networking
 
@@ -194,6 +222,8 @@ Key points:
 - `admin-policy` restricts `/cockpit/*` to `authp/admin`
 - `user-policy` is provided for user-facing applications that should allow
   both `authp/admin` and `authp/user`
+- `tls internal` tells Caddy to issue a certificate from its local CA instead of
+  using public ACME/Let's Encrypt
 - `GATEWAY_DOMAIN` and `ENTRA_ADMIN_GROUP_NAME` come from container
   environment variables set in `config.toml`
 
@@ -246,6 +276,9 @@ rebuilding the AtomixOS base image.
 This tutorial uses HS256 (symmetric) JWT signing for simplicity. For
 production deployments:
 
+- **Use public DNS and public certificates** if exposing the device outside a
+  trusted local network. The tutorial intentionally uses Caddy internal TLS for
+  local management, not internet deployment.
 - **Use asymmetric keys (RS256/ES256)** instead of a shared HMAC secret.
   AuthCrunch supports RSA and ECDSA key pairs.
 - **Rotate secrets regularly.** The `JWT_SHARED_KEY` and Azure client secret

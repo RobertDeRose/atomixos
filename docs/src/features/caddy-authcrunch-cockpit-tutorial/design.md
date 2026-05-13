@@ -2,18 +2,20 @@
 
 ## Summary
 
-A documentation-only tutorial that provides a fully working `config.toml` bundle
-demonstrating Caddy with the AuthCrunch plugin for Microsoft Entra OIDC authentication,
-provider-swap guidance for Google and other OIDC providers, JWT-based group-to-role
-mapping, and Cockpit-ws for device management -- all provisioned through AtomixOS's
-existing config.toml system.
+A documentation-only tutorial that provides a fully working local-management
+`config.toml` bundle demonstrating Caddy with the AuthCrunch plugin for
+Microsoft Entra OIDC authentication, provider-swap guidance for Google and other
+OIDC providers, JWT-based group-to-role mapping, and Cockpit-ws for device
+management -- all provisioned through AtomixOS's existing config.toml system.
 
 ## Goal
 
-An operator can copy the tutorial config, substitute their identity-provider and domain
-values, build a config bundle, and provision an AtomixOS device with a working
-OIDC-authenticated management stack. The tutorial exercises every major config.toml
-feature: containers, networks, volumes, builds, bundle files, and token substitution.
+An operator can copy the tutorial config, substitute their identity-provider and
+local DNS values, build a config bundle, and provision an AtomixOS device with
+a working OIDC-authenticated management stack that does not need public DNS,
+public ACME validation, or inbound internet exposure. The tutorial exercises
+every major config.toml feature: containers, networks, volumes, builds, bundle
+files, and token substitution.
 
 ## Architecture
 
@@ -44,14 +46,15 @@ graph TD
         mgmtnet["management network"]
     end
 
-    internet((Internet)) -- "ports 80, 443" --> caddy
+    lan((Local LAN browser)) -- "ports 80, 443" --> caddy
     cockpit -. "mount" .-> socket
     caddy -. "mount" .-> caddydata
 ```
 
 ### Authentication Flow
 
-1. User navigates to `https://gateway.example.com/cockpit/`
+1. User navigates to `https://gateway.example.com/cockpit/`, where the gateway
+   name resolves locally to the device's LAN address
 2. Caddy's authorization policy checks for a valid JWT cookie
 3. If no cookie: redirect to `/auth/` which initiates Entra OIDC login
 4. AuthCrunch receives the OIDC ID token, maps Entra groups to local roles:
@@ -151,7 +154,7 @@ provides a foundation for moving to bridge networking later.
 | `AZURE_CLIENT_ID`        | caddy-gateway             | Entra app registration client ID      |
 | `AZURE_CLIENT_SECRET`    | caddy-gateway             | Entra app registration client secret  |
 | `ENTRA_ADMIN_GROUP_NAME` | caddy-gateway             | Entra group promoted to `authp/admin` |
-| `GATEWAY_DOMAIN`         | caddy-gateway, cockpit-ws | Public device domain                  |
+| `GATEWAY_DOMAIN`         | caddy-gateway, cockpit-ws | Local device DNS name                 |
 | `JWT_SHARED_KEY`         | caddy-gateway             | Shared secret for JWT sign/verify     |
 
 ## Caddyfile Design
@@ -211,6 +214,8 @@ provides a foundation for moving to bridge networking later.
 }
 
 {$GATEWAY_DOMAIN} {
+    tls internal
+
     route /auth* {
         authenticate with myportal
     }
@@ -228,6 +233,18 @@ provides a foundation for moving to bridge networking later.
     # }
 }
 ```
+
+## Local TLS Design
+
+The tutorial is meant to work locally, not as an internet-facing deployment.
+Caddy uses `tls internal` so certificate issuance is handled by Caddy's local CA
+instead of Let's Encrypt. Operators must ensure their management workstation
+resolves `GATEWAY_DOMAIN` to the device's LAN address and either trusts the
+Caddy local root CA or accepts the browser warning during testing.
+
+This intentionally avoids the failure mode where a local gateway name resolves
+to a public IP, causing ACME HTTP-01/TLS-ALPN-01 validation to time out against a
+host that is not the AtomixOS device.
 
 ## Cockpit Local Session Design
 
@@ -273,13 +290,15 @@ values that change for Google and other OIDC providers:
   feature (`.build` Quadlet support is a new prerequisite)
 - Both containers are rootful for this example: Caddy for privileged ports and
   Cockpit for host management socket access
-- Tutorial values (tenant ID, client ID, domain) use obvious `<PLACEHOLDER>` markers
+- Tutorial values (tenant ID, client ID, local DNS name) use obvious
+  `<PLACEHOLDER>` markers
 - Must not require changes to the AtomixOS base image schema beyond `.build` support
 - The tutorial config must pass `first-boot-provision validate`
 
 ## Non-Goals
 
-- Production-hardening (certificate pinning, secret rotation, HA)
+- Internet deployment and production-hardening (public certificates,
+  certificate pinning, secret rotation, HA)
 - Native host Cockpit service packaging
 - Custom PAM module or Cockpit bearer-token authentication
 - SAML providers (tutorial focuses on OIDC)
@@ -303,6 +322,7 @@ values that change for Google and other OIDC providers:
 | Cockpit has no second login         | Caddy misconfiguration could expose an admin session  | Keep cockpit bound behind admin-policy and host-local routing   |
 | Host socket mounts are powerful     | Container compromise can manage host services/podman  | Document that Cockpit is an admin application, not a user app   |
 | Entra group claim configuration     | Groups may appear as GUIDs not names                  | Document Azure portal Token Configuration steps                 |
+| Local CA not trusted by browsers    | Browser warning on first HTTPS access                 | Document Caddy internal CA trust requirement                    |
 | JWT_SHARED_KEY in container env     | Secret visible in Quadlet file on disk                | Document that production should use secret files                |
 | Cockpit package drift               | Container module versions may not match host services | Treat this as an example stack; native host packaging is future |
 

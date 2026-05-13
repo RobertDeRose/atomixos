@@ -6,3 +6,5 @@ CROS = "CROS"
 HSA = "HSA"
 # Cockpit storage module package name
 storaged = "storaged"
+# Device product naming used in local tutorial examples.
+som = "som"
