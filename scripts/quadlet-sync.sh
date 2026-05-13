@@ -105,9 +105,9 @@ failed_units=()
 
 while IFS= read -r service_name; do
 	[ -n "$service_name" ] || continue
-	log "Starting $service_name"
-	if ! systemctl start "$service_name"; then
-		log "Failed to start $service_name"
+	log "Restarting $service_name"
+	if ! systemctl restart "$service_name"; then
+		log "Failed to restart $service_name"
 		failed_units+=("$service_name")
 	fi
 done < <(list_units_by_mode rootful)
@@ -115,9 +115,9 @@ done < <(list_units_by_mode rootful)
 if has_rootless_units; then
 	while IFS= read -r service_name; do
 		[ -n "$service_name" ] || continue
-		log "Starting rootless $service_name"
-		if ! run_as_appsvc systemctl --user start "$service_name"; then
-			log "Failed to start rootless $service_name"
+		log "Restarting rootless $service_name"
+		if ! run_as_appsvc systemctl --user restart "$service_name"; then
+			log "Failed to restart rootless $service_name"
 			failed_units+=("$service_name")
 		fi
 	done < <(list_units_by_mode rootless)
