@@ -61,9 +61,11 @@ privileged = true
 [container.cockpit-ws.Unit]
 Description = "Cockpit web console behind OIDC"
 After = ["cockpit-ws-build.service"]
+Requires = ["cockpit-ws-build.service"]
 
 [container.cockpit-ws.Container]
 Image = "localhost/cockpit-ws:latest"
+Pull = "never"
 PodmanArgs = ["--pid=host"]
 Environment = [
   "GATEWAY_DOMAIN=<GATEWAY_DOMAIN>",

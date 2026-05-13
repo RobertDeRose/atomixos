@@ -122,6 +122,11 @@ Containerfile in the bundle. This exercises the new `.build` config.toml feature
 The build uses `Network = "host"` so package installation does not depend on
 Podman's build-time netavark/nftables network setup.
 
+The `cockpit-ws.container` unit requires and starts after
+`cockpit-ws-build.service`, and sets `Pull = "never"` so Podman uses the local
+build output instead of trying to resolve `localhost/cockpit-ws:latest` as a
+registry image.
+
 ### Networks
 
 | Network    | Purpose                                                                       |
