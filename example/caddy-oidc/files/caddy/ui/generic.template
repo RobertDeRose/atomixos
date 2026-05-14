@@ -17,7 +17,7 @@
     <link rel="icon" href="{{ pathjoin .ActionEndpoint "/assets/images/favicon.png" }}" type="image/png" />
     <link rel="stylesheet" href="{{ pathjoin .ActionEndpoint "/assets/google-webfonts/roboto.css" }}" />
     <link rel="stylesheet" href="{{ pathjoin .ActionEndpoint "/assets/line-awesome/line-awesome.css" }}" />
-    <link rel="stylesheet" href="{{ pathjoin .ActionEndpoint "/assets/css/portal.css" }}" />
+    <link rel="stylesheet" href="{{ pathjoin .ActionEndpoint "/assets/css/generic.css" }}" />
     {{ if eq .Data.ui_options.custom_css_required "yes" }}
       <link rel="stylesheet" href="{{ pathjoin .ActionEndpoint "/assets/css/custom.css" }}" />
     {{ end }}
@@ -30,38 +30,25 @@
     <div class="app-page">
       <div class="app-content">
         <div class="app-container">
-          <div class="logo-col-box justify-center">
-            <div>
-              <img class="logo-img" src="{{ pathjoin .ActionEndpoint "/assets/images/atomixos-logo.png" }}" alt="AtomixOS" />
-            </div>
-            <div>
-              <h2 class="logo-col-txt">Applications</h2>
-            </div>
+          <div class="logo-box">
+            <img class="logo-img" src="{{ pathjoin .ActionEndpoint "/assets/images/atomixos-logo.png" }}" alt="AtomixOS" />
           </div>
-          <div class="mt-3 grid">
-            {{ range .PrivateLinks }}
-              <div class="pb-2">
-                <a href="{{ .Link }}" {{ if .TargetEnabled }}target="{{ .Target }}"{{ end }}>
-                  <div class="app-portal-btn-box">
-                    <div class="app-portal-btn-img">{{ if .IconEnabled -}}<i class="{{ .IconName }}"></i>{{- end }}</div>
-                    <div class="app-portal-btn-txt"><span>{{ .Title }}</span></div>
-                  </div>
-                </a>
-              </div>
-            {{ end }}
-            <div class="pb-2">
-              <a href="{{ pathjoin .ActionEndpoint "/logout" }}">
-                <div class="app-portal-btn-box">
-                  <div class="app-portal-btn-img"><i class="las la-sign-out-alt"></i></div>
-                  <div class="app-portal-btn-txt"><span>{{ .Data.i18n_sign_out }}</span></div>
-                </div>
-              </a>
+          <div class="atomixos-auth-card atomixos-generic-card">
+            <div class="app-gen-banner-box">
+              <h1 class="app-gen-banner-header">{{ .PageTitle }}</h1>
+              <p class="app-gen-banner-message">{{ .Data.message }}</p>
+            </div>
+            <div class="atomixos-generic-actions">
+              {{ if .Data.go_back_url }}
+                <a href="{{ .Data.go_back_url }}" class="atomixos-generic-action">{{ .Data.i18n_go_back_action }}</a>
+              {{ end }}
+              <a href="/auth/portal" class="atomixos-generic-action">Return to Portal</a>
             </div>
           </div>
         </div>
       </div>
     </div>
-    <script src="{{ pathjoin .ActionEndpoint "/assets/js/portal.js" }}"></script>
+    <script src="{{ pathjoin .ActionEndpoint "/assets/js/generic.js" }}"></script>
     {{ if eq .Data.ui_options.custom_js_required "yes" }}
       <script src="{{ pathjoin .ActionEndpoint "/assets/js/custom.js" }}"></script>
     {{ end }}

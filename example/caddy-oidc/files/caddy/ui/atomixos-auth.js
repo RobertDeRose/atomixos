@@ -1,14 +1,47 @@
 (function () {
+  function resolveTheme() {
+    const style = localStorage.getItem("shell:style") || "auto";
+    if (style === "dark") return "dark";
+    if (style === "light") return "light";
+    return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+
   function applyTheme() {
-    const cookie = document.cookie.match(/(?:^|;\s*)cockpit:theme=([^;]+)/);
-    let theme = cookie && decodeURIComponent(cookie[1]);
-    if (theme !== "light" && theme !== "dark") {
-      theme = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    const theme = resolveTheme();
+    if (theme === "dark") {
+      document.documentElement.classList.add("pf-v6-theme-dark");
+    } else {
+      document.documentElement.classList.remove("pf-v6-theme-dark");
     }
-    document.documentElement.classList.remove("pf-v6-theme-light", "pf-v6-theme-dark");
-    document.documentElement.classList.add("pf-v6-theme-" + theme);
-    // CSS custom properties are defined in atomixos-auth.css on :root and
-    // :root.pf-v6-theme-dark — toggling the class is sufficient.
+
+    const colors = theme === "dark" ? {
+      "--anx-bg": "#071426",
+      "--anx-surface": "#0e2748",
+      "--anx-button": "#1b477a",
+      "--anx-button-prefix": "#173a64",
+      "--anx-border": "#2c5d93",
+      "--anx-text": "#eaf4ff",
+      "--anx-muted": "#b8d0eb",
+      "--anx-accent": "#62b3ff",
+      "--anx-accent-2": "#21d4a7",
+    } : {
+      "--anx-bg": "#f3f8ff",
+      "--anx-surface": "#ffffff",
+      "--anx-button": "#ffffff",
+      "--anx-button-prefix": "#f1f5f9",
+      "--anx-border": "#8cb7e3",
+      "--anx-text": "#061a32",
+      "--anx-muted": "#31506f",
+      "--anx-accent": "#075fab",
+      "--anx-accent-2": "#00796b",
+    };
+
+    for (const [name, value] of Object.entries(colors)) {
+      document.documentElement.style.setProperty(name, value);
+    }
+
+    document.body.style.background = `radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--anx-accent) 18%, transparent), transparent 32%), var(--anx-bg)`;
+    document.body.style.color = "var(--anx-text)";
   }
 
   function nextTheme() {
@@ -16,8 +49,7 @@
   }
 
   function setTheme(theme) {
-    document.cookie = "cockpit:theme=" + encodeURIComponent(theme) + "; path=/; SameSite=Lax";
-    document.cookie = "cockpit:theme=" + encodeURIComponent(theme) + "; path=/cockpit/; SameSite=Lax";
+    localStorage.setItem("shell:style", theme);
     applyTheme();
     updateThemeToggle();
   }
@@ -57,7 +89,7 @@
 
       const brand = document.createElement("div");
       brand.className = "atomixos-auth-brand";
-      brand.innerHTML = '<img src="/auth/assets/images/atomixos-logo.png" alt="AtomixOS">';
+    brand.innerHTML = '<img src="/auth/assets/images/atomixos-logo.png" alt="AtomixOS">';
       target.parentNode.insertBefore(brand, target);
     }
 
@@ -220,7 +252,16 @@
         color: #ffffff !important;
       }
       .app-portal-btn-img i {
-        color: #ffffff !important;
+        display: none !important;
+      }
+      .app-portal-btn-img::before {
+        content: "";
+        display: inline-block;
+        width: 1.65rem;
+        height: 1.65rem;
+        background: #ffffff;
+        mask: url("/auth/assets/images/user.svg") center / contain no-repeat;
+        -webkit-mask: url("/auth/assets/images/user.svg") center / contain no-repeat;
       }
       .app-portal-btn-box,
       .app-portal-btn-txt,

@@ -8,8 +8,10 @@
     <base href="/cockpit/">
     <script>
       (function () {
-        var themeCookie = document.cookie.match(/(?:^|;\s*)cockpit:theme=([^;]+)/);
-        var theme = themeCookie && decodeURIComponent(themeCookie[1]);
+        var theme = window.localStorage && window.localStorage.getItem("shell:style");
+        if (theme === "auto") {
+          theme = null;
+        }
         if (theme !== "light" && theme !== "dark") {
           theme = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
         }

@@ -8,12 +8,9 @@
     <meta name="author" content="{{ .MetaAuthor }}" />
     <script>
       (function () {
-        var match = document.cookie.match(/(?:^|;\s*)cockpit:theme=([^;]+)/);
-        var theme = match && decodeURIComponent(match[1]);
-        if (theme !== "light" && theme !== "dark") {
-          theme = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-        }
-        document.documentElement.classList.add("pf-v6-theme-" + theme);
+        var style = localStorage.getItem("shell:style") || "auto";
+        var dark = style === "dark" || (style === "auto" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        if (dark) document.documentElement.classList.add("pf-v6-theme-dark");
       })();
     </script>
     <link rel="shortcut icon" href="{{ pathjoin .ActionEndpoint "/assets/images/favicon.png" }}" type="image/png" />

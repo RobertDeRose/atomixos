@@ -25,11 +25,13 @@
 				theme basic
 				template login /etc/caddy/ui/login.template
 				template portal /etc/caddy/ui/portal.template
+				template generic /etc/caddy/ui/generic.template
 				custom css path /etc/caddy/ui/atomixos-auth.css
 				custom js path /etc/caddy/ui/atomixos-auth.js
 				static_asset "assets/images/atomixos-logo.png" "image/png" /etc/caddy/ui/atomixos-logo.png
 				static_asset "assets/images/cockpit.svg" "image/svg+xml" /etc/caddy/ui/cockpit.svg
 				static_asset "assets/images/microsoft-entra.svg" "image/svg+xml" /etc/caddy/ui/microsoft-entra.svg
+				static_asset "assets/images/user.svg" "image/svg+xml" /etc/caddy/ui/user.svg
 
 				links {
 					"Admin Console" /cockpit/ icon "las la-server"

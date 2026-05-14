@@ -169,6 +169,73 @@ body {
   box-shadow: 0 20px 60px rgba(6, 26, 50, 0.16) !important;
 }
 
+.atomixos-generic-card {
+  display: grid !important;
+  justify-items: center !important;
+  gap: 1rem !important;
+  padding: 1.5rem !important;
+  border: 0 !important;
+  background: var(--anx-surface) !important;
+  box-shadow: none !important;
+  text-align: center !important;
+}
+
+.atomixos-generic-card .app-gen-banner-box {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.atomixos-generic-card .app-gen-banner-header {
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: var(--anx-text) !important;
+  font-size: clamp(1.625rem, 3.5vw, 2.25rem) !important;
+  line-height: 1.1 !important;
+  text-align: center !important;
+}
+
+.atomixos-generic-card .app-gen-banner-message {
+  margin: 0.75rem 0 0 !important;
+  color: var(--anx-muted) !important;
+  font-size: 1rem !important;
+}
+
+.atomixos-generic-actions {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 1rem !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.atomixos-generic-action {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  justify-self: start !important;
+  min-width: 10rem !important;
+  min-height: 2.75rem !important;
+  padding: 0.65rem 1rem !important;
+  border: 1px solid color-mix(in srgb, var(--anx-border) 65%, transparent) !important;
+  border-radius: 8px !important;
+  background: var(--anx-button) !important;
+  color: var(--anx-text) !important;
+  text-align: center !important;
+  text-decoration: none !important;
+  box-shadow: none !important;
+}
+
+.atomixos-generic-action:hover,
+.atomixos-generic-action:focus-visible {
+  border-color: var(--anx-accent) !important;
+  box-shadow: 0 10px 26px rgba(6, 26, 50, 0.12) !important;
+  outline: 0 !important;
+}
+
 a[href*="/cockpit/"] .app-portal-btn-img {
   display: grid !important;
   place-items: center !important;
@@ -207,15 +274,20 @@ a[href*="/cockpit/"] .app-portal-btn-img i {
 }
 
 .app-portal-btn-img i {
-  color: #ffffff !important;
+  display: none !important;
 }
 
-a[href*="/cockpit/"] .app-portal-btn-img::before {
+.app-portal-btn-img::before {
   content: "";
   display: inline-block;
   width: 1.65rem;
   height: 1.65rem;
   background: #ffffff;
+  mask: url("/auth/assets/images/user.svg") center / contain no-repeat;
+  -webkit-mask: url("/auth/assets/images/user.svg") center / contain no-repeat;
+}
+
+a[href*="/cockpit/"] .app-portal-btn-img::before {
   mask: url("/auth/assets/images/cockpit.svg") center / contain no-repeat;
   -webkit-mask: url("/auth/assets/images/cockpit.svg") center / contain no-repeat;
 }
