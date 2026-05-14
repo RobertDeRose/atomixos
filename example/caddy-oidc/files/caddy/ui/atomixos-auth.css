@@ -1,0 +1,258 @@
+:root {
+  --anx-bg: #f3f8ff;
+  --anx-surface: #ffffff;
+  --anx-button: #ffffff;
+  --anx-button-prefix: #f1f5f9;
+  --anx-border: #8cb7e3;
+  --anx-text: #061a32;
+  --anx-muted: #31506f;
+  --anx-accent: #075fab;
+  --anx-accent-2: #00796b;
+}
+
+:root.pf-v6-theme-dark {
+  color-scheme: dark;
+  --anx-bg: #071426;
+  --anx-surface: #0e2748;
+  --anx-button: #1b477a;
+  --anx-button-prefix: #173a64;
+  --anx-border: #2c5d93;
+  --anx-text: #eaf4ff;
+  --anx-muted: #b8d0eb;
+  --anx-accent: #62b3ff;
+  --anx-accent-2: #21d4a7;
+}
+
+:root.pf-v6-theme-light {
+  color-scheme: light;
+}
+
+body {
+  background: radial-gradient(circle at 50% 0%, rgba(7, 95, 171, 0.18), transparent 32%), var(--anx-bg) !important;
+  color: var(--anx-text) !important;
+}
+
+.app-page {
+  background: transparent !important;
+}
+
+.app-container {
+  position: relative !important;
+  background: color-mix(in srgb, var(--anx-surface) 96%, transparent) !important;
+  border: 1px solid color-mix(in srgb, var(--anx-border) 70%, transparent) !important;
+  border-radius: 0 !important;
+  box-shadow: 0 20px 60px rgba(6, 26, 50, 0.16) !important;
+  color: var(--anx-text) !important;
+}
+
+#authenticators {
+  margin-top: 2rem !important;
+}
+
+.atomixos-theme-toggle {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 20;
+  display: grid;
+  width: 2.25rem;
+  height: 2.25rem;
+  place-items: center;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--anx-accent);
+  cursor: pointer;
+  font: inherit;
+}
+
+.atomixos-theme-toggle:hover,
+.atomixos-theme-toggle:focus-visible {
+  outline: 0;
+}
+
+.atomixos-theme-toggle svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  fill: currentColor;
+}
+
+.app-inp-lbl {
+  display: none !important;
+}
+
+.logo-box,
+.logo-col-box {
+  display: grid !important;
+  justify-items: center !important;
+  gap: 0.65rem !important;
+  text-align: center !important;
+}
+
+.logo-box {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: 0 !important;
+}
+
+.logo-img {
+  width: min(13rem, 62vw) !important;
+  height: auto !important;
+  filter: drop-shadow(0 14px 28px rgba(6, 26, 50, 0.18));
+}
+
+.logo-txt,
+.logo-col-txt,
+.app-login-btn-txt {
+  color: var(--anx-text) !important;
+}
+
+.logo-txt,
+.logo-col-txt {
+  display: block !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: 0 !important;
+}
+
+.logo-col-box .atomixos-auth-card {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.app-login-btn-box {
+  border: 1px solid color-mix(in srgb, var(--anx-border) 65%, transparent) !important;
+  border-radius: 8px !important;
+  overflow: hidden !important;
+  background: var(--anx-button) !important;
+  box-shadow: none !important;
+}
+
+.app-login-btn-box:hover,
+.app-login-btn-box:focus-within {
+  border-color: var(--anx-accent) !important;
+  box-shadow: 0 10px 26px rgba(6, 26, 50, 0.12) !important;
+}
+
+.app-login-btn-txt span {
+  color: var(--anx-text) !important;
+  text-transform: none !important;
+}
+
+.atomixos-auth-brand {
+  display: grid;
+  justify-items: center;
+  gap: 0.85rem;
+  margin: 1.75rem auto 1.25rem;
+  text-align: center;
+}
+
+.atomixos-auth-hidden {
+  display: none !important;
+}
+
+.atomixos-auth-brand img {
+  width: min(13rem, 62vw);
+  filter: drop-shadow(0 14px 28px rgba(6, 26, 50, 0.18));
+}
+
+.atomixos-auth-card {
+  border: 1px solid color-mix(in srgb, var(--anx-border) 70%, transparent) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 20px 60px rgba(6, 26, 50, 0.16) !important;
+}
+
+a[href*="/cockpit/"] .app-portal-btn-img {
+  display: grid !important;
+  place-items: center !important;
+  width: 3.75rem !important;
+  min-width: 3.75rem !important;
+  height: 4rem !important;
+  background: linear-gradient(135deg, #0078d4, #50e6ff) !important;
+  border-radius: 0.375rem 0 0 0.375rem !important;
+  color: var(--anx-accent) !important;
+}
+
+.app-portal-btn-img {
+  width: 3.75rem !important;
+  min-width: 3.75rem !important;
+  background: linear-gradient(135deg, #0078d4, #50e6ff) !important;
+  color: #ffffff !important;
+}
+
+.app-portal-btn-box,
+.app-portal-btn-txt,
+.app-login-btn-box,
+.app-login-btn-txt {
+  background: var(--anx-button) !important;
+  border-color: color-mix(in srgb, var(--anx-border) 65%, transparent) !important;
+  color: var(--anx-text) !important;
+}
+
+.app-portal-btn-box {
+  border: 1px solid color-mix(in srgb, var(--anx-border) 65%, transparent) !important;
+  box-shadow: none !important;
+  overflow: hidden !important;
+}
+
+a[href*="/cockpit/"] .app-portal-btn-img i {
+  display: none !important;
+}
+
+.app-portal-btn-img i {
+  color: #ffffff !important;
+}
+
+a[href*="/cockpit/"] .app-portal-btn-img::before {
+  content: "";
+  display: inline-block;
+  width: 1.65rem;
+  height: 1.65rem;
+  background: #ffffff;
+  mask: url("/auth/assets/images/cockpit.svg") center / contain no-repeat;
+  -webkit-mask: url("/auth/assets/images/cockpit.svg") center / contain no-repeat;
+}
+
+.atomixos-provider-entra .app-login-btn-box > div:first-child {
+  display: grid !important;
+  place-items: center !important;
+  width: 5rem !important;
+  background: linear-gradient(135deg, #0078d4, #50e6ff) !important;
+}
+
+.atomixos-provider-entra .app-login-btn-box > div:first-child i {
+  display: none !important;
+}
+
+.atomixos-provider-entra .app-login-btn-box > div:first-child::before {
+  content: "";
+  display: inline-block;
+  width: 2.25rem;
+  height: 2.25rem;
+  background: url("/auth/assets/images/microsoft-entra.svg") center / contain no-repeat;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.pf-v6-theme-light) {
+    --anx-bg: #071426;
+    --anx-surface: #0e2748;
+    --anx-button: #1b477a;
+    --anx-button-prefix: #173a64;
+    --anx-border: #2c5d93;
+    --anx-text: #eaf4ff;
+    --anx-muted: #b8d0eb;
+    --anx-accent: #62b3ff;
+    --anx-accent-2: #21d4a7;
+  }
+
+  body {
+    background: radial-gradient(circle at 50% 0%, rgba(98, 179, 255, 0.22), transparent 32%), var(--anx-bg) !important;
+  }
+}

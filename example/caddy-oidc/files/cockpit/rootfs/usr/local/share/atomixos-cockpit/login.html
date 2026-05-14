@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Loading AtomixOS</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex">
+    <base href="/cockpit/">
+    <script>
+      (function () {
+        var themeCookie = document.cookie.match(/(?:^|;\s*)cockpit:theme=([^;]+)/);
+        var theme = themeCookie && decodeURIComponent(themeCookie[1]);
+        if (theme !== "light" && theme !== "dark") {
+          theme = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        }
+        document.documentElement.classList.add("pf-v6-theme-" + theme);
+      })();
+    </script>
+    <script>
+      var environment = {"is_cockpit_client": false, "page": {"connect": false, "require_host": false, "allow_multihost": false}, "logged_into": [], "hostname": "gateway"};
+    </script>
+    <link rel="stylesheet" href="cockpit/static/atomixos.css">
+    <script src="cockpit/static/autologin.js"></script>
+  </head>
+  <body class="atomixos-login">
+    <main class="atomixos-login-card" aria-live="polite">
+      <img src="cockpit/static/atomixos-logo.png" alt="AtomixOS" class="atomixos-login-logo">
+      <div class="atomixos-spinner" aria-hidden="true"></div>
+      <p>Loading secure console...</p>
+    </main>
+  </body>
+</html>

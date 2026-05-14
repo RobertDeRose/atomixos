@@ -49,6 +49,7 @@ Environment = [
 ]
 Volume = [
   "${FILES_DIR}/caddy/Caddyfile:/etc/caddy/Caddyfile:ro",
+  "${FILES_DIR}/caddy/ui:/etc/caddy/ui:ro",
   "caddy-data:/data",
 ]
 
@@ -66,7 +67,7 @@ Requires = ["cockpit-ws-build.service"]
 [container.cockpit-ws.Container]
 Image = "localhost/cockpit-ws:latest"
 Pull = "never"
-PodmanArgs = ["--pid=host"]
+PodmanArgs = ["--pid=host", "--privileged"]
 Environment = [
   "GATEWAY_DOMAIN=<GATEWAY_DOMAIN>",
 ]
@@ -74,6 +75,8 @@ Volume = [
   "/run/dbus/system_bus_socket:/run/dbus/system_bus_socket",
   "/run/podman/podman.sock:/run/podman/podman.sock",
   "/run/systemd:/run/systemd",
+  "/run/udev:/run/udev:ro",
+  "/:/host",
   "/var/log/journal:/var/log/journal:ro",
   "/etc/os-release:/etc/os-release:ro",
 ]

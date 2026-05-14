@@ -149,6 +149,43 @@
         };
       };
 
+      nixosConfigurations.bundle-test-vm = nixpkgs.lib.nixosSystem {
+        inherit system;
+        modules = [
+          "${nixpkgs}/nixos/modules/virtualisation/qemu-vm.nix"
+          overlayModule
+          ./modules/base.nix
+          ./modules/hardware-qemu.nix
+          (
+            { lib, pkgs, ... }:
+            {
+              virtualisation = {
+                memorySize = 4096;
+                diskSize = 8192;
+                writableStore = true;
+                qemu.options = [
+                  "-smp 4"
+                  "-nographic"
+                  "-netdev user,id=lan.0,net=172.20.30.0/24,dhcpstart=172.20.30.10,hostfwd=tcp:127.0.0.1:8080-172.20.30.1:8080"
+                  "-device virtio-net-pci,netdev=lan.0,mac=52:54:00:12:30:01"
+                ];
+              };
+
+              networking.hostName = lib.mkForce "gateway";
+              services.getty.autologinUser = lib.mkForce "admin";
+              atonic.firewall.extraInputRules = ''
+                tcp dport { 22, 80, 443 } accept comment "bundle-test forwarded WAN services"
+              '';
+
+              environment.systemPackages = [ pkgs.curl ];
+            }
+          )
+        ];
+        specialArgs = {
+          inherit self developmentMode;
+        };
+      };
+
       # ── Package outputs ────────────────────────────────────────────────────
 
       packages.${system} = {
@@ -322,10 +359,17 @@
 
       # ── QEMU VM for development ───────────────────────────────────────────
 
-      # Quick access: nix run .#rock64-qemu-vm
-      apps.${system}.rock64-qemu-vm = {
-        type = "app";
-        program = "${self.nixosConfigurations.rock64-qemu.config.system.build.vm}/bin/run-nixos-vm";
+      apps.${system} = {
+        # Quick access: nix run .#rock64-qemu-vm
+        rock64-qemu-vm = {
+          type = "app";
+          program = "${self.nixosConfigurations.rock64-qemu.config.system.build.vm}/bin/run-nixos-vm";
+        };
+
+        bundle-test-vm = {
+          type = "app";
+          program = "${self.nixosConfigurations.bundle-test-vm.config.system.build.vm}/bin/run-gateway-vm";
+        };
       };
 
       # ── Development shell ────────────────────────────────────────────────

@@ -1,0 +1,5 @@
+{
+  "requires": {
+    "cockpit": "239"
+  }
+}

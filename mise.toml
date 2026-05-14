@@ -100,6 +100,73 @@ fi
 "${cmd[@]}" nix build .#boot-script -o result-boot-script
 """
 
+[tasks."vm:bundle-test"]
+description = "Run a QEMU VM for testing config.toml bundles"
+usage = """
+flag "--build-only" help="Only build the VM runner"
+"""
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+
+nix build .#nixosConfigurations.bundle-test-vm.config.system.build.vm -o result-bundle-test-vm
+
+runner=./result-bundle-test-vm/bin/run-gateway-vm
+host_runner="$runner"
+if [ "$(uname -s)" = "Darwin" ]; then
+  host_bash=$(nix build --no-link --print-out-paths nixpkgs#legacyPackages.aarch64-darwin.bash.out)
+  host_coreutils=$(nix build --no-link --print-out-paths nixpkgs#legacyPackages.aarch64-darwin.coreutils.out)
+  host_qemu=$(nix build --no-link --print-out-paths nixpkgs#legacyPackages.aarch64-darwin.qemu.out)
+  host_e2fsprogs=$(nix build --no-link --print-out-paths nixpkgs#legacyPackages.aarch64-darwin.e2fsprogs.bin)
+
+  host_runner=./.bundle-test-vm-runner
+  rm -f "$host_runner"
+  cp "$runner" "$host_runner"
+  chmod +x "$host_runner"
+  HOST_BASH="$host_bash" \
+  HOST_COREUTILS="$host_coreutils" \
+  HOST_QEMU="$host_qemu" \
+  HOST_E2FSPROGS="$host_e2fsprogs" \
+    perl -0pi \
+      -e 's{^#! .*?/bin/bash}{"#! $ENV{HOST_BASH}/bin/bash"}me;
+          s{export PATH=.*?/bin}{"export PATH=$ENV{HOST_COREUTILS}/bin"}e;
+          s{/nix/store/[^[:space:]]+-qemu-[^/]+/bin/qemu-img}{"$ENV{HOST_QEMU}/bin/qemu-img"}ge;
+          s{/nix/store/[^[:space:]]+-qemu-[^/]+/bin/qemu-system-aarch64}{"$ENV{HOST_QEMU}/bin/qemu-system-aarch64"}ge;
+          s{/nix/store/[^[:space:]]+-e2fsprogs-[^/]+/bin/mkfs.ext4}{"$ENV{HOST_E2FSPROGS}/bin/mkfs.ext4"}ge;' \
+      "$host_runner"
+  perl -0pi -e 's{accel=kvm:tcg}{accel=hvf:tcg}g' "$host_runner"
+fi
+
+cat <<'EOF'
+Bundle test VM ports:
+  SSH:       ssh -p 10022 admin@127.0.0.1
+  Bootstrap: http://127.0.0.1:8080
+  HTTP:      http://127.0.0.1:8081
+  HTTPS:     https://127.0.0.1:8443
+
+Apply an example bundle with:
+  curl -F config_file=@config.tar.zst http://127.0.0.1:8080/apply
+EOF
+
+if [ "${usage_build_only:-false}" = "true" ]; then
+  exit 0
+fi
+
+for port in 10022 8080 8081 8443; do
+  if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+    echo "Host port $port is already in use; stop that process or edit vm:bundle-test ports." >&2
+    lsof -nP -iTCP:"$port" -sTCP:LISTEN >&2 || true
+    exit 1
+  fi
+done
+
+export QEMU_NET_OPTS="hostfwd=tcp:127.0.0.1:10022-:22,hostfwd=tcp:127.0.0.1:8081-:80,hostfwd=tcp:127.0.0.1:8443-:443"
+vm_state_dir=$(mktemp -d "${TMPDIR:-/tmp}/atomixos-bundle-test-vm.XXXXXXXXXX")
+trap 'rm -rf "$vm_state_dir"' EXIT
+export NIX_DISK_IMAGE="$vm_state_dir/gateway.qcow2"
+exec "$host_runner"
+"""
+
 [tasks.build]
 description = "Build artifacts and retain the last 2 distinct images"
 usage = """

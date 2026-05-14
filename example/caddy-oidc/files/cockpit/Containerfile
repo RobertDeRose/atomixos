@@ -1,13 +1,26 @@
-FROM quay.io/fedora/fedora:latest
+FROM quay.io/fedora/fedora:42
 
 RUN dnf install -y --setopt=install_weak_deps=False \
     cockpit-bridge \
-    cockpit-networkmanager \
+    cockpit-files \
     cockpit-podman \
-    cockpit-storaged \
     cockpit-system \
     cockpit-ws \
+    openssh-clients \
     podman \
     && dnf clean all
 
-CMD ["/bin/sh", "-c", "printf '[WebService]\nAllowUnencrypted = true\nLoginTo = false\nProtocolHeader = X-Forwarded-Proto\nOrigins = https://%s\nUrlRoot = /cockpit/\n' \"${GATEWAY_DOMAIN:?GATEWAY_DOMAIN is required}\" > /etc/cockpit/cockpit.conf && exec /usr/libexec/cockpit-ws --no-tls --local-session /usr/bin/cockpit-bridge"]
+COPY rootfs/ /
+
+RUN chmod 0755 \
+    /usr/local/bin/cockpit-auth-atomixos \
+    /usr/local/bin/cockpit-beiboot-bridge \
+    /usr/local/bin/start-cockpit \
+    && mkdir -p /usr/share/cockpit/branding/default /usr/share/cockpit/branding/fedora \
+    && ln -sf ../../static/atomixos.css /usr/share/cockpit/branding/default/branding.css \
+    && ln -sf ../../static/atomixos.css /usr/share/cockpit/branding/fedora/branding.css \
+    && ln -sf ../../static/atomixos-logo.png /usr/share/cockpit/branding/default/logo.png \
+    && ln -sf ../../static/atomixos-logo.png /usr/share/cockpit/branding/fedora/logo.png \
+    && python3 /usr/local/bin/patch-cockpit.py
+
+CMD ["/usr/local/bin/start-cockpit"]

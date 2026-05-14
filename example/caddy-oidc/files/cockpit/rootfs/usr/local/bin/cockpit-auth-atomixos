@@ -1,0 +1,169 @@
+#!/usr/bin/python3
+import base64
+import json
+import os
+import sys
+import time
+
+
+def send_frame(content):
+    data = json.dumps(content).encode()
+    os.write(1, str(len(data) + 1).encode())
+    os.write(1, b"\n\n")
+    os.write(1, data)
+
+
+def deny(message):
+    send_frame(
+        {
+            "command": "init",
+            "problem": "access-denied",
+            "message": message,
+        }
+    )
+    sys.exit(1)
+
+
+def read_size(fd):
+    size = 0
+    seen = 0
+    while True:
+        chunk = os.read(fd, 1)
+        if not chunk:
+            return None
+        if chunk == b"\n":
+            return size
+        if chunk < b"0" or chunk > b"9":
+            raise ValueError("invalid frame: size contains non-digit")
+        size = (size * 10) + int(chunk)
+        seen += 1
+        if seen > 7:
+            raise ValueError("invalid frame: size too long")
+
+
+def read_frame(fd):
+    size = read_size(fd)
+    if size is None:
+        raise ValueError("unexpected EOF reading cockpit frame size")
+    data = b""
+    while size > 0:
+        chunk = os.read(fd, size)
+        if not chunk:
+            raise ValueError("unexpected EOF reading cockpit frame")
+        size -= len(chunk)
+        data += chunk
+    return json.loads(data.decode())
+
+
+def send_authorize(challenge=None, response=None):
+    command = {"command": "authorize"}
+    if challenge:
+        command["cookie"] = f"atomixos{os.getpid()}{time.time()}"
+        command["challenge"] = challenge
+    if response:
+        command["response"] = response
+    send_frame(command)
+
+
+def b64url_decode(value):
+    padding = "=" * ((4 - len(value) % 4) % 4)
+    return base64.urlsafe_b64decode((value + padding).encode())
+
+
+def decode_jwt_claims(token):
+    parts = token.split(".")
+    if len(parts) != 3:
+        deny("invalid bearer token format")
+
+    try:
+        header = json.loads(b64url_decode(parts[0]))
+        claims = json.loads(b64url_decode(parts[1]))
+        b64url_decode(parts[2])
+    except (ValueError, json.JSONDecodeError):
+        deny("invalid bearer token encoding")
+
+    # Caddy/AuthCrunch already validates the portal token before proxying to
+    # Cockpit. The public keys for asymmetric JWTs are not exported into this
+    # container today, so Cockpit re-validates claims but relies on Caddy as the
+    # signature verification boundary. Never accept unsigned JWTs.
+    algorithm = header.get("alg")
+    allowed_algorithms = {
+        "ES256",
+        "ES384",
+        "ES512",
+        "HS256",
+        "HS384",
+        "HS512",
+        "PS256",
+        "PS384",
+        "PS512",
+        "RS256",
+        "RS384",
+        "RS512",
+    }
+    if algorithm not in allowed_algorithms:
+        deny(f"unsupported bearer token algorithm: {algorithm}")
+
+    now = int(time.time())
+    exp = claims.get("exp")
+    if not isinstance(exp, int) or exp <= now:
+        deny("expired bearer token")
+    nbf = claims.get("nbf")
+    if isinstance(nbf, int) and nbf > now:
+        deny("bearer token is not active yet")
+
+    return claims
+
+
+def claim_values(value):
+    if isinstance(value, str):
+        return value.split()
+    if isinstance(value, list):
+        return [item for item in value if isinstance(item, str)]
+    return []
+
+
+def role_claims(claims):
+    roles = []
+    for key in ("roles", "role", "groups", "group"):
+        roles.extend(claim_values(claims.get(key)))
+    return set(roles)
+
+
+def local_user_for_claims(claims):
+    required_role = "authp/admin"
+    if required_role not in role_claims(claims):
+        deny("bearer token does not include required Cockpit role")
+    # AtomixOS currently provisions only the admin user. Keep this function
+    # isolated so future config.toml user/group support can map roles here.
+    return "admin"
+
+
+def bearer_token(response):
+    prefix = "Bearer "
+    if not response.startswith(prefix):
+        deny("missing bearer token")
+    return response[len(prefix) :]
+
+
+try:
+    send_authorize(challenge="*")
+    # Cockpit-ws sends the authorize response on stdin (fd 0).
+    response = read_frame(0).get("response", "")
+    user = local_user_for_claims(decode_jwt_claims(bearer_token(response)))
+except Exception as exc:
+    deny(str(exc))
+
+send_authorize(response="ssh-agent")
+env = os.environ.copy()
+# Launch the beiboot host bridge via a small wrapper script so the inline
+# code is readable and debuggable.
+os.execlpe(
+    "python3",
+    "python3",
+    "/usr/local/bin/cockpit-beiboot-bridge",
+    "--remote-bridge",
+    "never",
+    f"{user}@127.0.0.1",
+    env,
+)

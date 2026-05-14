@@ -108,6 +108,20 @@ list_units_by_mode() {
 	runtime_metadata_query "$filter" --arg mode "$mode"
 }
 
+list_build_units_by_mode() {
+	local mode="$1"
+	# shellcheck disable=SC2016
+	local filter='.units[] | select(.mode == $mode and (.service // "") != "" and (.filename // "" | endswith(".build"))) | .service'
+	runtime_metadata_query "$filter" --arg mode "$mode"
+}
+
+list_non_build_units_by_mode() {
+	local mode="$1"
+	# shellcheck disable=SC2016
+	local filter='.units[] | select(.mode == $mode and (.service // "") != "" and ((.filename // "" | endswith(".build")) | not)) | .service'
+	runtime_metadata_query "$filter" --arg mode "$mode"
+}
+
 if [ ! -f "$CONFIG_ROOT/config.toml" ]; then
 	log "No provisioned config present, skipping"
 	exit 0
@@ -135,12 +149,21 @@ failed_units=()
 
 while IFS= read -r service_name; do
 	[ -n "$service_name" ] || continue
+	log "Running build $service_name"
+	if ! systemctl restart "$service_name"; then
+		log "Failed to run build $service_name"
+		failed_units+=("$service_name")
+	fi
+done < <(list_build_units_by_mode rootful)
+
+while IFS= read -r service_name; do
+	[ -n "$service_name" ] || continue
 	log "Restarting $service_name"
 	if ! systemctl restart "$service_name"; then
 		log "Failed to restart $service_name"
 		failed_units+=("$service_name")
 	fi
-done < <(list_units_by_mode rootful)
+done < <(list_non_build_units_by_mode rootful)
 
 if has_rootless_units; then
 	while IFS= read -r service_name; do

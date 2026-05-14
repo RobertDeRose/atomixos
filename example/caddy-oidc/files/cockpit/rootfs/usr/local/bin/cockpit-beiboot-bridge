@@ -1,0 +1,23 @@
+#!/usr/bin/python3
+"""Cockpit beiboot bridge launcher with NixOS host environment."""
+import cockpit.beiboot as b
+
+
+def _python_interpreter(comment):
+    """Return a command tuple that starts the host bridge with NixOS paths."""
+    return (
+        (
+            "env",
+            "PATH=/run/current-system/sw/bin:/run/wrappers/bin:$PATH",
+            "LD_LIBRARY_PATH=/run/current-system/sw/lib:$LD_LIBRARY_PATH",
+            "XDG_DATA_DIRS=/data/cockpit/share:/usr/local/share:/usr/share",
+            "/run/current-system/sw/bin/python3",
+            "-ic",
+            f"# {comment}",
+        ),
+        (),
+    )
+
+
+b.python_interpreter = _python_interpreter
+b.main()

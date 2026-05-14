@@ -554,6 +554,7 @@
       htop
       curl
       jq
+      python3
       f2fs-tools
       kmod # modprobe — systemd needs this for loading kernel modules
     ];

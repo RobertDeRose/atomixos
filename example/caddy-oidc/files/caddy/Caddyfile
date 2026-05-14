@@ -22,8 +22,17 @@
 			enable identity provider azure
 
 			ui {
+				theme basic
+				template login /etc/caddy/ui/login.template
+				template portal /etc/caddy/ui/portal.template
+				custom css path /etc/caddy/ui/atomixos-auth.css
+				custom js path /etc/caddy/ui/atomixos-auth.js
+				static_asset "assets/images/atomixos-logo.png" "image/png" /etc/caddy/ui/atomixos-logo.png
+				static_asset "assets/images/cockpit.svg" "image/svg+xml" /etc/caddy/ui/cockpit.svg
+				static_asset "assets/images/microsoft-entra.svg" "image/svg+xml" /etc/caddy/ui/microsoft-entra.svg
+
 				links {
-					"Cockpit" /cockpit/ icon "las la-server"
+					"Admin Console" /cockpit/ icon "las la-server"
 				}
 			}
 
@@ -32,15 +41,16 @@
 				action add role authp/user
 			}
 
-		transform user {
-			match realm azure
-			match roles {$ENTRA_ADMIN_GROUP_NAME}
-			action add role authp/admin
-		}
+			transform user {
+				match realm azure
+				match roles {$ENTRA_ADMIN_GROUP_NAME}
+				action add role authp/admin
+			}
 		}
 
 		authorization policy user-policy {
 			set auth url /auth/
+			set access_token cookie name AUTHP_ACCESS_TOKEN
 			crypto key verify {env.JWT_SHARED_KEY}
 			allow roles authp/admin authp/user
 			validate bearer header
@@ -49,6 +59,7 @@
 
 		authorization policy admin-policy {
 			set auth url /auth/
+			set access_token cookie name AUTHP_ACCESS_TOKEN
 			crypto key verify {env.JWT_SHARED_KEY}
 			allow roles authp/admin
 			validate bearer header
@@ -62,14 +73,24 @@
 
 	redir / /cockpit/ 302
 	redir /cockpit /cockpit/ 302
+	header /auth/assets/* {
+		Cache-Control "no-store, no-cache, must-revalidate"
+		Pragma "no-cache"
+		Expires "0"
+		defer
+	}
 
 	route /auth* {
 		authenticate with myportal
 	}
 
 	route /cockpit/* {
+		header Cache-Control "no-store"
+		header Pragma "no-cache"
 		authorize with admin-policy
-		reverse_proxy localhost:9090
+		reverse_proxy localhost:9090 {
+			header_up Authorization "Bearer {http.request.cookie.AUTHP_ACCESS_TOKEN}"
+		}
 	}
 
 	# Add user-facing applications here. They can use user-policy to allow

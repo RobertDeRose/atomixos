@@ -203,7 +203,8 @@ Key points:
 - The `${FILES_DIR}` token is replaced at provision time with the path to
   the extracted bundle files
 - `GATEWAY_DOMAIN` is passed to both containers; Caddy uses it for the site
-  address and Cockpit uses it when generating `/etc/cockpit/cockpit.conf`
+  address and Cockpit uses it to generate the real-device and VM-forwarded
+  origins in `/etc/cockpit/cockpit.conf`
 - Caddy uses `tls internal`, so HTTPS is local-only and does not require public
   DNS or Let's Encrypt validation
 - The `management` network is defined for future use when containers move

@@ -69,6 +69,67 @@ timer.
 
 ## Interactive Debugging
 
+### Bundle Test VM
+
+Use `vm:bundle-test` to boot an interactive AtomixOS VM for exercising real
+`config.toml` bundles without physical hardware:
+
+```sh
+mise run vm:bundle-test
+```
+
+Each launch uses a fresh temporary VM disk image. The VM runner is still built
+through Nix and reused from the store when inputs have not changed, but runtime
+state from previous bundle tests is discarded when the VM exits.
+
+The VM uses the QEMU hardware profile with `eth0` as WAN and a second virtio NIC
+as LAN. Host ports are forwarded for common operator workflows:
+
+| Host URL/Port                  | Guest service        |
+|--------------------------------|----------------------|
+| `ssh -p 10022 admin@127.0.0.1` | SSH                  |
+| `http://127.0.0.1:8080`        | Bootstrap/reapply UI |
+| `http://127.0.0.1:8081`        | Caddy HTTP           |
+| `https://127.0.0.1:8443`       | Caddy HTTPS          |
+
+Build the runner without launching it:
+
+```sh
+mise run vm:bundle-test --build-only
+```
+
+Apply a bundle from the host:
+
+```sh
+tar --zstd -cvf config.tar.zst -C example/caddy-oidc .
+curl -F config_file=@config.tar.zst http://127.0.0.1:8080/apply
+```
+
+For domain-based Caddy examples, map the example domain to localhost while
+testing from the host:
+
+```sh
+curl -k --resolve gateway.example.com:8443:127.0.0.1 \
+  https://gateway.example.com:8443/cockpit/
+```
+
+For browser testing, add a local hosts entry and include the forwarded HTTPS
+port in the URL:
+
+```text
+127.0.0.1 gateway.example.com
+```
+
+Then browse to `https://gateway.example.com:8443/`.
+
+The Cockpit container generates both the real device origin and the VM forwarded
+HTTPS origin from `GATEWAY_DOMAIN` because Cockpit accepts space-separated
+origins.
+
+SSH is key-only and uses the provisioned `/data/config/ssh-authorized-keys`
+state. On a fresh VM, use the serial console or apply a bundle containing an
+admin key before expecting `ssh -p 10022 admin@127.0.0.1` to succeed.
+
 Launch an interactive QEMU VM with a Python REPL:
 
 ```sh

@@ -1,0 +1,688 @@
+:root,
+:root.pf-v6-theme-light,
+.pf-v6-theme-light {
+  color-scheme: light;
+  --anx-bg: #f3f8ff;
+  --anx-bg-2: #e4f0ff;
+  --anx-surface: #ffffff;
+  --anx-surface-2: #edf6ff;
+  --anx-border: #8cb7e3;
+  --anx-text: #061a32;
+  --anx-muted: #31506f;
+  --anx-accent: #075fab;
+  --anx-accent-2: #00796b;
+  --anx-link: #064f93;
+  --anx-danger: #b42337;
+}
+
+:root.pf-v6-theme-dark,
+.pf-v6-theme-dark {
+  color-scheme: dark;
+  --anx-bg: #071426;
+  --anx-bg-2: #0b2140;
+  --anx-surface: #0e2748;
+  --anx-surface-2: #14345d;
+  --anx-border: #2c5d93;
+  --anx-text: #eaf4ff;
+  --anx-muted: #b8d0eb;
+  --anx-accent: #62b3ff;
+  --anx-accent-2: #21d4a7;
+  --anx-link: #8ed0ff;
+  --anx-danger: #ff6b7a;
+}
+
+:root,
+:root.pf-v6-theme-light,
+.pf-v6-theme-light {
+  --anx-app-shell: #ffffff;
+  --anx-app-muted: #f7fbff;
+  --anx-app-frame: #f1f7ff;
+  --anx-topbar: #ffffff;
+}
+
+:root.pf-v6-theme-dark,
+.pf-v6-theme-dark {
+  --anx-app-shell: #0d213b;
+  --anx-app-muted: #101f33;
+  --anx-app-frame: #071426;
+  --anx-topbar: #102b4f;
+}
+
+:root,
+:root.pf-v6-theme-light,
+:root.pf-v6-theme-dark,
+.pf-v6-theme-light,
+.pf-v6-theme-dark {
+  --pf-t--global--border--radius--small: 2px;
+  --pf-t--global--border--radius--medium: 3px;
+  --pf-t--global--border--radius--large: 5px;
+  --pf-t--global--text--color--regular: var(--anx-text);
+  --pf-t--global--text--color--subtle: var(--anx-muted);
+  --pf-t--global--background--color--primary--default: var(--anx-bg);
+  --pf-t--global--background--color--secondary--default: var(--anx-bg-2);
+  --pf-v6-global--BackgroundColor--100: var(--anx-bg);
+  --pf-v6-global--BackgroundColor--200: var(--anx-bg-2);
+  --pf-v6-global--Color--100: var(--anx-text);
+  --pf-v6-global--Color--200: var(--anx-muted);
+  --pf-v6-global--primary-color--100: var(--anx-accent);
+  --pf-v6-global--primary-color--200: var(--anx-accent-2);
+  --pf-v6-global--link--Color: var(--anx-link);
+  --pf-v6-global--BorderColor--100: var(--anx-border);
+  --pf-v6-global--BorderRadius--sm: 2px;
+  --pf-v6-global--BorderRadius--lg: 5px;
+}
+
+body,
+.pf-v6-c-page,
+.pf-v6-c-page__main,
+.ct-page-fill {
+  background: radial-gradient(circle at 15% 0%, color-mix(in srgb, var(--anx-accent) 18%, transparent), transparent 32%), var(--anx-bg) !important;
+  color: var(--anx-text) !important;
+}
+
+#shell,
+#main,
+#content,
+#content > iframe,
+.area-ct-content {
+  background: var(--anx-bg) !important;
+}
+
+.pf-v6-c-card,
+.pf-v6-c-panel,
+.pf-v6-c-menu,
+.pf-v6-c-menu__content,
+.pf-v6-c-dropdown__menu,
+.pf-v6-c-popover__content,
+.pf-v6-c-modal-box,
+.pf-v6-c-page__main-section,
+.pf-v6-c-toolbar,
+.pf-v6-c-table,
+.pf-v6-c-data-list,
+.pf-v6-c-description-list,
+.pf-v6-c-description-list__group,
+.pf-v6-c-list,
+.pf-v6-c-tab-content,
+.pf-v6-c-tabs,
+.pf-v6-c-page__main-group,
+.ct-card,
+.ct-table,
+.ct-form,
+.ct-listing-panel,
+.ct-listing,
+.page-ct,
+iframe body {
+  background: var(--anx-surface) !important;
+  border-color: var(--anx-border) !important;
+  color: var(--anx-text) !important;
+}
+
+.pf-v6-c-page__main-section,
+.page-ct,
+.ct-page-fill,
+.curtains-ct,
+.listing-ct,
+.terminal-ct,
+.logs-ct,
+.accounts-ct,
+.users-page,
+.overview-page,
+.cockpit-log-panel,
+.cockpit-log-panel .pf-v6-c-page__main-section {
+  background: var(--anx-app-shell) !important;
+  border-color: color-mix(in srgb, var(--anx-border) 45%, transparent) !important;
+  color: var(--anx-text) !important;
+}
+
+#content,
+#content > iframe,
+.area-ct-content {
+  border: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+}
+
+.pf-v6-theme-light .pf-v6-c-page__main-section,
+.pf-v6-theme-light .page-ct,
+.pf-v6-theme-light .ct-page-fill,
+.pf-v6-theme-light .listing-ct,
+.pf-v6-theme-light .terminal-ct,
+.pf-v6-theme-light .logs-ct,
+.pf-v6-theme-light .accounts-ct,
+.pf-v6-theme-light .users-page,
+.pf-v6-theme-light .overview-page {
+  box-shadow: inset 0 1px 0 rgba(140, 183, 227, 0.28) !important;
+}
+
+.pf-v6-theme-dark .pf-v6-c-page__main-section,
+.pf-v6-theme-dark .page-ct,
+.pf-v6-theme-dark .ct-page-fill,
+.pf-v6-theme-dark .listing-ct,
+.pf-v6-theme-dark .terminal-ct,
+.pf-v6-theme-dark .logs-ct,
+.pf-v6-theme-dark .accounts-ct,
+.pf-v6-theme-dark .users-page,
+.pf-v6-theme-dark .overview-page {
+  box-shadow: inset 0 1px 0 rgba(142, 208, 255, 0.12) !important;
+}
+
+.pf-v6-theme-dark .ct-table,
+.pf-v6-theme-dark .pf-v6-c-table,
+.pf-v6-theme-dark .ct-listing,
+.pf-v6-theme-dark .cockpit-log-panel,
+.pf-v6-theme-dark .terminal-ct .terminal,
+.pf-v6-theme-dark .terminal-ct .terminal-container {
+  background: color-mix(in srgb, var(--anx-app-shell) 88%, #000000) !important;
+}
+
+.pf-v6-theme-light .ct-table,
+.pf-v6-theme-light .pf-v6-c-table,
+.pf-v6-theme-light .ct-listing,
+.pf-v6-theme-light .cockpit-log-panel,
+.pf-v6-theme-light .terminal-ct .terminal,
+.pf-v6-theme-light .terminal-ct .terminal-container {
+  background: var(--anx-surface) !important;
+}
+
+.terminal-ct .terminal,
+.terminal-ct .terminal-container,
+.terminal-ct .xterm,
+.terminal-ct .xterm-viewport,
+.terminal-ct .xterm-screen {
+  border-radius: 5px !important;
+}
+
+.pf-v6-theme-light .pf-v6-c-page__main,
+.pf-v6-theme-light .ct-page-fill,
+.pf-v6-theme-light .page-ct,
+.pf-v6-theme-light .listing-ct,
+.pf-v6-theme-light .terminal-ct,
+.pf-v6-theme-light .logs-ct,
+.pf-v6-theme-light .accounts-ct {
+  background: linear-gradient(180deg, #ffffff 0, var(--anx-app-shell) 13rem, var(--anx-app-frame) 13rem) !important;
+}
+
+.pf-v6-theme-dark .pf-v6-c-page__main,
+.pf-v6-theme-dark .ct-page-fill,
+.pf-v6-theme-dark .page-ct,
+.pf-v6-theme-dark .listing-ct,
+.pf-v6-theme-dark .terminal-ct,
+.pf-v6-theme-dark .logs-ct,
+.pf-v6-theme-dark .accounts-ct {
+  background: linear-gradient(180deg, #102b4f 0, var(--anx-app-shell) 13rem, var(--anx-app-frame) 13rem) !important;
+}
+
+.pf-v6-theme-light .ct-table,
+.pf-v6-theme-light .pf-v6-c-table,
+.pf-v6-theme-light .ct-listing-panel,
+.pf-v6-theme-light .pf-v6-c-card,
+.pf-v6-theme-light .pf-v6-c-panel {
+  background: rgba(255, 255, 255, 0.96) !important;
+}
+
+.pf-v6-theme-dark .ct-table,
+.pf-v6-theme-dark .pf-v6-c-table,
+.pf-v6-theme-dark .ct-listing-panel,
+.pf-v6-theme-dark .pf-v6-c-card,
+.pf-v6-theme-dark .pf-v6-c-panel {
+  background: rgba(14, 39, 72, 0.94) !important;
+}
+
+.service-page,
+.services-page,
+.service-list,
+.terminal-page,
+.logs-page,
+.logs-panel,
+.journal-panel,
+.ct-page-fill > .pf-v6-c-page__main-section,
+.ct-page-fill > .pf-v6-c-panel,
+.ct-page-fill > .ct-listing-panel,
+.ct-page-fill > .ct-table,
+.ct-page-fill > .pf-v6-c-table,
+.ct-page-fill > div,
+.page-ct > div,
+.terminal-ct > div,
+.logs-ct > div,
+.listing-ct > div {
+  background: var(--anx-surface) !important;
+  border-color: color-mix(in srgb, var(--anx-border) 55%, transparent) !important;
+  border-radius: 0 !important;
+  color: var(--anx-text) !important;
+}
+
+.pf-v6-theme-dark .service-page,
+.pf-v6-theme-dark .services-page,
+.pf-v6-theme-dark .service-list,
+.pf-v6-theme-dark .terminal-page,
+.pf-v6-theme-dark .logs-page,
+.pf-v6-theme-dark .logs-panel,
+.pf-v6-theme-dark .journal-panel,
+.pf-v6-theme-dark .ct-page-fill > .pf-v6-c-page__main-section,
+.pf-v6-theme-dark .ct-page-fill > .pf-v6-c-panel,
+.pf-v6-theme-dark .ct-page-fill > .ct-listing-panel,
+.pf-v6-theme-dark .ct-page-fill > .ct-table,
+.pf-v6-theme-dark .ct-page-fill > .pf-v6-c-table,
+.pf-v6-theme-dark .ct-page-fill > div,
+.pf-v6-theme-dark .page-ct > div,
+.pf-v6-theme-dark .terminal-ct > div,
+.pf-v6-theme-dark .logs-ct > div,
+.pf-v6-theme-dark .listing-ct > div {
+  background: var(--anx-surface) !important;
+}
+
+.pf-v6-theme-light .service-page,
+.pf-v6-theme-light .services-page,
+.pf-v6-theme-light .service-list,
+.pf-v6-theme-light .terminal-page,
+.pf-v6-theme-light .logs-page,
+.pf-v6-theme-light .logs-panel,
+.pf-v6-theme-light .journal-panel,
+.pf-v6-theme-light .ct-page-fill > .pf-v6-c-page__main-section,
+.pf-v6-theme-light .ct-page-fill > .pf-v6-c-panel,
+.pf-v6-theme-light .ct-page-fill > .ct-listing-panel,
+.pf-v6-theme-light .ct-page-fill > .ct-table,
+.pf-v6-theme-light .ct-page-fill > .pf-v6-c-table,
+.pf-v6-theme-light .ct-page-fill > div,
+.pf-v6-theme-light .page-ct > div,
+.pf-v6-theme-light .terminal-ct > div,
+.pf-v6-theme-light .logs-ct > div,
+.pf-v6-theme-light .listing-ct > div {
+  background: var(--anx-surface) !important;
+}
+
+.pf-v6-c-card,
+.pf-v6-c-panel,
+.ct-card,
+.ct-listing-panel,
+.ct-listing,
+.ct-table,
+.pf-v6-c-table,
+.pf-v6-c-tabs,
+.pf-v6-c-toolbar,
+.pf-v6-c-page__main-section,
+.service-page,
+.services-page,
+.service-list,
+.terminal-page,
+.logs-page,
+.logs-panel,
+.journal-panel {
+  border-radius: 0 !important;
+}
+
+html body #services .pf-v6-c-page,
+html body #services .pf-v6-c-page__main-container,
+html body #services .pf-v6-c-page__main,
+html body #services .pf-v6-c-page__main-section,
+html body #services .pf-v6-c-card,
+html body #services #services-list,
+html body #journal .pf-v6-c-page,
+html body #journal .pf-v6-c-page__main-container,
+html body #journal .pf-v6-c-page__main,
+html body #journal .pf-v6-c-page__main-section,
+html body #journal .pf-v6-c-card,
+html body #terminal .pf-v6-c-page,
+html body #terminal .pf-v6-c-page__main-container,
+html body #terminal .pf-v6-c-page__main,
+html body #terminal .pf-v6-c-page__main-section,
+html body #terminal .pf-v6-c-card,
+html body #overview.terminal-ct,
+html body #overview.terminal-ct > div {
+  background: var(--anx-surface) !important;
+  border-color: color-mix(in srgb, var(--anx-border) 55%, transparent) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+html body #services .pf-v6-c-page__main-container,
+html body #journal .pf-v6-c-page__main-container,
+html body #terminal .pf-v6-c-page__main-container {
+  margin: 0 !important;
+  width: 100% !important;
+}
+
+html body #services .pf-v6-c-nav.pf-m-horizontal,
+html body #services .pf-v6-c-menu-toggle,
+html body #services .pf-v6-c-text-input-group,
+html body #journal .pf-v6-c-menu-toggle,
+html body #journal .pf-v6-c-text-input-group,
+html body #terminal .pf-v6-c-menu-toggle,
+html body #terminal .pf-v6-c-text-input-group {
+  background: color-mix(in srgb, var(--anx-surface-2) 72%, var(--anx-surface)) !important;
+  border-color: color-mix(in srgb, var(--anx-border) 75%, transparent) !important;
+  border-radius: 3px !important;
+}
+
+.pf-v6-c-card,
+.pf-v6-c-panel,
+.ct-card,
+.ct-listing-panel {
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--anx-border) 55%, transparent) !important;
+}
+
+.pf-v6-c-button,
+.pf-v6-c-menu__item,
+.pf-v6-c-nav__link,
+.pf-v6-c-page__sidebar,
+.pf-v6-c-page__header,
+input,
+select,
+textarea {
+  border-radius: 3px !important;
+}
+
+.pf-v6-c-button,
+.pf-v6-c-button::before,
+.pf-v6-c-button::after,
+.pf-v6-c-button.pf-m-primary,
+.pf-v6-c-button.pf-m-secondary,
+.pf-v6-c-button.pf-m-control,
+.pf-v6-c-menu-toggle,
+.pf-v6-c-menu-toggle::before,
+.pf-v6-c-menu-toggle::after,
+.pf-v6-c-input-group .pf-v6-c-button,
+.pf-v6-c-input-group .pf-v6-c-menu-toggle,
+.pf-v6-c-input-group__item,
+.pf-v6-c-input-group__item .pf-v6-c-button,
+.pf-v6-c-input-group__item .pf-v6-c-menu-toggle,
+.pf-v6-c-dropdown__toggle,
+.pf-v6-c-dropdown__toggle::before,
+.pf-v6-c-dropdown__toggle::after,
+.pf-v6-c-dropdown__toggle-button,
+.pf-v6-c-dropdown__toggle-button::before,
+.pf-v6-c-dropdown__toggle-button::after {
+  border-radius: 0 !important;
+}
+
+.pf-v6-c-button.pf-m-primary {
+  background: linear-gradient(180deg, var(--anx-accent), color-mix(in srgb, var(--anx-accent) 72%, #001b3d)) !important;
+  color: #ffffff !important;
+}
+
+.pf-v6-c-page__sidebar,
+.pf-v6-c-page__sidebar-body,
+nav[aria-label="Global"],
+nav[aria-label="Main"] {
+  background: color-mix(in srgb, var(--anx-bg) 94%, #000000) !important;
+  border-right: 0 !important;
+  box-shadow: none !important;
+}
+
+#hosts-sel,
+#topnav,
+#topnav .ct-topnav,
+#topnav .navbar,
+#topnav .pf-v6-c-toolbar,
+#topnav .pf-v6-c-page__header,
+#topnav .pf-v6-c-page__header-tools {
+  background: var(--anx-topbar) !important;
+  border-color: transparent !important;
+  color: var(--anx-text) !important;
+  box-shadow: none !important;
+}
+
+#hosts-sel .ct-switcher,
+#hosts-sel .username,
+#hosts-sel .at,
+#hosts-sel .hostname,
+#topnav,
+#topnav a,
+#topnav button,
+#topnav .pf-v6-c-button {
+  color: var(--anx-text) !important;
+}
+
+#topnav .pf-v6-c-button,
+#topnav button {
+  background: transparent !important;
+  border-color: transparent !important;
+}
+
+#topnav .pf-v6-c-button:hover,
+#topnav .pf-v6-c-button:focus,
+#topnav button:hover,
+#topnav button:focus {
+  background: color-mix(in srgb, var(--anx-accent) 12%, transparent) !important;
+  border-color: color-mix(in srgb, var(--anx-border) 45%, transparent) !important;
+}
+
+.atomixos-sidebar-collapsed .pf-v6-c-nav__section-title,
+.atomixos-sidebar-collapsed nav[aria-label="Global"] h2,
+.atomixos-sidebar-collapsed nav[aria-label="Main"] h2 {
+  color: var(--anx-accent) !important;
+  font-size: 0.62rem !important;
+  letter-spacing: 0.04em !important;
+  padding-left: 0.45rem !important;
+  padding-right: 0.2rem !important;
+  width: 4.25rem !important;
+}
+
+.pf-v6-c-nav__section-title,
+nav[aria-label="Global"] h2,
+nav[aria-label="Main"] h2 {
+  color: var(--anx-accent) !important;
+  font-size: 0.76rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.1em !important;
+  text-transform: uppercase !important;
+  opacity: 1 !important;
+  padding-top: 1.15rem !important;
+}
+
+.pf-v6-c-nav__link,
+nav[aria-label="Global"] a,
+nav[aria-label="Main"] a {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.75rem !important;
+  color: var(--anx-muted) !important;
+}
+
+.atomixos-nav-icon {
+  display: inline-grid;
+  flex: 0 0 2.15rem;
+  width: 2.15rem;
+  height: 2.15rem;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--anx-accent);
+  font-size: 1.35rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.atomixos-nav-icon svg {
+  width: 1.65rem;
+  height: 1.65rem;
+  fill: currentColor;
+}
+
+.pf-v6-c-nav__link:hover,
+.pf-v6-c-nav__link.pf-m-current,
+nav[aria-label="Global"] a:hover,
+nav[aria-label="Main"] a:hover {
+  background: color-mix(in srgb, var(--anx-accent) 14%, transparent) !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  color: var(--anx-text) !important;
+}
+
+body.atomixos-login {
+  min-height: 100vh;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 50% 20%, color-mix(in srgb, var(--anx-accent) 22%, transparent), transparent 34%),
+    linear-gradient(155deg, var(--anx-bg), var(--anx-bg-2) 58%, var(--anx-bg));
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.atomixos-login-card {
+  display: grid;
+  justify-items: center;
+  gap: 1rem;
+  color: var(--anx-text);
+}
+
+.atomixos-login-logo {
+  width: min(18rem, 70vw);
+  filter: drop-shadow(0 18px 36px rgba(0, 0, 0, 0.45));
+}
+
+.atomixos-spinner {
+  width: 2rem;
+  height: 2rem;
+  border: 3px solid rgba(169, 196, 228, 0.28);
+  border-top-color: #62b3ff;
+  border-radius: 999px;
+  animation: atomixos-spin 0.8s linear infinite;
+}
+
+.atomixos-login-card p {
+  margin: 0;
+  color: var(--anx-muted);
+  letter-spacing: 0.02em;
+}
+
+@keyframes atomixos-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (min-width: 900px) {
+  body.atomixos-sidebar-collapsed #hosts-sel {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 15rem !important;
+    min-width: 15rem !important;
+    height: 4.25rem !important;
+    margin: 0 !important;
+    z-index: 35 !important;
+  }
+
+  body.atomixos-sidebar-collapsed #nav-system {
+    position: absolute !important;
+    left: 0 !important;
+    top: 4.25rem !important;
+    bottom: 0 !important;
+    width: 4.25rem !important;
+    min-width: 4.25rem !important;
+    max-width: 4.25rem !important;
+    padding-left: 0 !important;
+    z-index: 30 !important;
+    background: color-mix(in srgb, var(--anx-bg) 94%, #000000) !important;
+    border-right: 0 !important;
+    box-shadow: none !important;
+    transition: width 190ms ease, min-width 190ms ease, max-width 190ms ease !important;
+  }
+
+  body.atomixos-sidebar-collapsed #topnav {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    margin-left: 0 !important;
+    width: 100% !important;
+    height: 4.25rem !important;
+    padding-left: 15rem !important;
+    background: var(--anx-topbar) !important;
+    border-bottom: 1px solid color-mix(in srgb, var(--anx-border) 30%, transparent) !important;
+  }
+
+  body.atomixos-sidebar-collapsed #content {
+    position: absolute !important;
+    left: 4.25rem !important;
+    right: 0 !important;
+    top: 4.25rem !important;
+    bottom: 0 !important;
+    margin-left: 0 !important;
+    width: calc(100% - 4.25rem) !important;
+  }
+
+  body.atomixos-sidebar-collapsed.atomixos-sidebar-expanded #nav-system {
+    width: 15rem !important;
+    min-width: 15rem !important;
+    max-width: 15rem !important;
+  }
+
+  body.atomixos-sidebar-collapsed #host-apps,
+  body.atomixos-sidebar-collapsed .pf-v6-c-page__sidebar,
+  body.atomixos-sidebar-collapsed nav[aria-label="Global"],
+  body.atomixos-sidebar-collapsed nav[aria-label="Main"] {
+    width: 4.25rem !important;
+    min-width: 4.25rem !important;
+    max-width: 4.25rem !important;
+    overflow: hidden !important;
+    background: color-mix(in srgb, var(--anx-bg) 94%, #000000) !important;
+    border-right: 0 !important;
+    box-shadow: none !important;
+    transition: width 190ms ease, min-width 190ms ease, max-width 190ms ease, opacity 140ms ease, visibility 140ms ease !important;
+  }
+
+  body.atomixos-sidebar-collapsed #host-apps *,
+  body.atomixos-sidebar-collapsed nav[aria-label="Global"] *,
+  body.atomixos-sidebar-collapsed nav[aria-label="Main"] * {
+    border-right-color: transparent !important;
+    box-shadow: none !important;
+  }
+
+  body.atomixos-sidebar-collapsed.atomixos-sidebar-expanded #host-apps,
+  body.atomixos-sidebar-collapsed.atomixos-sidebar-expanded .pf-v6-c-page__sidebar,
+  body.atomixos-sidebar-collapsed.atomixos-sidebar-expanded nav[aria-label="Global"],
+  body.atomixos-sidebar-collapsed.atomixos-sidebar-expanded nav[aria-label="Main"] {
+    width: 15rem !important;
+    min-width: 15rem !important;
+    max-width: 15rem !important;
+  }
+
+  body.atomixos-sidebar-collapsed nav[aria-label="Global"] .pf-v6-c-nav__link,
+  body.atomixos-sidebar-collapsed nav[aria-label="Main"] .pf-v6-c-nav__link,
+  body.atomixos-sidebar-collapsed nav[aria-label="Global"] a,
+  body.atomixos-sidebar-collapsed nav[aria-label="Main"] a {
+    white-space: nowrap;
+  }
+
+  body.atomixos-sidebar-collapsed #host-apps > .search,
+  body.atomixos-sidebar-collapsed #host-apps .pf-v6-c-text-input-group.search {
+    opacity: 0 !important;
+    pointer-events: none !important;
+    visibility: hidden !important;
+    width: calc(15rem - 1.5rem) !important;
+    transition: opacity 140ms ease, visibility 140ms ease !important;
+  }
+
+  body.atomixos-sidebar-collapsed.atomixos-sidebar-expanded #host-apps > .search,
+  body.atomixos-sidebar-collapsed.atomixos-sidebar-expanded #host-apps .pf-v6-c-text-input-group.search {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    visibility: visible !important;
+  }
+
+  body.atomixos-sidebar-collapsed.atomixos-sidebar-expanded #host-apps > .search {
+    display: block !important;
+    margin: 0.75rem 0.75rem 0.25rem !important;
+    width: calc(15rem - 1.5rem) !important;
+  }
+
+  body.atomixos-sidebar-collapsed.atomixos-sidebar-expanded #host-apps .pf-v6-c-text-input-group.search {
+    background: color-mix(in srgb, var(--anx-surface-2) 62%, var(--anx-bg)) !important;
+    border: 1px solid color-mix(in srgb, var(--anx-border) 65%, transparent) !important;
+    border-radius: 3px !important;
+  }
+
+  body.atomixos-sidebar-collapsed #host-apps > .search .pf-v6-c-text-input-group,
+  body.atomixos-sidebar-collapsed #host-apps > .search input {
+    width: 100% !important;
+  }
+
+  body.atomixos-sidebar-collapsed .atomixos-nav-label {
+    opacity: 0;
+    transition: opacity 140ms ease !important;
+  }
+
+  body.atomixos-sidebar-collapsed.atomixos-sidebar-expanded .atomixos-nav-label {
+    opacity: 1;
+  }
+}

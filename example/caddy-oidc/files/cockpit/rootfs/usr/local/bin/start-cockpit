@@ -1,0 +1,56 @@
+#!/bin/sh
+set -eu
+
+: "${GATEWAY_DOMAIN:?GATEWAY_DOMAIN is required}"
+
+key_dir=/etc/cockpit/host-ssh
+key="$key_dir/id_ed25519"
+host_cockpit_share=/host/data/cockpit/share/cockpit
+host_authorized_keys=/host/data/config/ssh-authorized-keys/admin
+
+mkdir -p "$key_dir" /host/data/config/ssh-authorized-keys "$(dirname "$host_cockpit_share")"
+rm -rf "$host_cockpit_share"
+mkdir -p "$host_cockpit_share"
+cp -a /usr/share/cockpit/. "$host_cockpit_share/"
+
+if [ ! -f "$key" ]; then
+  ssh-keygen -q -t ed25519 -N '' -C cockpit-ws@atomixos -f "$key"
+fi
+
+chmod 700 "$key_dir"
+chmod 600 "$key"
+
+touch "$host_authorized_keys"
+pub=$(cat "$key.pub")
+grep -qxF "$pub" "$host_authorized_keys" || printf '%s\n' "$pub" >> "$host_authorized_keys"
+chmod 600 "$host_authorized_keys"
+
+cat > /etc/cockpit/cockpit.conf <<EOF
+[WebService]
+AllowUnencrypted = true
+CustomLoginPage = /usr/local/share/atomixos-cockpit
+LoginTo = false
+ProtocolHeader = X-Forwarded-Proto
+Origins = https://${GATEWAY_DOMAIN} https://${GATEWAY_DOMAIN}:8443
+Shell = /atomixos-shell/index.html
+UrlRoot = /cockpit/
+
+[bearer]
+Command = /usr/local/bin/cockpit-auth-atomixos
+
+[Basic]
+action = none
+
+[Negotiate]
+action = none
+
+[Ssh-Login]
+host = 127.0.0.1
+connectToUnknownHosts = true
+EOF
+
+export XDG_DATA_DIRS=/host/data/cockpit/share:/usr/local/share:/usr/share
+eval "$(ssh-agent -s)"
+ssh-add "$key"
+
+exec /usr/libexec/cockpit-ws --no-tls

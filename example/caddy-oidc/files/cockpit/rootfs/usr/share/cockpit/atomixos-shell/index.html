@@ -1,0 +1,30 @@
+<!doctype html>
+<html id="shell-page" class="index-page atomixos-shell-page">
+  <head>
+    <title>AtomixOS Console</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script>
+      (function () {
+        var m = document.cookie.match(/(?:^|;\s*)cockpit:theme=([^;]+)/);
+        var t = m && decodeURIComponent(m[1]);
+        if (t !== "light" && t !== "dark") {
+          t = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        }
+        document.documentElement.classList.add("pf-v6-theme-" + t);
+      })();
+    </script>
+    <link rel="icon" href="../static/atomixos-logo.png">
+    <link href="../shell/shell.css" rel="stylesheet">
+    <link href="../../static/branding.css" rel="stylesheet">
+    <link href="../static/atomixos.css" rel="stylesheet">
+    <script src="../base1/cockpit.js"></script>
+    <script src="../manifests-i18n.js"></script>
+    <script src="../shell/po.js"></script>
+    <script src="../shell/shell.js"></script>
+    <script src="../static/atomixos-shell.js"></script>
+  </head>
+  <body class="pf-v6-m-tabular-nums atomixos-shell">
+    <div id="shell"></div>
+  </body>
+</html>
