@@ -81,8 +81,8 @@ Quadlet containers on a persistent `/data` partition.
 
 ### `caddy-authcrunch-cockpit-tutorial`
 
-- Status: in-progress
-- Overview: Create a comprehensive tutorial section in the documentation that provides a
+- Status: completed
+- Overview: Provides a comprehensive tutorial section in the documentation with a
   fully working `config.toml` bundle deploying Caddy with the AuthCrunch plugin for
   Microsoft Entra OIDC authentication, JWT token generation with OIDC group-to-role
   mapping, and Cockpit-ws for container management. The tutorial demonstrates the full
@@ -143,12 +143,13 @@ Quadlet containers on a persistent `/data` partition.
   - Network and volume Quadlet support (completed: `85ec53c`)
   - Bundle file support with `${FILES_DIR}` token substitution (completed)
   - Container, network, volume rendering and sync (completed)
-  - Quadlet `.build` support (new: required for custom cockpit-ws image)
+  - Quadlet `.build` support (completed)
 - Suggested validation:
   - `first-boot-provision validate` on the tutorial config.toml
   - NixOS VM test importing the tutorial bundle and verifying rendered Quadlet files
   - Manual verification with a real Entra tenant (cannot be automated)
-- Suggested first workflow command: `/start-feature caddy-authcrunch-cockpit-tutorial`
+- Delivered in: `docs/src/tutorials/oidc-device-management.md` and
+  `example/caddy-oidc/`
 
 ### `nixstasis-client`
 
