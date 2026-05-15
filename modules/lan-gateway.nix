@@ -18,6 +18,9 @@ in
 
   services.dnsmasq = {
     enable = true;
+    # We intentionally run dnsmasq as LAN-only DHCP/DNS authority. Avoid the
+    # module's default resolv-file flag, which is ignored when no-resolv is set.
+    resolveLocalQueries = false;
     settings = {
       # Only listen on LAN interface
       interface = "eth1";
@@ -36,11 +39,18 @@ in
 
   services.chrony = {
     enable = true;
+    # Rock64 boards have an RK808 RTC, but chronyd holding /dev/rtc open causes
+    # systemd-timedated to log repeated busy warnings. NTP is authoritative for
+    # AtomixOS, so do not let chrony track/trim the RTC.
+    enableRTCTrimming = false;
     servers = [ ];
     initstepslew.enabled = false;
     extraConfig = ''
       # Sync from upstream NTP servers (via WAN / eth0)
-      pool pool.ntp.org offline iburst
+      server 1.ntp.ubuntu.com iburst
+      server 2.ntp.ubuntu.com iburst
+      server 3.ntp.ubuntu.com iburst
+      server 4.ntp.ubuntu.com iburst
 
       # Step large RTC drift whenever upstream time becomes available.
       makestep 1.0 -1

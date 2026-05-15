@@ -107,6 +107,7 @@ nixos-lib.runTest {
       # Use bind-dynamic so dnsmasq doesn't fail if eth2 isn't ready at start.
       services.dnsmasq = {
         enable = true;
+        resolveLocalQueries = false;
         settings = {
           interface = "eth2";
           bind-dynamic = true;

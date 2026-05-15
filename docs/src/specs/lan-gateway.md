@@ -77,7 +77,7 @@ gateway-local DNS names without forwarding queries upstream.
 
 ### ADDED: NTP server on LAN
 
-chrony acts as both an NTP client (syncing from `pool.ntp.org` via WAN) and an NTP server for LAN clients. The
+chrony acts as both an NTP client (syncing from Ubuntu public NTP servers via WAN) and an NTP server for LAN clients. The
 provisioned LAN subnet is allowed to query. When no valid provisioned LAN config exists, the fallback subnet is
 `172.20.30.0/24`.
 

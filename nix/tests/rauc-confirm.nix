@@ -89,6 +89,7 @@ nixos-lib.runTest {
       # Bind to loopback so it starts reliably. eth1 is created later in test.
       services.dnsmasq = {
         enable = true;
+        resolveLocalQueries = false;
         settings = {
           listen-address = "127.0.0.1";
           bind-interfaces = true;

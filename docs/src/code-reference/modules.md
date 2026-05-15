@@ -289,7 +289,7 @@ present with any ports, appends those ports to the platform-required LAN ports o
 
 | Setting  | Value                                             |
 |----------|---------------------------------------------------|
-| Upstream | `pool pool.ntp.org iburst`                        |
+| Upstream | `1.ntp.ubuntu.com` through `4.ntp.ubuntu.com`     |
 | Serve to | provisioned LAN subnet, fallback `172.20.30.0/24` |
 | Fallback | `local stratum 10`                                |
 

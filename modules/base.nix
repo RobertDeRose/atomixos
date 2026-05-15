@@ -162,6 +162,9 @@
       ProtectKernelLogs = lib.mkForce false;
       ProtectControlGroups = lib.mkForce false;
       ProtectHostname = lib.mkForce false;
+      ExecStartPre = lib.mkAfter [
+        "${pkgs.coreutils}/bin/chmod 0440 /var/lib/chrony/chrony.keys"
+      ];
     };
 
     # dnsmasq: disable mount-namespace sandboxing. Upstream sets ProtectSystem,
