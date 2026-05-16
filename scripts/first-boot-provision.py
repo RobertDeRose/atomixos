@@ -523,9 +523,6 @@ def load_users(users_value):
             message = f"expected string at users.{username}.ssh_key"
             raise provision_error(message)
         ssh_key = ssh_key_raw.strip()
-        if username == "admin" and not is_admin:
-            raise provision_error("users.admin.isAdmin must be true for the image admin account")
-
         normalized[username] = {
             "isAdmin": is_admin,
             "ssh_key": ssh_key,
@@ -1196,18 +1193,7 @@ def write_imported_state(parsed: dict, prepared_config: Path, prepared_files: Pa
     signers_path.write_text("\n".join(parsed["ssh_keys"]) + "\n")
     signers_path.chmod(0o600)
 
-    ssh_path = ssh_dir / "admin"
-    admin_user = parsed["users"].get("admin")
-    if admin_user and admin_user["ssh_key"]:
-        ssh_path.write_text(admin_user["ssh_key"] + "\n")
-        ssh_path.chmod(0o600)
-        maybe_chown_user(ssh_path, "admin")
-    else:
-        ssh_path.unlink(missing_ok=True)
-
     for username, user in parsed["users"].items():
-        if username == "admin":
-            continue
         user_ssh_path = ssh_dir / username
         ssh_key = user["ssh_key"]
         if ssh_key:

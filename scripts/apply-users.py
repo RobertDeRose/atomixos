@@ -26,11 +26,7 @@ MANAGED_STATE = Path(os.environ.get("ATOMIXOS_MANAGED_STATE", "/data/config/mana
 SSH_KEYS_DIR = Path(os.environ.get("ATOMIXOS_SSH_KEYS_DIR", "/data/config/ssh-authorized-keys"))
 
 # Users that must never be created, modified, or locked by this script.
-PROTECTED_USERS = {"root", "admin", "appsvc"}
-
-# The NixOS-declared admin user that gets its groups updated but is never
-# created or deleted by this script.
-IMAGE_ADMIN = "admin"
+PROTECTED_USERS = {"root", "appsvc"}
 
 
 def log(msg: str) -> None:
@@ -74,9 +70,6 @@ def run(cmd: list[str]) -> None:
 def ensure_user(name: str, is_admin: bool) -> None:
     """Create or update a managed user account."""
     if name in PROTECTED_USERS:
-        # admin is handled separately for group membership only.
-        if name == IMAGE_ADMIN:
-            ensure_admin_groups(is_admin)
         return
 
     if user_exists(name):
@@ -118,20 +111,6 @@ def ensure_authorized_keys_owner(name: str) -> None:
     user = pwd.getpwnam(name)
     os.chown(key_path, user.pw_uid, user.pw_gid)
     key_path.chmod(0o600)
-
-
-def ensure_admin_groups(is_admin: bool) -> None:
-    """Ensure the image-declared admin user has correct wheel membership."""
-    if not user_exists(IMAGE_ADMIN):
-        return
-    if is_admin and group_exists("wheel"):
-        # admin is already in wheel from NixOS config; this is a no-op safety net.
-        try:
-            wheel = grp.getgrnam("wheel")
-            if IMAGE_ADMIN not in wheel.gr_mem:
-                run(["usermod", "--append", "--groups", "wheel", IMAGE_ADMIN])
-        except KeyError:
-            pass
 
 
 def lock_user(name: str) -> None:

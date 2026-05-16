@@ -456,19 +456,6 @@
       hashedPassword = "!";
     };
 
-    users.users.admin = {
-      isNormalUser = true;
-      extraGroups = [
-        "wheel"
-        "podman"
-      ];
-
-      # Normal operator access is SSH-key-only. The password stays locked even
-      # after provisioning; break-glass serial root recovery is handled
-      # separately on supported hardware.
-      hashedPassword = "!";
-    };
-
     users.users.appsvc = {
       isSystemUser = true;
       group = "appsvc";

@@ -94,6 +94,6 @@ treats `/boot/config.toml` as a seed on a true fresh flash, reprovisioning uses
 USB `config.toml` first and then falls back to the bootstrap UI instead of
 replaying an old `/boot/config.toml`.
 
-The image keeps both `root` and `admin` passwords locked. On Rock64,
+The image keeps `root` locked and does not ship a built-in operator account. On Rock64,
 `_RUT_OH_=1` enables a deterministic serial-only root recovery path on UART2
 (`ttyS2`, 1.5 Mbaud) for the next boot.

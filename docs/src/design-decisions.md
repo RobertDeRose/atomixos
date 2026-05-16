@@ -144,8 +144,8 @@ selection using files.
 
 ## Decision 15: EN18031 authentication
 
-**Choice**: no default passwords, locked local root/admin passwords, SSH key-only access, serial break-glass recovery,
-and Nixstasis-hosted remote management.
+**Choice**: no default passwords, locked local root password, no built-in operator account, SSH key-only access, serial
+break-glass recovery, and optional Nixstasis-based remote management.
 
 **Rationale**: The base image does not host the web management/authentication stack. SSH key-only access and locked
 passwords prevent brute-force attacks on the device, while Nixstasis handles remote management credentials outside the

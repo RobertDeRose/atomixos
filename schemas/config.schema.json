@@ -17,19 +17,6 @@
         "type": "string",
         "pattern": "^[a-z_][a-z0-9_-]{0,31}$"
       },
-      "properties": {
-        "admin": {
-          "allOf": [
-            { "$ref": "#/$defs/userDefinition" },
-            {
-              "required": ["isAdmin"],
-              "properties": {
-                "isAdmin": { "const": true }
-              }
-            }
-          ]
-        }
-      },
       "additionalProperties": {
         "$ref": "#/$defs/userDefinition"
       }

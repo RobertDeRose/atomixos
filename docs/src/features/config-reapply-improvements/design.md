@@ -49,9 +49,9 @@ The existing import path writes derived state under `/data/config`, including:
 - `quadlet/`
 - `quadlet-runtime.json`
 
-The base image currently sets `users.mutableUsers = false` and declares only fixed image users such as `admin` and
-`appsvc`. OpenSSH already reads authorized keys from `/data/config/ssh-authorized-keys/%u`, but arbitrary config-declared
-users do not exist unless the image or a runtime apply step materializes them.
+The base image currently sets `users.mutableUsers = false` and declares only fixed service users such as `appsvc`.
+OpenSSH already reads authorized keys from `/data/config/ssh-authorized-keys/%u`, but arbitrary config-declared
+users do not exist unless a runtime apply step materializes them.
 
 The planned feature states that basic re-apply already works by accepting a POST, overwriting `/data/config`, and running
 Quadlet sync. This feature narrows that behavior into a safer state-machine.
@@ -95,7 +95,6 @@ ssh_key = ""
 Rules:
 
 - `isAdmin` defaults to `false`.
-- `users.admin`, when present, must set `isAdmin = true` because it maps to the image-declared admin account.
 - `ssh_key` defaults to an empty string.
 - At least one admin user with a non-empty SSH public key is required before first boot can complete.
 - Empty SSH keys are ignored, not written as authorized key lines.
