@@ -22,8 +22,8 @@
 - [x] Update `first-boot-provision.py` to parse `[users]` instead of top-level `[admin]`.
 - [x] Persist normalized managed user state under `/data/config` for boot-time and re-apply materialization.
 - [x] Render managed user state and SSH authorized keys for all declared users.
-- [ ] Add a runtime user apply service that materializes managed users from persisted config on boot and re-apply.
-- [ ] Lock or disable managed users removed during config re-apply.
+- [x] Add a runtime user apply service that materializes managed users from persisted config on boot and re-apply.
+- [x] Lock or disable managed users removed during config re-apply.
 - [x] Update LAN settings parsing to consume `[network]` while preserving current defaults.
 - [x] Update firewall parsing to consume firewall rules under `[network]`.
 - [x] Update Quadlet rendering to consume `[containers.container]`, `[containers.network]`, `[containers.volume]`, and

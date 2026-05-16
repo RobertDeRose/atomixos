@@ -17,6 +17,10 @@ let
     install -m0644 ${../../docs/src/atomixos.png} "$out/share/atomixos/atomixos.png"
     install -m0644 ${../../schemas/config.schema.json} "$out/share/atomixos/config.schema.json"
   '';
+  applyUsersScript = pkgs.writeShellScriptBin "apply-users" ''
+    set -euo pipefail
+    exec ${pkgs.python3Minimal}/bin/python3 ${../../scripts/apply-users.py} "$@"
+  '';
 in
 nixos-lib.runTest {
   name = "first-boot-provision";
@@ -37,7 +41,9 @@ nixos-lib.runTest {
         pkgs.jq
         pkgs.python3Minimal
         pkgs.gnutar
+        pkgs.shadow
         provisionCli
+        applyUsersScript
         quadletSyncScript
         pkgs.zstd
       ];
@@ -194,6 +200,33 @@ nixos-lib.runTest {
     gateway.succeed("printf '{\"gateway_cidr\":\"10.44.0.1/24\",\"gateway_ip\":\"10.44.0.1\",\"subnet_cidr\":\"10.44.0.0/24\",\"netmask\":\"255.255.255.0\",\"dhcp_start\":\"10.44.0.1\",\"dhcp_end\":\"10.44.0.200\",\"domain\":\"lab\",\"gateway_aliases\":[\"atomixos\"]}\n' >/tmp/lan-apply/gateway-dhcp-settings.json")
     gateway.fail("PATH=/tmp/lan-apply/bin:$PATH ATOMIXOS_LAN_SETTINGS_FILE=/tmp/lan-apply/gateway-dhcp-settings.json ATOMIXOS_DNSMASQ_CONFIG_DIR=/tmp/lan-apply ATOMIXOS_DNSMASQ_HOSTS_FILE=/tmp/lan-apply/dnsmasq-hosts ATOMIXOS_CHRONY_LAN_FILE=/tmp/lan-apply/chrony-lan.conf ATOMIXOS_LAN_NETWORK_FILE=/tmp/lan-apply/etc/systemd/network/20-lan.network.d/50-atomixos.conf ATOMIXOS_ETC_HOSTS_FILE=/tmp/lan-apply/etc-hosts ATOMIXOS_SYS_CLASS_NET_DIR=/tmp/lan-apply/sys/class/net python3 ${../../scripts/lan-gateway-apply.py} >/tmp/lan-apply/gateway-dhcp.out 2>/tmp/lan-apply/gateway-dhcp.err")
     gateway.succeed("grep -F \"[lan-gateway-apply] dhcp_start and dhcp_end must not include gateway_ip in /tmp/lan-apply/gateway-dhcp-settings.json\" /tmp/lan-apply/gateway-dhcp.err")
+
+    # ── apply-users: create managed users from users.json ──
+    gateway.succeed("mkdir -p /tmp/apply-users-test")
+    gateway.succeed("cat > /tmp/apply-users-test/users.json <<'EOF'\n{\"admin\": {\"isAdmin\": true, \"ssh_key\": \"ssh-ed25519 AAAAC3test admin@test\"}, \"operator\": {\"isAdmin\": true, \"ssh_key\": \"ssh-ed25519 AAAAC3op op@test\"}, \"viewer\": {\"isAdmin\": false, \"ssh_key\": \"\"}}\nEOF")
+    gateway.succeed("ATOMIXOS_USERS_JSON=/tmp/apply-users-test/users.json ATOMIXOS_MANAGED_STATE=/tmp/apply-users-test/managed-users.json python3 ${../../scripts/apply-users.py}")
+    gateway.succeed("id operator")
+    gateway.succeed("id viewer")
+    gateway.succeed("id -nG operator | grep -w wheel")
+    gateway.fail("id -nG viewer | grep -w wheel")
+    gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nmanaged = json.loads(Path('/tmp/apply-users-test/managed-users.json').read_text())\nassert sorted(managed) == ['operator', 'viewer'], managed\nPY")
+
+    # ── apply-users: lock removed users ──
+    gateway.succeed("cat > /tmp/apply-users-test/users.json <<'EOF'\n{\"admin\": {\"isAdmin\": true, \"ssh_key\": \"ssh-ed25519 AAAAC3test admin@test\"}, \"viewer\": {\"isAdmin\": false, \"ssh_key\": \"\"}}\nEOF")
+    gateway.succeed("ATOMIXOS_USERS_JSON=/tmp/apply-users-test/users.json ATOMIXOS_MANAGED_STATE=/tmp/apply-users-test/managed-users.json python3 ${../../scripts/apply-users.py}")
+    gateway.succeed("getent shadow operator | grep -F '!'")
+    gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nmanaged = json.loads(Path('/tmp/apply-users-test/managed-users.json').read_text())\nassert sorted(managed) == ['viewer'], managed\nPY")
+
+    # ── apply-users: idempotent re-run does not fail ──
+    gateway.succeed("ATOMIXOS_USERS_JSON=/tmp/apply-users-test/users.json ATOMIXOS_MANAGED_STATE=/tmp/apply-users-test/managed-users.json python3 ${../../scripts/apply-users.py}")
+
+    # ── apply-users: skips gracefully when no users.json ──
+    gateway.succeed("ATOMIXOS_USERS_JSON=/tmp/apply-users-test/nonexistent.json ATOMIXOS_MANAGED_STATE=/tmp/apply-users-test/managed-users.json python3 ${../../scripts/apply-users.py}")
+
+    # ── apply-users: refuses to touch protected users ──
+    gateway.succeed("cat > /tmp/apply-users-test/users-root.json <<'EOF'\n{\"admin\": {\"isAdmin\": true, \"ssh_key\": \"ssh-ed25519 AAAAC3test admin@test\"}, \"root\": {\"isAdmin\": true, \"ssh_key\": \"ssh-ed25519 AAAAC3root root@test\"}}\nEOF")
+    gateway.succeed("ATOMIXOS_USERS_JSON=/tmp/apply-users-test/users-root.json ATOMIXOS_MANAGED_STATE=/tmp/apply-users-test/managed-users-root.json python3 ${../../scripts/apply-users.py}")
+    gateway.fail("grep '^root:.*:/bin/sh$' /etc/passwd")
     gateway.succeed("rm -rf /tmp/bootstrap-root")
     gateway.succeed("mkdir -p /tmp/bootstrap-root")
     gateway.succeed("first-boot-provision serve /tmp/bootstrap-root /tmp/bootstrap-output.toml --host 127.0.0.1 --port 18080 >/tmp/bootstrap.log 2>&1 & echo $! >/tmp/bootstrap.pid")

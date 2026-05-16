@@ -19,8 +19,13 @@
 
 let
   firstBootScript = pkgs.writeShellScript "first-boot" (builtins.readFile ../scripts/first-boot.sh);
+  applyUsersScript = pkgs.writeShellScript "apply-users" ''
+    set -euo pipefail
+    exec ${pkgs.python3Minimal}/bin/python3 ${../scripts/apply-users.py}
+  '';
   bootstrapPostResponseScript = pkgs.writeShellScript "bootstrap-post-response" ''
     set -euo pipefail
+    ${pkgs.systemd}/bin/systemctl restart atomixos-apply-users.service
     ${pkgs.systemd}/bin/systemctl restart quadlet-sync.service
     if ${pkgs.systemd}/bin/systemctl list-unit-files lan-gateway-apply.service >/dev/null 2>&1; then
       ${pkgs.systemd}/bin/systemctl restart lan-gateway-apply.service
@@ -118,6 +123,35 @@ in
     serviceConfig = {
       Type = "oneshot";
       ExecStart = firstBootScript;
+      RemainAfterExit = true;
+    };
+  };
+
+  systemd.services.atomixos-apply-users = {
+    description = "Materialize managed users from provisioned config";
+    after = [
+      "data.mount"
+      "nss-user-lookup.target"
+    ];
+    wants = [
+      "data.mount"
+      "nss-user-lookup.target"
+    ];
+    before = [ "sshd.service" ];
+    wantedBy = [ "multi-user.target" ];
+
+    unitConfig.ConditionPathExists = "/data/config/users.json";
+    unitConfig.RequiresMountsFor = [ "/data" ];
+
+    path = [
+      pkgs.python3Minimal
+      pkgs.shadow
+      pkgs.util-linux
+    ];
+
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = applyUsersScript;
       RemainAfterExit = true;
     };
   };
