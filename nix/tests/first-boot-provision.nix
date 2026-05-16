@@ -42,6 +42,7 @@ nixos-lib.runTest {
         pkgs.python3Minimal
         pkgs.gnutar
         pkgs.shadow
+        pkgs.openssh
         provisionCli
         applyUsersScript
         quadletSyncScript
@@ -324,6 +325,54 @@ nixos-lib.runTest {
     gateway.fail("first-boot-provision validate /tmp/invalid-config.toml")
     gateway.fail("first-boot-provision validate /tmp/gateway-contained-config.toml >/tmp/gateway-contained.out 2>/tmp/gateway-contained.err")
     gateway.succeed("grep 'network.dnsmasq.dhcp_start and network.dnsmasq.dhcp_end must not include the gateway IP' /tmp/gateway-contained.err")
+
+    # ── T030: re-apply authentication ──
+    # Set up a provisioned config root with known admin key
+    gateway.succeed("rm -rf /tmp/auth-root && mkdir -p /tmp/auth-root")
+    gateway.succeed("ssh-keygen -t ed25519 -N \"\" -f /tmp/auth-test-key -q")
+    gateway.succeed("first-boot-provision import /tmp/config.toml /tmp/auth-root")
+
+    # Overwrite admin authorized key with our test key
+    gateway.succeed("cat /tmp/auth-test-key.pub > /tmp/auth-root/ssh-authorized-keys/admin")
+
+    # Start bootstrap server pointing at provisioned root
+    gateway.succeed("first-boot-provision serve /tmp/auth-root --host 127.0.0.1 --port 18081 >/tmp/auth-bootstrap.log 2>&1 & echo $! >/tmp/auth-bootstrap.pid")
+    gateway.wait_until_succeeds("ss -tln | grep ':18081'", timeout=30)
+
+    # Unauthenticated POST to provisioned device must be rejected (401)
+    gateway.succeed("curl -s -o /tmp/auth-unauth-response.json -w '%{http_code}' -H 'Content-Type: text/plain' --data-binary @/tmp/config.toml http://127.0.0.1:18081/api/config > /tmp/auth-unauth-code")
+    gateway.succeed("grep '^401$' /tmp/auth-unauth-code")
+    gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nresp = json.loads(Path('/tmp/auth-unauth-response.json').read_text())\nassert resp['ok'] is False, resp\nassert 'authentication required' in resp['error'], resp\nPY")
+
+    # GET /api/nonce on provisioned device returns a nonce
+    gateway.succeed("curl -fsS http://127.0.0.1:18081/api/nonce > /tmp/auth-nonce-response.json")
+    gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nresp = json.loads(Path('/tmp/auth-nonce-response.json').read_text())\nassert resp['ok'] is True, resp\nassert len(resp['nonce']) > 20, resp\nPath('/tmp/auth-nonce.txt').write_text(resp['nonce'])\nPY")
+
+    # Sign the nonce with our test key
+    gateway.succeed("cat /tmp/auth-nonce.txt | ssh-keygen -Y sign -f /tmp/auth-test-key -n atomixos-reapply > /tmp/auth-signature.pem")
+    gateway.succeed("python3 - <<'PY'\nimport base64\nfrom pathlib import Path\nsig = Path('/tmp/auth-signature.pem').read_bytes()\nPath('/tmp/auth-signature-b64.txt').write_text(base64.b64encode(sig).decode())\nnonce = Path('/tmp/auth-nonce.txt').read_text().strip()\nPath('/tmp/auth-nonce-clean.txt').write_text(nonce)\nPY")
+
+    # Authenticated POST should succeed
+    gateway.succeed("curl -fsS -H 'Content-Type: text/plain' -H \"X-Atomicnix-Nonce: $(cat /tmp/auth-nonce-clean.txt)\" -H \"X-Atomicnix-Signature: $(cat /tmp/auth-signature-b64.txt)\" --data-binary @/tmp/config.toml http://127.0.0.1:18081/api/config > /tmp/auth-success-response.json")
+    gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nresp = json.loads(Path('/tmp/auth-success-response.json').read_text())\nassert resp['ok'] is True, resp\nassert resp['message'] == 'Configuration applied.', resp\nPY")
+
+    # Nonce replay must fail (nonce was consumed)
+    gateway.succeed("curl -s -o /tmp/auth-replay-response.json -w '%{http_code}' -H 'Content-Type: text/plain' -H \"X-Atomicnix-Nonce: $(cat /tmp/auth-nonce-clean.txt)\" -H \"X-Atomicnix-Signature: $(cat /tmp/auth-signature-b64.txt)\" --data-binary @/tmp/config.toml http://127.0.0.1:18081/api/config > /tmp/auth-replay-code")
+    gateway.succeed("grep '^401$' /tmp/auth-replay-code")
+    gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nresp = json.loads(Path('/tmp/auth-replay-response.json').read_text())\nassert 'expired' in resp['error'], resp\nPY")
+
+    # GET /api/nonce on UNPROVISIONED device returns empty nonce
+    gateway.succeed("kill $(cat /tmp/auth-bootstrap.pid)")
+    gateway.succeed("rm -rf /tmp/auth-root-empty && mkdir -p /tmp/auth-root-empty")
+    gateway.succeed("first-boot-provision serve /tmp/auth-root-empty --host 127.0.0.1 --port 18081 >/tmp/auth-bootstrap2.log 2>&1 & echo $! >/tmp/auth-bootstrap.pid")
+    gateway.wait_until_succeeds("ss -tln | grep ':18081'", timeout=30)
+    gateway.succeed("curl -fsS http://127.0.0.1:18081/api/nonce > /tmp/auth-nonce-empty.json")
+    gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nresp = json.loads(Path('/tmp/auth-nonce-empty.json').read_text())\nassert resp['ok'] is True, resp\nassert resp['nonce'] == \"\", resp\nassert 'unprovisioned' in resp.get('message', \"\"), resp\nPY")
+
+    # Unauthenticated POST to unprovisioned device should succeed
+    gateway.succeed("curl -fsS -H 'Content-Type: text/plain' --data-binary @/tmp/config.toml http://127.0.0.1:18081/api/config > /tmp/auth-fresh-response.json")
+    gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nresp = json.loads(Path('/tmp/auth-fresh-response.json').read_text())\nassert resp['ok'] is True, resp\nPY")
+    gateway.succeed("kill $(cat /tmp/auth-bootstrap.pid)")
 
     gateway.log("first-boot-provision helper test passed")
   '';

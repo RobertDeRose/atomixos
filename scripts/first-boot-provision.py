@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import base64
 import email.policy
 import errno
 import html
@@ -9,6 +10,7 @@ import json
 import os
 import pwd
 import re
+import secrets
 import shutil
 import subprocess
 import sys
@@ -57,6 +59,9 @@ DEFAULT_LAN_GATEWAY_ALIASES = ["atomixos"]
 DEFAULT_LAN_HOSTNAME_PATTERN = ""
 SCHEMA_ENV = "ATOMIXOS_CONFIG_SCHEMA"
 BOOTSTRAP_POST_RESPONSE_ENV = "ATOMIXOS_BOOTSTRAP_POST_RESPONSE"
+NONCE_TTL_SECONDS = int(os.environ.get("ATOMIXOS_NONCE_TTL", "300"))
+SSH_KEYGEN_BIN = os.environ.get("ATOMIXOS_SSH_KEYGEN", "ssh-keygen")
+AUTH_REQUIRED_MESSAGE = "authentication required: provide X-Atomicnix-Nonce and X-Atomicnix-Signature headers"
 RESERVED_USERNAMES = {
     "appsvc",
     "bin",
@@ -69,6 +74,83 @@ RESERVED_USERNAMES = {
     "systemd-resolve",
     "systemd-timesync",
 }
+
+
+class NonceStore:
+    """In-memory store for short-lived authentication nonces."""
+
+    def __init__(self, ttl: int = NONCE_TTL_SECONDS):
+        self._ttl = ttl
+        self._nonces: dict[str, float] = {}
+
+    def issue(self) -> str:
+        self._prune()
+        nonce = secrets.token_urlsafe(32)
+        self._nonces[nonce] = time.monotonic()
+        return nonce
+
+    def consume(self, nonce: str) -> bool:
+        self._prune()
+        issued_at = self._nonces.pop(nonce, None)
+        if issued_at is None:
+            return False
+        return (time.monotonic() - issued_at) < self._ttl
+
+    def _prune(self):
+        now = time.monotonic()
+        expired = [n for n, t in self._nonces.items() if (now - t) >= self._ttl]
+        for n in expired:
+            del self._nonces[n]
+
+
+def verify_ssh_signature(nonce: str, signature_blob: bytes, allowed_keys_path: Path) -> bool:
+    """Verify an SSH signature over a nonce using ssh-keygen -Y verify.
+
+    The allowed_keys_path should be a file in ssh allowed_signers format.
+    Returns True if verification succeeds.
+    """
+    with tempfile.NamedTemporaryFile(mode="wb", suffix=".sig", delete=False) as sig_file:
+        sig_file.write(signature_blob)
+        sig_path = sig_file.name
+
+    try:
+        result = subprocess.run(
+            [
+                SSH_KEYGEN_BIN, "-Y", "verify",
+                "-f", str(allowed_keys_path),
+                "-I", "atomixos-reapply",
+                "-n", "atomixos-reapply",
+                "-s", sig_path,
+            ],
+            input=nonce.encode(),
+            capture_output=True,
+            timeout=10,
+        )
+        return result.returncode == 0
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+    finally:
+        Path(sig_path).unlink(missing_ok=True)
+
+
+def build_allowed_signers(config_root: Path) -> Path | None:
+    """Build a temporary allowed_signers file from active admin SSH keys.
+
+    Returns the path to the temp file, or None if no keys exist.
+    """
+    admin_keys_path = config_root / "ssh-authorized-keys" / "admin"
+    if not admin_keys_path.exists():
+        return None
+
+    keys = [line.strip() for line in admin_keys_path.read_text().splitlines() if line.strip()]
+    if not keys:
+        return None
+
+    # allowed_signers format: <principal> <key>
+    lines = [f"atomixos-reapply {key}" for key in keys]
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".allowed_signers", delete=False) as tmp:
+        tmp.write("\n".join(lines) + "\n")
+        return Path(tmp.name)
 
 
 class ProvisionError(RuntimeError):
@@ -1493,6 +1575,44 @@ WantedBy = [\"default.target\"]
 class BootstrapHandler(BaseHTTPRequestHandler):
     config_root = None
     output_path = None
+    nonce_store = NonceStore()
+
+    def _is_provisioned(self) -> bool:
+        """Check if the device already has an active config."""
+        return (Path(self.config_root) / "config.toml").exists()
+
+    def _require_auth(self) -> bool:
+        """Verify re-apply authentication. Returns True if authorized."""
+        nonce = self.headers.get("X-Atomicnix-Nonce", "")
+        signature_b64 = self.headers.get("X-Atomicnix-Signature", "")
+
+        if not nonce or not signature_b64:
+            self._send_json(401, {"ok": False, "error": AUTH_REQUIRED_MESSAGE})
+            return False
+
+        if not self.nonce_store.consume(nonce):
+            self._send_json(401, {"ok": False, "error": "invalid or expired nonce"})
+            return False
+
+        try:
+            signature_blob = base64.b64decode(signature_b64)
+        except Exception:
+            self._send_json(401, {"ok": False, "error": "invalid signature encoding"})
+            return False
+
+        allowed_signers_path = build_allowed_signers(Path(self.config_root))
+        if allowed_signers_path is None:
+            self._send_json(401, {"ok": False, "error": "no admin keys available for verification"})
+            return False
+
+        try:
+            if not verify_ssh_signature(nonce, signature_blob, allowed_signers_path):
+                self._send_json(401, {"ok": False, "error": "signature verification failed"})
+                return False
+        finally:
+            allowed_signers_path.unlink(missing_ok=True)
+
+        return True
 
     def _mark_applied(self):
         output_path = getattr(self, "output_path", None)
@@ -1565,6 +1685,16 @@ class BootstrapHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         request = urlparse(self.path)
+        if request.path == "/api/nonce":
+            if not self._is_provisioned():
+                self._send_json(
+                    200,
+                    {"ok": True, "nonce": "", "message": "device is unprovisioned; no authentication required"},
+                )
+                return
+            nonce = self.nonce_store.issue()
+            self._send_json(200, {"ok": True, "nonce": nonce})
+            return
         if request.path == "/assets/atomixos.png":
             if not BOOTSTRAP_LOGO_PATH.is_file():
                 self.send_error(404)
@@ -1582,6 +1712,11 @@ class BootstrapHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         if self.path == "/api/config":
+            # Require authentication if already provisioned.
+            if self._is_provisioned():
+                if not self._require_auth():
+                    return
+
             length = int(self.headers.get("Content-Length", "0"))
             payload = self.rfile.read(length)
             filename = self.headers.get("X-Config-Filename", "config.toml")

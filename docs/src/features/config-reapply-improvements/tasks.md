@@ -33,12 +33,12 @@
 
 ## T030 - Harden re-apply authentication
 
-- [ ] Detect already-provisioned devices by active persisted config state.
-- [ ] Add nonce issuance for short-lived re-apply authentication challenges.
-- [ ] Verify SSH signatures against active admin user keys before accepting candidate config bytes.
-- [ ] Require authentication for `POST /api/config` when active config exists.
-- [ ] Keep first provisioning unauthenticated for fresh devices without existing operator credentials.
-- [ ] Add tests for unauthenticated rejection and authenticated acceptance.
+- [x] Detect already-provisioned devices by active persisted config state.
+- [x] Add nonce issuance for short-lived re-apply authentication challenges.
+- [x] Verify SSH signatures against active admin user keys before accepting candidate config bytes.
+- [x] Require authentication for `POST /api/config` when active config exists.
+- [x] Keep first provisioning unauthenticated for fresh devices without existing operator credentials.
+- [x] Add tests for unauthenticated rejection and authenticated acceptance.
 
 ## T040 - Implement atomic candidate apply
 
