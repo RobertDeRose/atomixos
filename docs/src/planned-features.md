@@ -80,6 +80,10 @@ Quadlet containers on a persistent `/data` partition.
   re-apply, activation checks, and rollback behavior. Evaluate splitting this into a
   small Python subproject with `pyproject.toml`, pytest-based unit tests, clearer module
   boundaries, and possibly a vendored MIT-licensed Bottle router for the HTTP layer.
+  Include an async re-apply job API so long-running activation does not hold an HTTP
+  request open: authenticated submission returns a job ID, Boot UI/API clients poll job
+  status, only one apply job runs at a time, and final state records success, activation
+  failures, and whether rollback completed.
 
 ## Resolved Questions
 

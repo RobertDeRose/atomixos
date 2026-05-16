@@ -46,13 +46,10 @@ in
     servers = [ ];
     initstepslew.enabled = false;
     extraConfig = ''
-      # Sync from Cloudflare's public, non-leap-smearing NTP service via WAN.
-      server time.cloudflare.com iburst
-
       # Step large RTC drift whenever upstream time becomes available.
       makestep 1.0 -1
 
-      # Serve time to LAN devices from the applied LAN config.
+      # Sync from provisioned WAN NTP servers and serve time to LAN devices.
       include /etc/atomixos/chrony-lan.conf
 
       # Deny all other clients
@@ -87,6 +84,7 @@ in
 
   environment.etc."atomixos/chrony-lan.conf".text = ''
     # Managed at runtime by lan-gateway-apply.
+    server time.cloudflare.com iburst
     allow 172.20.30.0/24
   '';
 

@@ -38,3 +38,4 @@ bkup/
 # AtomixOS files
 config.toml
 !example/**/config.toml
+.bundle-test-vm-runner

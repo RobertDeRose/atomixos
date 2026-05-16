@@ -33,6 +33,7 @@ REQUIRED_STRING_FIELDS = (
     "domain",
 )
 DNS_LABEL_PATTERN = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
+DEFAULT_NTP_SERVERS = ["time.cloudflare.com"]
 
 
 def replace_file(path: Path, content: str) -> bool:
@@ -164,6 +165,17 @@ def gateway_aliases(payload: dict[str, object]) -> list[str]:
     return aliases
 
 
+def ntp_servers(payload: dict[str, object]) -> list[str]:
+    servers = payload.get("ntp_servers", DEFAULT_NTP_SERVERS)
+    if not isinstance(servers, list) or any(not isinstance(server, str) or not server for server in servers):
+        msg = f"ntp_servers must be a list of non-empty strings in {CONFIG_FILE}"
+        raise ValueError(msg)
+    if any(any(char.isspace() or ord(char) < 32 or ord(char) == 127 for char in server) for server in servers):
+        msg = f"ntp_servers must not contain whitespace or control characters in {CONFIG_FILE}"
+        raise ValueError(msg)
+    return servers
+
+
 def load_settings() -> dict[str, object]:
     try:
         raw_payload = json.loads(CONFIG_FILE.read_text())
@@ -183,6 +195,7 @@ def load_settings() -> dict[str, object]:
         payload[key] = require_string(payload, key)
     payload["hostname_pattern"] = optional_string(payload, "hostname_pattern")
     payload["gateway_aliases"] = gateway_aliases(payload)
+    payload["ntp_servers"] = ntp_servers(payload)
 
     gateway = parse_ipv4_interface(payload["gateway_cidr"], "gateway_cidr")
     gateway_ip = parse_ipv4_address(payload["gateway_ip"], "gateway_ip")
@@ -245,6 +258,7 @@ def main() -> int:
     dhcp_end = payload["dhcp_end"]
     domain = payload["domain"]
     aliases = payload.get("gateway_aliases", [])
+    ntp_server_values = payload.get("ntp_servers", DEFAULT_NTP_SERVERS)
     hostname_pattern = payload.get("hostname_pattern", "")
 
     gateway_names: list[str] = []
@@ -285,7 +299,9 @@ def main() -> int:
 
     chrony_changed = replace_file(
         CHRONY_LAN_FILE,
-        "# Managed by lan-gateway-apply\n" f"allow {subnet_cidr}\n",
+        "# Managed by lan-gateway-apply\n"
+        + "".join(f"server {server} iburst\n" for server in ntp_server_values)
+        + f"allow {subnet_cidr}\n",
     )
 
     existing_hosts: list[str] = []

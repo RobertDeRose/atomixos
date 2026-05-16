@@ -58,6 +58,7 @@ DEFAULT_LAN_DHCP_END = "172.20.30.254"
 DEFAULT_LAN_DOMAIN = "local"
 DEFAULT_LAN_GATEWAY_ALIASES = ["atomixos"]
 DEFAULT_LAN_HOSTNAME_PATTERN = ""
+DEFAULT_NTP_SERVERS = ["time.cloudflare.com"]
 SCHEMA_ENV = "ATOMIXOS_CONFIG_SCHEMA"
 BOOTSTRAP_POST_RESPONSE_ENV = "ATOMIXOS_BOOTSTRAP_POST_RESPONSE"
 BOOTSTRAP_ACTIVATION_ENV = "ATOMIXOS_BOOTSTRAP_ACTIVATION"
@@ -403,6 +404,15 @@ def require_optional_string_list(value, path: str):
     return result
 
 
+def require_ntp_server_list(value, path: str):
+    servers = require_string_list(value, path)
+    for idx, server in enumerate(servers):
+        if any(char.isspace() or ord(char) < 32 or ord(char) == 127 for char in server):
+            message = f"invalid NTP server at {path}[{idx}]: whitespace and control characters are not allowed"
+            raise provision_error(message)
+    return servers
+
+
 def require_bool(value, path: str):
     if not isinstance(value, bool):
         message = f"expected boolean at {path}"
@@ -546,7 +556,7 @@ def load_network_settings(network_value):
     network = require_allowed_keys(
         network_value,
         "network",
-        {"dns_servers", "dns_search_domains", "default_gateway", "interfaces", "dnsmasq", "firewall"},
+        {"dns_servers", "dns_search_domains", "default_gateway", "interfaces", "dnsmasq", "ntp", "firewall"},
     )
     dnsmasq = network.get("dnsmasq", {})
     dnsmasq_settings = require_allowed_keys(
@@ -573,7 +583,13 @@ def load_network_settings(network_value):
             message = "network.dnsmasq.interface must be eth1"
             raise provision_error(message)
 
-    return load_lan_settings(dnsmasq_settings, "network.dnsmasq")
+    lan_settings = load_lan_settings(dnsmasq_settings, "network.dnsmasq")
+    ntp = require_allowed_keys(network.get("ntp", {}), "network.ntp", {"servers"})
+    lan_settings["ntp_servers"] = require_ntp_server_list(
+        ntp.get("servers", DEFAULT_NTP_SERVERS),
+        "network.ntp.servers",
+    )
+    return lan_settings
 
 
 def load_firewall_inbound(network_value):
@@ -582,7 +598,7 @@ def load_firewall_inbound(network_value):
     network = require_allowed_keys(
         network_value,
         "network",
-        {"dns_servers", "dns_search_domains", "default_gateway", "interfaces", "dnsmasq", "firewall"},
+        {"dns_servers", "dns_search_domains", "default_gateway", "interfaces", "dnsmasq", "ntp", "firewall"},
     )
     firewall = network.get("firewall", {})
     firewall = require_allowed_keys(firewall, "network.firewall", {"inbound"})
@@ -2064,6 +2080,10 @@ class BootstrapHandler(BaseHTTPRequestHandler):
                 if hostname_pattern:
                     lan_lines.append(f'hostname_pattern = {json.dumps(hostname_pattern)}')
                 lan_text = "\n".join(lan_lines)
+                ntp_text = "\n".join([
+                    "[network.ntp]",
+                    f"servers = {json.dumps(DEFAULT_NTP_SERVERS)}",
+                ])
                 os_upgrade_text = ""
                 if os_upgrade_server_url:
                     os_upgrade_text = textwrap.dedent(
@@ -2091,6 +2111,8 @@ class BootstrapHandler(BaseHTTPRequestHandler):
                     {firewall_text}
 
                     {lan_text}
+
+                    {ntp_text}
 
                     {os_upgrade_text}
 

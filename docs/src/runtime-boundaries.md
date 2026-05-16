@@ -37,6 +37,9 @@ domain = "local"
 gateway_aliases = ["atomixos"]
 hostname_pattern = "atomixos-{mac}"
 
+[network.ntp]
+servers = ["time.cloudflare.com"]
+
 [activation]
 required = ["myapp"]
 
@@ -50,7 +53,8 @@ PublishPort = ["10080:8080"]
 
 WAN ports stay deny-by-default unless listed. LAN stays open by default; if `[network.firewall.inbound.lan]` is
 present with any ports, LAN switches to an explicit allowlist for only those ports. `[network.dnsmasq]` is optional;
-omitted fields use the fallback LAN gateway contract. The machine-readable schema is committed at
+omitted fields use the fallback LAN gateway contract. `[network.ntp]` is optional and defaults to Cloudflare NTP.
+The machine-readable schema is committed at
 `schemas/config.schema.json` and the import path validates against it before semantic checks.
 
 ## Firewall JSON
