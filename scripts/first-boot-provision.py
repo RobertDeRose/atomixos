@@ -79,24 +79,27 @@ RESERVED_USERNAMES = {
 
 
 class NonceStore:
-    """In-memory store for short-lived authentication nonces."""
+    """Thread-safe in-memory store for short-lived authentication nonces."""
 
     def __init__(self, ttl: int = NONCE_TTL_SECONDS):
         self._ttl = ttl
         self._nonces: dict[str, float] = {}
+        self._lock = threading.Lock()
 
     def issue(self) -> str:
-        self._prune()
-        nonce = secrets.token_urlsafe(32)
-        self._nonces[nonce] = time.monotonic()
-        return nonce
+        with self._lock:
+            self._prune()
+            nonce = secrets.token_urlsafe(32)
+            self._nonces[nonce] = time.monotonic()
+            return nonce
 
     def consume(self, nonce: str) -> bool:
-        self._prune()
-        issued_at = self._nonces.pop(nonce, None)
-        if issued_at is None:
-            return False
-        return (time.monotonic() - issued_at) < self._ttl
+        with self._lock:
+            self._prune()
+            issued_at = self._nonces.pop(nonce, None)
+            if issued_at is None:
+                return False
+            return (time.monotonic() - issued_at) < self._ttl
 
     def _prune(self):
         now = time.monotonic()
@@ -1691,9 +1694,13 @@ class BootstrapHandler(BaseHTTPRequestHandler):
     apply_lock = threading.Lock()
 
     def _is_provisioned(self) -> bool:
-        """Check if the device already has an active config."""
-        if not self.apply_lock.locked():
-            recover_config_root(Path(self.config_root))
+        """Check if the device already has an active config.
+
+        Recovery of interrupted promotions is intentionally NOT performed here.
+        The do_POST path calls recover_config_root() under the apply_lock before
+        invoking _do_POST_locked(), so mutating paths always see a consistent
+        state.  The GET /api/nonce path only needs a best-effort check.
+        """
         return (Path(self.config_root) / "config.toml").exists()
 
     def _require_auth(self, payload: bytes) -> bool:
