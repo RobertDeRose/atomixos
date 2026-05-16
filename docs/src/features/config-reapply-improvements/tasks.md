@@ -42,11 +42,11 @@
 
 ## T040 - Implement atomic candidate apply
 
-- [ ] Validate and render candidate config in a temporary candidate directory.
-- [ ] Prevent candidate validation/rendering from mutating active `/data/config`.
-- [ ] Promote candidate config to `/data/config` with a crash-safe directory replacement strategy.
-- [ ] Preserve the previous config in a rollback location until apply is confirmed.
-- [ ] Clean up stale candidate and rollback state safely.
+- [x] Validate and render candidate config in a temporary candidate directory.
+- [x] Prevent candidate validation/rendering from mutating active `/data/config`.
+- [x] Promote candidate config to `/data/config` with a crash-safe directory replacement strategy.
+- [x] Preserve the previous config in a rollback location until apply is confirmed.
+- [x] Clean up stale candidate and rollback state safely.
 
 ## T050 - Implement rollback on failed activation
 

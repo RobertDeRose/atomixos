@@ -374,6 +374,41 @@ nixos-lib.runTest {
     gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nresp = json.loads(Path('/tmp/auth-fresh-response.json').read_text())\nassert resp['ok'] is True, resp\nPY")
     gateway.succeed("kill $(cat /tmp/auth-bootstrap.pid)")
 
+    # ── T040: atomic candidate apply ──
+    # Start with a provisioned root
+    gateway.succeed("rm -rf /tmp/atomic-root /tmp/atomic-root-candidate /tmp/atomic-root-rollback && mkdir -p /tmp/atomic-root")
+    gateway.succeed("first-boot-provision import /tmp/config.toml /tmp/atomic-root")
+    gateway.succeed("test -f /tmp/atomic-root/config.toml")
+
+    # Re-import via bootstrap server should create rollback
+    gateway.succeed("ssh-keygen -t ed25519 -N \"\" -f /tmp/atomic-key -q")
+    gateway.succeed("cat /tmp/atomic-key.pub > /tmp/atomic-root/ssh-authorized-keys/admin")
+    gateway.succeed("first-boot-provision serve /tmp/atomic-root --host 127.0.0.1 --port 18082 >/tmp/atomic-bootstrap.log 2>&1 & echo $! >/tmp/atomic-bootstrap.pid")
+    gateway.wait_until_succeeds("ss -tln | grep ':18082'", timeout=30)
+
+    # Get nonce and sign
+    gateway.succeed("curl -fsS http://127.0.0.1:18082/api/nonce > /tmp/atomic-nonce.json")
+    gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nnonce = json.loads(Path('/tmp/atomic-nonce.json').read_text())['nonce']\nPath('/tmp/atomic-nonce.txt').write_text(nonce)\nPY")
+    gateway.succeed("cat /tmp/atomic-nonce.txt | ssh-keygen -Y sign -f /tmp/atomic-key -n atomixos-reapply > /tmp/atomic-sig.pem")
+    gateway.succeed("python3 - <<'PY'\nimport base64\nfrom pathlib import Path\nsig = Path('/tmp/atomic-sig.pem').read_bytes()\nPath('/tmp/atomic-sig-b64.txt').write_text(base64.b64encode(sig).decode())\nPY")
+
+    # Authenticated re-apply creates rollback
+    gateway.succeed("curl -fsS -H 'Content-Type: text/plain' -H \"X-Atomicnix-Nonce: $(cat /tmp/atomic-nonce.txt)\" -H \"X-Atomicnix-Signature: $(cat /tmp/atomic-sig-b64.txt)\" --data-binary @/tmp/config.toml http://127.0.0.1:18082/api/config > /tmp/atomic-apply-response.json")
+    gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nresp = json.loads(Path('/tmp/atomic-apply-response.json').read_text())\nassert resp['ok'] is True, resp\nPY")
+    gateway.succeed("test -d /tmp/atomic-root-rollback")
+    gateway.succeed("test -f /tmp/atomic-root-rollback/config.toml")
+    gateway.succeed("test -f /tmp/atomic-root/config.toml")
+    gateway.succeed("test ! -d /tmp/atomic-root-candidate")
+    gateway.succeed("kill $(cat /tmp/atomic-bootstrap.pid)")
+
+    # Test restore_rollback
+    gateway.succeed("python3 - <<'PY'\nimport sys, os, importlib.util\nfrom pathlib import Path\nos.environ['ATOMIXOS_CONFIG_SCHEMA'] = '${provisionCli}/share/atomixos/config.schema.json'\nspec = importlib.util.spec_from_file_location('fbp', '${../../scripts/first-boot-provision.py}')\nmod = importlib.util.module_from_spec(spec)\nspec.loader.exec_module(mod)\nassert mod.restore_rollback(Path('/tmp/atomic-root')) is True\nassert Path('/tmp/atomic-root/config.toml').exists()\nassert not Path('/tmp/atomic-root-rollback').exists()\nPY")
+
+    # Test cleanup_rollback
+    gateway.succeed("first-boot-provision import /tmp/config.toml /tmp/atomic-root")
+    gateway.succeed("mkdir -p /tmp/atomic-root-rollback && touch /tmp/atomic-root-rollback/config.toml")
+    gateway.succeed("python3 - <<'PY'\nimport sys, os, importlib.util\nfrom pathlib import Path\nos.environ['ATOMIXOS_CONFIG_SCHEMA'] = '${provisionCli}/share/atomixos/config.schema.json'\nspec = importlib.util.spec_from_file_location('fbp', '${../../scripts/first-boot-provision.py}')\nmod = importlib.util.module_from_spec(spec)\nspec.loader.exec_module(mod)\nmod.cleanup_rollback(Path('/tmp/atomic-root'))\nassert not Path('/tmp/atomic-root-rollback').exists()\nPY")
+
     gateway.log("first-boot-provision helper test passed")
   '';
 }

@@ -1264,6 +1264,78 @@ def import_config(config_path: Path, config_root: Path):
             temp_bundle.cleanup()
 
 
+CANDIDATE_SUFFIX = "-candidate"
+ROLLBACK_SUFFIX = "-rollback"
+
+
+def atomic_import_config(config_path: Path, config_root: Path):
+    """Import config atomically with rollback preservation.
+
+    For fresh provisioning (config_root doesn't exist or has no config.toml),
+    writes directly. For re-apply, renders into a candidate directory and
+    promotes via rename, preserving the previous state for rollback.
+    """
+    temp_bundle, prepared_config, prepared_files = prepare_source_path(config_path)
+    try:
+        is_reapply = (config_root / "config.toml").exists()
+
+        if not is_reapply:
+            # Fresh provisioning: write directly.
+            parsed = load_config(prepared_config, config_root)
+            write_imported_state(parsed, prepared_config, prepared_files, config_root)
+            return parsed["warnings"]
+
+        # Re-apply: render into candidate, then promote atomically.
+        candidate_root = config_root.parent / (config_root.name + CANDIDATE_SUFFIX)
+        rollback_root = config_root.parent / (config_root.name + ROLLBACK_SUFFIX)
+
+        # Clean stale candidate from a previous failed attempt.
+        if candidate_root.exists():
+            shutil.rmtree(candidate_root)
+
+        candidate_root.mkdir(parents=True, exist_ok=True)
+
+        # Validate and render into candidate directory.
+        parsed = load_config(prepared_config, config_root)
+        write_imported_state(parsed, prepared_config, prepared_files, candidate_root)
+        carry_forward_managed_state(config_root, candidate_root)
+
+        # Atomic promotion: active → rollback, candidate → active.
+        # Remove stale rollback from a previous successful apply.
+        if rollback_root.exists():
+            shutil.rmtree(rollback_root)
+
+        # Step 1: move active to rollback (preserves previous state).
+        os.rename(str(config_root), str(rollback_root))
+        # Step 2: move candidate to active.
+        os.rename(str(candidate_root), str(config_root))
+
+        return parsed["warnings"]
+    finally:
+        if temp_bundle is not None:
+            temp_bundle.cleanup()
+
+
+def cleanup_rollback(config_root: Path):
+    """Remove rollback state after successful activation."""
+    rollback_root = config_root.parent / (config_root.name + ROLLBACK_SUFFIX)
+    if rollback_root.exists():
+        shutil.rmtree(rollback_root)
+
+
+def restore_rollback(config_root: Path) -> bool:
+    """Restore previous config from rollback. Returns True if restored."""
+    rollback_root = config_root.parent / (config_root.name + ROLLBACK_SUFFIX)
+    if not rollback_root.exists():
+        return False
+
+    # Remove the failed active config.
+    if config_root.exists():
+        shutil.rmtree(config_root)
+    os.rename(str(rollback_root), str(config_root))
+    return True
+
+
 def validate_config_source(source_path: Path):
     temp_bundle, prepared_config, _prepared_files = prepare_source_path(source_path)
     try:
@@ -1627,10 +1699,31 @@ class BootstrapHandler(BaseHTTPRequestHandler):
         subprocess.Popen([command], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def _write_payload(self, payload: bytes, filename: str = "config.toml"):
+        config_root = Path(self.config_root)
         temp_bundle, prepared_config, prepared_files = prepare_source_bytes(payload, filename)
         try:
-            parsed = load_config(prepared_config, Path(self.config_root))
-            write_imported_state(parsed, prepared_config, prepared_files, Path(self.config_root))
+            is_reapply = (config_root / "config.toml").exists()
+            if is_reapply:
+                # Atomic re-apply: candidate → promote → rollback preserved.
+                candidate_root = config_root.parent / (config_root.name + CANDIDATE_SUFFIX)
+                rollback_root = config_root.parent / (config_root.name + ROLLBACK_SUFFIX)
+
+                if candidate_root.exists():
+                    shutil.rmtree(candidate_root)
+                candidate_root.mkdir(parents=True, exist_ok=True)
+
+                parsed = load_config(prepared_config, config_root)
+                write_imported_state(parsed, prepared_config, prepared_files, candidate_root)
+
+                if rollback_root.exists():
+                    shutil.rmtree(rollback_root)
+                os.rename(str(config_root), str(rollback_root))
+                os.rename(str(candidate_root), str(config_root))
+            else:
+                # Fresh provisioning: write directly.
+                parsed = load_config(prepared_config, config_root)
+                write_imported_state(parsed, prepared_config, prepared_files, config_root)
+
             return prepared_config.read_text()
         finally:
             temp_bundle.cleanup()
