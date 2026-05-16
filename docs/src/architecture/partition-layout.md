@@ -60,7 +60,8 @@ Contents created during provisioning:
 /data/
   .completed_first_boot              First-boot sentinel
   config/
-    ssh-authorized-keys/admin        Operator's SSH public key
+    admin-signers                    Admin SSH keys trusted for config re-apply signatures
+    ssh-authorized-keys/<user>       Per-user SSH authorized keys
     nixstasis/                       Planned enrollment key and agent state
     openvpn/client.conf              OpenVPN recovery tunnel config (optional)
   containers/                        Reserved for future application workloads

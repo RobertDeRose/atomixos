@@ -3,6 +3,7 @@ import argparse
 import base64
 import email.policy
 import errno
+import hashlib
 import html
 import io
 import ipaddress
@@ -104,8 +105,13 @@ class NonceStore:
             del self._nonces[n]
 
 
-def verify_ssh_signature(nonce: str, signature_blob: bytes, allowed_keys_path: Path) -> bool:
-    """Verify an SSH signature over a nonce using ssh-keygen -Y verify.
+def reapply_signature_message(nonce: str, path: str, payload: bytes) -> str:
+    digest = hashlib.sha256(payload).hexdigest()
+    return f"atomixos-reapply-v1\nnonce:{nonce}\npath:{path}\nsha256:{digest}\n"
+
+
+def verify_ssh_signature(message: str, signature_blob: bytes, allowed_keys_path: Path) -> bool:
+    """Verify an SSH signature over a request-bound message.
 
     The allowed_keys_path should be a file in ssh allowed_signers format.
     Returns True if verification succeeds.
@@ -123,7 +129,7 @@ def verify_ssh_signature(nonce: str, signature_blob: bytes, allowed_keys_path: P
                 "-n", "atomixos-reapply",
                 "-s", sig_path,
             ],
-            input=nonce.encode(),
+            input=message.encode(),
             capture_output=True,
             timeout=10,
         )
@@ -139,7 +145,7 @@ def build_allowed_signers(config_root: Path) -> Path | None:
 
     Returns the path to the temp file, or None if no keys exist.
     """
-    admin_keys_path = config_root / "ssh-authorized-keys" / "admin"
+    admin_keys_path = config_root / "admin-signers"
     if not admin_keys_path.exists():
         return None
 
@@ -1184,10 +1190,18 @@ def write_imported_state(parsed: dict, prepared_config: Path, prepared_files: Pa
         if existing_key_file.is_file() and existing_key_file.name not in desired_key_files:
             existing_key_file.unlink()
 
+    signers_path = config_root / "admin-signers"
+    signers_path.write_text("\n".join(parsed["ssh_keys"]) + "\n")
+    signers_path.chmod(0o600)
+
     ssh_path = ssh_dir / "admin"
-    ssh_path.write_text("\n".join(parsed["ssh_keys"]) + "\n")
-    ssh_path.chmod(0o600)
-    maybe_chown_user(ssh_path, "admin")
+    admin_user = parsed["users"].get("admin")
+    if admin_user and admin_user["ssh_key"]:
+        ssh_path.write_text(admin_user["ssh_key"] + "\n")
+        ssh_path.chmod(0o600)
+        maybe_chown_user(ssh_path, "admin")
+    else:
+        ssh_path.unlink(missing_ok=True)
 
     for username, user in parsed["users"].items():
         if username == "admin":
@@ -1278,6 +1292,7 @@ def atomic_import_config(config_path: Path, config_root: Path):
     """
     temp_bundle, prepared_config, prepared_files = prepare_source_path(config_path)
     try:
+        recover_config_root(config_root)
         is_reapply = (config_root / "config.toml").exists()
 
         if not is_reapply:
@@ -1322,6 +1337,19 @@ def cleanup_rollback(config_root: Path):
     rollback_root = config_root.parent / (config_root.name + ROLLBACK_SUFFIX)
     if rollback_root.exists():
         shutil.rmtree(rollback_root)
+
+
+def recover_config_root(config_root: Path) -> None:
+    """Recover from an interrupted active→rollback, candidate→active promotion."""
+    rollback_root = config_root.parent / (config_root.name + ROLLBACK_SUFFIX)
+    candidate_root = config_root.parent / (config_root.name + CANDIDATE_SUFFIX)
+    if (config_root / "config.toml").exists():
+        return
+    if candidate_root.exists():
+        candidate_root.rename(config_root)
+        return
+    if rollback_root.exists():
+        rollback_root.rename(config_root)
 
 
 def restore_rollback(config_root: Path) -> bool:
@@ -1652,9 +1680,10 @@ class BootstrapHandler(BaseHTTPRequestHandler):
 
     def _is_provisioned(self) -> bool:
         """Check if the device already has an active config."""
+        recover_config_root(Path(self.config_root))
         return (Path(self.config_root) / "config.toml").exists()
 
-    def _require_auth(self) -> bool:
+    def _require_auth(self, payload: bytes) -> bool:
         """Verify re-apply authentication. Returns True if authorized."""
         nonce = self.headers.get("X-Atomicnix-Nonce", "")
         signature_b64 = self.headers.get("X-Atomicnix-Signature", "")
@@ -1679,7 +1708,8 @@ class BootstrapHandler(BaseHTTPRequestHandler):
             return False
 
         try:
-            if not verify_ssh_signature(nonce, signature_blob, allowed_signers_path):
+            message = reapply_signature_message(nonce, urlparse(self.path).path, payload)
+            if not verify_ssh_signature(message, signature_blob, allowed_signers_path):
                 self._send_json(401, {"ok": False, "error": "signature verification failed"})
                 return False
         finally:
@@ -1796,6 +1826,7 @@ class BootstrapHandler(BaseHTTPRequestHandler):
         config_root = Path(self.config_root)
         temp_bundle, prepared_config, prepared_files = prepare_source_bytes(payload, filename)
         try:
+            recover_config_root(config_root)
             is_reapply = (config_root / "config.toml").exists()
             if is_reapply:
                 # Atomic re-apply: candidate → promote → rollback preserved.
@@ -1904,14 +1935,20 @@ class BootstrapHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         was_provisioned = self._is_provisioned()
-        if self.path in ("/api/config", "/apply", "/generate") and was_provisioned:
-            if not self._require_auth():
-                return
+        if (
+            self.path in ("/api/config", "/apply", "/generate")
+            and was_provisioned
+            and (not self.headers.get("X-Atomicnix-Nonce") or not self.headers.get("X-Atomicnix-Signature"))
+        ):
+            self._send_json(401, {"ok": False, "error": AUTH_REQUIRED_MESSAGE})
+            return
 
         if self.path == "/api/config":
             length = int(self.headers.get("Content-Length", "0"))
             payload = self.rfile.read(length)
             filename = self.headers.get("X-Config-Filename", "config.toml")
+            if was_provisioned and not self._require_auth(payload):
+                return
             try:
                 self._write_payload(payload, filename)
             except Exception as exc:
@@ -2040,6 +2077,8 @@ class BootstrapHandler(BaseHTTPRequestHandler):
                 self.send_error(404)
                 return
 
+            if was_provisioned and not self._require_auth(payload):
+                return
             applied_config = self._write_payload(payload, filename)
             if was_provisioned:
                 ok, failures, restored = self._complete_reapply()

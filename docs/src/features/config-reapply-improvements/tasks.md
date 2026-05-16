@@ -35,7 +35,7 @@
 
 - [x] Detect already-provisioned devices by active persisted config state.
 - [x] Add nonce issuance for short-lived re-apply authentication challenges.
-- [x] Verify SSH signatures against active admin user keys before accepting candidate config bytes.
+- [x] Verify request-bound SSH signatures against active admin user keys before accepting candidate config bytes.
 - [x] Require authentication for mutating bootstrap POST paths when active config exists.
 - [x] Keep first provisioning unauthenticated for fresh devices without existing operator credentials.
 - [x] Add tests for unauthenticated rejection and authenticated acceptance.

@@ -178,6 +178,7 @@ in
       pkgs.coreutils
       pkgs.gzip
       pkgs.jq
+      pkgs.openssh
       pkgs.python3Minimal
       pkgs.systemd
       pkgs.zstd

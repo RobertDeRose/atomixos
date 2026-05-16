@@ -9,7 +9,8 @@ Persisted device-local state lives on `/data`:
 
 | Item                       | Storage Path                              | Notes                                             |
 |----------------------------|-------------------------------------------|---------------------------------------------------|
-| SSH public key             | `/data/config/ssh-authorized-keys/admin`  | Local operator key for LAN/VPN access             |
+| Admin signer keys          | `/data/config/admin-signers`              | Admin SSH keys trusted for config re-apply        |
+| User SSH public keys       | `/data/config/ssh-authorized-keys/<user>` | Per-user LAN/VPN SSH access                       |
 | Nixstasis registration key | `/data/config/nixstasis/registration-key` | Planned persistent device enrollment credential   |
 | Nixstasis agent state      | `/data/config/nixstasis/`                 | Planned client state, tunnel config, and metadata |
 
@@ -64,5 +65,5 @@ services.openssh = {
 };
 ```
 
-The `admin` user's authorized keys are read from `/data/config/ssh-authorized-keys/admin`, which is populated during
-provisioning.
+User authorized keys are read from `/data/config/ssh-authorized-keys/<user>`, which is populated during provisioning.
+Admin re-apply signer keys are stored separately in `/data/config/admin-signers`.

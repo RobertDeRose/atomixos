@@ -38,10 +38,11 @@ fails.
 
 ## Re-Apply Flow
 
-`POST /api/config` on an already-provisioned device requires SSH signature authentication. The operator requests a nonce
-via `GET /api/nonce`, signs it with an active admin SSH key (`ssh-keygen -Y sign -n atomixos-reapply`), and includes the
-nonce and base64 signature in the `X-Atomicnix-Nonce` and `X-Atomicnix-Signature` request headers. Nonces are
-single-use and expire after 5 minutes (configurable via `ATOMIXOS_NONCE_TTL`).
+Mutating bootstrap POST paths on an already-provisioned device require SSH signature authentication. The operator
+requests a nonce via `GET /api/nonce`, then signs a request-bound message containing the nonce, target path, and
+SHA-256 digest of the submitted config payload (`ssh-keygen -Y sign -n atomixos-reapply`). The request includes the
+nonce and base64 signature in the `X-Atomicnix-Nonce` and `X-Atomicnix-Signature` headers. Nonces are single-use and
+expire after 5 minutes (configurable via `ATOMIXOS_NONCE_TTL`).
 
 Re-apply uses atomic candidate promotion:
 

@@ -41,6 +41,7 @@ such as `[container.<name>]`, `[network.<name>]`, `[volume.<name>]`, and `[build
 The existing import path writes derived state under `/data/config`, including:
 
 - `config.toml`
+- `admin-signers`
 - `ssh-authorized-keys/admin`
 - `firewall-inbound.json`
 - `lan-settings.json`
@@ -207,10 +208,9 @@ Proposed flow:
 10. Restore the previous config and re-apply it if activation fails.
 
 Authentication uses an SSH-key challenge-response with an existing admin SSH key. The device issues a nonce for a short
-validity window, and the operator signs that nonce with a private key corresponding to a currently authorized admin user.
-The re-apply request must include the public key identity and signature. The device verifies the signature against active
-admin keys before accepting config bytes. This keeps re-apply LAN-local, avoids default credentials, and reuses the
-existing key-only operator trust model.
+validity window, and the operator signs a request-bound message containing the nonce, target path, and SHA-256 digest of
+the submitted config payload. The device verifies the signature against active admin signer keys before accepting config
+bytes. This keeps re-apply LAN-local, avoids default credentials, and reuses the existing key-only operator trust model.
 
 ## Failure Handling
 
