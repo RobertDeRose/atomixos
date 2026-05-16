@@ -523,6 +523,8 @@ def load_users(users_value):
             message = f"expected string at users.{username}.ssh_key"
             raise provision_error(message)
         ssh_key = ssh_key_raw.strip()
+        if username == "admin" and not is_admin:
+            raise provision_error("users.admin.isAdmin must be true for the image admin account")
 
         normalized[username] = {
             "isAdmin": is_admin,
@@ -1343,6 +1345,13 @@ def recover_config_root(config_root: Path) -> None:
     """Recover from an interrupted active→rollback, candidate→active promotion."""
     rollback_root = config_root.parent / (config_root.name + ROLLBACK_SUFFIX)
     candidate_root = config_root.parent / (config_root.name + CANDIDATE_SUFFIX)
+    if rollback_root.exists() and (config_root / "config.toml").exists():
+        if config_root.exists():
+            shutil.rmtree(config_root)
+        rollback_root.rename(config_root)
+        if candidate_root.exists():
+            shutil.rmtree(candidate_root)
+        return
     if (config_root / "config.toml").exists():
         return
     if candidate_root.exists():

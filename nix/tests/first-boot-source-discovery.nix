@@ -57,7 +57,7 @@ nixos-lib.runTest {
     gateway.succeed("cat > /testbin/rauc <<'EOF'\n#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\n' \"$*\" >>/test-state/rauc.log\nif [ \"$1\" = status ] && [ \"$2\" = mark-good ]; then\n  exit 0\nfi\necho unexpected rauc invocation >&2\nexit 1\nEOF\nchmod +x /testbin/rauc")
     gateway.succeed("cat > /testbin/fw_printenv <<'EOF'\n#!/usr/bin/env bash\nexit 0\nEOF\nchmod +x /testbin/fw_printenv")
     gateway.succeed("cat > /testbin/fw_setenv <<'EOF'\n#!/usr/bin/env bash\nprintf 'fw_setenv %s\n' \"$*\" >>/test-state/fw-setenv.log\nEOF\nchmod +x /testbin/fw_setenv")
-    gateway.succeed("cat > /testbin/systemctl <<'EOF'\n#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\n' \"$*\" >>/test-state/systemctl.log\ncase \"$1\" in\n  restart)\n    if [ \"''${ATOMIXOS_TEST_FAIL_SERVICE:-}\" = \"$2\" ]; then\n      exit 1\n    fi\n    exit 0\n    ;;&\n  try-restart)\n    exit 0\n    ;;&\n  list-unit-files)\n    if [ \"''${ATOMIXOS_TEST_LIST_APPLY_SERVICES:-0}\" = 1 ]; then\n      case \"$2\" in\n        lan-gateway-apply.service|provisioned-firewall-inbound.service) exit 0 ;;&\n      esac\n    fi\n    exit 1\n    ;;&\n  *) echo unexpected systemctl invocation >&2; exit 1 ;;&\nesac\nEOF\nchmod +x /testbin/systemctl")
+    gateway.succeed("cat > /testbin/systemctl <<'EOF'\n#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\n' \"$*\" >>/test-state/systemctl.log\ncase \"$1\" in\n  start)\n    case \"$2\" in\n      atomixos-apply-users.service) exit 0 ;;&\n    esac\n    echo unexpected systemctl start invocation >&2\n    exit 1\n    ;;&\n  restart)\n    if [ \"''${ATOMIXOS_TEST_FAIL_SERVICE:-}\" = \"$2\" ]; then\n      exit 1\n    fi\n    exit 0\n    ;;&\n  try-restart)\n    exit 0\n    ;;&\n  list-unit-files)\n    if [ \"''${ATOMIXOS_TEST_LIST_APPLY_SERVICES:-0}\" = 1 ]; then\n      case \"$2\" in\n        lan-gateway-apply.service|provisioned-firewall-inbound.service) exit 0 ;;&\n      esac\n    fi\n    exit 1\n    ;;&\n  *) echo unexpected systemctl invocation >&2; exit 1 ;;&\nesac\nEOF\nchmod +x /testbin/systemctl")
     gateway.succeed("cat > /testbin/mount <<'EOF'\n#!/usr/bin/env bash\nset -euo pipefail\nargs=(\"$@\")\nargc=''${#args[@]}\nsource_path=''${args[$((argc-2))]}\ntarget=''${args[$((argc-1))]}\ncase \"$source_path\" in\n  /test-usb/*) cp -R \"$source_path/.\" \"$target/\" ;;\n  *) echo unexpected mount source: $source_path >&2; exit 1 ;;\nesac\nprintf '%s -> %s\n' \"$source_path\" \"$target\" >>/test-state/mount.log\nEOF\nchmod +x /testbin/mount")
     gateway.succeed("cat > /testbin/umount <<'EOF'\n#!/usr/bin/env bash\nset -euo pipefail\nrm -rf \"$1\"/*\nprintf '%s\n' \"$1\" >>/test-state/umount.log\nEOF\nchmod +x /testbin/umount")
     gateway.succeed("cat > /testbin/first-boot-provision <<'EOF'\n#!/usr/bin/env bash\nexec /run/current-system/sw/bin/first-boot-provision \"$@\"\nEOF\nchmod +x /testbin/first-boot-provision")
@@ -70,6 +70,7 @@ nixos-lib.runTest {
     gateway.succeed("cp /tmp/config-template.toml /boot/config.toml && cp /tmp/config-template.toml /test-usb/usb-a/config.toml && : >/etc/atomixos/fresh-flash")
     gateway.succeed("env PATH=/testbin:/run/current-system/sw/bin ATOMIXOS_CONFIG_ROOT=/tmp/config-roots/fresh-boot-seed ATOMIXOS_FIRST_BOOT_SENTINEL=/tmp/bootcases/fresh-boot-seed/sentinel ATOMIXOS_BOOT_SLOT=boot.a ATOMIXOS_USB_SEARCH_DIRS='/test-usb' ATOMIXOS_BOOTSTRAP_HOST=127.0.0.1 ATOMIXOS_INITRD_MARKER=/etc/atomixos/fresh-flash ATOMIXOS_BOOT_CONFIG_PATH=/boot/config.toml first-boot")
     gateway.succeed("cmp /boot/config.toml /tmp/config-roots/fresh-boot-seed/config.toml")
+    gateway.succeed("grep '^start atomixos-apply-users.service$' /test-state/systemctl.log")
     gateway.succeed("test -f /tmp/bootcases/fresh-boot-seed/sentinel")
     gateway.succeed("grep '^status mark-good boot.a$' /test-state/rauc.log")
 
@@ -79,6 +80,7 @@ nixos-lib.runTest {
     gateway.succeed("cp /tmp/config-template.toml /test-usb/usb-b/config.toml && : >/etc/atomixos/fresh-flash")
     gateway.succeed("env PATH=/testbin:/run/current-system/sw/bin ATOMIXOS_CONFIG_ROOT=/tmp/config-roots/fresh-usb-fallback ATOMIXOS_FIRST_BOOT_SENTINEL=/tmp/bootcases/fresh-usb-fallback/sentinel ATOMIXOS_BOOT_SLOT=boot.a ATOMIXOS_USB_SEARCH_DIRS='/test-usb' ATOMIXOS_BOOTSTRAP_HOST=127.0.0.1 ATOMIXOS_INITRD_MARKER=/etc/atomixos/fresh-flash ATOMIXOS_BOOT_CONFIG_PATH=/boot/config.toml first-boot")
     gateway.succeed("cmp /test-usb/usb-b/config.toml /tmp/config-roots/fresh-usb-fallback/config.toml")
+    gateway.succeed("grep '^start atomixos-apply-users.service$' /test-state/systemctl.log")
     gateway.succeed("grep '/test-usb/usb-b' /test-state/mount.log")
     gateway.succeed("test -f /tmp/bootcases/fresh-usb-fallback/sentinel")
 
@@ -108,6 +110,7 @@ nixos-lib.runTest {
     gateway.succeed("grep 'Configuration applied' /tmp/bootstrap-response.html")
     gateway.succeed("grep 'Download applied config.toml' /tmp/bootstrap-response.html")
     gateway.succeed("grep 'Waiting for provisioning via bootstrap web console' /tmp/bootstrap-case.log")
+    gateway.succeed("grep '^start atomixos-apply-users.service$' /test-state/systemctl.log")
     gateway.succeed("kill $(cat /tmp/bootstrap-web.pid)")
     gateway.succeed("rm -rf /tmp/bootstrap-invalid-lan-root /test-state && mkdir -p /tmp/bootstrap-invalid-lan-root /test-state")
     gateway.succeed("rm -f /boot/config.toml /etc/atomixos/fresh-flash /tmp/bootstrap-invalid-lan-sentinel")

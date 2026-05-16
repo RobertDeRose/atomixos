@@ -152,6 +152,10 @@ sync_quadlet_units() {
 	fi
 }
 
+apply_managed_users() {
+	systemctl start atomixos-apply-users.service
+}
+
 import_seed_config() {
 	local source_path="$1"
 	local status=0
@@ -165,6 +169,7 @@ import_seed_config() {
 	if [ "$status" -ne 0 ]; then
 		return "$status"
 	fi
+	apply_managed_users
 	sync_quadlet_units
 }
 
@@ -176,6 +181,7 @@ discover_and_import_provisioning() {
 	local seed_path usb_path
 	if has_valid_provisioning; then
 		log "Using existing provisioned config from $CONFIG_TOML"
+		apply_managed_users
 		sync_quadlet_units
 		return 0
 	fi
@@ -196,6 +202,7 @@ discover_and_import_provisioning() {
 	if ! bootstrap_web_console; then
 		return 1
 	fi
+	apply_managed_users
 	sync_quadlet_units
 }
 

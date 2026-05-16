@@ -66,6 +66,7 @@ nixos-lib.runTest {
     gateway.succeed("cat > /tmp/gateway-contained-config.toml <<'EOF'\nversion = 1\n\n[users.admin]\nisAdmin = true\nssh_key = \"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBootstrapKey admin@example\"\n\n[network.firewall.inbound.wan]\ntcp = [443]\n\n[network.dnsmasq]\ngateway_cidr = \"10.44.0.50/24\"\ndhcp_start = \"10.44.0.10\"\ndhcp_end = \"10.44.0.200\"\n\n[health]\nrequired = [\"myapp\"]\n\n[containers.container.myapp]\nprivileged = false\n\n[containers.container.myapp.Container]\nImage = \"ghcr.io/example/myapp:latest\"\nEOF")
     gateway.succeed("cat > /tmp/no-health-config.toml <<'EOF'\nversion = 1\n\n[users.admin]\nisAdmin = true\nssh_key = \"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBootstrapKey admin@example\"\n\n[network.firewall.inbound.wan]\ntcp = [443]\n\n[health]\nrequired = [\"placeholder\"]\n\n[containers.container.placeholder]\nprivileged = true\n\n[containers.container.placeholder.Container]\nImage = \"ghcr.io/example/placeholder:latest\"\nEOF")
     gateway.succeed("cat > /tmp/operator-admin-config.toml <<'EOF'\nversion = 1\n\n[users.operator]\nisAdmin = true\nssh_key = \"ssh-ed25519 AAAAC3operator operator@example\"\n\n[health]\nrequired = [\"placeholder\"]\n\n[containers.container.placeholder]\nprivileged = true\n\n[containers.container.placeholder.Container]\nImage = \"ghcr.io/example/placeholder:latest\"\nEOF")
+    gateway.succeed("cat > /tmp/nonadmin-admin-config.toml <<'EOF'\nversion = 1\n\n[users.admin]\nisAdmin = false\nssh_key = \"ssh-ed25519 AAAAC3admin admin@example\"\n\n[users.operator]\nisAdmin = true\nssh_key = \"ssh-ed25519 AAAAC3operator operator@example\"\n\n[health]\nrequired = [\"placeholder\"]\n\n[containers.container.placeholder]\nprivileged = true\n\n[containers.container.placeholder.Container]\nImage = \"ghcr.io/example/placeholder:latest\"\nEOF")
     gateway.succeed("cat > /tmp/sign-reapply <<'PY'\n#!/usr/bin/env python3\nimport base64\nimport hashlib\nimport subprocess\nimport sys\nfrom pathlib import Path\nnonce_path, path, payload_path, key_path, sig_b64_path = sys.argv[1:]\nnonce = Path(nonce_path).read_text().strip()\npayload = Path(payload_path).read_bytes()\nmessage = f'atomixos-reapply-v1\\nnonce:{nonce}\\npath:{path}\\nsha256:{hashlib.sha256(payload).hexdigest()}\\n'.encode()\nproc = subprocess.run(['ssh-keygen', '-Y', 'sign', '-f', key_path, '-n', 'atomixos-reapply'], input=message, stdout=subprocess.PIPE, check=True)\nPath(sig_b64_path).write_text(base64.b64encode(proc.stdout).decode())\nPY\nchmod +x /tmp/sign-reapply")
     gateway.succeed("first-boot-provision validate /tmp/config.toml")
     gateway.succeed("first-boot-provision import /tmp/config.toml /data/config")
@@ -118,6 +119,7 @@ nixos-lib.runTest {
     gateway.fail("test -f /tmp/operator-admin-root/ssh-authorized-keys/admin")
     gateway.succeed("grep 'AAAAC3operator' /tmp/operator-admin-root/admin-signers")
     gateway.succeed("grep 'AAAAC3operator' /tmp/operator-admin-root/ssh-authorized-keys/operator")
+    gateway.fail("first-boot-provision validate /tmp/nonadmin-admin-config.toml")
 
     gateway.succeed("mkdir -p /tmp/lan-apply/bin /tmp/lan-apply/etc/systemd/network/20-lan.network.d /tmp/lan-apply/sys/class/net/eth1")
     gateway.succeed("printf '00:11:22:33:44:55\n' >/tmp/lan-apply/sys/class/net/eth1/address")
@@ -542,6 +544,14 @@ nixos-lib.runTest {
     gateway.succeed("rm -rf /tmp/recover-root /tmp/recover-root-candidate /tmp/recover-root-rollback && mkdir -p /tmp/recover-root-candidate /tmp/recover-root-rollback")
     gateway.succeed("printf 'candidate\n' >/tmp/recover-root-candidate/config.toml && printf 'rollback\n' >/tmp/recover-root-rollback/config.toml")
     gateway.succeed("python3 - <<'PY'\nimport sys, os, importlib.util\nfrom pathlib import Path\nos.environ['ATOMIXOS_CONFIG_SCHEMA'] = '${provisionCli}/share/atomixos/config.schema.json'\nspec = importlib.util.spec_from_file_location('fbp', '${../../scripts/first-boot-provision.py}')\nmod = importlib.util.module_from_spec(spec)\nspec.loader.exec_module(mod)\nmod.recover_config_root(Path('/tmp/recover-root'))\nassert Path('/tmp/recover-root/config.toml').read_text() == 'candidate\\n'\nassert not Path('/tmp/recover-root-candidate').exists()\nPY")
+    gateway.succeed("rm -rf /tmp/recover-active-root /tmp/recover-active-root-candidate /tmp/recover-active-root-rollback && mkdir -p /tmp/recover-active-root /tmp/recover-active-root-rollback")
+    gateway.succeed("printf 'candidate\n' >/tmp/recover-active-root/config.toml && printf 'rollback\n' >/tmp/recover-active-root-rollback/config.toml")
+    gateway.succeed("python3 - <<'PY'\nimport sys, os, importlib.util\nfrom pathlib import Path\nos.environ['ATOMIXOS_CONFIG_SCHEMA'] = '${provisionCli}/share/atomixos/config.schema.json'\nspec = importlib.util.spec_from_file_location('fbp', '${../../scripts/first-boot-provision.py}')\nmod = importlib.util.module_from_spec(spec)\nspec.loader.exec_module(mod)\nmod.recover_config_root(Path('/tmp/recover-active-root'))\nassert Path('/tmp/recover-active-root/config.toml').read_text() == 'rollback\\n'\nassert not Path('/tmp/recover-active-root-rollback').exists()\nPY")
+    gateway.succeed("rm -rf /tmp/recover-cli-root /tmp/recover-cli-root-candidate /tmp/recover-cli-root-rollback && mkdir -p /tmp/recover-cli-root-candidate /tmp/recover-cli-root-rollback")
+    gateway.succeed("printf 'candidate\n' >/tmp/recover-cli-root-candidate/config.toml && printf 'rollback\n' >/tmp/recover-cli-root-rollback/config.toml")
+    gateway.succeed("first-boot-provision recover /tmp/recover-cli-root")
+    gateway.succeed("grep '^candidate$' /tmp/recover-cli-root/config.toml")
+    gateway.succeed("test ! -d /tmp/recover-cli-root-candidate")
 
     # Test cleanup_rollback
     gateway.succeed("first-boot-provision import /tmp/config.toml /tmp/atomic-root")
