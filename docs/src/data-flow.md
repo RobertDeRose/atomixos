@@ -24,16 +24,42 @@ Persisted outputs are:
 | Imported source config   | `/data/config/config.toml`                |
 | Managed users            | `/data/config/users.json`                 |
 | User SSH keys            | `/data/config/ssh-authorized-keys/<user>` |
-| WAN inbound policy       | `/data/config/firewall-inbound.json`     |
-| LAN runtime settings     | `/data/config/lan-settings.json`         |
-| OS upgrade settings      | `/data/config/os-upgrade.json`           |
-| Required health units    | `/data/config/health-required.json`      |
-| Rendered Quadlets        | `/data/config/quadlet/*.container`       |
-| Quadlet runtime metadata | `/data/config/quadlet-runtime.json`      |
-| Bundle payload files     | `/data/config/files/`                    |
+| WAN inbound policy       | `/data/config/firewall-inbound.json`      |
+| LAN runtime settings     | `/data/config/lan-settings.json`          |
+| OS upgrade settings      | `/data/config/os-upgrade.json`            |
+| Required health units    | `/data/config/health-required.json`       |
+| Rendered Quadlets        | `/data/config/quadlet/*.container`        |
+| Quadlet runtime metadata | `/data/config/quadlet-runtime.json`       |
+| Managed user tracking    | `/data/config/managed-users.json`         |
+| Bundle payload files     | `/data/config/files/`                     |
 
 `first-boot.service` fails before RAUC slot confirmation if Quadlet sync, LAN runtime apply, or provisioned firewall apply
 fails.
+
+## Re-Apply Flow
+
+`POST /api/config` on an already-provisioned device requires SSH signature authentication. The operator requests a nonce
+via `GET /api/nonce`, signs it with an active admin SSH key (`ssh-keygen -Y sign -n atomixos-reapply`), and includes the
+nonce and base64 signature in the `X-Atomicnix-Nonce` and `X-Atomicnix-Signature` request headers. Nonces are
+single-use and expire after 5 minutes (configurable via `ATOMIXOS_NONCE_TTL`).
+
+Re-apply uses atomic candidate promotion:
+
+1. Validate and render candidate config in `/data/config-candidate/`.
+2. Rename active `/data/config` to `/data/config-rollback`.
+3. Rename candidate to `/data/config`.
+4. Run activation services synchronously (user apply, Quadlet sync, LAN apply, firewall).
+5. On success, clean up `/data/config-rollback`.
+6. On failure, restore `/data/config-rollback` to `/data/config` and re-activate.
+
+First provisioning (no existing `config.toml`) remains unauthenticated and writes directly.
+
+## Managed Users Flow
+
+`atomixos-apply-users.service` materializes managed users from `/data/config/users.json` on every boot and after
+re-apply. It runs before `sshd.service` so accounts exist before SSH accepts connections. Admin users are added to the
+`wheel` group. Users removed from the config are locked (`expiredate=1`, `shell=/sbin/nologin`). Protected image users
+(`root`, `appsvc`) are never created or locked by this service.
 
 ## Update Flow
 

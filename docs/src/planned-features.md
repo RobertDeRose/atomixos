@@ -89,7 +89,7 @@ Quadlet containers on a persistent `/data` partition.
   power of the config.toml provisioning system including containers, networks, volumes,
   and bundle files.
 - Requirements:
-  - Working `config.toml` with all required sections (admin, firewall, health, containers)
+  - Working `config.toml` with all required sections (users, network, health, containers)
   - AuthCrunch container (`ghcr.io/authcrunch/authcrunch`) as rootful with host networking
   - Caddyfile configuring Microsoft Entra OIDC provider, authentication portal, and
     authorization policies

@@ -58,11 +58,11 @@
 
 ## T060 - Update examples and operator docs
 
-- [ ] Update provisioning docs for the new `config.toml` structure.
-- [ ] Update data-flow and runtime-boundary docs for candidate apply and rollback state.
-- [ ] Update LAN/network docs for `[network]` defaults and overrides.
-- [ ] Update Caddy/AuthCrunch/Cockpit tutorial config and docs to use `[containers]`.
-- [ ] Update code-reference docs for parser, rendered files, and API behavior.
+- [x] Update provisioning docs for the new `config.toml` structure.
+- [x] Update data-flow and runtime-boundary docs for candidate apply and rollback state.
+- [x] Update LAN/network docs for `[network]` defaults and overrides.
+- [x] Update Caddy/AuthCrunch/Cockpit tutorial config and docs to use `[containers]`.
+- [x] Update code-reference docs for parser, rendered files, and API behavior.
 
 ## T070 - Add automated validation
 

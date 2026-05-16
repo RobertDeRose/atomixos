@@ -60,8 +60,8 @@ them the same way it supports `.network` and `.volume`.
 ## T004 -- Write config.toml
 
 - [x] Define `version = 1`
-- [x] Define `admin.ssh_keys` with placeholder public key
-- [x] Define `firewall.inbound.wan` with ports 80 and 443 open (TCP)
+- [x] Define `users.admin.ssh_key` with placeholder public key
+- [x] Define `network.firewall.inbound.wan` with ports 80 and 443 open (TCP)
 - [x] Define `health.required` listing `caddy-gateway.service` and
   `cockpit-ws.service`
 - [x] Define `caddy-gateway` container (rootful, AuthCrunch image)
