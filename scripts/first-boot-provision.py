@@ -59,6 +59,7 @@ DEFAULT_LAN_GATEWAY_ALIASES = ["atomixos"]
 DEFAULT_LAN_HOSTNAME_PATTERN = ""
 SCHEMA_ENV = "ATOMIXOS_CONFIG_SCHEMA"
 BOOTSTRAP_POST_RESPONSE_ENV = "ATOMIXOS_BOOTSTRAP_POST_RESPONSE"
+BOOTSTRAP_ACTIVATION_ENV = "ATOMIXOS_BOOTSTRAP_ACTIVATION"
 NONCE_TTL_SECONDS = int(os.environ.get("ATOMIXOS_NONCE_TTL", "300"))
 SSH_KEYGEN_BIN = os.environ.get("ATOMIXOS_SSH_KEYGEN", "ssh-keygen")
 AUTH_REQUIRED_MESSAGE = "authentication required: provide X-Atomicnix-Nonce and X-Atomicnix-Signature headers"
@@ -1700,7 +1701,7 @@ class BootstrapHandler(BaseHTTPRequestHandler):
 
     def _activate_services(self) -> list[str]:
         """Run activation services synchronously. Returns list of failed services."""
-        command = os.environ.get(BOOTSTRAP_POST_RESPONSE_ENV)
+        command = os.environ.get(BOOTSTRAP_ACTIVATION_ENV) or os.environ.get(BOOTSTRAP_POST_RESPONSE_ENV)
         if not command:
             return []
         try:
@@ -1732,20 +1733,64 @@ class BootstrapHandler(BaseHTTPRequestHandler):
         if not isinstance(required, list) or not required:
             return []
 
-        # Check each required unit via systemctl is-active
+        runtime_modes = self._load_runtime_unit_modes()
         failed = []
         for unit in required:
             service = f"{unit}.service"
+            mode = runtime_modes.get(service, "rootful")
             try:
-                result = subprocess.run(
-                    ["systemctl", "is-active", "--quiet", service],
-                    timeout=10,
-                )
+                if mode == "rootless":
+                    result = self._check_rootless_service(service)
+                else:
+                    result = subprocess.run(["systemctl", "is-active", "--quiet", service], timeout=10)  # noqa: S607
                 if result.returncode != 0:
                     failed.append(service)
             except (FileNotFoundError, subprocess.TimeoutExpired):
                 failed.append(service)
         return failed
+
+    def _load_runtime_unit_modes(self) -> dict[str, str]:
+        runtime_path = Path(self.config_root) / RUNTIME_METADATA_FILENAME
+        try:
+            runtime = json.loads(runtime_path.read_text())
+        except (json.JSONDecodeError, OSError):
+            return {}
+        modes = {}
+        for unit in runtime.get("units", []):
+            if isinstance(unit, dict) and isinstance(unit.get("service"), str):
+                modes[unit["service"]] = unit.get("mode", "rootful")
+        return modes
+
+    def _check_rootless_service(self, service: str) -> subprocess.CompletedProcess:
+        try:
+            uid = pwd.getpwnam(APP_RUNTIME_USER).pw_uid
+        except KeyError:
+            return subprocess.CompletedProcess([], 1)
+        runtime_dir = f"/run/user/{uid}"
+        return subprocess.run(
+            [  # noqa: S607
+                "runuser", "-u", APP_RUNTIME_USER, "--", "env",
+                f"HOME=/var/lib/{APP_RUNTIME_USER}",
+                f"XDG_RUNTIME_DIR={runtime_dir}",
+                f"DBUS_SESSION_BUS_ADDRESS=unix:path={runtime_dir}/bus",
+                "systemctl", "--user", "is-active", "--quiet", service,
+            ],
+            timeout=10,
+        )
+
+    def _complete_reapply(self) -> tuple[bool, list[str], bool]:
+        activation_failures = self._activate_services()
+        health_failures = [] if activation_failures else self._check_required_services()
+        failures = activation_failures + health_failures
+        if failures:
+            config_root = Path(self.config_root)
+            restored = restore_rollback(config_root)
+            if restored:
+                # Re-activate with restored config.
+                self._activate_services()
+            return False, failures, restored
+        cleanup_rollback(Path(self.config_root))
+        return True, [], False
 
     def _write_payload(self, payload: bytes, filename: str = "config.toml"):
         config_root = Path(self.config_root)
@@ -1875,15 +1920,8 @@ class BootstrapHandler(BaseHTTPRequestHandler):
 
             # Activate services synchronously for re-apply; rollback on failure.
             if was_provisioned:
-                activation_failures = self._activate_services()
-                health_failures = [] if activation_failures else self._check_required_services()
-                failures = activation_failures + health_failures
-                if failures:
-                    config_root = Path(self.config_root)
-                    restored = restore_rollback(config_root)
-                    if restored:
-                        # Re-activate with restored config.
-                        self._activate_services()
+                ok, failures, restored = self._complete_reapply()
+                if not ok:
                     self._send_json(502, {
                         "ok": False,
                         "error": "activation failed; rolled back to previous config",
@@ -1891,8 +1929,6 @@ class BootstrapHandler(BaseHTTPRequestHandler):
                         "rolled_back": restored,
                     })
                     return
-                # Activation succeeded — clean rollback state.
-                cleanup_rollback(Path(self.config_root))
             else:
                 # First provisioning: fire-and-forget activation.
                 self._run_post_response_async()
@@ -2005,6 +2041,18 @@ class BootstrapHandler(BaseHTTPRequestHandler):
                 return
 
             applied_config = self._write_payload(payload, filename)
+            if was_provisioned:
+                ok, failures, restored = self._complete_reapply()
+                if not ok:
+                    detail = html.escape(json.dumps({"failures": failures, "rolled_back": restored}, indent=2))
+                    self._send_html(
+                        config_text=config_text,
+                        message=(
+                            "<p><strong>Error:</strong> activation failed; rolled back to previous config.</p>"
+                            f"<pre>{detail}</pre>"
+                        ),
+                    )
+                    return
         except Exception as exc:
             self._send_html(config_text=config_text, message=f"<p><strong>Error:</strong> {html.escape(str(exc))}</p>")
             return
@@ -2020,7 +2068,8 @@ class BootstrapHandler(BaseHTTPRequestHandler):
             ),
         )
         self._mark_applied()
-        self._run_post_response_async()
+        if not was_provisioned:
+            self._run_post_response_async()
 
     def log_message(self, fmt, *args):
         if fmt == '"%s" %s %s' and args:
