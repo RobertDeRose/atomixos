@@ -69,6 +69,12 @@ Quadlet containers on a persistent `/data` partition.
 - **USB WiFi**: Kernel WiFi/Bluetooth stacks are disabled. Hardware selection needed
   before enablement.
 - **Active watchdog enforcement**: Deferred pending Rock64 boot-reliability validation.
+- **Additional `[activation]` options**: Evaluate adding activation controls beyond
+  `required`, such as `timeout_seconds` for max wait/check windows,
+  `rollback_on_failure` for whether to restore previous config, `restart` for an
+  explicit ordered service restart list, `settle_seconds` before checking health,
+  `allow_degraded` for services allowed to fail without rollback, and
+  `strategy = "rollback" | "keep-failed" | "manual-confirm"`.
 
 ## Resolved Questions
 

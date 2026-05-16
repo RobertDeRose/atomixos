@@ -37,7 +37,7 @@ domain = "local"
 gateway_aliases = ["atomixos"]
 hostname_pattern = "atomixos-{mac}"
 
-[health]
+[activation]
 required = ["myapp"]
 
 [containers.container.myapp]

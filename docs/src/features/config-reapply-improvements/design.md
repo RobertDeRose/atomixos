@@ -35,8 +35,8 @@ to restructure `config.toml` around `[users]`, `[network]`, and `[containers]`, 
 ## Current Behavior
 
 `scripts/first-boot-provision.py` owns config parsing, import, bootstrap UI, and `POST /api/config`. The current format
-uses top-level `[admin]`, `[firewall]`, `[health]`, optional `[lan]`, optional `[os_upgrade]`, and top-level Quadlet tables
-such as `[container.<name>]`, `[network.<name>]`, `[volume.<name>]`, and `[build.<name>]`.
+uses top-level `[admin]`, `[firewall]`, `[activation]`, optional `[lan]`, optional `[os_upgrade]`, and top-level Quadlet
+tables such as `[container.<name>]`, `[network.<name>]`, `[volume.<name>]`, and `[build.<name>]`.
 
 The existing import path writes derived state under `/data/config`, including:
 
@@ -64,7 +64,7 @@ Top-level sections are reserved for OS/device configuration:
 
 - `[users]`
 - `[network]`
-- `[health]`
+- `[activation]`
 - `[os_upgrade]`
 - `[containers]`
 

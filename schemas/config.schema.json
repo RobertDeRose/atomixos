@@ -4,7 +4,7 @@
   "title": "AtomixOS config.toml",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "users", "health", "containers"],
+  "required": ["version", "users", "activation", "containers"],
   "properties": {
     "version": {
       "type": "integer",
@@ -33,7 +33,7 @@
         }
       }
     },
-    "health": {
+    "activation": {
       "type": "object",
       "additionalProperties": false,
       "required": ["required"],

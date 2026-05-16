@@ -897,8 +897,8 @@ def load_config(config_path: Path, config_root: Path = DEFAULT_CONFIG_DIR):
     root = require_allowed_keys(
         data,
         "config",
-        {"version", "users", "network", "health", "os_upgrade", "containers"},
-        {"version", "users", "health", "containers"},
+        {"version", "users", "network", "activation", "os_upgrade", "containers"},
+        {"version", "users", "activation", "containers"},
     )
 
     version = root.get("version")
@@ -909,8 +909,8 @@ def load_config(config_path: Path, config_root: Path = DEFAULT_CONFIG_DIR):
     users, ssh_keys = load_users(root.get("users"))
     firewall_inbound = load_firewall_inbound(root.get("network"))
 
-    health = require_allowed_keys(root.get("health"), "health", {"required"}, {"required"})
-    required_units = require_string_list(health.get("required"), "health.required")
+    activation = require_allowed_keys(root.get("activation"), "activation", {"required"}, {"required"})
+    required_units = require_string_list(activation.get("required"), "activation.required")
 
     lan_settings = load_network_settings(root.get("network"))
 
@@ -959,7 +959,7 @@ def load_config(config_path: Path, config_root: Path = DEFAULT_CONFIG_DIR):
 
     for unit in required_units:
         if unit not in container:
-            message = f"health.required references unknown unit: {unit}"
+            message = f"activation.required references unknown unit: {unit}"
             raise provision_error(message)
 
     return {
@@ -1642,7 +1642,7 @@ BOOTSTRAP_HTML = """<!doctype html>
           <textarea class=\"short\" name=\"gateway_aliases\">atomixos</textarea>
           <label>Gateway hostname pattern</label>
           <textarea class=\"short\" name=\"hostname_pattern\">atomixos-{{mac}}</textarea>
-          <label>Required health units (one per line)</label>
+          <label>Required activation units (one per line)</label>
           <textarea class=\"short\" name=\"required\"></textarea>
           <label>Container TOML snippet</label>
           <textarea name=\"quadlet\">[container.myapp]
@@ -2060,7 +2060,7 @@ class BootstrapHandler(BaseHTTPRequestHandler):
 
                     {os_upgrade_text}
 
-                    [health]
+                    [activation]
                     required = {json.dumps(required)}
 
                     {quadlet}

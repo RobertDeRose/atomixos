@@ -126,7 +126,7 @@ ssh_keys = ["ssh-ed25519 AAAA..."]
 tcp = [80, 443]
 udp = [1194]
 
-[health]
+[activation]
 required = ["traefik", "whoami"]
 
 [container.<name>]
@@ -256,7 +256,7 @@ Required keys:
 
 - `required`
 
-#### `health.required`
+#### `activation.required`
 
 - type: non-empty array of non-empty strings
 - each item names a required application/service unit
@@ -508,11 +508,11 @@ The importer should validate:
 - `version == 1`
 - `admin.ssh_keys` is a non-empty string array
 - `firewall.inbound.tcp` and `udp`, when present, are valid port arrays
-- `health.required` is a non-empty string array
+- `activation.required` is a non-empty string array
 - `container` exists and defines at least one container
 - each container defines `privileged`
 - each container defines `[Container]` with `Image`
-- `health.required` names correspond to declared containers
+- `activation.required` names correspond to declared containers
 - bundle layout is valid when importing archives
 - bundle top level is limited to `config.toml` and optional `files/`
 - archive member paths are safe

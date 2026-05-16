@@ -1,7 +1,11 @@
 # Config Reapply Improvements Tasks
 
-- [x] Confirm the canonical `config.toml` top-level sections: `[users]`, `[network]`, `[health]`, `[os_upgrade]`, and `[containers]`.
-- [x] Reject legacy top-level `[admin]`, `[firewall]`, `[lan]`, `[container]`, `[network]`, `[volume]`, and `[build]` config without migration because AtomixOS is unreleased.
+## T000 - Review and confirm feature spec
+
+- [x] Confirm the canonical `config.toml` top-level sections: `[users]`, `[network]`, `[activation]`, `[os_upgrade]`,
+  and `[containers]`.
+- [x] Reject legacy top-level `[admin]`, `[firewall]`, `[lan]`, `[container]`, `[network]`, `[volume]`, and `[build]`
+  config without migration because AtomixOS is unreleased.
 - [x] Use SSH-key challenge-response with an existing admin key for re-apply authentication.
 - [x] Manage declared `[users.<name>]` local users in this feature.
 

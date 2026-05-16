@@ -7,7 +7,7 @@ ssh_key = "<SSH_PUBLIC_KEY>"
 [network.firewall.inbound.wan]
 tcp = [80, 443]
 
-[health]
+[activation]
 required = ["caddy-gateway", "cockpit-ws"]
 
 # -- Networks --------------------------------------------------------
