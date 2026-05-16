@@ -401,6 +401,57 @@ nixos-lib.runTest {
     gateway.succeed("test ! -d /tmp/atomic-root-candidate")
     gateway.succeed("kill $(cat /tmp/atomic-bootstrap.pid)")
 
+    # ── T070: invalid config via authenticated re-apply preserves active state ──
+    gateway.succeed("rm -rf /tmp/reapply-invalid-root /tmp/reapply-invalid-root-candidate /tmp/reapply-invalid-root-rollback && mkdir -p /tmp/reapply-invalid-root")
+    gateway.succeed("first-boot-provision import /tmp/config.toml /tmp/reapply-invalid-root")
+    gateway.succeed("ssh-keygen -t ed25519 -N \"\" -f /tmp/reapply-invalid-key -q")
+    gateway.succeed("cat /tmp/reapply-invalid-key.pub > /tmp/reapply-invalid-root/ssh-authorized-keys/admin")
+    # Capture a hash of active config before re-apply attempt
+    gateway.succeed("sha256sum /tmp/reapply-invalid-root/config.toml | awk '{print $1}' > /tmp/reapply-invalid-hash-before")
+    gateway.succeed("first-boot-provision serve /tmp/reapply-invalid-root --host 127.0.0.1 --port 18083 >/tmp/reapply-invalid.log 2>&1 & echo $! >/tmp/reapply-invalid.pid")
+    gateway.wait_until_succeeds("ss -tln | grep ':18083'", timeout=30)
+    # Get nonce and sign
+    gateway.succeed("curl -fsS http://127.0.0.1:18083/api/nonce > /tmp/reapply-invalid-nonce.json")
+    gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nnonce = json.loads(Path('/tmp/reapply-invalid-nonce.json').read_text())['nonce']\nPath('/tmp/reapply-invalid-nonce.txt').write_text(nonce)\nPY")
+    gateway.succeed("cat /tmp/reapply-invalid-nonce.txt | ssh-keygen -Y sign -f /tmp/reapply-invalid-key -n atomixos-reapply > /tmp/reapply-invalid-sig.pem")
+    gateway.succeed("python3 - <<'PY'\nimport base64\nfrom pathlib import Path\nsig = Path('/tmp/reapply-invalid-sig.pem').read_bytes()\nPath('/tmp/reapply-invalid-sig-b64.txt').write_text(base64.b64encode(sig).decode())\nPY")
+    # Submit invalid config via authenticated API — should get 400
+    gateway.succeed("curl -s -o /tmp/reapply-invalid-response.json -w '%{http_code}' -H 'Content-Type: text/plain' -H \"X-Atomicnix-Nonce: $(cat /tmp/reapply-invalid-nonce.txt)\" -H \"X-Atomicnix-Signature: $(cat /tmp/reapply-invalid-sig-b64.txt)\" --data-binary @/tmp/invalid-config.toml http://127.0.0.1:18083/api/config > /tmp/reapply-invalid-code")
+    gateway.succeed("grep '^400$' /tmp/reapply-invalid-code")
+    gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nresp = json.loads(Path('/tmp/reapply-invalid-response.json').read_text())\nassert resp['ok'] is False, resp\nassert 'error' in resp, resp\nPY")
+    # Active config must be unchanged — same hash, no candidate/rollback debris
+    gateway.succeed("sha256sum /tmp/reapply-invalid-root/config.toml | awk '{print $1}' > /tmp/reapply-invalid-hash-after")
+    gateway.succeed("diff /tmp/reapply-invalid-hash-before /tmp/reapply-invalid-hash-after")
+    gateway.succeed("test ! -d /tmp/reapply-invalid-root-candidate")
+    gateway.succeed("test ! -d /tmp/reapply-invalid-root-rollback")
+    gateway.succeed("kill $(cat /tmp/reapply-invalid.pid)")
+
+    # ── T070: activation failure triggers rollback to previous config ──
+    gateway.succeed("rm -rf /tmp/rollback-root /tmp/rollback-root-candidate /tmp/rollback-root-rollback && mkdir -p /tmp/rollback-root")
+    gateway.succeed("first-boot-provision import /tmp/config.toml /tmp/rollback-root")
+    gateway.succeed("ssh-keygen -t ed25519 -N \"\" -f /tmp/rollback-key -q")
+    gateway.succeed("cat /tmp/rollback-key.pub > /tmp/rollback-root/ssh-authorized-keys/admin")
+    gateway.succeed("sha256sum /tmp/rollback-root/config.toml | awk '{print $1}' > /tmp/rollback-hash-before")
+    # Create a post-response hook that always fails (simulates activation failure)
+    gateway.succeed("cat > /tmp/rollback-activation-hook <<'EOF'\n#!/usr/bin/env bash\nexit 1\nEOF\nchmod +x /tmp/rollback-activation-hook")
+    gateway.succeed("ATOMIXOS_BOOTSTRAP_POST_RESPONSE=/tmp/rollback-activation-hook first-boot-provision serve /tmp/rollback-root --host 127.0.0.1 --port 18084 >/tmp/rollback.log 2>&1 & echo $! >/tmp/rollback.pid")
+    gateway.wait_until_succeeds("ss -tln | grep ':18084'", timeout=30)
+    # Get nonce and sign
+    gateway.succeed("curl -fsS http://127.0.0.1:18084/api/nonce > /tmp/rollback-nonce.json")
+    gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nnonce = json.loads(Path('/tmp/rollback-nonce.json').read_text())['nonce']\nPath('/tmp/rollback-nonce.txt').write_text(nonce)\nPY")
+    gateway.succeed("cat /tmp/rollback-nonce.txt | ssh-keygen -Y sign -f /tmp/rollback-key -n atomixos-reapply > /tmp/rollback-sig.pem")
+    gateway.succeed("python3 - <<'PY'\nimport base64\nfrom pathlib import Path\nsig = Path('/tmp/rollback-sig.pem').read_bytes()\nPath('/tmp/rollback-sig-b64.txt').write_text(base64.b64encode(sig).decode())\nPY")
+    # Submit valid config — activation will fail, should get 502 with rollback
+    gateway.succeed("curl -s -o /tmp/rollback-response.json -w '%{http_code}' -H 'Content-Type: text/plain' -H \"X-Atomicnix-Nonce: $(cat /tmp/rollback-nonce.txt)\" -H \"X-Atomicnix-Signature: $(cat /tmp/rollback-sig-b64.txt)\" --data-binary @/tmp/config.toml http://127.0.0.1:18084/api/config > /tmp/rollback-code")
+    gateway.succeed("grep '^502$' /tmp/rollback-code")
+    gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nresp = json.loads(Path('/tmp/rollback-response.json').read_text())\nassert resp['ok'] is False, resp\nassert 'rolled back' in resp['error'], resp\nassert resp['rolled_back'] is True, resp\nassert len(resp['failures']) > 0, resp\nPY")
+    # Config should be restored to the original (rollback consumed)
+    gateway.succeed("sha256sum /tmp/rollback-root/config.toml | awk '{print $1}' > /tmp/rollback-hash-after")
+    gateway.succeed("diff /tmp/rollback-hash-before /tmp/rollback-hash-after")
+    gateway.succeed("test ! -d /tmp/rollback-root-rollback")
+    gateway.succeed("test ! -d /tmp/rollback-root-candidate")
+    gateway.succeed("kill $(cat /tmp/rollback.pid)")
+
     # Test restore_rollback (create a fake rollback first)
     gateway.succeed("mkdir -p /tmp/atomic-root-rollback && cp /tmp/config.toml /tmp/atomic-root-rollback/config.toml")
     gateway.succeed("python3 - <<'PY'\nimport sys, os, importlib.util\nfrom pathlib import Path\nos.environ['ATOMIXOS_CONFIG_SCHEMA'] = '${provisionCli}/share/atomixos/config.schema.json'\nspec = importlib.util.spec_from_file_location('fbp', '${../../scripts/first-boot-provision.py}')\nmod = importlib.util.module_from_spec(spec)\nspec.loader.exec_module(mod)\nassert mod.restore_rollback(Path('/tmp/atomic-root')) is True\nassert Path('/tmp/atomic-root/config.toml').exists()\nassert not Path('/tmp/atomic-root-rollback').exists()\nPY")

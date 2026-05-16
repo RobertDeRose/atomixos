@@ -1761,8 +1761,13 @@ class BootstrapHandler(BaseHTTPRequestHandler):
                     shutil.rmtree(candidate_root)
                 candidate_root.mkdir(parents=True, exist_ok=True)
 
-                parsed = load_config(prepared_config, config_root)
-                write_imported_state(parsed, prepared_config, prepared_files, candidate_root)
+                try:
+                    parsed = load_config(prepared_config, config_root)
+                    write_imported_state(parsed, prepared_config, prepared_files, candidate_root)
+                    carry_forward_managed_state(config_root, candidate_root)
+                except Exception:
+                    shutil.rmtree(candidate_root, ignore_errors=True)
+                    raise
 
                 if rollback_root.exists():
                     shutil.rmtree(rollback_root)

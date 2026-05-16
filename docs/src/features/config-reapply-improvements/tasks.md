@@ -66,16 +66,17 @@
 
 ## T070 - Add automated validation
 
-- [ ] Add unit tests for schema defaults and invalid key rejection.
-- [ ] Add unit tests for users/admin SSH key extraction.
-- [ ] Add unit tests for managed user creation/update/disable behavior.
-- [ ] Add boot or VM coverage proving managed users are materialized from `/data/config` after reboot.
-- [ ] Add unit tests for network defaults, dnsmasq defaults, and firewall rule rendering.
-- [ ] Add unit tests for nested `[containers]` Quadlet rendering.
-- [ ] Add unit tests for SSH-key challenge-response authentication.
-- [ ] Add VM or integration test for successful authenticated re-apply.
-- [ ] Add VM or integration test for invalid config preserving active state.
-- [ ] Add VM or integration test for activation failure rollback.
+- [x] Add unit tests for schema defaults and invalid key rejection.
+- [x] Add unit tests for users/admin SSH key extraction.
+- [x] Add unit tests for managed user creation/update/disable behavior.
+- [ ] Add boot or VM coverage proving managed users are materialized from `/data/config` after reboot (deferred: requires
+  persistent VM disk).
+- [x] Add unit tests for network defaults, dnsmasq defaults, and firewall rule rendering.
+- [x] Add unit tests for nested `[containers]` Quadlet rendering.
+- [x] Add unit tests for SSH-key challenge-response authentication.
+- [x] Add VM or integration test for successful authenticated re-apply.
+- [x] Add VM or integration test for invalid config preserving active state.
+- [x] Add VM or integration test for activation failure rollback.
 
 ## T999 - Final verification and release readiness
 
