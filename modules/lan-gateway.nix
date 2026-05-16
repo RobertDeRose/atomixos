@@ -46,11 +46,8 @@ in
     servers = [ ];
     initstepslew.enabled = false;
     extraConfig = ''
-      # Sync from upstream NTP servers (via WAN / eth0)
-      server 1.ntp.ubuntu.com iburst
-      server 2.ntp.ubuntu.com iburst
-      server 3.ntp.ubuntu.com iburst
-      server 4.ntp.ubuntu.com iburst
+      # Sync from Cloudflare's public, non-leap-smearing NTP service via WAN.
+      server time.cloudflare.com iburst
 
       # Step large RTC drift whenever upstream time becomes available.
       makestep 1.0 -1

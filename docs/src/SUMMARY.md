@@ -28,6 +28,7 @@
 # Operations
 
 - [Hardware Testing](./hardware-testing.md)
+- [NTP Settings](./operations/ntp-settings.md)
 
 # Specifications
 
