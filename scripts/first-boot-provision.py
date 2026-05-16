@@ -1698,6 +1698,55 @@ class BootstrapHandler(BaseHTTPRequestHandler):
             return
         subprocess.Popen([command], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
+    def _activate_services(self) -> list[str]:
+        """Run activation services synchronously. Returns list of failed services."""
+        command = os.environ.get(BOOTSTRAP_POST_RESPONSE_ENV)
+        if not command:
+            return []
+        try:
+            result = subprocess.run(
+                [command],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if result.returncode != 0:
+                stderr = result.stderr.strip()
+                return [f"activation script failed (exit {result.returncode}): {stderr[:200]}"]
+        except subprocess.TimeoutExpired:
+            return ["activation script timed out"]
+        except FileNotFoundError:
+            return ["activation script not found"]
+        return []
+
+    def _check_required_services(self) -> list[str]:
+        """Check that required health services are active. Returns failed units."""
+        config_root = Path(self.config_root)
+        health_path = config_root / "health-required.json"
+        if not health_path.exists():
+            return []
+        try:
+            required = json.loads(health_path.read_text())
+        except (json.JSONDecodeError, OSError):
+            return []
+        if not isinstance(required, list) or not required:
+            return []
+
+        # Check each required unit via systemctl is-active
+        failed = []
+        for unit in required:
+            service = f"{unit}.service"
+            try:
+                result = subprocess.run(
+                    ["systemctl", "is-active", "--quiet", service],
+                    timeout=10,
+                )
+                if result.returncode != 0:
+                    failed.append(service)
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                failed.append(service)
+        return failed
+
     def _write_payload(self, payload: bytes, filename: str = "config.toml"):
         config_root = Path(self.config_root)
         temp_bundle, prepared_config, prepared_files = prepare_source_bytes(payload, filename)
@@ -1805,8 +1854,9 @@ class BootstrapHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         if self.path == "/api/config":
+            was_provisioned = self._is_provisioned()
             # Require authentication if already provisioned.
-            if self._is_provisioned():
+            if was_provisioned:
                 if not self._require_auth():
                     return
 
@@ -1819,9 +1869,30 @@ class BootstrapHandler(BaseHTTPRequestHandler):
                 self._send_json(400, {"ok": False, "error": str(exc)})
                 return
 
+            # Activate services synchronously for re-apply; rollback on failure.
+            if was_provisioned:
+                activation_failures = self._activate_services()
+                if activation_failures:
+                    config_root = Path(self.config_root)
+                    restored = restore_rollback(config_root)
+                    if restored:
+                        # Re-activate with restored config.
+                        self._activate_services()
+                    self._send_json(502, {
+                        "ok": False,
+                        "error": "activation failed; rolled back to previous config",
+                        "failures": activation_failures,
+                        "rolled_back": restored,
+                    })
+                    return
+                # Activation succeeded — clean rollback state.
+                cleanup_rollback(Path(self.config_root))
+            else:
+                # First provisioning: fire-and-forget activation.
+                self._run_post_response_async()
+
             self._send_json(200, {"ok": True, "message": "Configuration applied."})
             self._mark_applied()
-            self._run_post_response_async()
             return
 
         form = self._read_form()

@@ -392,16 +392,17 @@ nixos-lib.runTest {
     gateway.succeed("cat /tmp/atomic-nonce.txt | ssh-keygen -Y sign -f /tmp/atomic-key -n atomixos-reapply > /tmp/atomic-sig.pem")
     gateway.succeed("python3 - <<'PY'\nimport base64\nfrom pathlib import Path\nsig = Path('/tmp/atomic-sig.pem').read_bytes()\nPath('/tmp/atomic-sig-b64.txt').write_text(base64.b64encode(sig).decode())\nPY")
 
-    # Authenticated re-apply creates rollback
+    # Authenticated re-apply: rollback is cleaned after successful activation
     gateway.succeed("curl -fsS -H 'Content-Type: text/plain' -H \"X-Atomicnix-Nonce: $(cat /tmp/atomic-nonce.txt)\" -H \"X-Atomicnix-Signature: $(cat /tmp/atomic-sig-b64.txt)\" --data-binary @/tmp/config.toml http://127.0.0.1:18082/api/config > /tmp/atomic-apply-response.json")
     gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nresp = json.loads(Path('/tmp/atomic-apply-response.json').read_text())\nassert resp['ok'] is True, resp\nPY")
-    gateway.succeed("test -d /tmp/atomic-root-rollback")
-    gateway.succeed("test -f /tmp/atomic-root-rollback/config.toml")
+    # Rollback was created then cleaned after successful activation
+    gateway.succeed("test ! -d /tmp/atomic-root-rollback")
     gateway.succeed("test -f /tmp/atomic-root/config.toml")
     gateway.succeed("test ! -d /tmp/atomic-root-candidate")
     gateway.succeed("kill $(cat /tmp/atomic-bootstrap.pid)")
 
-    # Test restore_rollback
+    # Test restore_rollback (create a fake rollback first)
+    gateway.succeed("mkdir -p /tmp/atomic-root-rollback && cp /tmp/config.toml /tmp/atomic-root-rollback/config.toml")
     gateway.succeed("python3 - <<'PY'\nimport sys, os, importlib.util\nfrom pathlib import Path\nos.environ['ATOMIXOS_CONFIG_SCHEMA'] = '${provisionCli}/share/atomixos/config.schema.json'\nspec = importlib.util.spec_from_file_location('fbp', '${../../scripts/first-boot-provision.py}')\nmod = importlib.util.module_from_spec(spec)\nspec.loader.exec_module(mod)\nassert mod.restore_rollback(Path('/tmp/atomic-root')) is True\nassert Path('/tmp/atomic-root/config.toml').exists()\nassert not Path('/tmp/atomic-root-rollback').exists()\nPY")
 
     # Test cleanup_rollback

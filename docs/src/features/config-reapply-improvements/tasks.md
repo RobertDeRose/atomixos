@@ -50,11 +50,11 @@
 
 ## T050 - Implement rollback on failed activation
 
-- [ ] Apply LAN settings, firewall state, and Quadlet sync after candidate promotion.
-- [ ] Confirm required services reach the expected active state.
-- [ ] Restore previous config if apply or service confirmation fails.
-- [ ] Re-apply previous LAN, firewall, and Quadlet state after rollback.
-- [ ] Return clear API errors describing validation or activation failures.
+- [x] Apply LAN settings, firewall state, and Quadlet sync after candidate promotion.
+- [x] Confirm required services reach the expected active state.
+- [x] Restore previous config if apply or service confirmation fails.
+- [x] Re-apply previous LAN, firewall, and Quadlet state after rollback.
+- [x] Return clear API errors describing validation or activation failures.
 
 ## T060 - Update examples and operator docs
 
