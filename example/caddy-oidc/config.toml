@@ -1,9 +1,10 @@
 version = 1
 
-[admin]
-ssh_keys = ["<SSH_PUBLIC_KEY>"]
+[users.admin]
+isAdmin = true
+ssh_key = "<SSH_PUBLIC_KEY>"
 
-[firewall.inbound.wan]
+[network.firewall.inbound.wan]
 tcp = [80, 443]
 
 [health]
@@ -11,33 +12,33 @@ required = ["caddy-gateway", "cockpit-ws"]
 
 # -- Networks --------------------------------------------------------
 
-[network.management]
-[network.management.Network]
+[containers.network.management]
+[containers.network.management.Network]
 Subnet = "10.89.1.0/24"
 
 # -- Volumes ---------------------------------------------------------
 
-[volume.caddy-data]
-[volume.caddy-data.Volume]
+[containers.volume.caddy-data]
+[containers.volume.caddy-data.Volume]
 Driver = "local"
 
 # -- Builds ----------------------------------------------------------
 
-[build.cockpit-ws]
-[build.cockpit-ws.Build]
+[containers.build.cockpit-ws]
+[containers.build.cockpit-ws.Build]
 File = "${FILES_DIR}/cockpit/Containerfile"
 ImageTag = "localhost/cockpit-ws:latest"
 Network = "host"
 
 # -- Containers ------------------------------------------------------
 
-[container.caddy-gateway]
+[containers.container.caddy-gateway]
 privileged = true
 
-[container.caddy-gateway.Unit]
+[containers.container.caddy-gateway.Unit]
 Description = "Caddy gateway with AuthCrunch OIDC"
 
-[container.caddy-gateway.Container]
+[containers.container.caddy-gateway.Container]
 Image = "ghcr.io/authcrunch/authcrunch:latest"
 Environment = [
   "GATEWAY_DOMAIN=<GATEWAY_DOMAIN>",
@@ -53,18 +54,18 @@ Volume = [
   "caddy-data:/data",
 ]
 
-[container.caddy-gateway.Install]
+[containers.container.caddy-gateway.Install]
 WantedBy = ["multi-user.target"]
 
-[container.cockpit-ws]
+[containers.container.cockpit-ws]
 privileged = true
 
-[container.cockpit-ws.Unit]
+[containers.container.cockpit-ws.Unit]
 Description = "Cockpit web console behind OIDC"
 After = ["cockpit-ws-build.service"]
 Requires = ["cockpit-ws-build.service"]
 
-[container.cockpit-ws.Container]
+[containers.container.cockpit-ws.Container]
 Image = "localhost/cockpit-ws:latest"
 Pull = "never"
 PodmanArgs = ["--pid=host", "--privileged"]
@@ -81,5 +82,5 @@ Volume = [
   "/etc/os-release:/etc/os-release:ro",
 ]
 
-[container.cockpit-ws.Install]
+[containers.container.cockpit-ws.Install]
 WantedBy = ["multi-user.target"]

@@ -19,10 +19,11 @@ USB seed, a supported seed bundle, or the LAN bootstrap console.
 
 Persisted outputs are:
 
-| Output                   | Path                                     |
-|--------------------------|------------------------------------------|
-| Imported source config   | `/data/config/config.toml`               |
-| Admin SSH keys           | `/data/config/ssh-authorized-keys/admin` |
+| Output                   | Path                                      |
+|--------------------------|-------------------------------------------|
+| Imported source config   | `/data/config/config.toml`                |
+| Managed users            | `/data/config/users.json`                 |
+| User SSH keys            | `/data/config/ssh-authorized-keys/<user>` |
 | WAN inbound policy       | `/data/config/firewall-inbound.json`     |
 | LAN runtime settings     | `/data/config/lan-settings.json`         |
 | OS upgrade settings      | `/data/config/os-upgrade.json`           |

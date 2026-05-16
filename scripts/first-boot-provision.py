@@ -57,6 +57,18 @@ DEFAULT_LAN_GATEWAY_ALIASES = ["atomixos"]
 DEFAULT_LAN_HOSTNAME_PATTERN = ""
 SCHEMA_ENV = "ATOMIXOS_CONFIG_SCHEMA"
 BOOTSTRAP_POST_RESPONSE_ENV = "ATOMIXOS_BOOTSTRAP_POST_RESPONSE"
+RESERVED_USERNAMES = {
+    "appsvc",
+    "bin",
+    "chrony",
+    "daemon",
+    "dnsmasq",
+    "nobody",
+    "root",
+    "systemd-network",
+    "systemd-resolve",
+    "systemd-timesync",
+}
 
 
 class ProvisionError(RuntimeError):
@@ -228,6 +240,16 @@ def validate_name(name: str) -> str:
     return name
 
 
+def validate_username(name: str) -> str:
+    message = f"invalid user name: {name!r}"
+    if not re.fullmatch(r"[a-z_][a-z0-9_-]{0,31}", name):
+        raise provision_error(message)
+    if name in RESERVED_USERNAMES:
+        message = f"reserved user name: {name!r}"
+        raise provision_error(message)
+    return name
+
+
 def require_mapping(value, path: str):
     if not isinstance(value, dict):
         message = f"expected table at {path}"
@@ -396,6 +418,109 @@ def load_lan_settings(lan_value, path: str = "lan"):
         "hostname_pattern": hostname_pattern,
         "gateway_aliases": list(dict.fromkeys(gateway_aliases)),
     }
+
+
+def load_users(users_value):
+    users = require_mapping(users_value, "users")
+    normalized = {}
+    admin_keys = []
+
+    for username, raw_user in users.items():
+        validate_username(username)
+        user = require_allowed_keys(raw_user, f"users.{username}", {"isAdmin", "ssh_key"})
+        is_admin = require_bool(user.get("isAdmin", False), f"users.{username}.isAdmin")
+        ssh_key_raw = user.get("ssh_key", "")
+        if not isinstance(ssh_key_raw, str):
+            message = f"expected string at users.{username}.ssh_key"
+            raise provision_error(message)
+        ssh_key = ssh_key_raw.strip()
+
+        normalized[username] = {
+            "isAdmin": is_admin,
+            "ssh_key": ssh_key,
+        }
+        if is_admin and ssh_key:
+            admin_keys.append(ssh_key)
+
+    if not admin_keys:
+        message = "users must define at least one admin user with a non-empty ssh_key"
+        raise provision_error(message)
+
+    return normalized, admin_keys
+
+
+def load_network_settings(network_value):
+    if network_value is None:
+        network_value = {}
+    network = require_allowed_keys(
+        network_value,
+        "network",
+        {"dns_servers", "dns_search_domains", "default_gateway", "interfaces", "dnsmasq", "firewall"},
+    )
+    dnsmasq = network.get("dnsmasq", {})
+    dnsmasq_settings = require_allowed_keys(
+        dnsmasq,
+        "network.dnsmasq",
+        {
+            "enable",
+            "interface",
+            "gateway_cidr",
+            "dhcp_start",
+            "dhcp_end",
+            "domain",
+            "hostname_pattern",
+            "gateway_aliases",
+        },
+    )
+
+    if "enable" in dnsmasq_settings and not require_bool(dnsmasq_settings["enable"], "network.dnsmasq.enable"):
+        message = "network.dnsmasq.enable must remain true; disabling LAN DHCP/DNS is not supported"
+        raise provision_error(message)
+    if "interface" in dnsmasq_settings:
+        interface = require_string(dnsmasq_settings["interface"], "network.dnsmasq.interface")
+        if interface != "eth1":
+            message = "network.dnsmasq.interface must be eth1"
+            raise provision_error(message)
+
+    return load_lan_settings(dnsmasq_settings, "network.dnsmasq")
+
+
+def load_firewall_inbound(network_value):
+    if network_value is None:
+        network_value = {}
+    network = require_allowed_keys(
+        network_value,
+        "network",
+        {"dns_servers", "dns_search_domains", "default_gateway", "interfaces", "dnsmasq", "firewall"},
+    )
+    firewall = network.get("firewall", {})
+    firewall = require_allowed_keys(firewall, "network.firewall", {"inbound"})
+    inbound_value = firewall.get("inbound", {})
+    inbound = require_allowed_keys(inbound_value, "network.firewall.inbound", {"wan", "lan"})
+
+    def normalize_firewall_scope(scope_value, scope_path: str):
+        if scope_value is None:
+            return {}
+        scope = require_allowed_keys(scope_value, scope_path, {"tcp", "udp"})
+        normalized = {}
+        if "tcp" in scope:
+            tcp_ports = require_port_list(scope.get("tcp"), f"{scope_path}.tcp")
+            if tcp_ports:
+                normalized["tcp"] = tcp_ports
+        if "udp" in scope:
+            udp_ports = require_port_list(scope.get("udp"), f"{scope_path}.udp")
+            if udp_ports:
+                normalized["udp"] = udp_ports
+        return normalized
+
+    firewall_inbound = {}
+    wan_scope = normalize_firewall_scope(inbound.get("wan"), "network.firewall.inbound.wan")
+    if wan_scope:
+        firewall_inbound["wan"] = wan_scope
+    lan_scope = normalize_firewall_scope(inbound.get("lan"), "network.firewall.inbound.lan")
+    if lan_scope:
+        firewall_inbound["lan"] = lan_scope
+    return firewall_inbound
 
 
 def ensure_dir(path: Path):
@@ -684,8 +809,8 @@ def load_config(config_path: Path, config_root: Path = DEFAULT_CONFIG_DIR):
     root = require_allowed_keys(
         data,
         "config",
-        {"version", "admin", "firewall", "health", "lan", "os_upgrade", "container", "network", "volume", "build"},
-        {"version", "admin", "firewall", "health", "container"},
+        {"version", "users", "network", "health", "os_upgrade", "containers"},
+        {"version", "users", "health", "containers"},
     )
 
     version = root.get("version")
@@ -693,44 +818,13 @@ def load_config(config_path: Path, config_root: Path = DEFAULT_CONFIG_DIR):
         message = "version must be integer 1"
         raise provision_error(message)
 
-    admin = require_allowed_keys(root.get("admin"), "admin", {"ssh_keys"}, {"ssh_keys"})
-    ssh_keys = require_string_list(admin.get("ssh_keys"), "admin.ssh_keys")
-
-    firewall = require_allowed_keys(root.get("firewall"), "firewall", {"inbound"}, {"inbound"})
-    inbound_value = require_mapping(firewall.get("inbound"), "firewall.inbound")
-
-    def normalize_firewall_scope(scope_value, scope_path: str):
-        scope = require_allowed_keys(scope_value, scope_path, {"tcp", "udp"})
-        normalized = {}
-        if "tcp" in scope:
-            tcp_ports = require_port_list(scope.get("tcp"), f"{scope_path}.tcp")
-            if tcp_ports:
-                normalized["tcp"] = tcp_ports
-        if "udp" in scope:
-            udp_ports = require_port_list(scope.get("udp"), f"{scope_path}.udp")
-            if udp_ports:
-                normalized["udp"] = udp_ports
-        return normalized
-
-    if any(key in inbound_value for key in ("wan", "lan")):
-        inbound = require_allowed_keys(inbound_value, "firewall.inbound", {"wan", "lan"})
-        firewall_inbound = {}
-        if "wan" in inbound:
-            wan_scope = normalize_firewall_scope(inbound.get("wan"), "firewall.inbound.wan")
-            if wan_scope:
-                firewall_inbound["wan"] = wan_scope
-        if "lan" in inbound:
-            lan_scope = normalize_firewall_scope(inbound.get("lan"), "firewall.inbound.lan")
-            if lan_scope:
-                firewall_inbound["lan"] = lan_scope
-    else:
-        wan_scope = normalize_firewall_scope(inbound_value, "firewall.inbound")
-        firewall_inbound = {"wan": wan_scope} if wan_scope else {}
+    users, ssh_keys = load_users(root.get("users"))
+    firewall_inbound = load_firewall_inbound(root.get("network"))
 
     health = require_allowed_keys(root.get("health"), "health", {"required"}, {"required"})
     required_units = require_string_list(health.get("required"), "health.required")
 
-    lan_settings = load_lan_settings(root.get("lan"))
+    lan_settings = load_network_settings(root.get("network"))
 
     os_upgrade_settings = None
     if root.get("os_upgrade") is not None:
@@ -739,32 +833,38 @@ def load_config(config_path: Path, config_root: Path = DEFAULT_CONFIG_DIR):
             "server_url": require_string(os_upgrade.get("server_url"), "os_upgrade.server_url")
         }
 
-    container = require_mapping(root.get("container"), "container")
+    containers = require_allowed_keys(
+        root.get("containers"),
+        "containers",
+        {"container", "network", "volume", "build"},
+        {"container"},
+    )
+    container = require_mapping(containers.get("container"), "containers.container")
     rendered_units, runtime_units, warnings = render_containers(container, config_root)
     if not rendered_units:
         message = "config.toml must define at least one Quadlet unit"
         raise provision_error(message)
 
-    network_table = root.get("network")
+    network_table = containers.get("network")
     if network_table is not None:
         rendered_networks, network_runtime = render_networks(
-            require_mapping(network_table, "network"), config_root
+            require_mapping(network_table, "containers.network"), config_root
         )
         rendered_units.update(rendered_networks)
         runtime_units.extend(network_runtime)
 
-    volume_table = root.get("volume")
+    volume_table = containers.get("volume")
     if volume_table is not None:
         rendered_volumes, volume_runtime = render_volumes(
-            require_mapping(volume_table, "volume"), config_root
+            require_mapping(volume_table, "containers.volume"), config_root
         )
         rendered_units.update(rendered_volumes)
         runtime_units.extend(volume_runtime)
 
-    build_table = root.get("build")
+    build_table = containers.get("build")
     if build_table is not None:
         rendered_builds, build_runtime = render_builds(
-            require_mapping(build_table, "build"), config_root
+            require_mapping(build_table, "containers.build"), config_root
         )
         rendered_units.update(rendered_builds)
         runtime_units.extend(build_runtime)
@@ -776,6 +876,7 @@ def load_config(config_path: Path, config_root: Path = DEFAULT_CONFIG_DIR):
 
     return {
         "ssh_keys": ssh_keys,
+        "users": users,
         "firewall_inbound": firewall_inbound,
         "lan_settings": lan_settings,
         "os_upgrade": os_upgrade_settings,
@@ -824,6 +925,21 @@ def generated_required_units(quadlet: str):
         raise provision_error(message)
 
     return [validate_name(name) for name in container]
+
+
+def generated_extra_users(ssh_keys: list[str]):
+    blocks = []
+    for index, ssh_key in enumerate(ssh_keys, start=2):
+        blocks.append(
+            textwrap.dedent(
+                f"""
+                [users.admin{index}]
+                isAdmin = true
+                ssh_key = {json.dumps(ssh_key)}
+                """
+            ).strip()
+        )
+    return "\n\n".join(blocks)
 
 
 def uploaded_config_text(payload: bytes, filename: str):
@@ -975,10 +1091,32 @@ def write_imported_state(parsed: dict, prepared_config: Path, prepared_files: Pa
     shutil.copyfile(prepared_config, imported_path)
     imported_path.chmod(0o600)
 
-    ssh_path = config_root / "ssh-authorized-keys" / "admin"
+    users_path = config_root / "users.json"
+    users_path.write_text(json.dumps(parsed["users"], indent=2) + "\n")
+    users_path.chmod(0o600)
+
+    ssh_dir = config_root / "ssh-authorized-keys"
+    desired_key_files = {"admin", *parsed["users"].keys()}
+    for existing_key_file in ssh_dir.iterdir():
+        if existing_key_file.is_file() and existing_key_file.name not in desired_key_files:
+            existing_key_file.unlink()
+
+    ssh_path = ssh_dir / "admin"
     ssh_path.write_text("\n".join(parsed["ssh_keys"]) + "\n")
     ssh_path.chmod(0o600)
     maybe_chown_user(ssh_path, "admin")
+
+    for username, user in parsed["users"].items():
+        if username == "admin":
+            continue
+        user_ssh_path = ssh_dir / username
+        ssh_key = user["ssh_key"]
+        if ssh_key:
+            user_ssh_path.write_text(ssh_key + "\n")
+            user_ssh_path.chmod(0o600)
+            maybe_chown_user(user_ssh_path, username)
+        else:
+            user_ssh_path.unlink(missing_ok=True)
 
     health_path = config_root / "health-required.json"
     health_path.write_text(json.dumps(parsed["required_units"], indent=2) + "\n")
@@ -1492,22 +1630,24 @@ class BootstrapHandler(BaseHTTPRequestHandler):
                 required = [line.strip() for line in form.get("required", "").splitlines() if line.strip()]
                 if not required:
                     required = generated_required_units(quadlet)
-                firewall_lines = ["[firewall.inbound]"]
+                firewall_lines = []
                 if wan_tcp_ports or wan_udp_ports:
-                    firewall_lines.extend(["", "[firewall.inbound.wan]"])
+                    firewall_lines.extend(["[network.firewall.inbound.wan]"])
                     if wan_tcp_ports:
                         firewall_lines.append(f"tcp = {json.dumps(wan_tcp_ports)}")
                     if wan_udp_ports:
                         firewall_lines.append(f"udp = {json.dumps(wan_udp_ports)}")
                 if lan_tcp_ports or lan_udp_ports:
-                    firewall_lines.extend(["", "[firewall.inbound.lan]"])
+                    if firewall_lines:
+                        firewall_lines.append("")
+                    firewall_lines.extend(["[network.firewall.inbound.lan]"])
                     if lan_tcp_ports:
                         firewall_lines.append(f"tcp = {json.dumps(lan_tcp_ports)}")
                     if lan_udp_ports:
                         firewall_lines.append(f"udp = {json.dumps(lan_udp_ports)}")
                 firewall_text = "\n".join(firewall_lines)
                 lan_lines = [
-                    "[lan]",
+                    "[network.dnsmasq]",
                     f'gateway_cidr = {json.dumps(gateway_cidr)}',
                     f'dhcp_start = {json.dumps(dhcp_start)}',
                     f'dhcp_end = {json.dumps(dhcp_end)}',
@@ -1525,12 +1665,21 @@ class BootstrapHandler(BaseHTTPRequestHandler):
                         server_url = {json.dumps(os_upgrade_server_url)}
                         """
                     ).strip()
+                quadlet = (
+                    quadlet.replace("[container.", "[containers.container.")
+                    .replace("[network.", "[containers.network.")
+                    .replace("[volume.", "[containers.volume.")
+                    .replace("[build.", "[containers.build.")
+                )
                 config_text = textwrap.dedent(
                     f"""
                     version = 1
 
-                    [admin]
-                    ssh_keys = {json.dumps(ssh_keys)}
+                    [users.admin]
+                    isAdmin = true
+                    ssh_key = {json.dumps(ssh_keys[0] if ssh_keys else "")}
+
+                    {generated_extra_users(ssh_keys[1:])}
 
                     {firewall_text}
 

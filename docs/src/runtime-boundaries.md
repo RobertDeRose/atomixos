@@ -21,16 +21,15 @@ The accepted `config.toml` schema is:
 ```toml
 version = 1
 
-[admin]
-ssh_keys = ["ssh-ed25519 ..."]
+[users.admin]
+isAdmin = true
+ssh_key = "ssh-ed25519 ..."
 
-[firewall.inbound]
-
-[firewall.inbound.wan]
+[network.firewall.inbound.wan]
 tcp = [443]
 udp = [1194]
 
-[lan]
+[network.dnsmasq]
 gateway_cidr = "172.20.30.1/24"
 dhcp_start = "172.20.30.10"
 dhcp_end = "172.20.30.254"
@@ -41,17 +40,17 @@ hostname_pattern = "atomixos-{mac}"
 [health]
 required = ["myapp"]
 
-[container.myapp]
+[containers.container.myapp]
 privileged = false
 
-[container.myapp.Container]
+[containers.container.myapp.Container]
 Image = "ghcr.io/example/myapp:latest"
 PublishPort = ["10080:8080"]
 ```
 
-`[firewall.inbound]` is required. WAN ports stay deny-by-default unless listed. LAN stays open by default; if
-`[firewall.inbound.lan]` is present with any ports, LAN switches to an explicit allowlist for only those ports.
-`[lan]` is optional; omitted fields use the fallback LAN gateway contract. The machine-readable schema is committed at
+WAN ports stay deny-by-default unless listed. LAN stays open by default; if `[network.firewall.inbound.lan]` is
+present with any ports, LAN switches to an explicit allowlist for only those ports. `[network.dnsmasq]` is optional;
+omitted fields use the fallback LAN gateway contract. The machine-readable schema is committed at
 `schemas/config.schema.json` and the import path validates against it before semantic checks.
 
 ## Firewall JSON

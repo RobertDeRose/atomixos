@@ -52,7 +52,7 @@ nixos-lib.runTest {
     gateway.start()
     gateway.wait_for_unit("multi-user.target")
 
-    gateway.succeed("cat > /tmp/config-template.toml <<'EOF'\nversion = 1\n\n[admin]\nssh_keys = [\"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKey admin@example\"]\n\n[firewall.inbound]\n\n[firewall.inbound.wan]\ntcp = [443]\n\n[health]\nrequired = [\"demo\"]\n\n[container.demo]\nprivileged = true\n\n[container.demo.Container]\nImage = \"docker.io/library/nginx:latest\"\n\n[container.demo.Install]\nWantedBy = [\"multi-user.target\"]\nEOF")
+    gateway.succeed("cat > /tmp/config-template.toml <<'EOF'\nversion = 1\n\n[users.admin]\nisAdmin = true\nssh_key = \"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKey admin@example\"\n\n[network.firewall.inbound.wan]\ntcp = [443]\n\n[health]\nrequired = [\"demo\"]\n\n[containers.container.demo]\nprivileged = true\n\n[containers.container.demo.Container]\nImage = \"docker.io/library/nginx:latest\"\n\n[containers.container.demo.Install]\nWantedBy = [\"multi-user.target\"]\nEOF")
 
     gateway.succeed("cat > /testbin/rauc <<'EOF'\n#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\n' \"$*\" >>/test-state/rauc.log\nif [ \"$1\" = status ] && [ \"$2\" = mark-good ]; then\n  exit 0\nfi\necho unexpected rauc invocation >&2\nexit 1\nEOF\nchmod +x /testbin/rauc")
     gateway.succeed("cat > /testbin/fw_printenv <<'EOF'\n#!/usr/bin/env bash\nexit 0\nEOF\nchmod +x /testbin/fw_printenv")

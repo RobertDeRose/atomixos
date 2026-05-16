@@ -7,25 +7,29 @@
 
 ## T010 - Define the official config schema
 
-- [ ] Replace `schemas/config.schema.json` with the new canonical schema used by validation and documentation.
-- [ ] Define `[users]` schema with default `isAdmin = false` and default empty `ssh_key`.
-- [ ] Add username validation and reserved-system-user rejection.
-- [ ] Define `[network]` schema for DNS servers, search domains, interfaces, default gateway, dnsmasq, and firewall rules.
-- [ ] Define `[containers]` schema for nested container, network, volume, and build Quadlet units.
-- [ ] Add cross-field validation for admin SSH keys, LAN subnet, DHCP range, port ranges, and required service references.
-- [ ] Ensure schema errors include precise config paths and actionable messages.
+- [x] Replace `schemas/config.schema.json` with the new canonical schema used by validation and documentation.
+- [x] Define `[users]` schema with default `isAdmin = false` and default empty `ssh_key`.
+- [x] Add username validation and reserved-system-user rejection.
+- [x] Define `[network]` schema for dnsmasq and firewall rules.
+- [ ] Define `[network]` schema for DNS servers, search domains, interfaces, and default gateway once runtime support is
+  implemented.
+- [x] Define `[containers]` schema for nested container, network, volume, and build Quadlet units.
+- [x] Add cross-field validation for admin SSH keys, LAN subnet, DHCP range, port ranges, and required service references.
+- [x] Ensure schema errors include precise config paths and actionable messages.
 
 ## T020 - Implement config parser restructure
 
-- [ ] Update `first-boot-provision.py` to parse `[users]` instead of top-level `[admin]`.
-- [ ] Persist normalized managed user state under `/data/config` for boot-time and re-apply materialization.
-- [ ] Render managed user state and SSH authorized keys for all declared users.
+- [x] Update `first-boot-provision.py` to parse `[users]` instead of top-level `[admin]`.
+- [x] Persist normalized managed user state under `/data/config` for boot-time and re-apply materialization.
+- [x] Render managed user state and SSH authorized keys for all declared users.
 - [ ] Add a runtime user apply service that materializes managed users from persisted config on boot and re-apply.
 - [ ] Lock or disable managed users removed during config re-apply.
-- [ ] Update LAN settings parsing to consume `[network]` while preserving current defaults.
-- [ ] Update firewall parsing to consume firewall rules under `[network]`.
-- [ ] Update Quadlet rendering to consume `[containers.container]`, `[containers.network]`, `[containers.volume]`, and `[containers.build]`.
-- [ ] Keep rendered persistent outputs compatible with existing runtime services unless those services are intentionally updated.
+- [x] Update LAN settings parsing to consume `[network]` while preserving current defaults.
+- [x] Update firewall parsing to consume firewall rules under `[network]`.
+- [x] Update Quadlet rendering to consume `[containers.container]`, `[containers.network]`, `[containers.volume]`, and
+  `[containers.build]`.
+- [x] Keep rendered persistent outputs compatible with existing runtime services unless those services are intentionally
+  updated.
 
 ## T030 - Harden re-apply authentication
 
