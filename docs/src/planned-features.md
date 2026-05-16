@@ -75,6 +75,11 @@ Quadlet containers on a persistent `/data` partition.
   explicit ordered service restart list, `settle_seconds` before checking health,
   `allow_degraded` for services allowed to fail without rollback, and
   `strategy = "rollback" | "keep-failed" | "manual-confirm"`.
+- **Bootstrap provisioning subproject**: `scripts/first-boot-provision.py` now owns
+  config parsing, bundle import, Boot UI/API request handling, authentication, atomic
+  re-apply, activation checks, and rollback behavior. Evaluate splitting this into a
+  small Python subproject with `pyproject.toml`, pytest-based unit tests, clearer module
+  boundaries, and possibly a vendored MIT-licensed Bottle router for the HTTP layer.
 
 ## Resolved Questions
 
