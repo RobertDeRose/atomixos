@@ -1,0 +1,82 @@
+# Config Reapply Improvements Tasks
+
+- [x] Confirm the canonical `config.toml` top-level sections: `[users]`, `[network]`, `[health]`, `[os_upgrade]`, and `[containers]`.
+- [x] Reject legacy top-level `[admin]`, `[firewall]`, `[lan]`, `[container]`, `[network]`, `[volume]`, and `[build]` config without migration because AtomixOS is unreleased.
+- [x] Use SSH-key challenge-response with an existing admin key for re-apply authentication.
+- [x] Manage declared `[users.<name>]` local users in this feature.
+
+## T010 - Define the official config schema
+
+- [ ] Replace `schemas/config.schema.json` with the new canonical schema used by validation and documentation.
+- [ ] Define `[users]` schema with default `isAdmin = false` and default empty `ssh_key`.
+- [ ] Add username validation and reserved-system-user rejection.
+- [ ] Define `[network]` schema for DNS servers, search domains, interfaces, default gateway, dnsmasq, and firewall rules.
+- [ ] Define `[containers]` schema for nested container, network, volume, and build Quadlet units.
+- [ ] Add cross-field validation for admin SSH keys, LAN subnet, DHCP range, port ranges, and required service references.
+- [ ] Ensure schema errors include precise config paths and actionable messages.
+
+## T020 - Implement config parser restructure
+
+- [ ] Update `first-boot-provision.py` to parse `[users]` instead of top-level `[admin]`.
+- [ ] Persist normalized managed user state under `/data/config` for boot-time and re-apply materialization.
+- [ ] Render managed user state and SSH authorized keys for all declared users.
+- [ ] Add a runtime user apply service that materializes managed users from persisted config on boot and re-apply.
+- [ ] Lock or disable managed users removed during config re-apply.
+- [ ] Update LAN settings parsing to consume `[network]` while preserving current defaults.
+- [ ] Update firewall parsing to consume firewall rules under `[network]`.
+- [ ] Update Quadlet rendering to consume `[containers.container]`, `[containers.network]`, `[containers.volume]`, and `[containers.build]`.
+- [ ] Keep rendered persistent outputs compatible with existing runtime services unless those services are intentionally updated.
+
+## T030 - Harden re-apply authentication
+
+- [ ] Detect already-provisioned devices by active persisted config state.
+- [ ] Add nonce issuance for short-lived re-apply authentication challenges.
+- [ ] Verify SSH signatures against active admin user keys before accepting candidate config bytes.
+- [ ] Require authentication for `POST /api/config` when active config exists.
+- [ ] Keep first provisioning unauthenticated for fresh devices without existing operator credentials.
+- [ ] Add tests for unauthenticated rejection and authenticated acceptance.
+
+## T040 - Implement atomic candidate apply
+
+- [ ] Validate and render candidate config in a temporary candidate directory.
+- [ ] Prevent candidate validation/rendering from mutating active `/data/config`.
+- [ ] Promote candidate config to `/data/config` with a crash-safe directory replacement strategy.
+- [ ] Preserve the previous config in a rollback location until apply is confirmed.
+- [ ] Clean up stale candidate and rollback state safely.
+
+## T050 - Implement rollback on failed activation
+
+- [ ] Apply LAN settings, firewall state, and Quadlet sync after candidate promotion.
+- [ ] Confirm required services reach the expected active state.
+- [ ] Restore previous config if apply or service confirmation fails.
+- [ ] Re-apply previous LAN, firewall, and Quadlet state after rollback.
+- [ ] Return clear API errors describing validation or activation failures.
+
+## T060 - Update examples and operator docs
+
+- [ ] Update provisioning docs for the new `config.toml` structure.
+- [ ] Update data-flow and runtime-boundary docs for candidate apply and rollback state.
+- [ ] Update LAN/network docs for `[network]` defaults and overrides.
+- [ ] Update Caddy/AuthCrunch/Cockpit tutorial config and docs to use `[containers]`.
+- [ ] Update code-reference docs for parser, rendered files, and API behavior.
+
+## T070 - Add automated validation
+
+- [ ] Add unit tests for schema defaults and invalid key rejection.
+- [ ] Add unit tests for users/admin SSH key extraction.
+- [ ] Add unit tests for managed user creation/update/disable behavior.
+- [ ] Add boot or VM coverage proving managed users are materialized from `/data/config` after reboot.
+- [ ] Add unit tests for network defaults, dnsmasq defaults, and firewall rule rendering.
+- [ ] Add unit tests for nested `[containers]` Quadlet rendering.
+- [ ] Add unit tests for SSH-key challenge-response authentication.
+- [ ] Add VM or integration test for successful authenticated re-apply.
+- [ ] Add VM or integration test for invalid config preserving active state.
+- [ ] Add VM or integration test for activation failure rollback.
+
+## T999 - Final verification and release readiness
+
+- [ ] Run the repository's relevant formatting, unit, and Nix checks.
+- [ ] Verify docs, examples, specs, and implementation all describe the same `config.toml` contract.
+- [ ] Verify no unauthenticated re-apply path remains on already-provisioned devices.
+- [ ] Verify first provisioning still works from `/boot/config.toml`, USB, and bootstrap UI.
+- [ ] Record any intentionally deferred compatibility or migration work before merging.
