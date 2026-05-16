@@ -64,7 +64,6 @@ nixos-lib.runTest {
     gateway.succeed("printf 'KEY=VALUE\n' >/tmp/local.env")
     gateway.succeed("cat > /tmp/invalid-config.toml <<'EOF'\nversion = 1\n\n[users.admin]\nisAdmin = true\nssh_key = \"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBootstrapKey admin@example\"\n\n[network.firewall.inbound.wan]\ntcp = [443]\n\n[health]\nrequired = [\"missing-service\"]\n\n[containers.container.myapp]\nprivileged = false\n\n[containers.container.myapp.Container]\nImage = \"ghcr.io/example/myapp:latest\"\nEOF")
     gateway.succeed("cat > /tmp/gateway-contained-config.toml <<'EOF'\nversion = 1\n\n[users.admin]\nisAdmin = true\nssh_key = \"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBootstrapKey admin@example\"\n\n[network.firewall.inbound.wan]\ntcp = [443]\n\n[network.dnsmasq]\ngateway_cidr = \"10.44.0.50/24\"\ndhcp_start = \"10.44.0.10\"\ndhcp_end = \"10.44.0.200\"\n\n[health]\nrequired = [\"myapp\"]\n\n[containers.container.myapp]\nprivileged = false\n\n[containers.container.myapp.Container]\nImage = \"ghcr.io/example/myapp:latest\"\nEOF")
-
     gateway.succeed("first-boot-provision validate /tmp/config.toml")
     gateway.succeed("first-boot-provision import /tmp/config.toml /data/config")
     gateway.succeed("cp /tmp/local.env /data/config/local.env")
@@ -203,13 +202,15 @@ nixos-lib.runTest {
     gateway.succeed("grep -F \"[lan-gateway-apply] dhcp_start and dhcp_end must not include gateway_ip in /tmp/lan-apply/gateway-dhcp-settings.json\" /tmp/lan-apply/gateway-dhcp.err")
 
     # ── apply-users: create managed users from users.json ──
-    gateway.succeed("mkdir -p /tmp/apply-users-test")
+    gateway.succeed("mkdir -p /tmp/apply-users-test/ssh-authorized-keys")
     gateway.succeed("cat > /tmp/apply-users-test/users.json <<'EOF'\n{\"admin\": {\"isAdmin\": true, \"ssh_key\": \"ssh-ed25519 AAAAC3test admin@test\"}, \"operator\": {\"isAdmin\": true, \"ssh_key\": \"ssh-ed25519 AAAAC3op op@test\"}, \"viewer\": {\"isAdmin\": false, \"ssh_key\": \"\"}}\nEOF")
-    gateway.succeed("ATOMIXOS_USERS_JSON=/tmp/apply-users-test/users.json ATOMIXOS_MANAGED_STATE=/tmp/apply-users-test/managed-users.json python3 ${../../scripts/apply-users.py}")
+    gateway.succeed("printf 'ssh-ed25519 AAAAC3op op@test\n' >/tmp/apply-users-test/ssh-authorized-keys/operator && chmod 0600 /tmp/apply-users-test/ssh-authorized-keys/operator")
+    gateway.succeed("ATOMIXOS_USERS_JSON=/tmp/apply-users-test/users.json ATOMIXOS_MANAGED_STATE=/tmp/apply-users-test/managed-users.json ATOMIXOS_SSH_KEYS_DIR=/tmp/apply-users-test/ssh-authorized-keys python3 ${../../scripts/apply-users.py}")
     gateway.succeed("id operator")
     gateway.succeed("id viewer")
     gateway.succeed("id -nG operator | grep -w wheel")
     gateway.fail("id -nG viewer | grep -w wheel")
+    gateway.succeed("test \"$(stat -c %U:%a /tmp/apply-users-test/ssh-authorized-keys/operator)\" = 'operator:600'")
     gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nmanaged = json.loads(Path('/tmp/apply-users-test/managed-users.json').read_text())\nassert sorted(managed) == ['operator', 'viewer'], managed\nPY")
 
     # ── apply-users: lock removed users ──
@@ -336,13 +337,18 @@ nixos-lib.runTest {
     gateway.succeed("cat /tmp/auth-test-key.pub > /tmp/auth-root/ssh-authorized-keys/admin")
 
     # Start bootstrap server pointing at provisioned root
-    gateway.succeed("first-boot-provision serve /tmp/auth-root --host 127.0.0.1 --port 18081 >/tmp/auth-bootstrap.log 2>&1 & echo $! >/tmp/auth-bootstrap.pid")
+    gateway.succeed("mkdir -p /tmp/auth-bin && cat > /tmp/auth-bin/systemctl <<'EOF'\n#!/usr/bin/env bash\nif [ \"$1\" = is-active ]; then\n  exit 0\nfi\nexec /run/current-system/sw/bin/systemctl \"$@\"\nEOF\nchmod +x /tmp/auth-bin/systemctl")
+    gateway.succeed("PATH=/tmp/auth-bin:$PATH first-boot-provision serve /tmp/auth-root --host 127.0.0.1 --port 18081 >/tmp/auth-bootstrap.log 2>&1 & echo $! >/tmp/auth-bootstrap.pid")
     gateway.wait_until_succeeds("ss -tln | grep ':18081'", timeout=30)
 
     # Unauthenticated POST to provisioned device must be rejected (401)
     gateway.succeed("curl -s -o /tmp/auth-unauth-response.json -w '%{http_code}' -H 'Content-Type: text/plain' --data-binary @/tmp/config.toml http://127.0.0.1:18081/api/config > /tmp/auth-unauth-code")
     gateway.succeed("grep '^401$' /tmp/auth-unauth-code")
     gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nresp = json.loads(Path('/tmp/auth-unauth-response.json').read_text())\nassert resp['ok'] is False, resp\nassert 'authentication required' in resp['error'], resp\nPY")
+    gateway.succeed("curl -s -o /tmp/auth-apply-response.html -w '%{http_code}' -F config_file=@/tmp/config.toml http://127.0.0.1:18081/apply > /tmp/auth-apply-code")
+    gateway.succeed("grep '^401$' /tmp/auth-apply-code")
+    gateway.succeed("curl -s -o /tmp/auth-generate-response.html -w '%{http_code}' --data-urlencode 'ssh_keys=ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBootstrapKey admin@example' http://127.0.0.1:18081/generate > /tmp/auth-generate-code")
+    gateway.succeed("grep '^401$' /tmp/auth-generate-code")
 
     # GET /api/nonce on provisioned device returns a nonce
     gateway.succeed("curl -fsS http://127.0.0.1:18081/api/nonce > /tmp/auth-nonce-response.json")
@@ -383,7 +389,8 @@ nixos-lib.runTest {
     # Re-import via bootstrap server should create rollback
     gateway.succeed("ssh-keygen -t ed25519 -N \"\" -f /tmp/atomic-key -q")
     gateway.succeed("cat /tmp/atomic-key.pub > /tmp/atomic-root/ssh-authorized-keys/admin")
-    gateway.succeed("first-boot-provision serve /tmp/atomic-root --host 127.0.0.1 --port 18082 >/tmp/atomic-bootstrap.log 2>&1 & echo $! >/tmp/atomic-bootstrap.pid")
+    gateway.succeed("mkdir -p /tmp/atomic-bin && cat > /tmp/atomic-bin/systemctl <<'EOF'\n#!/usr/bin/env bash\nif [ \"$1\" = is-active ]; then\n  exit 0\nfi\nexec /run/current-system/sw/bin/systemctl \"$@\"\nEOF\nchmod +x /tmp/atomic-bin/systemctl")
+    gateway.succeed("PATH=/tmp/atomic-bin:$PATH first-boot-provision serve /tmp/atomic-root --host 127.0.0.1 --port 18082 >/tmp/atomic-bootstrap.log 2>&1 & echo $! >/tmp/atomic-bootstrap.pid")
     gateway.wait_until_succeeds("ss -tln | grep ':18082'", timeout=30)
 
     # Get nonce and sign
@@ -451,6 +458,29 @@ nixos-lib.runTest {
     gateway.succeed("test ! -d /tmp/rollback-root-rollback")
     gateway.succeed("test ! -d /tmp/rollback-root-candidate")
     gateway.succeed("kill $(cat /tmp/rollback.pid)")
+
+    # Required service health failures also trigger rollback after activation succeeds.
+    gateway.succeed("rm -rf /tmp/health-rollback-root /tmp/health-rollback-root-candidate /tmp/health-rollback-root-rollback && mkdir -p /tmp/health-rollback-root /tmp/health-bin")
+    gateway.succeed("first-boot-provision import /tmp/config.toml /tmp/health-rollback-root")
+    gateway.succeed("ssh-keygen -t ed25519 -N \"\" -f /tmp/health-rollback-key -q")
+    gateway.succeed("cat /tmp/health-rollback-key.pub > /tmp/health-rollback-root/ssh-authorized-keys/admin")
+    gateway.succeed("sha256sum /tmp/health-rollback-root/config.toml | awk '{print $1}' > /tmp/health-rollback-hash-before")
+    gateway.succeed("cat > /tmp/health-bin/systemctl <<'EOF'\n#!/usr/bin/env bash\nif [ \"$1\" = is-active ]; then\n  exit 1\nfi\nexec /run/current-system/sw/bin/systemctl \"$@\"\nEOF\nchmod +x /tmp/health-bin/systemctl")
+    gateway.succeed("cat > /tmp/health-activation-hook <<'EOF'\n#!/usr/bin/env bash\nexit 0\nEOF\nchmod +x /tmp/health-activation-hook")
+    gateway.succeed("PATH=/tmp/health-bin:$PATH ATOMIXOS_BOOTSTRAP_POST_RESPONSE=/tmp/health-activation-hook first-boot-provision serve /tmp/health-rollback-root --host 127.0.0.1 --port 18085 >/tmp/health-rollback.log 2>&1 & echo $! >/tmp/health-rollback.pid")
+    gateway.wait_until_succeeds("ss -tln | grep ':18085'", timeout=30)
+    gateway.succeed("curl -fsS http://127.0.0.1:18085/api/nonce > /tmp/health-rollback-nonce.json")
+    gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nnonce = json.loads(Path('/tmp/health-rollback-nonce.json').read_text())['nonce']\nPath('/tmp/health-rollback-nonce.txt').write_text(nonce)\nPY")
+    gateway.succeed("cat /tmp/health-rollback-nonce.txt | ssh-keygen -Y sign -f /tmp/health-rollback-key -n atomixos-reapply > /tmp/health-rollback-sig.pem")
+    gateway.succeed("python3 - <<'PY'\nimport base64\nfrom pathlib import Path\nsig = Path('/tmp/health-rollback-sig.pem').read_bytes()\nPath('/tmp/health-rollback-sig-b64.txt').write_text(base64.b64encode(sig).decode())\nPY")
+    gateway.succeed("curl -s -o /tmp/health-rollback-response.json -w '%{http_code}' -H 'Content-Type: text/plain' -H \"X-Atomicnix-Nonce: $(cat /tmp/health-rollback-nonce.txt)\" -H \"X-Atomicnix-Signature: $(cat /tmp/health-rollback-sig-b64.txt)\" --data-binary @/tmp/config.toml http://127.0.0.1:18085/api/config > /tmp/health-rollback-code")
+    gateway.succeed("grep '^502$' /tmp/health-rollback-code")
+    gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nresp = json.loads(Path('/tmp/health-rollback-response.json').read_text())\nassert resp['ok'] is False, resp\nassert resp['rolled_back'] is True, resp\nassert 'edgeproxy.service' in resp['failures'], resp\nPY")
+    gateway.succeed("sha256sum /tmp/health-rollback-root/config.toml | awk '{print $1}' > /tmp/health-rollback-hash-after")
+    gateway.succeed("diff /tmp/health-rollback-hash-before /tmp/health-rollback-hash-after")
+    gateway.succeed("test ! -d /tmp/health-rollback-root-rollback")
+    gateway.succeed("test ! -d /tmp/health-rollback-root-candidate")
+    gateway.succeed("kill $(cat /tmp/health-rollback.pid)")
 
     # Test restore_rollback (create a fake rollback first)
     gateway.succeed("mkdir -p /tmp/atomic-root-rollback && cp /tmp/config.toml /tmp/atomic-root-rollback/config.toml")

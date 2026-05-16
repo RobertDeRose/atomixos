@@ -1858,13 +1858,12 @@ class BootstrapHandler(BaseHTTPRequestHandler):
         self._send_html()
 
     def do_POST(self):
-        if self.path == "/api/config":
-            was_provisioned = self._is_provisioned()
-            # Require authentication if already provisioned.
-            if was_provisioned:
-                if not self._require_auth():
-                    return
+        was_provisioned = self._is_provisioned()
+        if self.path in ("/api/config", "/apply", "/generate") and was_provisioned:
+            if not self._require_auth():
+                return
 
+        if self.path == "/api/config":
             length = int(self.headers.get("Content-Length", "0"))
             payload = self.rfile.read(length)
             filename = self.headers.get("X-Config-Filename", "config.toml")
@@ -1877,7 +1876,9 @@ class BootstrapHandler(BaseHTTPRequestHandler):
             # Activate services synchronously for re-apply; rollback on failure.
             if was_provisioned:
                 activation_failures = self._activate_services()
-                if activation_failures:
+                health_failures = [] if activation_failures else self._check_required_services()
+                failures = activation_failures + health_failures
+                if failures:
                     config_root = Path(self.config_root)
                     restored = restore_rollback(config_root)
                     if restored:
@@ -1886,7 +1887,7 @@ class BootstrapHandler(BaseHTTPRequestHandler):
                     self._send_json(502, {
                         "ok": False,
                         "error": "activation failed; rolled back to previous config",
-                        "failures": activation_failures,
+                        "failures": failures,
                         "rolled_back": restored,
                     })
                     return

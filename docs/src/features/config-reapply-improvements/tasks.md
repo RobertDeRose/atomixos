@@ -36,7 +36,7 @@
 - [x] Detect already-provisioned devices by active persisted config state.
 - [x] Add nonce issuance for short-lived re-apply authentication challenges.
 - [x] Verify SSH signatures against active admin user keys before accepting candidate config bytes.
-- [x] Require authentication for `POST /api/config` when active config exists.
+- [x] Require authentication for mutating bootstrap POST paths when active config exists.
 - [x] Keep first provisioning unauthenticated for fresh devices without existing operator credentials.
 - [x] Add tests for unauthenticated rejection and authenticated acceptance.
 
@@ -91,4 +91,5 @@ Deferred work recorded at merge time:
 - `[network]` schema fields for DNS servers, search domains, interfaces, and default gateway are deferred until runtime
   support is implemented.
 - Managed user reboot materialization VM test deferred; requires persistent VM disk configuration.
-- Bootstrap HTML form paths (`/apply`, `/generate`) lack re-apply authentication; safe because the bootstrap server binds to LAN-only (`172.20.30.1:8080`) and the service restarts after provisioning with updated config. The programmatic `/api/config` endpoint enforces SSH-key authentication.
+- Provisioned-device re-apply authentication applies to all mutating bootstrap POST paths: `/api/config`, `/apply`, and
+  `/generate`.

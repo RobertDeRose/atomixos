@@ -23,6 +23,7 @@ from pathlib import Path
 
 USERS_JSON = Path(os.environ.get("ATOMIXOS_USERS_JSON", "/data/config/users.json"))
 MANAGED_STATE = Path(os.environ.get("ATOMIXOS_MANAGED_STATE", "/data/config/managed-users.json"))
+SSH_KEYS_DIR = Path(os.environ.get("ATOMIXOS_SSH_KEYS_DIR", "/data/config/ssh-authorized-keys"))
 
 # Users that must never be created, modified, or locked by this script.
 PROTECTED_USERS = {"root", "admin", "appsvc"}
@@ -109,6 +110,16 @@ def ensure_user(name: str, is_admin: bool) -> None:
             pass
 
 
+def ensure_authorized_keys_owner(name: str) -> None:
+    """Make per-user authorized_keys readable after dynamic user creation."""
+    key_path = SSH_KEYS_DIR / name
+    if not key_path.exists() or not user_exists(name):
+        return
+    user = pwd.getpwnam(name)
+    os.chown(key_path, user.pw_uid, user.pw_gid)
+    key_path.chmod(0o600)
+
+
 def ensure_admin_groups(is_admin: bool) -> None:
     """Ensure the image-declared admin user has correct wheel membership."""
     if not user_exists(IMAGE_ADMIN):
@@ -189,6 +200,7 @@ def main() -> None:
         is_admin = user.get("isAdmin", False)
         log(f"ensuring user: {username} (admin={is_admin})")
         ensure_user(username, is_admin)
+        ensure_authorized_keys_owner(username)
         # Only track non-protected users in managed state.
         if username not in PROTECTED_USERS:
             current.add(username)
