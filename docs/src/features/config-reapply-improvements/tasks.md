@@ -80,8 +80,15 @@
 
 ## T999 - Final verification and release readiness
 
-- [ ] Run the repository's relevant formatting, unit, and Nix checks.
-- [ ] Verify docs, examples, specs, and implementation all describe the same `config.toml` contract.
-- [ ] Verify no unauthenticated re-apply path remains on already-provisioned devices.
-- [ ] Verify first provisioning still works from `/boot/config.toml`, USB, and bootstrap UI.
-- [ ] Record any intentionally deferred compatibility or migration work before merging.
+- [x] Run the repository's relevant formatting, unit, and Nix checks.
+- [x] Verify docs, examples, specs, and implementation all describe the same `config.toml` contract.
+- [x] Verify no unauthenticated re-apply path remains on already-provisioned devices.
+- [x] Verify first provisioning still works from `/boot/config.toml`, USB, and bootstrap UI.
+- [x] Record any intentionally deferred compatibility or migration work before merging.
+
+Deferred work recorded at merge time:
+
+- `[network]` schema fields for DNS servers, search domains, interfaces, and default gateway are deferred until runtime
+  support is implemented.
+- Managed user reboot materialization VM test deferred; requires persistent VM disk configuration.
+- Bootstrap HTML form paths (`/apply`, `/generate`) lack re-apply authentication; safe because the bootstrap server binds to LAN-only (`172.20.30.1:8080`) and the service restarts after provisioning with updated config. The programmatic `/api/config` endpoint enforces SSH-key authentication.

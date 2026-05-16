@@ -76,8 +76,8 @@ the sustained verification window.
 `lan-gateway-apply.service` consumes `/data/config/lan-settings.json`, writes the eth1 network drop-in, updates dnsmasq
 and chrony runtime snippets, and restarts the affected services. `provisioned-firewall-inbound.service` consumes
 `/data/config/firewall-inbound.json` and applies the requested WAN and LAN nftables rules for the configured scopes.
-WAN remains deny-by-default unless explicitly opened. LAN is open by default, and an explicit `lan` scope appends
-operator-selected ports to the platform-required LAN ports instead of replacing them.
+WAN remains deny-by-default unless explicitly opened. LAN is open by default, but an explicit `lan` scope replaces that
+default-open rule with an allowlist of the configured ports merged with platform-required LAN ports.
 
 ## Application Runtime Flow
 
