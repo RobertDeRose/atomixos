@@ -426,6 +426,18 @@ nixos-lib.runTest {
     gateway.succeed("test ! -d /tmp/atomic-root-candidate")
     gateway.succeed("kill $(cat /tmp/atomic-bootstrap.pid)")
 
+    # CLI import also uses candidate promotion and preserves rollback for re-apply.
+    gateway.succeed("rm -rf /tmp/cli-atomic-root /tmp/cli-atomic-root-candidate /tmp/cli-atomic-root-rollback && mkdir -p /tmp/cli-atomic-root")
+    gateway.succeed("first-boot-provision import /tmp/config.toml /tmp/cli-atomic-root")
+    gateway.succeed("printf '[\"guest\"]\n' >/tmp/cli-atomic-root/managed-users.json")
+    gateway.succeed("first-boot-provision import /tmp/no-health-config.toml /tmp/cli-atomic-root")
+    gateway.succeed("test -f /tmp/cli-atomic-root/config.toml")
+    gateway.succeed("grep '\"guest\"' /tmp/cli-atomic-root/managed-users.json")
+    gateway.succeed("test -f /tmp/cli-atomic-root-rollback/config.toml")
+    gateway.succeed("test ! -d /tmp/cli-atomic-root-candidate")
+    gateway.succeed("test ! -f /tmp/cli-atomic-root.atomixos-promotion-pending")
+    gateway.succeed("rm -rf /tmp/cli-atomic-root /tmp/cli-atomic-root-rollback /tmp/cli-atomic-root.atomixos-promotion-pending")
+
     # Rootless required units are checked through the appsvc user manager.
     gateway.succeed("id appsvc >/dev/null 2>&1 || useradd --system --home-dir /var/lib/appsvc --shell /bin/sh appsvc")
     gateway.succeed("rm -rf /tmp/rootless-health-root /tmp/rootless-health-root-candidate /tmp/rootless-health-root-rollback && mkdir -p /tmp/rootless-health-root /tmp/rootless-health-bin")
@@ -544,6 +556,7 @@ nixos-lib.runTest {
     gateway.succeed("python3 - <<'PY'\nimport sys, os, importlib.util\nfrom pathlib import Path\nos.environ['ATOMIXOS_CONFIG_SCHEMA'] = '${provisionCli}/share/atomixos/config.schema.json'\nspec = importlib.util.spec_from_file_location('fbp', '${../../scripts/first-boot-provision.py}')\nmod = importlib.util.module_from_spec(spec)\nspec.loader.exec_module(mod)\nmod.recover_config_root(Path('/tmp/recover-root'))\nassert Path('/tmp/recover-root/config.toml').read_text() == 'candidate\\n'\nassert not Path('/tmp/recover-root-candidate').exists()\nPY")
     gateway.succeed("rm -rf /tmp/recover-active-root /tmp/recover-active-root-candidate /tmp/recover-active-root-rollback && mkdir -p /tmp/recover-active-root /tmp/recover-active-root-rollback")
     gateway.succeed("printf 'candidate\n' >/tmp/recover-active-root/config.toml && printf 'rollback\n' >/tmp/recover-active-root-rollback/config.toml")
+    gateway.succeed("printf 'pending\n' >/tmp/recover-active-root.atomixos-promotion-pending")
     gateway.succeed("python3 - <<'PY'\nimport sys, os, importlib.util\nfrom pathlib import Path\nos.environ['ATOMIXOS_CONFIG_SCHEMA'] = '${provisionCli}/share/atomixos/config.schema.json'\nspec = importlib.util.spec_from_file_location('fbp', '${../../scripts/first-boot-provision.py}')\nmod = importlib.util.module_from_spec(spec)\nspec.loader.exec_module(mod)\nmod.recover_config_root(Path('/tmp/recover-active-root'))\nassert Path('/tmp/recover-active-root/config.toml').read_text() == 'rollback\\n'\nassert not Path('/tmp/recover-active-root-rollback').exists()\nPY")
     gateway.succeed("rm -rf /tmp/recover-cli-root /tmp/recover-cli-root-candidate /tmp/recover-cli-root-rollback && mkdir -p /tmp/recover-cli-root-candidate /tmp/recover-cli-root-rollback")
     gateway.succeed("printf 'candidate\n' >/tmp/recover-cli-root-candidate/config.toml && printf 'rollback\n' >/tmp/recover-cli-root-rollback/config.toml")

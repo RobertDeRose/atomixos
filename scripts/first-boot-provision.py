@@ -1269,6 +1269,11 @@ def import_config(config_path: Path, config_root: Path):
 
 CANDIDATE_SUFFIX = "-candidate"
 ROLLBACK_SUFFIX = "-rollback"
+PROMOTION_MARKER = ".atomixos-promotion-pending"
+
+
+def promotion_marker_path(config_root: Path) -> Path:
+    return config_root.parent / f"{config_root.name}{PROMOTION_MARKER}"
 
 
 def atomic_import_config(config_path: Path, config_root: Path):
@@ -1310,9 +1315,11 @@ def atomic_import_config(config_path: Path, config_root: Path):
             shutil.rmtree(rollback_root)
 
         # Step 1: move active to rollback (preserves previous state).
-        os.rename(str(config_root), str(rollback_root))
+        promotion_marker_path(config_root).write_text("pending\n")
+        config_root.rename(rollback_root)
         # Step 2: move candidate to active.
-        os.rename(str(candidate_root), str(config_root))
+        candidate_root.rename(config_root)
+        promotion_marker_path(config_root).unlink(missing_ok=True)
 
         return parsed["warnings"]
     finally:
@@ -1325,18 +1332,24 @@ def cleanup_rollback(config_root: Path):
     rollback_root = config_root.parent / (config_root.name + ROLLBACK_SUFFIX)
     if rollback_root.exists():
         shutil.rmtree(rollback_root)
+    promotion_marker_path(config_root).unlink(missing_ok=True)
 
 
 def recover_config_root(config_root: Path) -> None:
     """Recover from an interrupted active→rollback, candidate→active promotion."""
     rollback_root = config_root.parent / (config_root.name + ROLLBACK_SUFFIX)
     candidate_root = config_root.parent / (config_root.name + CANDIDATE_SUFFIX)
-    if rollback_root.exists() and (config_root / "config.toml").exists():
+    marker_path = promotion_marker_path(config_root)
+    if marker_path.exists() and rollback_root.exists():
         if config_root.exists():
             shutil.rmtree(config_root)
         rollback_root.rename(config_root)
         if candidate_root.exists():
             shutil.rmtree(candidate_root)
+        marker_path.unlink(missing_ok=True)
+        return
+    if marker_path.exists() and not rollback_root.exists():
+        marker_path.unlink(missing_ok=True)
         return
     if (config_root / "config.toml").exists():
         return
@@ -1350,13 +1363,16 @@ def recover_config_root(config_root: Path) -> None:
 def restore_rollback(config_root: Path) -> bool:
     """Restore previous config from rollback. Returns True if restored."""
     rollback_root = config_root.parent / (config_root.name + ROLLBACK_SUFFIX)
+    marker_path = promotion_marker_path(config_root)
     if not rollback_root.exists():
+        marker_path.unlink(missing_ok=True)
         return False
 
     # Remove the failed active config.
     if config_root.exists():
         shutil.rmtree(config_root)
-    os.rename(str(rollback_root), str(config_root))
+    rollback_root.rename(config_root)
+    marker_path.unlink(missing_ok=True)
     return True
 
 
@@ -1672,10 +1688,12 @@ class BootstrapHandler(BaseHTTPRequestHandler):
     config_root = None
     output_path = None
     nonce_store = NonceStore()
+    apply_lock = threading.Lock()
 
     def _is_provisioned(self) -> bool:
         """Check if the device already has an active config."""
-        recover_config_root(Path(self.config_root))
+        if not self.apply_lock.locked():
+            recover_config_root(Path(self.config_root))
         return (Path(self.config_root) / "config.toml").exists()
 
     def _require_auth(self, payload: bytes) -> bool:
@@ -1842,8 +1860,9 @@ class BootstrapHandler(BaseHTTPRequestHandler):
 
                 if rollback_root.exists():
                     shutil.rmtree(rollback_root)
-                os.rename(str(config_root), str(rollback_root))
-                os.rename(str(candidate_root), str(config_root))
+                promotion_marker_path(config_root).write_text("pending\n")
+                config_root.rename(rollback_root)
+                candidate_root.rename(config_root)
             else:
                 # Fresh provisioning: write directly.
                 parsed = load_config(prepared_config, config_root)
@@ -1929,6 +1948,14 @@ class BootstrapHandler(BaseHTTPRequestHandler):
         self._send_html()
 
     def do_POST(self):
+        if self.path in ("/api/config", "/apply", "/generate"):
+            with self.apply_lock:
+                recover_config_root(Path(self.config_root))
+                self._do_POST_locked()
+            return
+        self._do_POST_locked()
+
+    def _do_POST_locked(self):
         was_provisioned = self._is_provisioned()
         if (
             self.path in ("/api/config", "/apply", "/generate")
@@ -2160,7 +2187,7 @@ def main():
             for warning in validate_config_source(Path(args.config)):
                 print(f"warning: {warning}", file=sys.stderr)
         elif args.command == "import":
-            for warning in import_config(Path(args.config), Path(args.config_root)):
+            for warning in atomic_import_config(Path(args.config), Path(args.config_root)):
                 print(f"warning: {warning}", file=sys.stderr)
         elif args.command == "sync-quadlet":
             sync_quadlet_units(
