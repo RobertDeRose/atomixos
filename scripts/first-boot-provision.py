@@ -1184,7 +1184,7 @@ def write_imported_state(parsed: dict, prepared_config: Path, prepared_files: Pa
     users_path.chmod(0o600)
 
     ssh_dir = config_root / "ssh-authorized-keys"
-    desired_key_files = {"admin", *parsed["users"].keys()}
+    desired_key_files = set(parsed["users"].keys())
     for existing_key_file in ssh_dir.iterdir():
         if existing_key_file.is_file() and existing_key_file.name not in desired_key_files:
             existing_key_file.unlink()

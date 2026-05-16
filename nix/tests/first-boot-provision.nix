@@ -114,6 +114,8 @@ nixos-lib.runTest {
     gateway.succeed("grep '^ImageTag=localhost/custom-ws:latest$' /data/config/quadlet/custom-ws.build")
 
     gateway.succeed("rm -rf /tmp/operator-admin-root && mkdir -p /tmp/operator-admin-root")
+    gateway.succeed("first-boot-provision import /tmp/config.toml /tmp/operator-admin-root")
+    gateway.succeed("test -f /tmp/operator-admin-root/ssh-authorized-keys/admin")
     gateway.succeed("first-boot-provision import /tmp/operator-admin-config.toml /tmp/operator-admin-root")
     gateway.fail("test -f /tmp/operator-admin-root/ssh-authorized-keys/admin")
     gateway.succeed("grep 'AAAAC3operator' /tmp/operator-admin-root/admin-signers")
@@ -221,6 +223,8 @@ nixos-lib.runTest {
     gateway.succeed("id -nG operator | grep -w wheel")
     gateway.fail("id -nG viewer | grep -w wheel")
     gateway.succeed("test \"$(stat -c %U:%a /tmp/apply-users-test/ssh-authorized-keys/operator)\" = 'operator:600'")
+    gateway.succeed("getent shadow admin | cut -d: -f2 | grep '^!$'")
+    gateway.succeed("getent shadow operator | cut -d: -f2 | grep '^!$'")
     gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nmanaged = json.loads(Path('/tmp/apply-users-test/managed-users.json').read_text())\nassert sorted(managed) == ['admin', 'operator', 'viewer'], managed\nPY")
 
     # ── apply-users: lock removed users ──
@@ -231,6 +235,7 @@ nixos-lib.runTest {
 
     # ── apply-users: idempotent re-run does not fail ──
     gateway.succeed("ATOMIXOS_USERS_JSON=/tmp/apply-users-test/users.json ATOMIXOS_MANAGED_STATE=/tmp/apply-users-test/managed-users.json python3 ${../../scripts/apply-users.py}")
+    gateway.succeed("getent shadow admin | cut -d: -f2 | grep '^!$'")
 
     # ── apply-users: skips gracefully when no users.json ──
     gateway.succeed("ATOMIXOS_USERS_JSON=/tmp/apply-users-test/nonexistent.json ATOMIXOS_MANAGED_STATE=/tmp/apply-users-test/managed-users.json python3 ${../../scripts/apply-users.py}")

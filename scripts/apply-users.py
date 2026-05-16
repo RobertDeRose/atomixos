@@ -73,9 +73,8 @@ def ensure_user(name: str, is_admin: bool) -> None:
         return
 
     if user_exists(name):
-        # Unlock the account in case it was previously locked.
-        # --expiredate= (empty) clears expiry on shadow-utils (NixOS ships shadow).
-        run(["usermod", "--unlock", "--expiredate=", "--shell=/bin/sh", name])
+        # Clear expiry in case the account was disabled, but keep password auth locked.
+        run(["usermod", "--expiredate=", "--password", "!", "--shell=/bin/sh", name])
     else:
         # Non-admin users are system accounts (no home, system UID range).
         # Account type cannot change after creation on the ephemeral overlay,
