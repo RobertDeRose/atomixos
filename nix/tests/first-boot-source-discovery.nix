@@ -112,6 +112,16 @@ nixos-lib.runTest {
     gateway.succeed("grep 'Waiting for provisioning via bootstrap web console' /tmp/bootstrap-case.log")
     gateway.succeed("grep '^start atomixos-apply-users.service$' /test-state/systemctl.log")
     gateway.succeed("kill $(cat /tmp/bootstrap-web.pid)")
+
+    gateway.succeed("rm -rf /tmp/bootcases/no-systemd-apply /tmp/config-roots/no-systemd-apply /test-state /tmp/no-systemd-bin && mkdir -p /tmp/bootcases/no-systemd-apply /tmp/config-roots/no-systemd-apply /test-state /tmp/no-systemd-bin /etc/atomixos")
+    gateway.succeed("rm -f /boot/config.toml /etc/atomixos/fresh-flash /data/.completed_first_boot")
+    gateway.succeed("cp /tmp/config-template.toml /boot/config.toml && : >/etc/atomixos/fresh-flash")
+    gateway.succeed("ln -s /testbin/rauc /tmp/no-systemd-bin/rauc && ln -s /testbin/fw_printenv /tmp/no-systemd-bin/fw_printenv && ln -s /testbin/fw_setenv /tmp/no-systemd-bin/fw_setenv && ln -s ${pkgs.jq}/bin/jq /tmp/no-systemd-bin/jq && ln -s ${pkgs.python3Minimal}/bin/python3 /tmp/no-systemd-bin/python3 && ln -s ${provisionCli}/bin/first-boot-provision /tmp/no-systemd-bin/first-boot-provision && ln -s ${firstBootScript}/bin/first-boot /tmp/no-systemd-bin/first-boot")
+    gateway.succeed("env PATH=/tmp/no-systemd-bin:${pkgs.coreutils}/bin:${pkgs.bash}/bin:${pkgs.shadow}/bin ATOMIXOS_APPLY_USERS_SCRIPT=${../../scripts/apply-users.py} ATOMIXOS_CONFIG_ROOT=/tmp/config-roots/no-systemd-apply ATOMIXOS_FIRST_BOOT_SENTINEL=/tmp/bootcases/no-systemd-apply/sentinel ATOMIXOS_BOOT_SLOT=boot.a ATOMIXOS_USB_SEARCH_DIRS='/test-usb' ATOMIXOS_BOOTSTRAP_HOST=127.0.0.1 ATOMIXOS_INITRD_MARKER=/etc/atomixos/fresh-flash ATOMIXOS_BOOT_CONFIG_PATH=/boot/config.toml first-boot >/tmp/no-systemd-apply.log 2>&1")
+    gateway.succeed("test -f /tmp/bootcases/no-systemd-apply/sentinel")
+    gateway.succeed("test -f /tmp/config-roots/no-systemd-apply/managed-users.json")
+    gateway.succeed("grep 'systemctl unavailable; applying managed users directly' /tmp/no-systemd-apply.log")
+
     gateway.succeed("rm -rf /tmp/bootstrap-invalid-lan-root /test-state && mkdir -p /tmp/bootstrap-invalid-lan-root /test-state")
     gateway.succeed("rm -f /boot/config.toml /etc/atomixos/fresh-flash /tmp/bootstrap-invalid-lan-sentinel")
     gateway.succeed("rm -rf /test-usb/usb-a/* /test-usb/usb-b/*")

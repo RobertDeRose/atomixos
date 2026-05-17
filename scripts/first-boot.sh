@@ -17,6 +17,7 @@ BOOT_CONFIG_PATH="${ATOMIXOS_BOOT_CONFIG_PATH:-/boot/config.toml}"
 APP_RUNTIME_QUADLET_DIR="${ATOMIXOS_ROOTLESS_QUADLET_DIR:-/var/lib/appsvc/.config/containers/systemd}"
 RAUC_ENABLED="${ATOMIXOS_RAUC_ENABLE:-1}"
 LAN_SETTINGS_FILE="$CONFIG_ROOT/lan-settings.json"
+APPLY_USERS_SCRIPT="${ATOMIXOS_APPLY_USERS_SCRIPT:-./scripts/apply-users.py}"
 
 read_bootstrap_host() {
 	if [ ! -f "$LAN_SETTINGS_FILE" ]; then
@@ -153,7 +154,16 @@ sync_quadlet_units() {
 }
 
 apply_managed_users() {
-	systemctl start atomixos-apply-users.service
+	if command -v systemctl >/dev/null 2>&1; then
+		systemctl start atomixos-apply-users.service
+		return 0
+	fi
+
+	log "WARNING: systemctl unavailable; applying managed users directly"
+	ATOMIXOS_USERS_JSON="$CONFIG_ROOT/users.json" \
+		ATOMIXOS_MANAGED_STATE="$CONFIG_ROOT/managed-users.json" \
+		ATOMIXOS_SSH_KEYS_DIR="$CONFIG_ROOT/ssh-authorized-keys" \
+		python3 "$APPLY_USERS_SCRIPT"
 }
 
 import_seed_config() {
