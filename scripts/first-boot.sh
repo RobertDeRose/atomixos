@@ -75,7 +75,9 @@ is_fresh_flash() {
 
 find_usb_config() {
 	local search_dir device mount_dir
-	for search_dir in ${ATOMIXOS_USB_SEARCH_DIRS:-/dev/disk/by-label /dev/disk/by-partlabel}; do
+	# Colon-separated list; avoids word-splitting issues with spaces in paths.
+	local IFS=':'
+	for search_dir in ${ATOMIXOS_USB_SEARCH_DIRS:-/dev/disk/by-label:/dev/disk/by-partlabel}; do
 		[ -d "$search_dir" ] || continue
 		for device in "$search_dir"/*; do
 			[ -e "$device" ] || continue
