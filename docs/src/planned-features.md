@@ -69,6 +69,14 @@ Quadlet containers on a persistent `/data` partition.
 - **USB WiFi**: Kernel WiFi/Bluetooth stacks are disabled. Hardware selection needed
   before enablement.
 - **Active watchdog enforcement**: Deferred pending Rock64 boot-reliability validation.
+- **Additional `[network]` properties**: Evaluate adding `dns_servers`,
+  `dns_search_domains`, `default_gateway`, and `interfaces` to the `[network]`
+  section for operator-controlled DNS, default route, and NIC configuration.
+  These keys are not currently consumed but may be needed for multi-NIC or
+  custom DNS setups.
+- **User shell configuration**: Allow operators to set `shell = "zsh"` or
+  `shell = "bash"` per user in `[users.<name>]`. Currently admin users default
+  to `/bin/zsh` and system accounts to `/bin/sh`, with no config override.
 - **Additional `[activation]` options**: Evaluate adding activation controls beyond
   `required`, such as `timeout_seconds` for max wait/check windows,
   `rollback_on_failure` for whether to restore previous config, `restart` for an

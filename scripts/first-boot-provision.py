@@ -559,7 +559,7 @@ def load_network_settings(network_value):
     network = require_allowed_keys(
         network_value,
         "network",
-        {"dns_servers", "dns_search_domains", "default_gateway", "interfaces", "dnsmasq", "ntp", "firewall"},
+        {"dnsmasq", "ntp", "firewall"},
     )
     dnsmasq = network.get("dnsmasq", {})
     dnsmasq_settings = require_allowed_keys(
@@ -601,7 +601,7 @@ def load_firewall_inbound(network_value):
     network = require_allowed_keys(
         network_value,
         "network",
-        {"dns_servers", "dns_search_domains", "default_gateway", "interfaces", "dnsmasq", "ntp", "firewall"},
+        {"dnsmasq", "ntp", "firewall"},
     )
     firewall = network.get("firewall", {})
     firewall = require_allowed_keys(firewall, "network.firewall", {"inbound"})
