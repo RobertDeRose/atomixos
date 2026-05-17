@@ -76,20 +76,24 @@ def ensure_user(name: str, is_admin: bool, previous: set[str]) -> None:
         if name not in previous:
             log(f"  refusing to modify unmanaged existing user: {name}")
             raise SystemExit(1)
-        # Clear expiry in case the account was disabled, but keep password auth locked.
-        run(["usermod", "--expiredate=", "--password", "!", "--shell=/bin/sh", name])
+        # Clear expiry in case the account was disabled; keep password locked.
+        # Do not override shell — only set at creation time.
+        run(["usermod", "--expiredate=", "--lock", name])
     else:
         # Non-admin users are system accounts (no home, system UID range).
         # Account type cannot change after creation on the ephemeral overlay,
         # which resets every boot anyway.
+        # Admin users get /bin/zsh; system accounts get /bin/sh.
+        shell = "/bin/zsh" if is_admin else "/bin/sh"
         cmd = [
             "useradd",
             "--system" if not is_admin else "--create-home",
-            "--shell", "/bin/sh",
-            "--password", "!",  # password-locked
+            "--shell", shell,
             name,
         ]
         run(cmd)
+        # Lock password after creation so the hash never appears in /proc.
+        run(["usermod", "--lock", name])
 
     # Manage admin group membership.
     if is_admin:
