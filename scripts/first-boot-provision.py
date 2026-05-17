@@ -2019,12 +2019,10 @@ class BootstrapHandler(BaseHTTPRequestHandler):
         self._send_html()
 
     def do_POST(self):
-        if self.path in ("/api/config", "/apply", "/generate"):
-            with self.apply_lock:
+        with self.apply_lock:
+            if self.path in ("/api/config", "/apply", "/generate"):
                 recover_config_root(Path(self.config_root))
-                self._do_POST_locked()
-            return
-        self._do_POST_locked()
+            self._do_POST_locked()
 
     def _do_POST_locked(self):
         was_provisioned = self._is_provisioned()
