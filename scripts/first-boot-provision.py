@@ -62,6 +62,7 @@ DEFAULT_NTP_SERVERS = ["time.cloudflare.com"]
 SCHEMA_ENV = "ATOMIXOS_CONFIG_SCHEMA"
 BOOTSTRAP_POST_RESPONSE_ENV = "ATOMIXOS_BOOTSTRAP_POST_RESPONSE"
 BOOTSTRAP_ACTIVATION_ENV = "ATOMIXOS_BOOTSTRAP_ACTIVATION"
+BOOTSTRAP_ACTIVATION_TIMEOUT_SECONDS = 300
 NONCE_TTL_SECONDS = int(os.environ.get("ATOMIXOS_NONCE_TTL", "300"))
 SSH_KEYGEN_BIN = os.environ.get("ATOMIXOS_SSH_KEYGEN", "ssh-keygen")
 AUTH_REQUIRED_MESSAGE = "authentication required: provide X-Atomicnix-Nonce and X-Atomicnix-Signature headers"
@@ -1702,6 +1703,17 @@ WantedBy = [\"default.target\"]
 </html>
 """
 
+PROVISIONED_BOOTSTRAP_HTML = BOOTSTRAP_HTML.replace(
+    """      <section class=\"grid\">
+        <form class=\"panel\" method=\"post\" action=\"/apply\" enctype=\"multipart/form-data\">""",
+    """      <section class=\"message\">
+        <p><strong>Device already provisioned.</strong> Re-apply requires signed API requests; the browser forms are
+        only available during first provisioning.</p>
+      </section>
+      <section class=\"grid\" style=\"display: none\">
+        <form class=\"panel\" method=\"post\" action=\"/apply\" enctype=\"multipart/form-data\">""",
+)
+
 
 class BootstrapHandler(BaseHTTPRequestHandler):
     config_root = None
@@ -1775,13 +1787,13 @@ class BootstrapHandler(BaseHTTPRequestHandler):
                 [command],
                 capture_output=True,
                 text=True,
-                timeout=120,
+                timeout=BOOTSTRAP_ACTIVATION_TIMEOUT_SECONDS,
             )
             if result.returncode != 0:
                 stderr = result.stderr.strip()
                 return [f"activation script failed (exit {result.returncode}): {stderr[:200]}"]
         except subprocess.TimeoutExpired:
-            return ["activation script timed out"]
+            return [f"activation script timed out after {BOOTSTRAP_ACTIVATION_TIMEOUT_SECONDS}s"]
         except FileNotFoundError:
             return ["activation script not found"]
         return []
@@ -1927,7 +1939,8 @@ class BootstrapHandler(BaseHTTPRequestHandler):
 
     def _send_html(self, config_text="", message=""):
         message_block = f'<section class="message">{message}</section>' if message else ""
-        body = BOOTSTRAP_HTML.format(config_text=html.escape(config_text), message_block=message_block)
+        template = PROVISIONED_BOOTSTRAP_HTML if self._is_provisioned() else BOOTSTRAP_HTML
+        body = template.format(config_text=html.escape(config_text), message_block=message_block)
         body_bytes = body.encode()
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
