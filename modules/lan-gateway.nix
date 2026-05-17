@@ -75,7 +75,7 @@ in
     expand-hosts
     addn-hosts=/etc/atomixos/dnsmasq-hosts
     local=/local/
-    port=53
+    log-dhcp
   '';
 
   environment.etc."atomixos/dnsmasq-hosts".text = ''
