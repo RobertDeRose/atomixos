@@ -8,15 +8,15 @@ manually copied into `/data/config/` after boot. This makes fresh installs, repr
 integration less coherent than they need to be.
 
 This change defines a single local first-boot provisioning contract based on `config.toml`, so a freshly flashed or
-reprovisioned device can acquire its admin credentials and Quadlet-managed application stack from a well-defined source
-order without baking per-device secrets into the base image.
+reprovisioned device can acquire its managed operator users and Quadlet-managed application stack from a well-defined
+source order without baking per-device secrets into the base image.
 
 ## What Changes
 
 - Add a first-boot local provisioning flow that discovers a single `config.toml` seed from `/boot`, then USB mass
   storage, then a local bootstrap web console
-- Define a bounded `config.toml` schema for provisioning admin SSH keys, explicit health
-  requirements, and structured Quadlet unit definitions
+- Define a bounded `config.toml` schema for provisioning managed users, explicit activation requirements, and structured
+  Quadlet unit definitions
 - Persist the imported provisioning state under `/data/config/`, including the source `config.toml` and rendered
   Quadlet units
 - Distinguish initial fresh-flash provisioning from reprovisioning using `boot-b absent` as the discriminator so

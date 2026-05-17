@@ -18,6 +18,7 @@ import sys
 import tarfile
 import tempfile
 import textwrap
+import threading
 import time
 from email.parser import BytesParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -1258,6 +1259,15 @@ def write_imported_state(parsed: dict, prepared_config: Path, prepared_files: Pa
     copy_bundle_files(prepared_files, config_root)
 
 
+def carry_forward_managed_state(previous_root: Path, candidate_root: Path) -> None:
+    previous_state = previous_root / "managed-users.json"
+    if not previous_state.exists():
+        return
+    target_state = candidate_root / "managed-users.json"
+    shutil.copyfile(previous_state, target_state)
+    target_state.chmod(0o600)
+
+
 def load_runtime_metadata(config_root: Path):
     metadata_path = config_root / RUNTIME_METADATA_FILENAME
     if not metadata_path.exists():
@@ -2211,6 +2221,9 @@ def main():
     import_parser.add_argument("config")
     import_parser.add_argument("config_root")
 
+    recover_parser = sub.add_parser("recover")
+    recover_parser.add_argument("config_root")
+
     sync_parser = sub.add_parser("sync-quadlet")
     sync_parser.add_argument("config_root")
     sync_parser.add_argument("target_root")
@@ -2231,6 +2244,8 @@ def main():
         elif args.command == "import":
             for warning in atomic_import_config(Path(args.config), Path(args.config_root)):
                 print(f"warning: {warning}", file=sys.stderr)
+        elif args.command == "recover":
+            recover_config_root(Path(args.config_root))
         elif args.command == "sync-quadlet":
             sync_quadlet_units(
                 Path(args.config_root),

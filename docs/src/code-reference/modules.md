@@ -107,10 +107,13 @@ on first boot.
 
 **User accounts:**
 
-| User    | Groups  | Authentication                                                                 |
-|---------|---------|--------------------------------------------------------------------------------|
-| `root`  | --      | Locked by default; Rock64 serial-root recovery only when `_RUT_OH_=1`          |
-| `admin` | `wheel` | SSH key from `/data/config/ssh-authorized-keys/admin`; password remains locked |
+| User     | Groups | Authentication                                                        |
+|----------|--------|-----------------------------------------------------------------------|
+| `root`   | --     | Locked by default; Rock64 serial-root recovery only when `_RUT_OH_=1` |
+| `appsvc` | --     | Runtime system account for rootless application containers            |
+
+Operator users are declared by provisioning config under `[users]`. Admin users are added to `wheel`, use SSH keys from
+`/data/config/ssh-authorized-keys/<user>`, and keep password authentication locked.
 
 **System packages:** `nano`, `htop`, `curl`, `jq`, `f2fs-tools`, `kmod`
 
@@ -289,7 +292,7 @@ present with any ports, appends those ports to the platform-required LAN ports o
 
 | Setting  | Value                                             |
 |----------|---------------------------------------------------|
-| Upstream | `time.cloudflare.com`                            |
+| Upstream | `time.cloudflare.com`                             |
 | Serve to | provisioned LAN subnet, fallback `172.20.30.0/24` |
 | Fallback | `local stratum 10`                                |
 

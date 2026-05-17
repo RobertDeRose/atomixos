@@ -49,15 +49,15 @@ reprovisioning SHALL use USB seed discovery followed by the bootstrap web consol
 ### Requirement: config.toml defines bounded provisioning data
 
 The local provisioning artifact SHALL be a single `config.toml` file containing only the bounded appliance provisioning
-contract: admin SSH keys, provisioned LAN and WAN firewall inbound policy, optional LAN settings, optional OS upgrade
-settings, explicit health requirements, and structured Quadlet definitions. The accepted structure SHALL be defined by a
-machine-readable schema that the import path validates before semantic normalization.
+contract: managed users, provisioned LAN and WAN firewall inbound policy, optional LAN/NTP settings, optional OS
+upgrade settings, explicit activation requirements, and structured Quadlet definitions. The accepted structure SHALL be
+defined by a machine-readable schema that the import path validates before semantic normalization.
 
 #### Scenario: Minimum valid config.toml includes admin access and stack definition
 
 - **WHEN** a `config.toml` file is accepted for import
-- **THEN** it includes at least one admin SSH key, a `[firewall.inbound]` table, at least one Quadlet-defined
-  application or service unit, and explicit health requirements
+- **THEN** it includes at least one admin user SSH key, optional `[network.firewall.inbound]` tables, at least one
+  Quadlet-defined application or service unit, and explicit activation requirements
 
 ### Requirement: Provisioning renders firewall and LAN runtime state
 
@@ -71,25 +71,25 @@ written to `/data/config/os-upgrade.json` when `[os_upgrade]` is present.
 
 #### Scenario: Firewall inbound config is bounded
 
-- **WHEN** provisioning imports `[firewall.inbound.wan]` or `[firewall.inbound.lan]` with TCP or UDP ports
+- **WHEN** provisioning imports `[network.firewall.inbound.wan]` or `[network.firewall.inbound.lan]` with TCP or UDP ports
 - **THEN** the persisted firewall JSON contains only normalized integer port arrays under those scopes
 - **AND** `provisioned-firewall-inbound.service` applies those ports to the matching interface rules for WAN and LAN
 
 #### Scenario: LAN range excludes gateway
 
-- **WHEN** provisioning imports `[lan]` with a gateway CIDR and DHCP range
+- **WHEN** provisioning imports `[network.dnsmasq]` with a gateway CIDR and DHCP range
 - **THEN** the DHCP range is rejected unless it is inside the gateway `/24`, ordered, and excludes the gateway IP
 
 ### Requirement: config.toml expresses containers as structured TOML
 
 The `config.toml` format SHALL represent Quadlet units as structured TOML tables rather than raw embedded multiline
-Quadlet blobs. The canonical identity shape SHALL be `container.<name>.<section>`, with a required
-`[container.<name>]` table that declares `privileged = true|false`. The device SHALL derive the rendered filename,
+Quadlet blobs. The canonical identity shape SHALL be `containers.container.<name>.<section>`, with a required
+`[containers.container.<name>]` table that declares `privileged = true|false`. The device SHALL derive the rendered filename,
 active path, and runtime mode from the container name plus that privilege flag.
 
 #### Scenario: Structured Quadlet tables map to rendered unit files
 
-- **WHEN** the provisioning flow reads `[container.traefik.Container]`
+- **WHEN** the provisioning flow reads `[containers.container.traefik.Container]`
 - **THEN** it treats that table as the `Container` section of the rendered `traefik.container` Quadlet unit under the
   canonical `/data/config/quadlet/` path
 
@@ -172,7 +172,7 @@ Provisioned containers SHALL be rendered into canonical Quadlet files before act
 
 When no provisioning seed file is found, the device SHALL start a constrained local bootstrap web console. The console
 SHALL support uploading an existing `config.toml` or supported config bundle, and generating a new `config.toml` from a
-basic form for admin SSH keys, optional OS update server configuration, and application stack provisioning.
+basic form for operator SSH keys, optional OS update server configuration, and application stack provisioning.
 
 #### Scenario: Generated config is shown back to the operator after apply
 

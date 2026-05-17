@@ -251,9 +251,9 @@
 
 ## 18. Authentication Provisioning
 
-- [x] 18.1 Persist imported admin SSH keys under `/data/config/ssh-authorized-keys/admin` through the provisioning
+- [x] 18.1 Persist imported operator SSH keys under `/data/config/ssh-authorized-keys/<user>` through the provisioning
   importer
-- [x] 18.2 Enforce SSH-key-only operator access with both `root` and `admin` password-locked by default
+- [x] 18.2 Enforce SSH-key-only operator access with `root` and config-managed operator users password-locked by default
 - [x] 18.3 Validate imported provisioning state before first boot commits the slot
 - [ ] 18.4 Verify on hardware that admin SSH key auth works, password auth remains rejected, and `_RUT_OH_` stays a
   physical serial recovery path rather than a normal operator login mode

@@ -348,7 +348,7 @@ Existing dependencies are satisfied. One new capability is required:
 - Bundle file support with `${FILES_DIR}` token substitution (completed)
 - Container, network, volume rendering and sync (completed)
 - **Quadlet `.build` support (new)**: schema, rendering, sync, and test updates needed
-  to support `[build.*]` sections in config.toml that produce `.build` Quadlet units.
+  to support `[containers.build.*]` sections in config.toml that produce `.build` Quadlet units.
   This is implemented as a prerequisite task within this feature.
 
 ## Affected Documentation

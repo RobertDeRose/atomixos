@@ -148,8 +148,9 @@ The effective network model is:
 
 ### 10. Use SSH-key-only operator access with physical serial recovery
 
-**Decision:** The `admin` account remains password-locked and uses SSH keys from `/data/config/ssh-authorized-keys/admin`.
-Root is also locked by default. `_RUT_OH_` is a physical serial-only recovery path, not a network authentication mode.
+**Decision:** Operator accounts are declared by config under `[users.<name>]`, remain password-locked, and use SSH keys
+from `/data/config/ssh-authorized-keys/<user>`. Root is also locked by default. `_RUT_OH_` is a physical serial-only
+recovery path, not a network authentication mode.
 
 **Rationale:** This matches the implemented security posture and removes ambiguity around password-based operator access.
 

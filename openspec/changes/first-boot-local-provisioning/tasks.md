@@ -2,7 +2,8 @@
 
 ## 1. Provisioning Contract
 
-- [x] 1.1 Define the supported `config.toml` schema for `admin`, `health`, and structured container/Quadlet data
+- [x] 1.1 Define the supported `config.toml` schema for managed users, activation requirements, and structured
+  container/Quadlet data
 - [x] 1.2 Define the TOML-to-Quadlet rendering rules, including how arrays map to repeated Quadlet directives
 - [x] 1.3 Define the canonical persisted layout under `/data/config/`, including the imported `config.toml` and rendered
   Quadlet unit files

@@ -48,12 +48,45 @@ let
     install -m0644 ${../docs/src/atomixos.png} "$out/share/atomixos/atomixos.png"
     install -m0644 ${../schemas/config.schema.json} "$out/share/atomixos/config.schema.json"
   '';
+  configRecoveryScript = pkgs.writeShellScript "atomixos-config-recover" ''
+    set -euo pipefail
+    exec ${provisionCli}/bin/first-boot-provision recover /data/config
+  '';
   ubootEnvTools = self.packages.${pkgs.stdenv.hostPlatform.system}.uboot-env-tools;
   firstBootEnv = {
     ATOMIXOS_RAUC_ENABLE = if config.atomixos.rauc.enable then "1" else "0";
   };
 in
 {
+  systemd.services.atomixos-config-recover = {
+    description = "Recover interrupted AtomixOS config promotion";
+    after = [ "data.mount" ];
+    wants = [ "data.mount" ];
+    before = [
+      "atomixos-apply-users.service"
+      "atomixos-bootstrap.service"
+      "first-boot.service"
+      "lan-gateway-apply.service"
+      "provisioned-firewall-inbound.service"
+      "quadlet-sync.service"
+    ];
+    wantedBy = [ "multi-user.target" ];
+
+    unitConfig.RequiresMountsFor = [ "/data" ];
+
+    path = [
+      pkgs.coreutils
+      pkgs.python3Minimal
+      provisionCli
+    ];
+
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = configRecoveryScript;
+      RemainAfterExit = true;
+    };
+  };
+
   systemd.services.quadlet-sync = {
     description = "Sync provisioned Quadlet units";
     after = [

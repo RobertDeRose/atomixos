@@ -10,7 +10,7 @@ cleanly with the later Nixstasis direction.
 The current first-boot-local-provisioning work converged on a bounded local provisioning contract:
 
 - a single `config.toml` artifact
-- admin SSH keys as imported access material
+- operator SSH keys as imported access material
 - structured Quadlet definitions as the application runtime contract
 - explicit health requirements in the same document
 - `/data/config/` as the durable home of imported operator configuration
@@ -78,7 +78,7 @@ but the check must happen in initrd where that condition is actually true.
 
 ### 3. Represent Quadlet as structured TOML, not raw embedded blobs
 
-**Decision:** `config.toml` uses the canonical shape `container.<name>.<section>`, with `[container.<name>]`
+**Decision:** `config.toml` uses the canonical shape `containers.container.<name>.<section>`, with `[containers.container.<name>]`
 declaring `privileged = true|false` and the OS owning the rootful vs rootless runtime details.
 
 **Rationale:** This preserves the Quadlet runtime model while keeping the provisioning artifact structured and

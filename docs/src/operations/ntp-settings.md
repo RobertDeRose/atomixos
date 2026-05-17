@@ -35,9 +35,9 @@ or other standard non-smearing servers.
 
 ## Operator Overrides
 
-For production networks with an enterprise or site-local time service, prefer the local NTP service when it is reliable and
-managed. Keep all configured upstreams in the same leap-second behavior family: either all standard non-smearing sources or
-all sources from the same smearing provider.
+For production networks with an enterprise or site-local time service, prefer the local NTP service when it is reliable
+and managed. Keep all configured upstreams in the same leap-second behavior family: either all standard non-smearing
+sources or all sources from the same smearing provider.
 
 AtomixOS currently sets the upstream in `modules/lan-gateway.nix`. After changing the upstream, rebuild and redeploy the
 image, then verify synchronization with:
