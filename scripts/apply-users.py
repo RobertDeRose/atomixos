@@ -91,18 +91,19 @@ def ensure_user(name: str, is_admin: bool, previous: set[str]) -> None:
         ]
         run(cmd)
 
-    # Manage wheel membership.
+    # Manage admin group membership.
     if is_admin:
-        if group_exists("wheel"):
-            run(["usermod", "--append", "--groups", "wheel", name])
+        admin_groups = [group for group in ["wheel", "podman"] if group_exists(group)]
+        if admin_groups:
+            run(["usermod", "--append", "--groups", ",".join(admin_groups), name])
     else:
-        # Remove from wheel if present.
-        try:
-            wheel = grp.getgrnam("wheel")
-            if name in wheel.gr_mem:
-                run(["gpasswd", "--delete", name, "wheel"])
-        except KeyError:
-            pass
+        for group_name in ["wheel", "podman"]:
+            try:
+                group = grp.getgrnam(group_name)
+                if name in group.gr_mem:
+                    run(["gpasswd", "--delete", name, group_name])
+            except KeyError:
+                pass
 
 
 def ensure_authorized_keys_owner(name: str) -> None:

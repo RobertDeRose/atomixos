@@ -220,13 +220,16 @@ nixos-lib.runTest {
 
     # ── apply-users: create managed users from users.json ──
     gateway.succeed("mkdir -p /tmp/apply-users-test/ssh-authorized-keys")
+    gateway.succeed("groupadd --force podman")
     gateway.succeed("cat > /tmp/apply-users-test/users.json <<'EOF'\n{\"admin\": {\"isAdmin\": true, \"ssh_key\": \"ssh-ed25519 AAAAC3test admin@test\"}, \"operator\": {\"isAdmin\": true, \"ssh_key\": \"ssh-ed25519 AAAAC3op op@test\"}, \"viewer\": {\"isAdmin\": false, \"ssh_key\": \"\"}}\nEOF")
     gateway.succeed("printf 'ssh-ed25519 AAAAC3op op@test\n' >/tmp/apply-users-test/ssh-authorized-keys/operator && chmod 0600 /tmp/apply-users-test/ssh-authorized-keys/operator")
     gateway.succeed("ATOMIXOS_USERS_JSON=/tmp/apply-users-test/users.json ATOMIXOS_MANAGED_STATE=/tmp/apply-users-test/managed-users.json ATOMIXOS_SSH_KEYS_DIR=/tmp/apply-users-test/ssh-authorized-keys python3 ${../../scripts/apply-users.py}")
     gateway.succeed("id operator")
     gateway.succeed("id viewer")
     gateway.succeed("id -nG operator | grep -w wheel")
+    gateway.succeed("id -nG operator | grep -w podman")
     gateway.fail("id -nG viewer | grep -w wheel")
+    gateway.fail("id -nG viewer | grep -w podman")
     gateway.succeed("test \"$(stat -c %U:%a /tmp/apply-users-test/ssh-authorized-keys/operator)\" = 'operator:600'")
     gateway.succeed("getent shadow admin | cut -d: -f2 | grep '^!$'")
     gateway.succeed("getent shadow operator | cut -d: -f2 | grep '^!$'")
