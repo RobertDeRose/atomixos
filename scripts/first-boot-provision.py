@@ -13,6 +13,7 @@ import pwd
 import re
 import secrets
 import shutil
+import socket as _socket
 import subprocess
 import sys
 import tarfile
@@ -1972,7 +1973,8 @@ class BootstrapHandler(BaseHTTPRequestHandler):
         """Read request body with size limit enforcement."""
         length = int(self.headers.get("Content-Length", "0"))
         if length > MAX_REQUEST_BODY_BYTES:
-            raise ValueError(f"request body too large ({length} bytes, max {MAX_REQUEST_BODY_BYTES})")
+            msg = f"request body too large ({length} bytes, max {MAX_REQUEST_BODY_BYTES})"
+            raise ValueError(msg)
         return self.rfile.read(length)
 
     def _read_form(self):
@@ -2100,12 +2102,14 @@ class BootstrapHandler(BaseHTTPRequestHandler):
                         line = line.strip()
                         if not line:
                             continue
-                        try:
-                            port = int(line)
-                        except ValueError:
-                            raise provision_error(f"{field}: {line!r} is not a valid port number")
-                        if not (1 <= port <= 65535):
-                            raise provision_error(f"{field}: port {port} out of range (1-65535)")
+                    try:
+                        port = int(line)
+                    except ValueError:
+                        msg = f"{field}: {line!r} is not a valid port number"
+                        raise provision_error(msg) from None
+                    if not (1 <= port <= 65535):
+                        msg = f"{field}: port {port} out of range (1-65535)"
+                        raise provision_error(msg)
                         ports.append(port)
                     return ports
 
@@ -2241,7 +2245,8 @@ class BootstrapHandler(BaseHTTPRequestHandler):
         sys.stderr.write("[bootstrap] " + (fmt % args) + "\n")
 
 
-def _systemd_listen_socket() -> "socket.socket | None":
+
+def _systemd_listen_socket() -> "_socket.socket | None":
     """Return the first systemd-passed socket if available (sd_listen_fds)."""
     listen_fds = os.environ.get("LISTEN_FDS")
     listen_pid = os.environ.get("LISTEN_PID")
@@ -2252,9 +2257,8 @@ def _systemd_listen_socket() -> "socket.socket | None":
     n_fds = int(listen_fds)
     if n_fds < 1:
         return None
-    import socket
     SD_LISTEN_FDS_START = 3
-    sock = socket.socket(fileno=SD_LISTEN_FDS_START)
+    sock = _socket.socket(fileno=SD_LISTEN_FDS_START)
     sock.setblocking(True)
     return sock
 
