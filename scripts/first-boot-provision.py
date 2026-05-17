@@ -2241,9 +2241,37 @@ class BootstrapHandler(BaseHTTPRequestHandler):
         sys.stderr.write("[bootstrap] " + (fmt % args) + "\n")
 
 
+def _systemd_listen_socket() -> "socket.socket | None":
+    """Return the first systemd-passed socket if available (sd_listen_fds)."""
+    listen_fds = os.environ.get("LISTEN_FDS")
+    listen_pid = os.environ.get("LISTEN_PID")
+    if not listen_fds or not listen_pid:
+        return None
+    if listen_pid != str(os.getpid()):
+        return None
+    n_fds = int(listen_fds)
+    if n_fds < 1:
+        return None
+    import socket
+    SD_LISTEN_FDS_START = 3
+    sock = socket.socket(fileno=SD_LISTEN_FDS_START)
+    sock.setblocking(True)
+    return sock
+
+
 def serve_bootstrap(config_root: Path, output_path: Path | None, host: str, port: int):
     BootstrapHandler.config_root = str(config_root)
     BootstrapHandler.output_path = str(output_path) if output_path else None
+
+    sd_sock = _systemd_listen_socket()
+    if sd_sock is not None:
+        sys.stderr.write("[bootstrap] using systemd socket activation\n")
+        httpd = ThreadingHTTPServer((host, port), BootstrapHandler, bind_and_activate=False)
+        httpd.socket = sd_sock
+        httpd.server_address = sd_sock.getsockname()
+        httpd.serve_forever()
+        return
+
     waiting_for_bind = False
     while True:
         try:

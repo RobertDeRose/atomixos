@@ -194,6 +194,26 @@ in
     };
   };
 
+  systemd.sockets.atomixos-bootstrap = {
+    description = "AtomixOS bootstrap web console socket";
+    after = [
+      "data.mount"
+      "network-online.target"
+    ];
+    wants = [
+      "data.mount"
+      "network-online.target"
+    ];
+    wantedBy = [ "sockets.target" ];
+
+    unitConfig.RequiresMountsFor = [ "/data" ];
+
+    socketConfig = {
+      ListenStream = "172.20.30.1:8080";
+      Accept = false;
+    };
+  };
+
   systemd.services.atomixos-bootstrap = {
     description = "AtomixOS bootstrap web console";
     after = [
@@ -204,7 +224,6 @@ in
       "data.mount"
       "network-online.target"
     ];
-    wantedBy = [ "multi-user.target" ];
 
     unitConfig.RequiresMountsFor = [ "/data" ];
 
