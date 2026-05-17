@@ -100,7 +100,8 @@ Rules:
 - Empty SSH keys are ignored, not written as authorized key lines.
 - Admin users are members of `wheel`; non-admin users are not.
 - Removed users from a re-applied config are disabled or locked rather than silently retaining access.
-- Usernames must be validated against a narrow safe pattern and must not collide with reserved system users.
+- Usernames must be validated against a narrow safe pattern and must not collide with protected system users or unmanaged
+  existing local accounts.
 - The existing password-locked, key-only SSH model remains mandatory for all managed users.
 
 Because the root filesystem is an immutable squashfs with an ephemeral overlay, managed users must be derived from

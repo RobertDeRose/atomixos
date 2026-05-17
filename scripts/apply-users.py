@@ -67,12 +67,15 @@ def run(cmd: list[str]) -> None:
         raise SystemExit(1)
 
 
-def ensure_user(name: str, is_admin: bool) -> None:
+def ensure_user(name: str, is_admin: bool, previous: set[str]) -> None:
     """Create or update a managed user account."""
     if name in PROTECTED_USERS:
         return
 
     if user_exists(name):
+        if name not in previous:
+            log(f"  refusing to modify unmanaged existing user: {name}")
+            raise SystemExit(1)
         # Clear expiry in case the account was disabled, but keep password auth locked.
         run(["usermod", "--expiredate=", "--password", "!", "--shell=/bin/sh", name])
     else:
@@ -177,9 +180,9 @@ def main() -> None:
             continue
         is_admin = user.get("isAdmin", False)
         log(f"ensuring user: {username} (admin={is_admin})")
-        ensure_user(username, is_admin)
+        ensure_user(username, is_admin, previous)
         ensure_authorized_keys_owner(username)
-        # Only track non-protected users in managed state.
+        # Only track non-protected users in managed state after collision checks pass.
         if username not in PROTECTED_USERS:
             current.add(username)
 

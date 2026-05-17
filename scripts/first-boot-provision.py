@@ -1268,6 +1268,25 @@ def carry_forward_managed_state(previous_root: Path, candidate_root: Path) -> No
     target_state.chmod(0o600)
 
 
+def read_managed_state(config_root: Path) -> set[str]:
+    state_path = config_root / "managed-users.json"
+    if not state_path.exists():
+        return set()
+    try:
+        data = json.loads(state_path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return set()
+    if not isinstance(data, list):
+        return set()
+    return {name for name in data if isinstance(name, str)}
+
+
+def write_managed_state(config_root: Path, names: set[str]) -> None:
+    state_path = config_root / "managed-users.json"
+    state_path.write_text(json.dumps(sorted(names), indent=2) + "\n")
+    state_path.chmod(0o600)
+
+
 def load_runtime_metadata(config_root: Path):
     metadata_path = config_root / RUNTIME_METADATA_FILENAME
     if not metadata_path.exists():
@@ -1398,10 +1417,16 @@ def restore_rollback(config_root: Path) -> bool:
         marker_path.unlink(missing_ok=True)
         return False
 
+    failed_managed = read_managed_state(config_root)
+    rollback_managed = read_managed_state(rollback_root)
+
     # Remove the failed active config.
     if config_root.exists():
         shutil.rmtree(config_root)
     rollback_root.rename(config_root)
+    merged_managed = rollback_managed | failed_managed
+    if merged_managed:
+        write_managed_state(config_root, merged_managed)
     marker_path.unlink(missing_ok=True)
     return True
 

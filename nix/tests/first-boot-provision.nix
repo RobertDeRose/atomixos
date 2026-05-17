@@ -242,11 +242,17 @@ nixos-lib.runTest {
     gateway.succeed("ATOMIXOS_USERS_JSON=/tmp/apply-users-test/users.json ATOMIXOS_MANAGED_STATE=/tmp/apply-users-test/managed-users.json python3 ${../../scripts/apply-users.py}")
     gateway.succeed("getent shadow admin | cut -d: -f2 | grep '^!$'")
 
+    # ── apply-users: refuses to mutate unmanaged existing system users ──
+    gateway.succeed("cat > /tmp/apply-users-test/users-collision.json <<'EOF'\n{\"nobody\": {\"isAdmin\": true, \"ssh_key\": \"ssh-ed25519 AAAAC3test nobody@test\"}}\nEOF")
+    gateway.fail("ATOMIXOS_USERS_JSON=/tmp/apply-users-test/users-collision.json ATOMIXOS_MANAGED_STATE=/tmp/apply-users-test/managed-users-collision.json python3 ${../../scripts/apply-users.py} >/tmp/apply-users-collision.out 2>/tmp/apply-users-collision.err")
+    gateway.succeed("grep 'refusing to modify unmanaged existing user: nobody' /tmp/apply-users-collision.err")
+
     # ── apply-users: skips gracefully when no users.json ──
     gateway.succeed("ATOMIXOS_USERS_JSON=/tmp/apply-users-test/nonexistent.json ATOMIXOS_MANAGED_STATE=/tmp/apply-users-test/managed-users.json python3 ${../../scripts/apply-users.py}")
 
     # ── apply-users: refuses to touch protected users ──
     gateway.succeed("cat > /tmp/apply-users-test/users-root.json <<'EOF'\n{\"admin\": {\"isAdmin\": true, \"ssh_key\": \"ssh-ed25519 AAAAC3test admin@test\"}, \"root\": {\"isAdmin\": true, \"ssh_key\": \"ssh-ed25519 AAAAC3root root@test\"}}\nEOF")
+    gateway.succeed("cp /tmp/apply-users-test/managed-users.json /tmp/apply-users-test/managed-users-root.json")
     gateway.succeed("ATOMIXOS_USERS_JSON=/tmp/apply-users-test/users-root.json ATOMIXOS_MANAGED_STATE=/tmp/apply-users-test/managed-users-root.json python3 ${../../scripts/apply-users.py}")
     gateway.fail("grep '^root:.*:/bin/sh$' /etc/passwd")
     gateway.succeed("rm -rf /tmp/bootstrap-root")
@@ -559,6 +565,10 @@ nixos-lib.runTest {
     # Test restore_rollback (create a fake rollback first)
     gateway.succeed("mkdir -p /tmp/atomic-root-rollback && cp /tmp/config.toml /tmp/atomic-root-rollback/config.toml")
     gateway.succeed("python3 - <<'PY'\nimport sys, os, importlib.util\nfrom pathlib import Path\nos.environ['ATOMIXOS_CONFIG_SCHEMA'] = '${provisionCli}/share/atomixos/config.schema.json'\nspec = importlib.util.spec_from_file_location('fbp', '${../../scripts/first-boot-provision.py}')\nmod = importlib.util.module_from_spec(spec)\nspec.loader.exec_module(mod)\nassert mod.restore_rollback(Path('/tmp/atomic-root')) is True\nassert Path('/tmp/atomic-root/config.toml').exists()\nassert not Path('/tmp/atomic-root-rollback').exists()\nPY")
+    gateway.succeed("rm -rf /tmp/managed-rollback-root /tmp/managed-rollback-root-rollback && mkdir -p /tmp/managed-rollback-root /tmp/managed-rollback-root-rollback")
+    gateway.succeed("printf 'candidate\n' >/tmp/managed-rollback-root/config.toml && printf 'rollback\n' >/tmp/managed-rollback-root-rollback/config.toml")
+    gateway.succeed("printf '[\"candidate\"]\n' >/tmp/managed-rollback-root/managed-users.json && printf '[\"rollback\"]\n' >/tmp/managed-rollback-root-rollback/managed-users.json")
+    gateway.succeed("python3 - <<'PY'\nimport json, os, importlib.util\nfrom pathlib import Path\nos.environ['ATOMIXOS_CONFIG_SCHEMA'] = '${provisionCli}/share/atomixos/config.schema.json'\nspec = importlib.util.spec_from_file_location('fbp', '${../../scripts/first-boot-provision.py}')\nmod = importlib.util.module_from_spec(spec)\nspec.loader.exec_module(mod)\nassert mod.restore_rollback(Path('/tmp/managed-rollback-root')) is True\nmanaged = json.loads(Path('/tmp/managed-rollback-root/managed-users.json').read_text())\nassert managed == ['candidate', 'rollback'], managed\nPY")
 
     # Test interrupted promotion recovery prefers candidate when active is missing.
     gateway.succeed("rm -rf /tmp/recover-root /tmp/recover-root-candidate /tmp/recover-root-rollback && mkdir -p /tmp/recover-root-candidate /tmp/recover-root-rollback")

@@ -28,6 +28,7 @@
 - [x] Render managed user state and SSH authorized keys for all declared users.
 - [x] Add a runtime user apply service that materializes managed users from persisted config on boot and re-apply.
 - [x] Lock or disable managed users removed during config re-apply.
+- [x] Refuse to mutate unmanaged existing local accounts during runtime user apply.
 - [x] Update LAN settings parsing to consume `[network]` while preserving current defaults.
 - [x] Update firewall parsing to consume firewall rules under `[network]`.
 - [x] Update Quadlet rendering to consume `[containers.container]`, `[containers.network]`, `[containers.volume]`, and
@@ -58,6 +59,7 @@
 - [x] Confirm required services reach the expected active state.
 - [x] Restore previous config if apply or service confirmation fails.
 - [x] Re-apply previous LAN, firewall, and Quadlet state after rollback.
+- [x] Preserve failed-candidate managed users through rollback long enough for the restored apply to lock them.
 - [x] Return clear API errors describing validation or activation failures.
 
 ## T060 - Update examples and operator docs
