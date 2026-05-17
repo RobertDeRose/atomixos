@@ -2140,12 +2140,10 @@ class BootstrapHandler(BaseHTTPRequestHandler):
                         server_url = {json.dumps(os_upgrade_server_url)}
                         """
                     ).strip()
-                quadlet = (
-                    quadlet.replace("[container.", "[containers.container.")
-                    .replace("[network.", "[containers.network.")
-                    .replace("[volume.", "[containers.volume.")
-                    .replace("[build.", "[containers.build.")
-                )
+                quadlet = re.sub(r"^\[container\.", "[containers.container.", quadlet, flags=re.MULTILINE)
+                quadlet = re.sub(r"^\[network\.", "[containers.network.", quadlet, flags=re.MULTILINE)
+                quadlet = re.sub(r"^\[volume\.", "[containers.volume.", quadlet, flags=re.MULTILINE)
+                quadlet = re.sub(r"^\[build\.", "[containers.build.", quadlet, flags=re.MULTILINE)
                 config_text = textwrap.dedent(
                     f"""
                     version = 2
