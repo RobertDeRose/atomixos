@@ -64,6 +64,7 @@ SCHEMA_ENV = "ATOMIXOS_CONFIG_SCHEMA"
 BOOTSTRAP_POST_RESPONSE_ENV = "ATOMIXOS_BOOTSTRAP_POST_RESPONSE"
 BOOTSTRAP_ACTIVATION_ENV = "ATOMIXOS_BOOTSTRAP_ACTIVATION"
 BOOTSTRAP_ACTIVATION_TIMEOUT_SECONDS = 300
+MAX_REQUEST_BODY_BYTES = 50 * 1024 * 1024  # 50 MB
 NONCE_TTL_SECONDS = int(os.environ.get("ATOMIXOS_NONCE_TTL", "300"))
 SSH_KEYGEN_BIN = os.environ.get("ATOMIXOS_SSH_KEYGEN", "ssh-keygen")
 AUTH_REQUIRED_MESSAGE = "authentication required: provide X-Atomicnix-Nonce and X-Atomicnix-Signature headers"
@@ -1964,9 +1965,15 @@ class BootstrapHandler(BaseHTTPRequestHandler):
             form[name] = payload.decode(charset)
         return form
 
-    def _read_form(self):
+    def _read_body(self) -> bytes:
+        """Read request body with size limit enforcement."""
         length = int(self.headers.get("Content-Length", "0"))
-        body = self.rfile.read(length)
+        if length > MAX_REQUEST_BODY_BYTES:
+            raise ValueError(f"request body too large ({length} bytes, max {MAX_REQUEST_BODY_BYTES})")
+        return self.rfile.read(length)
+
+    def _read_form(self):
+        body = self._read_body()
         content_type = self.headers.get("Content-Type", "")
         if content_type.startswith("multipart/form-data"):
             return self._read_multipart_form(body)
@@ -2035,8 +2042,11 @@ class BootstrapHandler(BaseHTTPRequestHandler):
             return
 
         if self.path == "/api/config":
-            length = int(self.headers.get("Content-Length", "0"))
-            payload = self.rfile.read(length)
+            try:
+                payload = self._read_body()
+            except ValueError as exc:
+                self._send_json(413, {"ok": False, "error": str(exc)})
+                return
             filename = self.headers.get("X-Config-Filename", "config.toml")
             if was_provisioned and not self._require_auth(payload):
                 return
