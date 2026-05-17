@@ -1811,7 +1811,10 @@ class BootstrapHandler(BaseHTTPRequestHandler):
         command = os.environ.get(BOOTSTRAP_POST_RESPONSE_ENV)
         if not command:
             return
-        subprocess.Popen([command], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        proc = subprocess.Popen([command], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # Reap the child in a daemon thread to avoid zombie accumulation.
+        reaper = threading.Thread(target=proc.wait, daemon=True)
+        reaper.start()
 
     def _activate_services(self) -> list[str]:
         """Run activation services synchronously. Returns list of failed services."""
