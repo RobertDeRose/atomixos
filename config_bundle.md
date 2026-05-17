@@ -23,7 +23,7 @@ The provisioning artifact should become a config bundle with two concerns:
 
 - `config.toml` contains OS-level and platform-level customization that maps
   directly to platform-managed resources such as users, SSH keys, firewall
-  rules, health requirements, and container definitions.
+  rules, activation requirements, and container definitions.
 - `files/` contains arbitrary application-specific files that the platform does
   not interpret semantically. Containers may mount these files wherever they
   need them.
@@ -73,7 +73,8 @@ Imported durable layout:
 ```text
 /data/config/
   config.toml
-  ssh-authorized-keys/admin
+  ssh-authorized-keys/<user>
+  admin-signers
   health-required.json
   quadlet/
     *.container
@@ -94,7 +95,7 @@ It should express:
 
 - admin SSH keys
 - minimal firewall ingress policy
-- required health units
+- required activation units
 - container definitions
 
 It should not attempt to embed full application configuration when files are a
@@ -119,31 +120,35 @@ Current intended top-level structure:
 ```toml
 version = 1
 
-[admin]
-ssh_keys = ["ssh-ed25519 AAAA..."]
+[users.admin]
+isAdmin = true
+ssh_key = "ssh-ed25519 AAAA..."
 
-[firewall.inbound]
+[network.firewall.inbound.wan]
 tcp = [80, 443]
 udp = [1194]
+
+[network.ntp]
+servers = ["time.cloudflare.com"]
 
 [activation]
 required = ["traefik", "whoami"]
 
-[container.<name>]
+[containers.container.<name>]
 privileged = true | false
 
-[container.<name>.Unit]
+[containers.container.<name>.Unit]
 ...
 
-[container.<name>.Container]
+[containers.container.<name>.Container]
 ...
 
-[container.<name>.Install]
+[containers.container.<name>.Install]
 ...
 ```
 
-The namespace should use `container.<name>` instead of the older
-`quadlet.system.container.<name>` or `quadlet.<type>.<name>` shapes.
+The namespace uses `containers.<type>.<name>` so container, network, volume, and
+build Quadlet resources live under one top-level `containers` table.
 
 ## Formal Schema Specification
 
@@ -155,18 +160,18 @@ it directly.
 Allowed keys:
 
 - `version`
-- `admin`
-- `firewall`
-- `health`
-- `container`
+- `users`
+- `network`
+- `activation`
+- `os_upgrade`
+- `containers`
 
 Required keys:
 
 - `version`
-- `admin`
-- `firewall`
-- `health`
-- `container`
+- `users`
+- `activation`
+- `containers`
 
 #### `version`
 
@@ -175,76 +180,128 @@ Required keys:
 
 Any other version is rejected.
 
-### `admin`
+### `users`
 
 Required table.
 
-Allowed keys:
+Each key is a managed username. At least one user must be declared.
 
-- `ssh_keys`
+For each user `<name>`, allowed keys are:
 
-Required keys:
+- `isAdmin`
+- `ssh_key`
 
-- `ssh_keys`
+#### `users.<name>.isAdmin`
 
-#### `admin.ssh_keys`
+- type: boolean
+- optional, defaults to `false`
+- at least one user must set `isAdmin = true`
 
-- type: non-empty array of non-empty strings
-- each string is written to `/data/config/ssh-authorized-keys/admin`
-- blank strings are invalid
+#### `users.<name>.ssh_key`
+
+- type: string
+- required for admin users
+- written to `/data/config/ssh-authorized-keys/<name>`
+- admin keys are also written to `/data/config/admin-signers` for re-apply
+  signature verification
 
 No password hash or password-based operator login is supported.
 
-### `firewall`
+### `network`
 
-Required table.
+Optional table.
+
+Allowed keys:
+
+- `dnsmasq`
+- `ntp`
+- `firewall`
+
+Unknown legacy network keys are rejected.
+
+### `network.firewall`
+
+Optional table.
 
 Allowed keys:
 
 - `inbound`
 
-Required keys:
+### `network.firewall.inbound`
 
-- `inbound`
-
-### `firewall.inbound`
-
-Required table.
+Optional table.
 
 Allowed keys:
+
+- `wan`
+- `lan`
+
+Each scope may contain:
 
 - `tcp`
 - `udp`
 
 At least one of `tcp` or `udp` should be present.
 
-#### `firewall.inbound.tcp`
+#### `network.firewall.inbound.<scope>.tcp`
 
 - type: non-empty array of integers
 - each integer must be a valid TCP port in range `1..65535`
 
-#### `firewall.inbound.udp`
+#### `network.firewall.inbound.<scope>.udp`
 
 - type: non-empty array of integers
 - each integer must be a valid UDP port in range `1..65535`
 
 Firewall semantics:
 
-- these are inbound ports to allow on the WAN side
+- `wan` entries are inbound ports to allow on the WAN side
+- `lan` entries switch LAN from default-open to an explicit allowlist merged
+  with platform-required LAN ports
 - only allow semantics are exposed
 - default policy remains drop
 - the user does not configure default policy
-- the user does not configure per-interface policy here
-- the user does not configure LAN restrictions here
 
 Rationale:
 
-- the platform already owns WAN vs LAN policy
+- the platform already owns WAN vs LAN policy boundaries
 - there is no cross-network exposure at the OS level beyond what applications
   choose to expose
 - the schema should stay intentionally narrow for now
 
-### `health`
+### `network.dnsmasq`
+
+Optional table for LAN DHCP/DNS settings. Omitted fields use the fallback LAN
+gateway contract.
+
+Allowed keys:
+
+- `enable`
+- `interface`
+- `gateway_cidr`
+- `dhcp_start`
+- `dhcp_end`
+- `domain`
+- `hostname_pattern`
+- `gateway_aliases`
+
+`enable` must remain true and `interface`, when provided, must be `eth1`.
+
+### `network.ntp`
+
+Optional table for upstream NTP servers.
+
+Allowed keys:
+
+- `servers`
+
+#### `network.ntp.servers`
+
+- type: non-empty array of non-empty strings
+- defaults to `["time.cloudflare.com"]`
+- whitespace and control characters are rejected before rendering chrony config
+
+### `activation`
 
 Required table.
 
@@ -262,24 +319,25 @@ Required keys:
 - each item names a required application/service unit
 - each item must correspond to a declared container name
 
-### `container`
+### `containers`
 
 Required table.
 
-- type: non-empty table
-- each key is a container name
+- allowed keys: `container`, `network`, `volume`, `build`
+- `container` is required and must be a non-empty table
+- each resource key is a Quadlet resource name
 - container names must be non-empty and may not contain `/`, NUL, `.` or `..`
 
 For each container `<name>`, the following subtables are allowed:
 
-- `[container.<name>]`
-- `[container.<name>.Unit]`
-- `[container.<name>.Container]`
-- `[container.<name>.Install]`
+- `[containers.container.<name>]`
+- `[containers.container.<name>.Unit]`
+- `[containers.container.<name>.Container]`
+- `[containers.container.<name>.Install]`
 - other systemd pass-through sections may be allowed in the future, but the
   initial importer should validate only the sections it explicitly supports
 
-#### `[container.<name>]`
+#### `[containers.container.<name>]`
 
 Required table.
 
@@ -291,7 +349,7 @@ Required keys:
 
 - `privileged`
 
-##### `container.<name>.privileged`
+##### `containers.container.<name>.privileged`
 
 - type: boolean
 
@@ -304,14 +362,14 @@ This flag intentionally hides lower-level runtime details from the schema.
 
 The OS retains ownership of the implementation details behind this distinction.
 
-#### `[container.<name>.Unit]`
+#### `[containers.container.<name>.Unit]`
 
 Optional table.
 
 - type: table of scalar or repeated values supported by the importer
 - rendered directly into the Quadlet `[Unit]` section
 
-#### `[container.<name>.Container]`
+#### `[containers.container.<name>.Container]`
 
 Required table.
 
@@ -320,7 +378,7 @@ Required table.
 - values are rendered into the Quadlet `[Container]` section after platform
   preprocessing and validation
 
-#### `[container.<name>.Install]`
+#### `[containers.container.<name>.Install]`
 
 Optional table.
 
@@ -458,7 +516,7 @@ Reason:
 
 So:
 
-- opening 80 and 443 belongs in `firewall.inbound`
+- opening 80 and 443 belongs in `network.firewall.inbound.wan`
 - HTTP-to-HTTPS redirect must still be handled by an HTTP-aware service such as
   Traefik or a future platform-managed redirect helper
 
@@ -506,10 +564,10 @@ Rationale:
 The importer should validate:
 
 - `version == 1`
-- `admin.ssh_keys` is a non-empty string array
-- `firewall.inbound.tcp` and `udp`, when present, are valid port arrays
+- at least one `users.<name>` entry is an admin with a non-empty `ssh_key`
+- `network.firewall.inbound.<scope>.tcp` and `udp`, when present, are valid port arrays
 - `activation.required` is a non-empty string array
-- `container` exists and defines at least one container
+- `containers.container` exists and defines at least one container
 - each container defines `privileged`
 - each container defines `[Container]` with `Image`
 - `activation.required` names correspond to declared containers
