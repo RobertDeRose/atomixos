@@ -55,7 +55,7 @@ let
   ubootEnvTools = self.packages.${pkgs.stdenv.hostPlatform.system}.uboot-env-tools;
   firstBootEnv = {
     ATOMIXOS_RAUC_ENABLE = if config.atomixos.rauc.enable then "1" else "0";
-    ATOMIXOS_APPLY_USERS_SCRIPT = "${../scripts/apply-users.py}";
+    ATOMIXOS_APPLY_USERS_SCRIPT = "${applyUsersScript}";
   };
 in
 {

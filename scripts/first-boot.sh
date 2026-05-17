@@ -163,7 +163,7 @@ apply_managed_users() {
 	ATOMIXOS_USERS_JSON="$CONFIG_ROOT/users.json" \
 		ATOMIXOS_MANAGED_STATE="$CONFIG_ROOT/managed-users.json" \
 		ATOMIXOS_SSH_KEYS_DIR="$CONFIG_ROOT/ssh-authorized-keys" \
-		python3 "$APPLY_USERS_SCRIPT"
+		"$APPLY_USERS_SCRIPT"
 }
 
 import_seed_config() {
