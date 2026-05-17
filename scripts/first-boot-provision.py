@@ -2090,10 +2090,26 @@ class BootstrapHandler(BaseHTTPRequestHandler):
                     filename = "config.toml"
             elif self.path == "/generate":
                 ssh_keys = [line.strip() for line in form.get("ssh_keys", "").splitlines() if line.strip()]
-                wan_tcp_ports = [int(line.strip()) for line in form.get("wan_tcp", "").splitlines() if line.strip()]
-                wan_udp_ports = [int(line.strip()) for line in form.get("wan_udp", "").splitlines() if line.strip()]
-                lan_tcp_ports = [int(line.strip()) for line in form.get("lan_tcp", "").splitlines() if line.strip()]
-                lan_udp_ports = [int(line.strip()) for line in form.get("lan_udp", "").splitlines() if line.strip()]
+
+                def parse_port_lines(raw: str, field: str) -> list[int]:
+                    ports = []
+                    for line in raw.splitlines():
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            port = int(line)
+                        except ValueError:
+                            raise provision_error(f"{field}: {line!r} is not a valid port number")
+                        if not (1 <= port <= 65535):
+                            raise provision_error(f"{field}: port {port} out of range (1-65535)")
+                        ports.append(port)
+                    return ports
+
+                wan_tcp_ports = parse_port_lines(form.get("wan_tcp", ""), "WAN TCP")
+                wan_udp_ports = parse_port_lines(form.get("wan_udp", ""), "WAN UDP")
+                lan_tcp_ports = parse_port_lines(form.get("lan_tcp", ""), "LAN TCP")
+                lan_udp_ports = parse_port_lines(form.get("lan_udp", ""), "LAN UDP")
                 os_upgrade_server_url = form.get("os_upgrade_server_url", "").strip()
                 gateway_cidr = form.get("gateway_cidr", DEFAULT_LAN_GATEWAY_CIDR).strip() or DEFAULT_LAN_GATEWAY_CIDR
                 dhcp_start = form.get("dhcp_start", DEFAULT_LAN_DHCP_START).strip() or DEFAULT_LAN_DHCP_START
