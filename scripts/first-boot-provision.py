@@ -923,8 +923,8 @@ def load_config(config_path: Path, config_root: Path = DEFAULT_CONFIG_DIR):
     )
 
     version = root.get("version")
-    if not isinstance(version, int) or isinstance(version, bool) or version != 1:
-        message = "version must be integer 1"
+    if not isinstance(version, int) or isinstance(version, bool) or version != 2:
+        message = "version must be integer 2"
         raise provision_error(message)
 
     users, ssh_keys = load_users(root.get("users"))
@@ -2123,7 +2123,7 @@ class BootstrapHandler(BaseHTTPRequestHandler):
                 )
                 config_text = textwrap.dedent(
                     f"""
-                    version = 1
+                    version = 2
 
                     [users.admin]
                     isAdmin = true

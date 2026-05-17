@@ -19,7 +19,7 @@ errors for programmatic clients.
 The accepted `config.toml` schema is:
 
 ```toml
-version = 1
+version = 2
 
 [users.admin]
 isAdmin = true

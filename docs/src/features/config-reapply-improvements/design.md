@@ -69,9 +69,9 @@ Top-level sections are reserved for OS/device configuration:
 - `[containers]`
 
 The prior top-level `[admin]`, `[firewall]`, `[lan]`, `[container]`, `[network]` as Quadlet networks, `[volume]`, and
-`[build]` tables are rejected by the new schema. AtomixOS is still unreleased and in design/testing, so this feature does
-not need a compatibility or migration path for earlier test configs. Existing examples and docs must be updated in the
-same unit of work.
+`[build]` tables are rejected by the new schema. The schema uses `version = 2` for this intentionally breaking config
+shape. AtomixOS is still unreleased and in design/testing, so this feature does not need a compatibility or migration
+path for earlier test configs. Existing examples and docs must be updated in the same unit of work.
 
 ### Users
 

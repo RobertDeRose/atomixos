@@ -8,7 +8,7 @@
   "properties": {
     "version": {
       "type": "integer",
-      "enum": [1]
+      "enum": [2]
     },
     "users": {
       "type": "object",

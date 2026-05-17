@@ -97,3 +97,5 @@ Deferred work recorded at merge time:
 - Managed user reboot materialization VM test deferred; requires persistent VM disk configuration.
 - Provisioned-device re-apply authentication applies to all mutating bootstrap POST paths: `/api/config`, `/apply`, and
   `/generate`.
+- Existing test devices with pre-`version = 2` state must be reprovisioned; no `/data/config/ssh-authorized-keys/admin`
+  migration is included for unreleased config shapes.

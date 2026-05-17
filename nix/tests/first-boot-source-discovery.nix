@@ -52,7 +52,7 @@ nixos-lib.runTest {
     gateway.start()
     gateway.wait_for_unit("multi-user.target")
 
-    gateway.succeed("cat > /tmp/config-template.toml <<'EOF'\nversion = 1\n\n[users.admin]\nisAdmin = true\nssh_key = \"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKey admin@example\"\n\n[network.firewall.inbound.wan]\ntcp = [443]\n\n[activation]\nrequired = [\"demo\"]\n\n[containers.container.demo]\nprivileged = true\n\n[containers.container.demo.Container]\nImage = \"docker.io/library/nginx:latest\"\n\n[containers.container.demo.Install]\nWantedBy = [\"multi-user.target\"]\nEOF")
+    gateway.succeed("cat > /tmp/config-template.toml <<'EOF'\nversion = 2\n\n[users.admin]\nisAdmin = true\nssh_key = \"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKey admin@example\"\n\n[network.firewall.inbound.wan]\ntcp = [443]\n\n[activation]\nrequired = [\"demo\"]\n\n[containers.container.demo]\nprivileged = true\n\n[containers.container.demo.Container]\nImage = \"docker.io/library/nginx:latest\"\n\n[containers.container.demo.Install]\nWantedBy = [\"multi-user.target\"]\nEOF")
 
     gateway.succeed("cat > /testbin/rauc <<'EOF'\n#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\n' \"$*\" >>/test-state/rauc.log\nif [ \"$1\" = status ] && [ \"$2\" = mark-good ]; then\n  exit 0\nfi\necho unexpected rauc invocation >&2\nexit 1\nEOF\nchmod +x /testbin/rauc")
     gateway.succeed("cat > /testbin/fw_printenv <<'EOF'\n#!/usr/bin/env bash\nexit 0\nEOF\nchmod +x /testbin/fw_printenv")
@@ -103,7 +103,7 @@ nixos-lib.runTest {
     gateway.succeed("curl -fsS -F config_file=@/tmp/config-template.toml http://172.20.30.1:18080/apply >/tmp/bootstrap-response.html")
     gateway.wait_until_succeeds("test -f /tmp/bootstrap-root/config.toml", timeout = 60)
     gateway.succeed("grep 'downloadAppliedConfig()' /tmp/bootstrap-response.html")
-    gateway.succeed("grep 'version = 1' /tmp/bootstrap-response.html")
+    gateway.succeed("grep 'version = 2' /tmp/bootstrap-response.html")
     gateway.succeed("grep 'docker.io/library/nginx:latest' /tmp/bootstrap-response.html")
     gateway.wait_until_succeeds("test -f /tmp/bootstrap-sentinel", timeout = 60)
     gateway.wait_until_succeeds("test ! -e /proc/$(cat /tmp/bootstrap-case.pid)", timeout = 60)
