@@ -1978,8 +1978,9 @@ class BootstrapHandler(BaseHTTPRequestHandler):
             raise ValueError(msg)
         return self.rfile.read(length)
 
-    def _read_form(self):
-        body = self._read_body()
+    def _read_form(self, body: bytes | None = None):
+        if body is None:
+            body = self._read_body()
         content_type = self.headers.get("Content-Type", "")
         if content_type.startswith("multipart/form-data"):
             return self._read_multipart_form(body)
@@ -2081,7 +2082,17 @@ class BootstrapHandler(BaseHTTPRequestHandler):
             self._mark_applied()
             return
 
-        form = self._read_form()
+        # ── Form-based endpoints: /apply and /generate ──
+        # Read raw body and authenticate BEFORE expensive form parsing.
+        try:
+            raw_body = self._read_body()
+        except ValueError as exc:
+            self._send_json(413, {"ok": False, "error": str(exc)})
+            return
+        if was_provisioned and not self._require_auth(raw_body):
+            return
+
+        form = self._read_form(raw_body)
         config_text = ""
         try:
             if self.path == "/apply":
@@ -2207,8 +2218,6 @@ class BootstrapHandler(BaseHTTPRequestHandler):
                 self.send_error(404)
                 return
 
-            if was_provisioned and not self._require_auth(payload):
-                return
             applied_config = self._write_payload(payload, filename)
             if was_provisioned:
                 ok, failures, restored = self._complete_reapply()
