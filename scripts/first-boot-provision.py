@@ -2102,14 +2102,14 @@ class BootstrapHandler(BaseHTTPRequestHandler):
                         line = line.strip()
                         if not line:
                             continue
-                    try:
-                        port = int(line)
-                    except ValueError:
-                        msg = f"{field}: {line!r} is not a valid port number"
-                        raise provision_error(msg) from None
-                    if not (1 <= port <= 65535):
-                        msg = f"{field}: port {port} out of range (1-65535)"
-                        raise provision_error(msg)
+                        try:
+                            port = int(line)
+                        except ValueError:
+                            msg = f"{field}: {line!r} is not a valid port number"
+                            raise provision_error(msg) from None
+                        if not (1 <= port <= 65535):
+                            msg = f"{field}: port {port} out of range (1-65535)"
+                            raise provision_error(msg)
                         ports.append(port)
                     return ports
 
