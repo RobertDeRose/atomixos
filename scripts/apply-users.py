@@ -147,15 +147,18 @@ def save_managed_state(names: set[str]) -> None:
     """Persist the current set of managed usernames atomically."""
     content = json.dumps(sorted(names), indent=2) + "\n"
     fd, tmp_path = tempfile.mkstemp(dir=str(MANAGED_STATE.parent), prefix=".managed-users-")
+    closed = False
     try:
         os.write(fd, content.encode())
         os.fchmod(fd, 0o600)
         os.fsync(fd)
         os.close(fd)
+        closed = True
         Path(tmp_path).rename(MANAGED_STATE)
     except BaseException:
-        with suppress(OSError):
-            os.close(fd)
+        if not closed:
+            with suppress(OSError):
+                os.close(fd)
         Path(tmp_path).unlink(missing_ok=True)
         raise
 
