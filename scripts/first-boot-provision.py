@@ -1938,6 +1938,7 @@ class BootstrapHandler(BaseHTTPRequestHandler):
                 promotion_marker_path(config_root).write_text("pending\n")
                 config_root.rename(rollback_root)
                 candidate_root.rename(config_root)
+                promotion_marker_path(config_root).unlink(missing_ok=True)
             else:
                 # Fresh provisioning: write directly.
                 parsed = load_config(prepared_config, config_root)
