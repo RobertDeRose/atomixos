@@ -2172,10 +2172,11 @@ class BootstrapHandler(BaseHTTPRequestHandler):
                         server_url = {json.dumps(os_upgrade_server_url)}
                         """
                     ).strip()
-                quadlet = re.sub(r"^\[container\.", "[containers.container.", quadlet, flags=re.MULTILINE)
-                quadlet = re.sub(r"^\[network\.", "[containers.network.", quadlet, flags=re.MULTILINE)
-                quadlet = re.sub(r"^\[volume\.", "[containers.volume.", quadlet, flags=re.MULTILINE)
-                quadlet = re.sub(r"^\[build\.", "[containers.build.", quadlet, flags=re.MULTILINE)
+                _no_prefix = r"(?!containers\.)"
+                quadlet = re.sub(rf"^\[{_no_prefix}container\.", "[containers.container.", quadlet, flags=re.MULTILINE)
+                quadlet = re.sub(rf"^\[{_no_prefix}network\.", "[containers.network.", quadlet, flags=re.MULTILINE)
+                quadlet = re.sub(rf"^\[{_no_prefix}volume\.", "[containers.volume.", quadlet, flags=re.MULTILINE)
+                quadlet = re.sub(rf"^\[{_no_prefix}build\.", "[containers.build.", quadlet, flags=re.MULTILINE)
                 config_text = textwrap.dedent(
                     f"""
                     version = 2
