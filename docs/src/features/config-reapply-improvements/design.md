@@ -98,7 +98,7 @@ Rules:
 - `ssh_key` defaults to an empty string.
 - At least one admin user with a non-empty SSH public key is required before first boot can complete.
 - Empty SSH keys are ignored, not written as authorized key lines.
-- Admin users are members of `wheel`; non-admin users are not.
+- Admin users are members of `wheel` and `podman` (when those groups exist); non-admin users are not.
 - Removed users from a re-applied config are disabled or locked rather than silently retaining access.
 - Usernames must be validated against a narrow safe pattern and must not collide with protected system users or unmanaged
   existing local accounts.
@@ -210,14 +210,15 @@ Proposed flow:
 
 Authentication uses an SSH-key challenge-response with an existing admin SSH key. The device issues a nonce for a short
 validity window, and the operator signs a request-bound message containing the nonce, target path, and SHA-256 digest of
-the submitted config payload. The device verifies the signature against active admin signer keys before accepting config
-bytes. This keeps re-apply LAN-local, avoids default credentials, and reuses the existing key-only operator trust model.
+the raw request body. The device verifies the signature against active admin signer keys before accepting or processing
+request content. This keeps re-apply LAN-local, avoids default credentials, and reuses the existing key-only operator
+trust model.
 
 ## Failure Handling
 
 - Invalid TOML or schema errors return a non-2xx response and leave active config untouched.
 - Failed candidate rendering leaves active config untouched.
-- Failed authentication returns a non-2xx response before parsing or writing the candidate config.
+- Failed authentication returns a non-2xx response before parsing or processing request content.
 - Crash before promotion leaves active config untouched.
 - Crash after promotion but before confirmation must be recoverable on next boot or next apply by detecting incomplete
   re-apply state.
