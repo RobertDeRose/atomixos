@@ -20,6 +20,12 @@ keys/
 *~
 .vscode/
 
+# Python development artifacts
+__pycache__/
+*.py[cod]
+.venv/
+uv.lock
+
 # OS files
 .DS_Store
 Thumbs.db
