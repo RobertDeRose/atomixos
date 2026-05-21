@@ -23,8 +23,8 @@ source order without baking per-device secrets into the base image.
   `/boot/config.toml` is a day-0 seed source only
 - Redefine the first-boot path so production slot confirmation happens after provisioning import and validation rather
   than unconditionally after Linux boots
-- Introduce a constrained local bootstrap web console that can upload an existing `config.toml` or generate one from a
-  simple form when no seed file is found
+- Introduce a constrained local bootstrap web console that can upload or paste an existing `config.toml` when no seed file
+  is found
 
 ## Capabilities
 

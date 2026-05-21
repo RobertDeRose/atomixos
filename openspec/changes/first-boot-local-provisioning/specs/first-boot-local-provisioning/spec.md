@@ -168,60 +168,64 @@ Provisioned containers SHALL be rendered into canonical Quadlet files before act
 - **WHEN** a provisioned container declares `privileged = true`
 - **THEN** the rendered Quadlet contains `Network=host`
 
-### Requirement: Bootstrap web console supports upload and basic form generation
+### Requirement: Bootstrap web console supports config upload
 
 When no provisioning seed file is found, the device SHALL start a constrained local bootstrap web console. The console
-SHALL support uploading an existing `config.toml` or supported config bundle, and generating a new `config.toml` from a
-basic form for operator SSH keys, optional OS update server configuration, and application stack provisioning.
+SHALL support uploading an existing `config.toml` or supported config bundle.
 
-#### Scenario: Generated config is shown back to the operator after apply
+#### Scenario: Applied config is shown back to the operator after apply
 
-- **WHEN** an operator uses the bootstrap form to generate and apply a valid `config.toml`
+- **WHEN** an operator uploads or pastes a valid `config.toml`
 - **THEN** the bootstrap UI shows the final applied `config.toml` content back to the operator
 
-#### Scenario: Generated config can be downloaded after apply
+#### Scenario: Applied config can be downloaded after apply
 
-- **WHEN** an operator uses the bootstrap form to generate and apply a valid `config.toml`
+- **WHEN** an operator uploads or pastes a valid `config.toml`
 - **THEN** the bootstrap UI offers a direct download for that final applied `config.toml`
 
 ### Requirement: Bootstrap endpoint supports programmatic config import
 
 The bootstrap service SHALL expose a constrained local API endpoint that accepts a complete `config.toml` payload or a
 supported config bundle for programmatic local import using the same validation and persistence path as the web console.
-The programmatic endpoint SHALL be `POST /api/config` and return JSON success or validation-error responses.
+The programmatic endpoint SHALL be `POST /api/config` and return a JSON async job response for accepted submissions, or
+a JSON validation-error response for rejected submissions. First-boot programmatic clients SHALL NOT require the Boot UI
+CSRF token; provisioned reapply clients SHALL use SSH signature authentication.
 
-#### Scenario: Programmatic upload returns JSON
+#### Scenario: Programmatic upload returns an async job
 
 - **WHEN** a local client POSTs `config.toml` to `/api/config`
-- **THEN** the bootstrap service validates and imports the payload
-- **AND** the response is JSON indicating success or the validation error
+- **THEN** the bootstrap service validates the payload and accepts an apply job
+- **AND** the response is JSON containing `job_id`, `job_url`, and first-boot `poll_token` when authentication is not yet
+  configured
 
-### Requirement: Bootstrap web console is exposed only on the LAN bootstrap endpoint
+### Requirement: Bootstrap endpoint narrows after initial provisioning
 
-The bootstrap web console SHALL bind to the LAN bootstrap address and remain reachable only from the LAN interface. The
-default local endpoint SHALL be `172.20.30.1:8080`, and the bootstrap service SHALL remain available after provisioning
-to support local recovery or reprovisioning.
+Before initial provisioning completes, the bootstrap API socket SHALL be reachable on WAN and LAN interfaces so operators
+can provision a device before LAN settings are known. After a valid provisioning config is applied, the service SHALL
+rebind to the configured LAN gateway IP and remain available only from the LAN interface for authenticated local recovery
+or reprovisioning. The first-boot web console SHALL be hidden after provisioning.
 
-#### Scenario: Bootstrap console listens on the LAN bootstrap endpoint
+#### Scenario: Bootstrap console listens on WAN and LAN before provisioning
 
 - **WHEN** the device starts the bootstrap web console
-- **THEN** it listens on `172.20.30.1:8080` and is reachable from the LAN interface without opening the same endpoint on
-  WAN
+- **THEN** it is reachable on the bootstrap port from WAN and LAN interfaces until initial provisioning completes
 
-#### Scenario: Bootstrap console remains available after provisioning
+#### Scenario: Bootstrap API remains available after provisioning
 
 - **WHEN** a valid provisioning config has already been applied
-- **THEN** the bootstrap console continues listening on the LAN bootstrap endpoint for recovery or reprovisioning
+- **THEN** the bootstrap API continues listening on the LAN bootstrap endpoint for authenticated recovery or
+  reprovisioning
+- **AND** the bootstrap API is no longer reachable from WAN
+
+#### Scenario: Bootstrap console is hidden after provisioning
+
+- **WHEN** a valid provisioning config has already been applied
+- **THEN** the unauthenticated first-boot console is not served
 
 #### Scenario: Existing config.toml can be uploaded through the bootstrap console
 
 - **WHEN** an operator opens the bootstrap web console on an unprovisioned device
 - **THEN** the console allows uploading an existing `config.toml` or supported config bundle for local import
-
-#### Scenario: Basic form can generate a config.toml
-
-- **WHEN** an operator uses the bootstrap web console without an existing seed file
-- **THEN** the console presents a basic form that can generate a valid `config.toml` and apply it locally
 
 #### Scenario: Programmatic client can upload config.toml directly
 

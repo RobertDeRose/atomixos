@@ -157,41 +157,41 @@ debuggable.
 - **Require remote phone-home before commit**: rejected because local provisioning and confirmation should not depend on
   external availability
 
-### 7. Expose the bootstrap UI only on the LAN bootstrap address
+### 7. Narrow the bootstrap endpoint after provisioning
 
-**Decision:** The bootstrap web console binds to the LAN gateway address and port `172.20.30.1:8080`, and the firewall
-explicitly allows that TCP port on the LAN interface only.
+**Decision:** Before initial provisioning completes, the bootstrap web console listens on WAN and LAN interfaces. After
+the first valid config is applied, LAN settings rebind the systemd socket to the configured LAN gateway address and port
+`8080`; subsequent recovery and reprovisioning use authenticated API calls on the LAN endpoint only.
 
-**Rationale:** The bootstrap UI is intended for local day-0 and reprovisioning workflows, not WAN exposure. Binding it
-to the LAN address and allow-listing it only on the LAN interface keeps the surface constrained while still making the
-fallback usable without extra manual firewall steps.
+**Rationale:** Fresh devices may not have a known LAN address yet, so day-0 provisioning must be reachable on either
+interface. Once the operator-provided LAN config is active, narrowing the socket to the LAN gateway address removes WAN
+exposure from the long-lived recovery surface.
 
 **Alternatives considered:**
 
-- **Bind on all interfaces**: rejected because it would expose the bootstrap surface more broadly than intended
+- **Always bind only on LAN**: rejected because it makes first provisioning brittle before LAN settings are known
 - **Require operators to open the firewall manually**: rejected because it makes the fallback path brittle during
   unprovisioned boot
 
-### 7a. Generated form-based configs should be shown and downloadable
+### 7a. Applied configs should be shown and downloadable
 
-**Decision:** When the bootstrap web console generates a `config.toml` from its basic form and applies it locally, the
-UI should show the final applied `config.toml` back to the operator and offer a direct download action for that exact
-rendered artifact.
+**Decision:** When the bootstrap web console applies an uploaded or pasted `config.toml`, the UI should show the final
+applied `config.toml` back to the operator and offer a direct download action for that exact artifact.
 
-**Rationale:** The generated file is the actual operator-facing provisioning contract. Showing the final rendered TOML
-immediately after apply makes the bootstrap flow easier to audit, makes the generated state reusable for later devices
-or reprovisioning, and avoids treating the form submission as a write-only UX.
+**Rationale:** The applied file is the actual operator-facing provisioning contract. Showing the final TOML immediately
+after apply makes the bootstrap flow easier to audit, makes the state reusable for later devices or reprovisioning, and
+avoids treating the form submission as a write-only UX.
 
 **Alternatives considered:**
 
 - **Apply silently and show only success/failure**: rejected because it hides the final contract the device actually
   accepted
-- **Offer download only as an optional later enhancement**: rejected because the generated artifact is useful immediately
+- **Offer download only as an optional later enhancement**: rejected because the applied artifact is useful immediately
   in the same provisioning session
 
 ## Risks / Trade-offs
 
-- **[Risk] Bootstrap UI becomes a second management plane** -> Keep it narrowly scoped to upload/generate/apply during
+- **[Risk] Bootstrap UI becomes a second management plane** -> Keep it narrowly scoped to upload/paste/apply during
   unprovisioned state only
 - **[Risk] Structured TOML diverges from raw Quadlet capabilities** -> Start with a bounded supported subset and render
   deterministically; expand only when real needs appear
@@ -210,7 +210,8 @@ or reprovisioning, and avoids treating the form submission as a write-only UX.
    and rootless Quadlet paths.
 4. Update first-boot validation and confirmation behavior so production slot commit depends on successful provisioning
    import.
-5. Add bootstrap UI support as the final fallback when no local seed file exists, bound to the LAN bootstrap address.
+5. Add bootstrap UI support as the final fallback when no local seed file exists, then rebind to the LAN bootstrap
+   address after provisioning.
 6. Update docs and provisioning workflows to describe initrd fresh-flash detection, `/boot` initial seeding, USB
    reprovisioning, and `/data` wipe as the reprovision reset boundary.
 
