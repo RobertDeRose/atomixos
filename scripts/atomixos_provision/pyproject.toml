@@ -1,0 +1,45 @@
+[project]
+name = "atomixos-provision"
+description = "AtomixOS device provisioning server"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = [
+  "click>=8,<9",
+  "litestar>=2.8,<3",
+  "uvicorn[standard]>=0.29,<1",
+]
+dynamic = ["version"]
+
+[project.scripts]
+atomixos-provision = "atomixos_provision.server:main"
+first-boot-provision = "atomixos_provision.server:main"
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8",
+  "pytest-asyncio>=0.23",
+  "httpx>=0.27",
+  "ruff>=0.4",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/atomixos_provision"]
+
+[tool.hatch.version]
+path = "src/atomixos_provision/__init__.py"
+
+[tool.pytest.ini_options]
+addopts = ["--import-mode=importlib"]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 99
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
