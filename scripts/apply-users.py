@@ -24,6 +24,13 @@ from pathlib import Path
 USERS_JSON = Path(os.environ.get("ATOMIXOS_USERS_JSON", "/data/config/users.json"))
 MANAGED_STATE = Path(os.environ.get("ATOMIXOS_MANAGED_STATE", "/data/config/managed-users.json"))
 SSH_KEYS_DIR = Path(os.environ.get("ATOMIXOS_SSH_KEYS_DIR", "/data/config/ssh-authorized-keys"))
+ADMIN_SHELL = os.environ["ATOMIXOS_ADMIN_SHELL"]
+SYSTEM_SHELL = os.environ["ATOMIXOS_SYSTEM_SHELL"]
+SHELLS = {
+    "bash": "/run/current-system/sw/bin/bash",
+    "sh": "/run/current-system/sw/bin/sh",
+    "zsh": "/run/current-system/sw/bin/zsh",
+}
 
 # Users that must never be created, modified, or locked by this script.
 PROTECTED_USERS = {"root", "appsvc"}
@@ -67,10 +74,22 @@ def run(cmd: list[str]) -> None:
         raise SystemExit(1)
 
 
-def ensure_user(name: str, is_admin: bool, previous: set[str]) -> None:
+def user_shell(user: dict, is_admin: bool) -> str:
+    shell = user.get("shell")
+    if shell is None:
+        return ADMIN_SHELL if is_admin else SYSTEM_SHELL
+    if shell not in SHELLS:
+        log(f"  invalid shell for user: {shell!r}")
+        raise SystemExit(1)
+    return SHELLS[shell]
+
+
+def ensure_user(name: str, user: dict, previous: set[str]) -> None:
     """Create or update a managed user account."""
     if name in PROTECTED_USERS:
         return
+
+    is_admin = user.get("isAdmin", False)
 
     if user_exists(name):
         if name not in previous:
@@ -83,12 +102,10 @@ def ensure_user(name: str, is_admin: bool, previous: set[str]) -> None:
         # Non-admin users are system accounts (no home, system UID range).
         # Account type cannot change after creation on the ephemeral overlay,
         # which resets every boot anyway.
-        # Admin users get /bin/zsh; system accounts get /bin/sh.
-        shell = "/bin/zsh" if is_admin else "/bin/sh"
         cmd = [
             "useradd",
             "--system" if not is_admin else "--create-home",
-            "--shell", shell,
+            "--shell", user_shell(user, is_admin),
             name,
         ]
         run(cmd)
@@ -188,7 +205,7 @@ def main() -> None:
             continue
         is_admin = user.get("isAdmin", False)
         log(f"ensuring user: {username} (admin={is_admin})")
-        ensure_user(username, is_admin, previous)
+        ensure_user(username, user, previous)
         ensure_authorized_keys_owner(username)
         # Only track non-protected users in managed state after collision checks pass.
         if username not in PROTECTED_USERS:
