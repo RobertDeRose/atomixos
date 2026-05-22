@@ -181,6 +181,11 @@ nixos-lib.runTest {
     # ── Phase 0: LAN defaults to open before restrictive provisioning ──
     gateway.log("Phase 0: Testing LAN default-open firewall rule")
     probe.succeed("nc -z -w 3 172.20.30.1 9090")
+    gateway.succeed("systemctl start bootstrap-wan-toggle.service")
+    probe.succeed("nc -z -w 3 192.168.1.1 8080")
+    gateway.succeed("touch /data/config/config.toml")
+    gateway.succeed("systemctl restart bootstrap-wan-toggle.service")
+    probe.fail("nc -z -w 3 192.168.1.1 8080")
     gateway.log("Phase 0 PASSED: LAN is open before explicit restrictive provisioning")
 
     # ── Phase 1: WAN rules (probe eth1 → gateway eth1) ──
@@ -206,7 +211,7 @@ nixos-lib.runTest {
     # SSH (22/tcp) — BLOCKED on WAN by default (no flag file)
     probe.fail("nc -z -w 3 192.168.1.1 22")
 
-    # Random port (8080/tcp) — BLOCKED on WAN
+    # Bootstrap port (8080/tcp) — BLOCKED on WAN after provisioning state exists
     probe.fail("nc -z -w 3 192.168.1.1 8080")
 
     # LAN remains open while no restrictive LAN scope is provisioned
