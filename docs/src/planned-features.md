@@ -83,15 +83,6 @@ Quadlet containers on a persistent `/data` partition.
   explicit ordered service restart list, `settle_seconds` before checking health,
   `allow_degraded` for services allowed to fail without rollback, and
   `strategy = "rollback" | "keep-failed" | "manual-confirm"`.
-- **Bootstrap provisioning subproject**: `scripts/first-boot-provision.py` now owns
-  config parsing, bundle import, Boot UI/API request handling, authentication, atomic
-  re-apply, activation checks, and rollback behavior. Evaluate splitting this into a
-  small Python subproject with `pyproject.toml`, pytest-based unit tests, clearer module
-  boundaries, and possibly a vendored MIT-licensed Bottle router for the HTTP layer.
-  Include an async re-apply job API so long-running activation does not hold an HTTP
-  request open: authenticated submission returns a job ID, Boot UI/API clients poll job
-  status, only one apply job runs at a time, and final state records success, activation
-  failures, and whether rollback completed.
 
 ## Resolved Questions
 
@@ -99,6 +90,13 @@ Quadlet containers on a persistent `/data` partition.
   Caddy/AuthCrunch and running cockpit-ws with `--local-session`. Caddy is the
   only public authentication and authorization boundary; `/cockpit/*` is
   restricted to `authp/admin`.
+- **Provisioning API foundation**: Resolved by replacing the monolithic
+  first-boot provisioner with the `atomixos-provision` Python package, Litestar
+  API service, SSH signature authentication, single-flight apply jobs, live
+  OpenAPI schema, crash-safe config promotion, activation health checks, and
+  rollback handling. Future changes should build on the same validate, render,
+  promote, activate, and rollback pipeline instead of adding parallel mutation
+  paths.
 
 ## Feature Map
 
@@ -234,6 +232,159 @@ Quadlet containers on a persistent `/data` partition.
 - Dependencies: None
 - Suggested validation: NixOS VM test with mock hawkBit DDI API
 - Suggested first workflow command: `/start-feature hawkbit-updates`
+
+### `rauc-production-keyring-policy`
+
+- Status: planned
+- Overview: Make RAUC production images fail closed unless a production keyring is
+  configured, while keeping development and test images explicit about using the
+  repository development CA.
+- Requirements:
+  - Default production behavior must require `atomixos.rauc.keyringCert`
+  - Development/test images must explicitly opt into the repository development CA
+  - VM tests must set the development opt-in where needed
+  - Documentation must show production and development keyring examples
+- Constraints:
+  - Must not break local VM development workflows
+  - Must preserve RAUC signed-bundle verification
+  - Must keep release image configuration auditable from Nix options
+- Non-goals:
+  - Replacing RAUC
+  - Managing production CA issuance or rotation server-side
+- Success criteria:
+  - A release image without `keyringCert` fails evaluation or build
+  - Development images continue to build only with an explicit dev-keyring opt-in
+  - Docs clearly state that the repository dev CA is never acceptable for production OTA
+- Risks and tradeoffs:
+  - Existing ad hoc test images may need option updates
+  - Operators need a documented CA provisioning workflow before release builds
+- Dependencies: RAUC module options from provisioning API service foundation
+- Suggested validation: Nix evaluation tests for both fail-closed and dev opt-in modes
+- Suggested first workflow command: `/start-feature rauc-production-keyring-policy`
+
+### `provisioning-api-privilege-separation`
+
+- Status: planned
+- Overview: Split the network-facing provisioning API process from privileged host
+  mutation helpers. The web process should run unprivileged and call a narrow,
+  auditable helper for config promotion, service activation, firewall changes, and
+  socket rebinding.
+- Requirements:
+  - Run the Litestar/uvicorn service as an unprivileged user
+  - Define a minimal privileged helper interface for apply/recover/activate actions
+  - Preserve single-flight apply semantics and job progress reporting
+  - Preserve first-boot bootstrap behavior and SSH-signed reapply behavior
+  - Ensure helper inputs are validated and scoped to `/data/config`
+- Constraints:
+  - Must work with read-only rootfs and mutable `/data`
+  - Must avoid adding DB, Redis, or heavyweight IPC dependencies
+  - Must not regress first-boot operator workflow
+- Non-goals:
+  - Full multi-tenant authorization model
+  - Remote fleet orchestration
+- Success criteria:
+  - Compromise of the HTTP process does not directly grant root shell or arbitrary
+    filesystem mutation
+  - Apply/recover/rollback paths still pass existing Python and Nix VM tests
+  - Systemd hardening is documented and enforced in the service unit
+- Risks and tradeoffs:
+  - Helper boundary adds implementation and test complexity
+  - Progress reporting may need a simple IPC contract
+- Dependencies: Provisioning API foundation
+- Suggested validation: VM test proving unprivileged service can provision via helper
+- Suggested first workflow command: `/start-feature provisioning-api-privilege-separation`
+
+### `provisioning-api-live-schema-contract`
+
+- Status: planned
+- Overview: Treat the live OpenAPI schema exposed by the provisioning service as a
+  supported client contract, not incidental framework output.
+- Requirements:
+  - Keep API routes documented with accurate request bodies, headers, responses, and
+    error shapes
+  - Exclude Boot UI/static routes from the API schema unless deliberately documented
+  - Add tests that assert schema coverage for new API endpoints
+  - Preserve operation IDs and domain tags for client generation
+- Constraints:
+  - Live schema exposure is intentional for online clients
+  - Must not expose inaccurate write-only implementation routes
+  - Must keep schema generation dependency-light
+- Non-goals:
+  - Replacing `config.toml` as the canonical import/export artifact
+  - Adding OAuth/JWT solely for docs access
+- Success criteria:
+  - Generated clients can submit config, poll jobs, validate config, and handle errors
+    using the live schema
+  - CI fails when a new API route lacks schema assertions
+- Risks and tradeoffs:
+  - Litestar defaults may need explicit overrides for raw binary endpoints
+  - Schema tests add maintenance cost but prevent client drift
+- Dependencies: Provisioning API foundation
+- Suggested validation: Python tests against `/schema/openapi.json`
+- Suggested first workflow command: `/start-feature provisioning-api-live-schema-contract`
+
+### `typed-partial-provisioning-api`
+
+- Status: planned
+- Overview: Add typed partial configuration endpoints for common operations while
+  preserving `config.toml` and bundles as the canonical import/export/backup format.
+  Partial changes must always produce a full desired state and reuse the existing
+  validate, render, promote, activate, and rollback pipeline.
+- Requirements:
+  - Add typed endpoints for users, network/LAN settings, container services, volumes,
+    and firewall inbound rules in priority order
+  - Load current desired state, apply the typed patch, validate the full result, render
+    a candidate, promote atomically, activate, and roll back on failure
+  - Return async jobs with progress just like full config submission
+  - Preserve config export/backup semantics after partial changes
+- Constraints:
+  - Must not mutate derived files directly under `/data/config`
+  - Must not introduce a database or divergent state store
+  - Must keep full config import behavior authoritative
+- Non-goals:
+  - Arbitrary JSON patch over internal rendered state
+  - Fleet-level orchestration
+- Success criteria:
+  - Partial updates and full config imports converge on the same on-disk desired state
+  - Failed partial updates roll back identically to failed full imports
+  - Live OpenAPI accurately documents each typed endpoint
+- Risks and tradeoffs:
+  - More API surface increases schema and validation maintenance
+  - Some edits may require restart ordering or health semantics not yet modeled
+- Dependencies: Provisioning API foundation, live schema contract
+- Suggested validation: Python tests for typed patch-to-full-state conversion plus VM
+  tests for at least one user and one container partial update
+- Suggested first workflow command: `/start-feature typed-partial-provisioning-api`
+
+### `boot-ui-htmx`
+
+- Status: planned
+- Overview: Redesign the first-boot Boot UI as a small server-rendered HTMX interface
+  while preserving the current upload/paste provisioning flow and bootstrap CSRF token
+  controls.
+- Requirements:
+  - Keep first-boot UI available only before provisioning completes
+  - Preserve upload and paste config paths
+  - Show async job progress using the existing first-boot poll token
+  - Reuse server-rendered fragments; no SPA/Vite dependency
+  - Maintain Host/Origin/Referer protections and bootstrap token checks
+- Constraints:
+  - Must fit embedded rootfs constraints
+  - Must not add a separate frontend build pipeline unless justified
+  - Must not introduce unauthenticated post-provision mutation paths
+- Non-goals:
+  - Full on-device management UI
+  - Replacing programmatic `/api/config`
+- Success criteria:
+  - Operator can provision from desktop and mobile browsers
+  - UI reflects validation/apply progress and final forwarding URL
+  - UI tests cover first-boot only exposure and CSRF failure paths
+- Risks and tradeoffs:
+  - More UI affordances increase bootstrap attack surface if not carefully scoped
+  - HTMX fragments must stay aligned with API/job behavior
+- Dependencies: Provisioning API foundation
+- Suggested validation: Python route tests and manual browser test in VM
+- Suggested first workflow command: `/start-feature boot-ui-htmx`
 
 ### `watchdog-enforcement`
 
