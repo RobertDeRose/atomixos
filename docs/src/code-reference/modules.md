@@ -305,16 +305,21 @@ upstream NixOS `services.rauc` module.
 
 **Custom NixOS options (`atomixos.rauc.*`):**
 
-| Option          | Type            | Default                   | Description                       |
-|-----------------|-----------------|---------------------------|-----------------------------------|
-| `compatible`    | string          | `"rock64"`                | RAUC compatible string            |
-| `bootloader`    | enum            | `"uboot"`                 | Backend (`uboot`, `custom`, etc.) |
-| `statusFile`    | string          | `/data/rauc/status.raucs` | RAUC status file                  |
-| `bundleFormats` | list of strings | `[-plain, +verity]`       | Allowed bundle formats            |
-| `slots.boot0`   | string          | (required)                | Boot slot A device path           |
-| `slots.boot1`   | string          | (required)                | Boot slot B device path           |
-| `slots.rootfs0` | string          | (required)                | Rootfs slot A device path         |
-| `slots.rootfs1` | string          | (required)                | Rootfs slot B device path         |
+| Option                     | Type            | Default                   | Description                       |
+|----------------------------|-----------------|---------------------------|-----------------------------------|
+| `compatible`               | string          | `"rock64"`                | RAUC compatible string            |
+| `bootloader`               | enum            | `"uboot"`                 | Backend (`uboot`, `custom`, etc.) |
+| `statusFile`               | string          | `/data/rauc/status.raucs` | RAUC status file                  |
+| `bundleFormats`            | list of strings | `[-plain, +verity]`       | Allowed bundle formats            |
+| `keyringCert`              | path or null    | `null`                    | Production RAUC CA certificate    |
+| `allowDevelopmentKeyring`  | bool            | `true`                    | Allow repository development CA   |
+| `slots.boot0`              | string          | (required)                | Boot slot A device path           |
+| `slots.boot1`              | string          | (required)                | Boot slot B device path           |
+| `slots.rootfs0`            | string          | (required)                | Rootfs slot A device path         |
+| `slots.rootfs1`            | string          | (required)                | Rootfs slot B device path         |
+
+Production builds should set `keyringCert` to the production RAUC CA and set `allowDevelopmentKeyring = false`. When the
+development keyring is used, `/etc/issue` includes a warning that the image must not be used for production OTA updates.
 
 When `bootloader = "custom"`, a file-based shell script is generated that simulates U-Boot environment management using
 files in `/var/lib/rauc/`.
@@ -362,12 +367,11 @@ path records lifecycle markers to the journal through normal service stdout.
 |-------------------|--------|---------|------------------------------------------|
 | `useHawkbit`      | bool   | `false` | Reserve hawkBit path and install package |
 | `pollingInterval` | string | `"1h"`  | Timer interval                           |
-| `serverUrl`       | string | `""`    | Optional fallback update server URL      |
 
 **Timer:** `OnBootSec=5min`, `OnUnitActiveSec=<pollingInterval>`, `RandomizedDelaySec=10min`
 
-`os-upgrade.service` prefers the provisioned `/data/config/os-upgrade.json` value and exits successfully without polling
-when neither the provisioned config nor the legacy fallback URL is set.
+`os-upgrade.service` reads the provisioned `/data/config/os-upgrade.json` value and exits successfully without polling
+when no provisioned update server is set.
 
 When `useHawkbit = true`, AtomixOS disables the polling service and installs `rauc-hawkbit-updater`, but does not
 configure an operational hawkBit systemd service in the current image.
@@ -387,7 +391,7 @@ configure an operational hawkBit systemd service in the current image.
 
 Mutually exclusive with `os-verification.service` via the sentinel file.
 
-`atomixos-bootstrap.service` runs `first-boot-provision serve` on the LAN bootstrap endpoint and remains available after
+`atomixos-bootstrap.service` runs `atomixos-provision serve` on the LAN bootstrap endpoint and remains available after
 provisioning so operators can recover or reprovision without re-imaging.
 
 ---

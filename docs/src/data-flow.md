@@ -53,6 +53,10 @@ Re-apply uses atomic candidate promotion:
 5. On success, clean up `/data/config-rollback`.
 6. On failure, restore `/data/config-rollback` to `/data/config` and re-activate.
 
+`POST /api/config` is asynchronous for programmatic clients. It returns a typed response with `job_id`, `state`, and
+`job_url`; the `Location` header points to the same job resource. The job records provisioning steps, service
+deployment/status events, activation failures, final result, and rollback status.
+
 First provisioning (no existing `config.toml`) remains unauthenticated and writes directly.
 
 ## Managed Users Flow
@@ -64,8 +68,8 @@ re-apply. It runs before `sshd.service` so accounts exist before SSH accepts con
 
 ## Update Flow
 
-`os-upgrade.service` reads `/data/config/os-upgrade.json` when present, falls back to the module-configured update URL for
-legacy deployments, and skips polling cleanly when no update server is configured. When polling is configured, it sends
+`os-upgrade.service` reads `/data/config/os-upgrade.json` and skips polling cleanly when no provisioned update server is
+configured. When polling is configured, it sends
 the compact lowercase 12-hex eth0 MAC in `X-Device-ID`, compares available bundle metadata with the booted version,
 downloads the bundle to `/data`, installs it with RAUC, and reboots into the newly selected slot.
 

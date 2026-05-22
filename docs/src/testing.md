@@ -6,6 +6,18 @@ flake `checks.*` outputs. Tests run on both Linux (TCG software emulation) and m
 
 ## Running Tests
 
+### Provisioning package
+
+```sh
+cd scripts/atomixos_provision
+uv run --extra dev pytest
+uv run --extra dev ruff check .
+```
+
+These tests cover the Litestar API, SSH-signature auth helpers, config parsing,
+bundle import, Quadlet rendering/sync, activation, job tracking, and service
+foundation modules.
+
 ### All tests
 
 ```sh

@@ -12,14 +12,23 @@ RAUC updates.
 
 `/data/config/` owns runtime configuration imported during provisioning. RAUC slot writes do not modify `/data`.
 
-The bootstrap API is LAN-local and exposes `POST /api/config` for complete `config.toml` files or supported config
-bundles. It uses the same validation and persistence path as the web console and returns JSON success or validation
-errors for programmatic clients.
+Before initial provisioning, the bootstrap API is reachable on WAN and LAN and exposes `POST /api/config` for complete
+`config.toml` files or supported config bundles. First-boot Boot UI submissions use a CSRF bootstrap token, not operator
+authentication; first-boot programmatic `/api/config` submissions do not require that UI token. After provisioning, the
+bootstrap API narrows to the LAN gateway endpoint. It uses the same validation, candidate promotion, activation, and
+rollback path as the web console. Programmatic
+clients receive `202 Accepted` with a `job_id` and `Location: /api/jobs/{id}` header, then poll the job resource for final
+success, failure, rollback status, and service deployment events.
+
+The API routes retain operation IDs and domain tags in code, and the production
+bootstrap service exposes live OpenAPI schema routes for online clients. Response
+bodies are typed in the provisioning package schemas while preserving the current
+JSON shapes.
 
 The accepted `config.toml` schema is:
 
 ```toml
-version = 2
+version = 1
 
 [users.admin]
 isAdmin = true

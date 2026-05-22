@@ -82,7 +82,7 @@ configuration into `/data/config/` from one of these sources:
 
 - `/boot/config.toml` on a fresh flash
 - USB `config.toml` or supported config bundle
-- the local bootstrap web console on `172.20.30.1:8080`
+- the bootstrap web console on WAN and LAN port `8080` until initial provisioning completes
 
 When a new `config.toml` is applied through one of those paths, the device
 persists it under `/data/config/`, writes admin SSH authorized keys, renders the

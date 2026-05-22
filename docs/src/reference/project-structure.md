@@ -50,7 +50,8 @@ scripts/
   ssh-wan-toggle.sh                SSH-on-WAN flag check
   ssh-wan-reload.sh                SSH-on-WAN runtime reload
   first-boot.sh                    First-boot provisioning import + mark-good
-  first-boot-provision.py          Provisioning importer/bootstrap/Quadlet renderer
+  atomixos_provision/             Provisioning server package (Litestar + uvicorn)
+    src/atomixos_provision/domain Explicit API domains: auth, config, jobs, system
   quadlet-sync.sh                  Rootful/rootless Quadlet sync + startup
   watchdog-boot-count.sh           Boot-count decrement and rollback journal logging
   boot.cmd                         U-Boot A/B boot script source

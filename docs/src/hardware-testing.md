@@ -37,7 +37,8 @@ screen /dev/tty.usbserial-DM02496T 1500000
 - Kernel loads and prints boot messages
 - System reaches `multi-user.target`
 - If `/boot/config.toml` or a USB seed is present, `first-boot.service` completes provisioning
-- Without a seed, the bootstrap UI appears on `172.20.30.1:8080` and first boot waits for operator input
+- Without a seed, the bootstrap UI appears on WAN and LAN port `8080`, and first boot waits indefinitely for operator
+  input until a valid config is applied
 
 ### Test 1.2: Verify first-boot service
 

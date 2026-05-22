@@ -118,7 +118,7 @@ The schema should:
 Current intended top-level structure:
 
 ```toml
-version = 2
+version = 1
 
 [users.admin]
 isAdmin = true
@@ -563,7 +563,7 @@ Rationale:
 
 The importer should validate:
 
-- `version == 2`
+- `version == 1`
 - at least one `users.<name>` entry is an admin with a non-empty `ssh_key`
 - `network.firewall.inbound.<scope>.tcp` and `udp`, when present, are valid port arrays
 - `activation.required` is a non-empty string array

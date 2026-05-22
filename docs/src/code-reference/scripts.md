@@ -139,7 +139,7 @@ which is captured by `journald` and forwarded to `/data/logs` by `rsyslog`.
 
 OTA update polling script. Checks for new RAUC bundles and installs them.
 
-**Environment:** `OS_UPGRADE_URL` (update server base URL)
+**Environment:** `ATOMIXOS_OS_UPGRADE_CONFIG` (provisioned JSON config path)
 
 **Steps:**
 
@@ -167,6 +167,27 @@ First-boot provisioning/import/bootstrap flow plus boot confirmation.
    firewall apply fails
 6. Mark the current RAUC slot good when RAUC is enabled
 7. Write timestamp to `/data/.completed_first_boot`
+
+### atomixos_provision
+
+**Location:** `scripts/atomixos_provision/`
+
+Litestar provisioning service package used by first boot and re-apply flows.
+
+**Key modules:**
+
+1. `app.py` wires the Litestar application explicitly
+2. `settings.py` loads environment-backed service settings
+3. `deps.py` provides Litestar dependency providers
+4. `domain/*/controller.py` contains API route handlers grouped by domain
+5. `domain/config/service.py` exposes the config apply/validate facade
+6. `schemas.py` defines typed API response shapes
+7. `exceptions.py` maps domain errors to API response bodies
+8. `provision.py`, `bundle.py`, `quadlet.py`, and `activation.py` implement the safe apply pipeline
+
+`POST /api/config` is asynchronous and returns a job URL. The job endpoint
+reports provisioning steps, service deployment/status events, final result, and
+rollback status.
 
 ### ssh-wan-toggle.sh
 

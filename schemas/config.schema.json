@@ -8,7 +8,7 @@
   "properties": {
     "version": {
       "type": "integer",
-      "enum": [2]
+      "enum": [1]
     },
     "users": {
       "type": "object",
@@ -121,6 +121,10 @@
         },
         "ssh_key": {
           "type": "string"
+        },
+        "shell": {
+          "type": "string",
+          "enum": ["bash", "sh", "zsh"]
         }
       }
     },

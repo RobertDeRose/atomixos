@@ -14,7 +14,8 @@ On first boot:
 4. Initrd persists a fresh-flash marker so switched-root provisioning can distinguish a new flash from a later
    reprovisioned `/data` wipe
 5. `first-boot.service` looks for `/boot/config.toml` only on a fresh flash, then USB `config.toml`, then starts the
-   bootstrap web console on `172.20.30.1:8080`
+   bootstrap web console on WAN and LAN port `8080`; after provisioning it narrows to the LAN gateway endpoint
+   and waits indefinitely for operator input when no seed is present
 6. The imported config is validated, persisted under `/data/config/`, rendered into canonical Quadlet files, and synced
    into the active rootful and rootless Quadlet paths
 7. `first-boot.service` applies Quadlets, LAN settings, and provisioned firewall rules, then marks the RAUC slot as good
@@ -36,10 +37,26 @@ On the next boot:
 1. Initrd sees that `boot-b` already exists, so it does not mark the boot as a fresh flash
 2. `/boot/config.toml` is not replayed
 3. `first-boot.service` searches USB `config.toml` sources first
-4. If no USB seed is found, the bootstrap web console starts on `172.20.30.1:8080`
+4. If no USB seed is found, the bootstrap web console starts on WAN and LAN port `8080`
 
 Imported operator state remains bounded to `/data/config/`, including the imported `config.toml`, rendered Quadlet
 files, admin SSH authorized keys, and other provisioning-derived runtime inputs.
+
+## Provisioning Service API
+
+The bootstrap console is backed by a long-lived Litestar service. API routes are
+grouped by domain but still wired explicitly by the app factory:
+
+| Route | Behavior |
+|-------|----------|
+| `GET /api/health` | Returns service liveness. |
+| `GET /api/nonce` | Issues a single-use nonce for SSH-signature authentication. |
+| `POST /api/validate` | Validates a `config.toml` or config bundle without applying it. |
+| `POST /api/config` | Accepts a config source and returns `202 Accepted` with a job URL. |
+| `GET /api/jobs/{id}` | Returns current provisioning job status, events, result, and rollback state. |
+
+Mutating apply jobs are single-flight. Clients poll the returned job URL for
+progress and final status.
 
 ## USB Recovery Mode
 
