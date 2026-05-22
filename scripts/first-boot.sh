@@ -10,6 +10,7 @@ set -euo pipefail
 log() { echo "[first-boot] $*"; }
 CONFIG_ROOT="${ATOMIXOS_CONFIG_ROOT:-/data/config}"
 CONFIG_TOML="$CONFIG_ROOT/config.toml"
+PROMOTION_MARKER="$CONFIG_ROOT.atomixos-promotion-pending"
 QUADLET_ACTIVE_DIR="${ATOMIXOS_QUADLET_ACTIVE_DIR:-/etc/containers/systemd}"
 BOOTSTRAP_HOST="${ATOMIXOS_BOOTSTRAP_HOST:-172.20.30.1}"
 INITRD_MARKER="${ATOMIXOS_INITRD_MARKER:-/etc/atomixos/fresh-flash}"
@@ -131,13 +132,13 @@ sync_quadlet_units() {
 			fi
 			log "WARNING: quadlet-sync.service failed with no required provisioned units"
 		fi
-		if systemctl list-unit-files lan-gateway-apply.service >/dev/null 2>&1; then
+		if systemctl cat lan-gateway-apply.service >/dev/null 2>&1; then
 			if ! systemctl restart lan-gateway-apply.service; then
 				log "ERROR: lan-gateway-apply.service failed"
 				return 1
 			fi
 		fi
-		if systemctl list-unit-files provisioned-firewall-inbound.service >/dev/null 2>&1; then
+		if systemctl cat provisioned-firewall-inbound.service >/dev/null 2>&1; then
 			if ! systemctl restart provisioned-firewall-inbound.service; then
 				log "ERROR: provisioned-firewall-inbound.service failed"
 				return 1
@@ -152,6 +153,16 @@ sync_quadlet_units() {
 			fi
 			log "WARNING: quadlet sync failed with no required provisioned units"
 		fi
+	fi
+}
+
+check_required_health() {
+	if ! has_required_units; then
+		return 0
+	fi
+	if ! first-boot-provision check-health "$CONFIG_ROOT"; then
+		log "ERROR: required provisioned services are not healthy"
+		return 1
 	fi
 }
 
@@ -172,7 +183,7 @@ import_seed_config() {
 	local source_path="$1"
 	local status=0
 	log "Importing provisioning config from $source_path"
-	if first-boot-provision import "$source_path" "$CONFIG_ROOT"; then
+	if ATOMIXOS_KEEP_INITIAL_PROMOTION_PENDING=1 first-boot-provision import "$source_path" "$CONFIG_ROOT"; then
 		status=0
 	else
 		status=$?
@@ -183,10 +194,12 @@ import_seed_config() {
 	fi
 	apply_managed_users
 	sync_quadlet_units
+	check_required_health
+	first-boot-provision complete-initial "$CONFIG_ROOT"
 }
 
 has_valid_provisioning() {
-	[ -f "$CONFIG_TOML" ] && first-boot-provision validate "$CONFIG_TOML" >/dev/null 2>&1
+	[ ! -f "$PROMOTION_MARKER" ] && [ -f "$CONFIG_TOML" ] && first-boot-provision validate "$CONFIG_TOML" >/dev/null 2>&1
 }
 
 discover_and_import_provisioning() {
@@ -195,6 +208,7 @@ discover_and_import_provisioning() {
 		log "Using existing provisioned config from $CONFIG_TOML"
 		apply_managed_users
 		sync_quadlet_units
+		check_required_health
 		return 0
 	fi
 
@@ -216,6 +230,7 @@ discover_and_import_provisioning() {
 	fi
 	apply_managed_users
 	sync_quadlet_units
+	check_required_health
 }
 
 SENTINEL="${ATOMIXOS_FIRST_BOOT_SENTINEL:-/data/.completed_first_boot}"
@@ -258,5 +273,22 @@ fi
 # ── Write sentinel ──
 log "Writing first-boot sentinel: $SENTINEL"
 date -Iseconds >"$SENTINEL"
+
+if command -v systemctl >/dev/null 2>&1; then
+	systemctl restart bootstrap-wan-toggle.service >/dev/null 2>&1 || true
+	if command -v systemd-run >/dev/null 2>&1; then
+		systemd-run \
+			--unit=atomixos-bootstrap-final-rebind \
+			--on-active=60s \
+			--property=Type=oneshot \
+			/bin/sh -c 'systemctl restart atomixos-bootstrap-rebind.service && systemctl stop atomixos-bootstrap.service && systemctl restart atomixos-bootstrap.socket && systemctl start atomixos-bootstrap.service' \
+			>/dev/null 2>&1 || true
+	else
+		systemctl restart atomixos-bootstrap-rebind.service >/dev/null 2>&1 || true
+		systemctl stop atomixos-bootstrap.service >/dev/null 2>&1 || true
+		systemctl restart atomixos-bootstrap.socket >/dev/null 2>&1 || true
+		systemctl start atomixos-bootstrap.service >/dev/null 2>&1 || true
+	fi
+fi
 
 log "First boot initialization complete"
