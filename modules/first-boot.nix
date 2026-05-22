@@ -21,36 +21,50 @@ let
   firstBootScript = pkgs.writeShellScript "first-boot" (builtins.readFile ../scripts/first-boot.sh);
   applyUsersScript = pkgs.writeShellScript "apply-users" ''
     set -euo pipefail
+    export ATOMIXOS_ADMIN_SHELL=/run/current-system/sw/bin/zsh
+    export ATOMIXOS_SYSTEM_SHELL=/run/current-system/sw/bin/bash
     exec ${pkgs.python3Minimal}/bin/python3 ${../scripts/apply-users.py}
   '';
   bootstrapActivationScript = pkgs.writeShellScript "bootstrap-activation" ''
     set -euo pipefail
     ${pkgs.systemd}/bin/systemctl restart atomixos-apply-users.service
     ${pkgs.systemd}/bin/systemctl restart quadlet-sync.service
-    if ${pkgs.systemd}/bin/systemctl list-unit-files lan-gateway-apply.service >/dev/null 2>&1; then
+    if ${pkgs.systemd}/bin/systemctl cat lan-gateway-apply.service >/dev/null 2>&1; then
       ${pkgs.systemd}/bin/systemctl restart lan-gateway-apply.service
     fi
-    if ${pkgs.systemd}/bin/systemctl list-unit-files provisioned-firewall-inbound.service >/dev/null 2>&1; then
+    if ${pkgs.systemd}/bin/systemctl cat provisioned-firewall-inbound.service >/dev/null 2>&1; then
       ${pkgs.systemd}/bin/systemctl restart provisioned-firewall-inbound.service
     fi
-  '';
-  bootstrapPostResponseScript = pkgs.writeShellScript "bootstrap-post-response" ''
-    set -euo pipefail
-    ${bootstrapActivationScript}
-    ${pkgs.systemd}/bin/systemctl try-restart atomixos-bootstrap.service
   '';
   quadletSyncScript = pkgs.writeShellScript "quadlet-sync" (
     builtins.readFile ../scripts/quadlet-sync.sh
   );
-  provisionCli = pkgs.runCommand "first-boot-provision" { } ''
-    mkdir -p "$out/bin" "$out/share/atomixos"
-    install -m0755 ${../scripts/first-boot-provision.py} "$out/bin/first-boot-provision"
-    install -m0644 ${../docs/src/atomixos.png} "$out/share/atomixos/atomixos.png"
-    install -m0644 ${../schemas/config.schema.json} "$out/share/atomixos/config.schema.json"
-  '';
+  provisionCli = pkgs.python3Packages.buildPythonApplication {
+    pname = "atomixos-provision";
+    version = "0.1.0";
+    pyproject = true;
+
+    src = ../scripts/atomixos_provision;
+
+    build-system = [ pkgs.python3Packages.hatchling ];
+    dependencies = [
+      pkgs.python3Packages.click
+      pkgs.python3Packages.litestar
+      pkgs.python3Packages.uvicorn
+    ];
+
+    postInstall = ''
+      mkdir -p "$out/share/atomixos"
+      install -m0644 ${../docs/src/atomixos.png} "$out/share/atomixos/atomixos.png"
+      install -m0644 ${../schemas/config.schema.json} "$out/share/atomixos/config.schema.json"
+    '';
+
+    # Tests require NixOS VM environment
+    doCheck = false;
+  };
   configRecoveryScript = pkgs.writeShellScript "atomixos-config-recover" ''
     set -euo pipefail
-    exec ${provisionCli}/bin/first-boot-provision recover /data/config
+    exec ${provisionCli}/bin/atomixos-provision recover /data/config
   '';
   ubootEnvTools = self.packages.${pkgs.stdenv.hostPlatform.system}.uboot-env-tools;
   firstBootEnv = {
@@ -65,7 +79,9 @@ in
     wants = [ "data.mount" ];
     before = [
       "atomixos-apply-users.service"
+      "atomixos-bootstrap-rebind.service"
       "atomixos-bootstrap.service"
+      "bootstrap-wan-toggle.service"
       "first-boot.service"
       "lan-gateway-apply.service"
       "provisioned-firewall-inbound.service"
@@ -162,6 +178,7 @@ in
       Type = "oneshot";
       ExecStart = firstBootScript;
       RemainAfterExit = true;
+      TimeoutStartSec = "infinity";
     };
   };
 
@@ -182,8 +199,10 @@ in
     unitConfig.RequiresMountsFor = [ "/data" ];
 
     path = [
+      pkgs.bashInteractive
       pkgs.python3Minimal
       pkgs.shadow
+      pkgs.zsh
       pkgs.util-linux
     ];
 
@@ -209,7 +228,7 @@ in
     unitConfig.RequiresMountsFor = [ "/data" ];
 
     socketConfig = {
-      ListenStream = "172.20.30.1:8080";
+      ListenStream = "0.0.0.0:8080";
       Accept = false;
     };
   };
@@ -245,9 +264,8 @@ in
       RestartSec = 2;
       Environment = [
         "ATOMIXOS_BOOTSTRAP_ACTIVATION=${bootstrapActivationScript}"
-        "ATOMIXOS_BOOTSTRAP_POST_RESPONSE=${bootstrapPostResponseScript}"
       ];
-      ExecStart = "${provisionCli}/bin/first-boot-provision serve /data/config --host 172.20.30.1 --port 8080";
+      ExecStart = "${provisionCli}/bin/atomixos-provision serve /data/config --host 172.20.30.1 --port 8080";
     };
   };
 }

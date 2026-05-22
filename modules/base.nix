@@ -39,6 +39,34 @@
     # ── Base system ──────────────────────────────────────────────────────────────
 
     system.stateVersion = "25.11";
+    environment.etc."os-release".text = lib.mkForce ''
+      ANSI_COLOR="0;38;5;45"
+      BUG_REPORT_URL="https://github.com/NixOS/nixpkgs/issues"
+      BUILD_ID="${config.system.nixos.label}"
+      DOCUMENTATION_URL="https://nixos.org/learn.html"
+      HOME_URL="https://nixos.org/"
+      ID=atomixos
+      ID_LIKE=nixos
+      IMAGE_ID=atomixos
+      LOGO=nix-snowflake
+      NAME=AtomixOS
+      PRETTY_NAME="AtomixOS ${config.system.nixos.release} (Helium)"
+      SUPPORT_URL="https://nixos.org/community.html"
+      VERSION="${config.system.nixos.release} (Helium)"
+      VERSION_CODENAME=helium
+      VERSION_ID="${config.system.nixos.release}"
+      VERSION_ID_LIKE="${config.system.nixos.release}"
+      VERSION_CODENAME_LIKE=xantusia
+      PRETTY_NAME_LIKE="NixOS ${config.system.nixos.release} (Xantusia)"
+    '';
+    environment.etc."lsb-release".text = lib.mkForce ''
+      DISTRIB_CODENAME=helium
+      DISTRIB_DESCRIPTION="AtomixOS ${config.system.nixos.release} (Helium)"
+      DISTRIB_ID=AtomixOS
+      DISTRIB_RELEASE="${config.system.nixos.release}"
+      DISTRIB_ID_LIKE=NixOS
+      DISTRIB_CODENAME_LIKE=xantusia
+    '';
 
     # Login banner — shows build identity on serial console so we always know
     # which image is running. Uses git rev when available, dirty rev otherwise.
@@ -48,9 +76,12 @@
       in
       ''
 
-        AtomixOS (NixOS ${config.system.nixos.release}) — build ${rev}
+        AtomixOS (Helium) — build ${rev}
 
       '';
+    environment.etc.motd.text = ''
+      Welcome to AtomixOS (Helium)!
+    '';
 
     time.timeZone = "UTC";
     i18n.defaultLocale = "en_US.UTF-8";
@@ -88,6 +119,66 @@
     # Disable bash tab-completion framework — removes bash-completion (~3 MB)
     # from etc-bashrc. Not needed on a headless embedded device.
     programs.bash.completion.enable = false;
+
+    programs.zsh = {
+      enable = true;
+      enableGlobalCompInit = false;
+    };
+    environment.enableAllTerminfo = true;
+
+    environment.shells = lib.mkForce [
+      "/run/current-system/sw/bin/bash"
+      "/run/current-system/sw/bin/sh"
+      "/run/current-system/sw/bin/zsh"
+    ];
+
+    environment.etc."skel/.bash_profile".text = ''
+      if [[ -f ~/.bashrc ]]; then
+        source ~/.bashrc
+      fi
+    '';
+
+    environment.etc."skel/.bashrc".text = ''
+      if [[ $- != *i* || ! -t 1 ]]; then
+        return
+      fi
+
+      source /etc/os-release
+      export INPUTRC=/etc/inputrc
+      export HISTFILE="$HOME/.bash_history"
+      RED='\[\e[38;5;196;1m\]'
+      ORANGE='\[\e[38;5;208;1m\]'
+      BLUE='\[\e[38;5;45m\]'
+      RESET='\[\e[0m\]'
+      bind '"\e[A": history-search-backward'
+      bind '"\e[B": history-search-forward'
+      PS1="╭─[$RED\u$RESET@$ORANGE\h$RESET] $BLUE\w$RESET\n╰─\\$ "
+    '';
+
+    environment.etc."skel/.zshrc".text = ''
+      if [[ ! -o interactive || ! -t 1 ]]; then
+        return
+      fi
+
+      source /etc/os-release
+      export ZSH=/etc/oh-my-zsh/share/oh-my-zsh
+      ZSH_THEME=bira
+      plugins=(git)
+      export HISTFILE="$HOME/.zsh_history"
+      HISTSIZE=5000
+      SAVEHIST=5000
+      source "$ZSH/oh-my-zsh.sh"
+      setopt HIST_IGNORE_DUPS SHARE_HISTORY AUTO_CD
+      bindkey '^?' backward-delete-char
+      bindkey '^H' backward-delete-char
+    '';
+
+    environment.etc."oh-my-zsh".source = pkgs.oh-my-zsh;
+
+    environment.etc."inputrc".text = ''
+      "\e[A": history-search-backward
+      "\e[B": history-search-forward
+    '';
 
     # Disable font configuration — removes fontconfig-bin, freetype, dejavu-fonts
     # from system-path. No graphical output on this device.
