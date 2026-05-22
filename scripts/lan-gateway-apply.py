@@ -14,6 +14,12 @@ DNSMASQ_CONFIG_DIR = Path(os.environ.get("ATOMIXOS_DNSMASQ_CONFIG_DIR", "/etc/dn
 DNSMASQ_CONFIG_FILE = DNSMASQ_CONFIG_DIR / "atomixos-lan.conf"
 DNSMASQ_HOSTS_FILE = Path(os.environ.get("ATOMIXOS_DNSMASQ_HOSTS_FILE", "/etc/atomixos/dnsmasq-hosts"))
 CHRONY_LAN_FILE = Path(os.environ.get("ATOMIXOS_CHRONY_LAN_FILE", "/etc/atomixos/chrony-lan.conf"))
+BOOTSTRAP_SOCKET_OVERRIDE = Path(
+    os.environ.get(
+        "ATOMIXOS_BOOTSTRAP_SOCKET_OVERRIDE",
+        "/run/systemd/system/atomixos-bootstrap.socket.d/50-lan-bind.conf",
+    )
+)
 NETWORK_FILE = Path(
     os.environ.get(
         "ATOMIXOS_LAN_NETWORK_FILE",
@@ -83,6 +89,20 @@ def run_command(args: list[str]) -> None:
         detail = stderr or stdout or f"exit status {exc.returncode}"
         msg = f"command failed: {' '.join(args)}: {detail}"
         raise ValueError(msg) from exc
+
+
+def write_bootstrap_socket_rebind(gateway_ip: str) -> None:
+    replace_file(
+        BOOTSTRAP_SOCKET_OVERRIDE,
+        "[Socket]\n"
+        "ListenStream=\n"
+        f"ListenStream={gateway_ip}:8080\n",
+    )
+
+
+def apply_bootstrap_socket_rebind(gateway_ip: str) -> None:
+    write_bootstrap_socket_rebind(gateway_ip)
+    run_command(["systemctl", "daemon-reload"])
 
 
 def host_names(alias: str, domain: str) -> list[str]:
@@ -170,9 +190,14 @@ def ntp_servers(payload: dict[str, object]) -> list[str]:
     if not isinstance(servers, list) or any(not isinstance(server, str) or not server for server in servers):
         msg = f"ntp_servers must be a list of non-empty strings in {CONFIG_FILE}"
         raise ValueError(msg)
-    if any(any(char.isspace() or ord(char) < 32 or ord(char) == 127 for char in server) for server in servers):
-        msg = f"ntp_servers must not contain whitespace or control characters in {CONFIG_FILE}"
-        raise ValueError(msg)
+    for server in servers:
+        if any(char.isspace() or ord(char) < 32 or ord(char) == 127 for char in server):
+            msg = f"ntp_servers must not contain whitespace or control characters in {CONFIG_FILE}"
+            raise ValueError(msg)
+        try:
+            ipaddress.ip_address(server)
+        except ValueError:
+            validate_dns_name(server, "ntp_servers")
     return servers
 
 
@@ -327,6 +352,8 @@ def main() -> int:
 
     if chrony_changed:
         run_command(["systemctl", "try-restart", "chronyd.service"])
+
+    apply_bootstrap_socket_rebind(gateway_ip)
 
     return 0
 

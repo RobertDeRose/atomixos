@@ -17,6 +17,7 @@ LAN_REQUIRED_TCP = {22, 53, 8080}
 LAN_REQUIRED_UDP = {53, 67, 68, 123}
 INTERFACE_PATTERN = re.compile(r"^[A-Za-z0-9_.:-]+$")
 RULE_COMMENT_PATTERN = re.compile(r"^[ -~]+$")
+NFT_COMMENT_PATTERN = re.compile(r'\bcomment\s+"((?:\\.|[^"\\])*)"')
 
 
 def validate_ports(value: object, path: str) -> list[int]:
@@ -68,6 +69,16 @@ def load_payload() -> dict[str, object]:
     return dict(payload)
 
 
+def nft_rule_comment(line: str) -> str | None:
+    match = NFT_COMMENT_PATTERN.search(line)
+    if not match:
+        return None
+    try:
+        return json.loads(f'"{match.group(1)}"')
+    except json.JSONDecodeError:
+        return None
+
+
 def run_nft(*args: str, input_text: str | None = None) -> subprocess.CompletedProcess[str]:
     try:
         return subprocess.run(
@@ -91,27 +102,36 @@ def main() -> int:
     wan_interface = validate_interface_name(WAN_INTERFACE)
     lan_interface = validate_interface_name(LAN_INTERFACE)
     lan_default_open_comment = validate_rule_comment(LAN_DEFAULT_OPEN_COMMENT)
-
-    if not CONFIG_FILE.exists():
-        return 0
-
-    payload = load_payload()
     existing = run_nft("-a", "list", "chain", "inet", "filter", "input")
 
     commands: list[str] = []
     for line in existing.stdout.splitlines():
-        if rule_comment not in line and lan_default_open_comment not in line:
+        comment = nft_rule_comment(line)
+        if comment not in {rule_comment, lan_default_open_comment}:
             continue
         match = re.search(r"handle (\d+)$", line)
         if match:
             commands.append(f"delete rule inet filter input handle {match.group(1)}")
 
-    scoped_payload = payload if any(key in payload for key in ("wan", "lan")) else {"wan": payload}
+    if not CONFIG_FILE.exists():
+        if commands:
+            run_nft("-f", "-", input_text="\n".join(commands))
+        return 0
 
-    restrictive_lan = False
+    payload = load_payload()
+
+    if not isinstance(payload, dict):
+        msg = f"{CONFIG_FILE} must be a JSON object"
+        raise ValueError(msg)
+
+    lan_payload = payload.get("lan")
+    restrictive_lan = isinstance(lan_payload, dict) and any(
+        validate_ports(lan_payload.get(proto), f"firewall-inbound.lan.{proto}")
+        for proto in ("tcp", "udp")
+    )
 
     for scope_name, interface in (("wan", wan_interface), ("lan", lan_interface)):
-        scope_payload = scoped_payload.get(scope_name)
+        scope_payload = payload.get(scope_name)
         if scope_payload is None:
             continue
         if not isinstance(scope_payload, dict):
@@ -119,13 +139,11 @@ def main() -> int:
             raise ValueError(msg)
         for proto in ("tcp", "udp"):
             ports = validate_ports(scope_payload.get(proto), f"firewall-inbound.{scope_name}.{proto}")
-            if scope_name == "lan" and ports:
+            if scope_name == "lan" and restrictive_lan:
                 required_ports = LAN_REQUIRED_TCP if proto == "tcp" else LAN_REQUIRED_UDP
                 ports = sorted(set(ports) | required_ports)
             if not ports:
                 continue
-            if scope_name == "lan":
-                restrictive_lan = True
             joined = ", ".join(str(port) for port in ports)
             commands.append(
                 f'add rule inet filter input iifname "{interface}" {proto} dport {{ {joined} }} '

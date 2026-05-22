@@ -18,6 +18,22 @@ let
     builtins.readFile ../scripts/ssh-wan-reload.sh
   );
 
+  bootstrapWanToggle = pkgs.writeShellScript "bootstrap-wan-toggle" ''
+    set -euo pipefail
+
+    nft -a list chain inet filter input 2>/dev/null \
+      | awk '/ATOMIXOS_BOOTSTRAP_WAN/ {print $NF}' \
+      | while IFS= read -r handle; do
+        [ -n "$handle" ] || continue
+        nft delete rule inet filter input handle "$handle"
+      done
+
+    if [ -f /data/config.atomixos-promotion-pending ] \
+      || { [ ! -f /data/config/config.toml ] && [ ! -f /data/config/admin-signers ]; }; then
+      nft add rule inet filter input iifname "${cfg.wanInterface}" tcp dport 8080 accept comment "ATOMIXOS_BOOTSTRAP_WAN"
+    fi
+  '';
+
   provisionedFirewallInbound = pkgs.runCommand "provisioned-firewall-inbound" { } ''
     mkdir -p "$out/bin"
     install -m0755 ${../scripts/provisioned-firewall-inbound.py} "$out/bin/provisioned-firewall-inbound"
@@ -64,6 +80,8 @@ in
 
           ${cfg.extraInputRules}
 
+          # First-boot WAN bootstrap access is reconciled by bootstrap-wan-toggle.service.
+
           # -- eth1 (LAN) rules --
           iifname "${cfg.lanInterface}" accept comment "ATOMIXOS_LAN_DEFAULT_OPEN"
 
@@ -101,12 +119,40 @@ in
       ];
       wantedBy = [ "multi-user.target" ];
 
-      path = [ pkgs.nftables ];
+      path = [
+        pkgs.gawk
+        pkgs.nftables
+      ];
 
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
         ExecStart = sshWanToggle;
+      };
+    };
+
+    systemd.services.bootstrap-wan-toggle = {
+      description = "Toggle first-boot bootstrap API access on WAN";
+      after = [
+        "data.mount"
+        "nftables.service"
+      ];
+      wants = [
+        "data.mount"
+        "nftables.service"
+      ];
+      wantedBy = [ "multi-user.target" ];
+
+      unitConfig.RequiresMountsFor = [ "/data" ];
+
+      path = [
+        pkgs.gawk
+        pkgs.nftables
+      ];
+
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = bootstrapWanToggle;
       };
     };
 

@@ -111,4 +111,37 @@ in
       ExecStart = "${lanGatewayApply}/bin/lan-gateway-apply";
     };
   };
+
+  systemd.services.atomixos-bootstrap-rebind = {
+    description = "Rebind bootstrap API socket to provisioned LAN address";
+    after = [ "lan-gateway-apply.service" ];
+    wants = [ "lan-gateway-apply.service" ];
+
+    unitConfig = {
+      ConditionPathExists = [
+        "/data/config/config.toml"
+        "/data/config/lan-settings.json"
+      ];
+      RequiresMountsFor = [ "/data" ];
+    };
+
+    path = [
+      pkgs.coreutils
+      pkgs.systemd
+    ];
+
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = pkgs.writeShellScript "atomixos-bootstrap-rebind" ''
+        gateway_ip="$(${pkgs.jq}/bin/jq -er '.gateway_ip' /data/config/lan-settings.json)"
+        case "$gateway_ip" in
+          *[!0-9.]*|"" ) exit 1 ;;
+        esac
+        mkdir -p /run/systemd/system/atomixos-bootstrap.socket.d
+        printf '[Socket]\nListenStream=\nListenStream=%s:8080\n' "$gateway_ip" \
+          >/run/systemd/system/atomixos-bootstrap.socket.d/50-lan-bind.conf
+        systemctl daemon-reload
+      '';
+    };
+  };
 }
