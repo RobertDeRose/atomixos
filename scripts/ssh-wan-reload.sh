@@ -6,9 +6,9 @@
 set -euo pipefail
 
 # Remove all existing dynamic SSH rules before optionally adding one.
-nft -a list chain inet filter input 2>/dev/null \
-	| awk 'match($0, /comment "SSH-WAN-dynamic"/) {print $NF}' \
-	| while IFS= read -r handle; do
+nft -a list chain inet filter input 2>/dev/null |
+	awk 'match($0, /comment "SSH-WAN-dynamic"/) {print $NF}' |
+	while IFS= read -r handle; do
 		[ -n "$handle" ] || continue
 		nft delete rule inet filter input handle "$handle"
 	done

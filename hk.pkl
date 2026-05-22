@@ -23,6 +23,7 @@ local linters = new Mapping<String, Step> {
   ["detect-private-key"] = (Builtins.detect_private_key) {
     exclude = List("certs/dev.*.key.pem")
   }
+  ["deadnix"] = Builtins.deadnix
   ["mise"] = Builtins.mise
   ["mixed-line-ending"] = Builtins.mixed_line_ending
   ["markdown-table-formatter"] = new Step {

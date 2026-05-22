@@ -1,8 +1,6 @@
 # Network interface configuration.
 # Deterministic NIC naming and interface setup.
 {
-  config,
-  lib,
   pkgs,
   ...
 }:

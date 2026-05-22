@@ -1,8 +1,6 @@
 # LAN gateway services: DHCP server (dnsmasq) and NTP server (chrony).
 # The Rock64 acts as DHCP and NTP server for isolated LAN devices.
 {
-  config,
-  lib,
   pkgs,
   ...
 }:

@@ -23,7 +23,6 @@
 {
   pkgs,
   hostPkgs ? pkgs,
-  self,
   qemuModule,
   ...
 }:
@@ -37,7 +36,7 @@ nixos-lib.runTest {
   inherit hostPkgs;
 
   nodes.gateway =
-    { config, lib, ... }:
+    { lib, ... }:
     {
       imports = [
         qemuModule
@@ -104,7 +103,7 @@ nixos-lib.runTest {
   # eth1 = VLAN 1 (WAN side, 192.168.1.x)
   # eth2 = VLAN 2 (LAN side, 172.20.30.x)
   nodes.probe =
-    { config, lib, ... }:
+    { ... }:
     {
       virtualisation = {
         vlans = [

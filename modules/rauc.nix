@@ -184,11 +184,13 @@ in
     environment.etc."rauc/ca.cert.pem".source =
       if cfg.keyringCert != null then cfg.keyringCert else ../certs/dev.ca.cert.pem;
 
-    environment.etc.issue.text = lib.mkIf (cfg.keyringCert == null) (lib.mkAfter ''
+    environment.etc.issue.text = lib.mkIf (cfg.keyringCert == null) (
+      lib.mkAfter ''
 
-      WARNING: DEVELOPMENT BUILD
-      This image uses the repository development RAUC keyring and must not be used for production OTA updates.
+        WARNING: DEVELOPMENT BUILD
+        This image uses the repository development RAUC keyring and must not be used for production OTA updates.
 
-    '');
+      ''
+    );
   };
 }

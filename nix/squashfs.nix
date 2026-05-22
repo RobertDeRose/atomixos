@@ -1,7 +1,6 @@
 # Build a squashfs image from the NixOS system closure.
 # Includes a size check to ensure it fits within the A/B partition slot.
 {
-  lib,
   stdenv,
   squashfsTools,
   closureInfo,

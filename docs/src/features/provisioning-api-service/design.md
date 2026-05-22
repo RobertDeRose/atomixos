@@ -80,7 +80,7 @@ application at `/Users/DeRoseR/workspace/personal/litestar-fullstack`.
 
 ### Current Package Layout
 
-```
+```text
 scripts/atomixos_provision/
 ├── pyproject.toml
 ├── src/
@@ -157,33 +157,33 @@ OAuth, Vite, and email plugins are not part of this foundation.
 
 ### HTTP Endpoints
 
-| Method | Path | Auth | Response | Description |
-|--------|------|------|----------|-------------|
-| GET | `/` | none | HTML | Boot UI page |
-| GET | `/api/nonce` | none | JSON | Issue single-use nonce for auth |
-| GET | `/api/health` | none | JSON | Liveness check |
-| GET | `/api/jobs/{id}` | SSH sig or first-boot poll token | JSON | Poll async job status |
-| GET | `/assets/atomixos.png` | none | image | Static logo |
-| POST | `/api/config` | SSH sig (provisioned) / none (first-boot) | JSON | Submit config, returns job ID (async) |
-| POST | `/api/validate` | SSH sig | JSON | Validate config without applying |
-| POST | `/apply` | bootstrap token (first-boot only) | HTML | Form upload → sync apply → result page |
+| Method | Path                    | Auth                                      | Response | Description                            |
+|--------|-------------------------|-------------------------------------------|----------|----------------------------------------|
+| GET    | `/`                     | none                                      | HTML     | Boot UI page                           |
+| GET    | `/api/nonce`            | none                                      | JSON     | Issue single-use nonce for auth        |
+| GET    | `/api/health`           | none                                      | JSON     | Liveness check                         |
+| GET    | `/api/jobs/{id}`        | SSH sig or first-boot poll token          | JSON     | Poll async job status                  |
+| GET    | `/assets/atomixos.png` | none                                      | image    | Static logo                            |
+| POST   | `/api/config`           | SSH sig (provisioned) / none (first-boot) | JSON     | Submit config, returns job ID (async)  |
+| POST   | `/api/validate`         | SSH sig                                   | JSON     | Validate config without applying       |
+| POST   | `/apply`                | bootstrap token (first-boot only)         | HTML     | Form upload → sync apply → result page |
 
 Future dynamic API endpoints should be typed resource operations that reuse the
 same config service and job pipeline, for example:
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/config/current` | Return normalized current desired state |
-| GET | `/api/config/export` | Export current config bundle for backup/clone |
-| PATCH | `/api/config/users/{name}` | Apply a typed user change through candidate promotion |
-| PATCH | `/api/config/network` | Apply typed network changes through candidate promotion |
-| PATCH | `/api/config/containers/{name}` | Apply typed container changes through candidate promotion |
+| Method | Path                            | Description                                               |
+|--------|---------------------------------|-----------------------------------------------------------|
+| GET    | `/api/config/current`           | Return normalized current desired state                   |
+| GET    | `/api/config/export`            | Export current config bundle for backup/clone             |
+| PATCH  | `/api/config/users/{name}`      | Apply a typed user change through candidate promotion     |
+| PATCH  | `/api/config/network`           | Apply typed network changes through candidate promotion   |
+| PATCH  | `/api/config/containers/{name}` | Apply typed container changes through candidate promotion |
 
 ### Endpoint Architecture
 
 All endpoints share a common core:
 
-```
+```text
 /api/config  ─→  parse raw body    ─→  jobs.submit(provision.apply)  ─→  JSON {job_id}
 /apply       ─→  parse multipart   ─→  provision.apply(sync)         ─→  HTML result
 ```
@@ -276,7 +276,7 @@ not parse human-readable strings.
 
 ### Job Lifecycle
 
-```
+```text
 SUBMITTED → RUNNING → SUCCEEDED
                    ↘ FAILED (+ rollback_status: completed | failed | skipped)
 ```

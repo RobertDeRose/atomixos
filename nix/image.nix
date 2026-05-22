@@ -3,7 +3,6 @@
 # boot.scr), rootfs slot A (squashfs), and first-boot-created slot B + /data
 # partitions.
 {
-  lib,
   stdenv,
   dosfstools,
   f2fs-tools,

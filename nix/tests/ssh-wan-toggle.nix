@@ -16,7 +16,6 @@
 {
   pkgs,
   hostPkgs ? pkgs,
-  self,
   qemuModule,
   ...
 }:
@@ -59,7 +58,7 @@ nixos-lib.runTest {
   inherit hostPkgs;
 
   nodes.gateway =
-    { config, lib, ... }:
+    { ... }:
     {
       imports = [ qemuModule ];
 
@@ -153,7 +152,7 @@ nixos-lib.runTest {
     };
 
   nodes.wan =
-    { config, lib, ... }:
+    { ... }:
     {
       virtualisation = {
         vlans = [ 1 ];

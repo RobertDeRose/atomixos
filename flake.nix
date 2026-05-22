@@ -13,7 +13,7 @@
       # ── Closure size overlay ──────────────────────────────────────────────
       # Override packages to strip unnecessary transitive dependencies that
       # bloat the read-only squashfs image.
-      embeddedOverlay = final: prev: {
+      embeddedOverlay = _final: prev: {
         # Build crun without CRIU support — removes criu (+ python3 ~102 MB)
         # from the runtime closure. CRIU checkpoint/restore is not needed on
         # an embedded gateway.

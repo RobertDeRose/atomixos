@@ -1,8 +1,6 @@
 # OpenVPN configuration for recovery management access.
 # Included in the rootfs so it survives container-layer failures.
 {
-  config,
-  lib,
   pkgs,
   ...
 }:

@@ -3,7 +3,6 @@
 # Hardware-specific settings (kernel, DTB, device paths) are in separate modules.
 {
   config,
-  developmentMode ? false,
   lib,
   pkgs,
   self,

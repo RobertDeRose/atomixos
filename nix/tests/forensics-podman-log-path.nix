@@ -30,7 +30,7 @@ nixos-lib.runTest {
   inherit hostPkgs;
 
   nodes.machine =
-    { lib, ... }:
+    { ... }:
     {
       imports = [
         ../../modules/rauc.nix

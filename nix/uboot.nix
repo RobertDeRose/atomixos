@@ -9,7 +9,6 @@
 #   - SD card removed from boot targets (security: prevent boot hijack)
 {
   pkgs,
-  lib,
 }:
 
 (pkgs.ubootRock64.override {

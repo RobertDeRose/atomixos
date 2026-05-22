@@ -19,7 +19,6 @@
 {
   pkgs,
   hostPkgs ? pkgs,
-  self,
   qemuModule,
   ...
 }:
@@ -33,7 +32,7 @@ nixos-lib.runTest {
   inherit hostPkgs;
 
   nodes.gateway =
-    { config, lib, ... }:
+    { ... }:
     {
       imports = [ qemuModule ];
 
@@ -136,7 +135,7 @@ nixos-lib.runTest {
   # LAN client — gets DHCP from gateway, should be isolated from WAN.
   # Only on VLAN 2, so it gets eth1 (not eth2) as its VLAN interface.
   nodes.lan =
-    { config, lib, ... }:
+    { ... }:
     {
       virtualisation = {
         vlans = [ 2 ];

@@ -47,12 +47,12 @@ files, admin SSH authorized keys, and other provisioning-derived runtime inputs.
 The bootstrap console is backed by a long-lived Litestar service. API routes are
 grouped by domain but still wired explicitly by the app factory:
 
-| Route | Behavior |
-|-------|----------|
-| `GET /api/health` | Returns service liveness. |
-| `GET /api/nonce` | Issues a single-use nonce for SSH-signature authentication. |
-| `POST /api/validate` | Validates a `config.toml` or config bundle without applying it. |
-| `POST /api/config` | Accepts a config source and returns `202 Accepted` with a job URL. |
+| Route                | Behavior                                                                     |
+|----------------------|------------------------------------------------------------------------------|
+| `GET /api/health`    | Returns service liveness.                                                    |
+| `GET /api/nonce`     | Issues a single-use nonce for SSH-signature authentication.                  |
+| `POST /api/validate` | Validates a `config.toml` or config bundle without applying it.              |
+| `POST /api/config`   | Accepts a config source and returns `202 Accepted` with a job URL.           |
 | `GET /api/jobs/{id}` | Returns current provisioning job status, events, result, and rollback state. |
 
 Mutating apply jobs are single-flight. Clients poll the returned job URL for

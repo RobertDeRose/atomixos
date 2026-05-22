@@ -10,7 +10,6 @@
 {
   pkgs,
   hostPkgs ? pkgs,
-  self,
   raucModule,
   qemuModule,
   ...
@@ -25,7 +24,7 @@ nixos-lib.runTest {
   inherit hostPkgs;
 
   nodes.gateway =
-    { config, lib, ... }:
+    { ... }:
     {
       imports = [
         raucModule

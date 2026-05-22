@@ -1,7 +1,6 @@
 # QEMU aarch64-virt hardware configuration for development/testing.
 # Shares all service configuration from base.nix but targets virtual hardware.
 {
-  config,
   lib,
   options,
   pkgs,

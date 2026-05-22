@@ -13,7 +13,6 @@
   lib,
   pkgs,
   self,
-  developmentMode ? false,
   ...
 }:
 

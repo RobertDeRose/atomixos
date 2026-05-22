@@ -305,18 +305,18 @@ upstream NixOS `services.rauc` module.
 
 **Custom NixOS options (`atomixos.rauc.*`):**
 
-| Option                     | Type            | Default                   | Description                       |
-|----------------------------|-----------------|---------------------------|-----------------------------------|
-| `compatible`               | string          | `"rock64"`                | RAUC compatible string            |
-| `bootloader`               | enum            | `"uboot"`                 | Backend (`uboot`, `custom`, etc.) |
-| `statusFile`               | string          | `/data/rauc/status.raucs` | RAUC status file                  |
-| `bundleFormats`            | list of strings | `[-plain, +verity]`       | Allowed bundle formats            |
-| `keyringCert`              | path or null    | `null`                    | Production RAUC CA certificate    |
-| `allowDevelopmentKeyring`  | bool            | `true`                    | Allow repository development CA   |
-| `slots.boot0`              | string          | (required)                | Boot slot A device path           |
-| `slots.boot1`              | string          | (required)                | Boot slot B device path           |
-| `slots.rootfs0`            | string          | (required)                | Rootfs slot A device path         |
-| `slots.rootfs1`            | string          | (required)                | Rootfs slot B device path         |
+| Option                    | Type            | Default                   | Description                       |
+|---------------------------|-----------------|---------------------------|-----------------------------------|
+| `compatible`              | string          | `"rock64"`                | RAUC compatible string            |
+| `bootloader`              | enum            | `"uboot"`                 | Backend (`uboot`, `custom`, etc.) |
+| `statusFile`              | string          | `/data/rauc/status.raucs` | RAUC status file                  |
+| `bundleFormats`           | list of strings | `[-plain, +verity]`       | Allowed bundle formats            |
+| `keyringCert`             | path or null    | `null`                    | Production RAUC CA certificate    |
+| `allowDevelopmentKeyring` | bool            | `true`                    | Allow repository development CA   |
+| `slots.boot0`             | string          | (required)                | Boot slot A device path           |
+| `slots.boot1`             | string          | (required)                | Boot slot B device path           |
+| `slots.rootfs0`           | string          | (required)                | Rootfs slot A device path         |
+| `slots.rootfs1`           | string          | (required)                | Rootfs slot B device path         |
 
 Production builds should set `keyringCert` to the production RAUC CA and set `allowDevelopmentKeyring = false`. When the
 development keyring is used, `/etc/issue` includes a warning that the image must not be used for production OTA updates.

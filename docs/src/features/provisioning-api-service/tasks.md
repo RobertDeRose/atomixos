@@ -12,7 +12,8 @@
 ## Package Structure
 
 - [x] Create `src/atomixos_provision/` package with `__init__.py`
-- [x] Create module files: app, auth, config, config_builder, quadlet, quadlet_sync, activation, jobs, provision, bundle, ui, server
+- [x] Create module files: app, auth, config, config_builder, quadlet,
+  quadlet_sync, activation, jobs, provision, bundle, ui, server
 - [x] Create `tests/` directory with `conftest.py`
 
 ## Config Parsing And Generation
@@ -95,7 +96,8 @@
 
 ## Cleanup And Close
 
-- [x] Move provisioning implementation into `scripts/atomixos_provision/` while preserving the `first-boot-provision` command interface
+- [x] Move provisioning implementation into `scripts/atomixos_provision/`
+  while preserving the `first-boot-provision` command interface
 - [x] Update docs and reference pages for the new package layout
 - [x] Update `docs/src/planned-features.md` to mark feature complete
 - [x] Add `boot-ui-htmx` to `planned-features.md` as a follow-up feature
@@ -115,7 +117,11 @@
 - [x] Add a `ConfigService` facade for apply and validate operations
 - [x] Keep `create_app()` route wiring explicit; do not add domain auto-discovery yet
 - [x] Add OpenAPI operation IDs, summaries, tags, and typed response metadata for API routes
-- [x] Add docs updates for `docs/src/provisioning.md`, `docs/src/data-flow.md`, `docs/src/runtime-boundaries.md`, `docs/src/reference/project-structure.md`, `docs/src/code-reference/scripts.md`, and `docs/src/testing.md` when service API behavior changes
+- [x] Add docs updates for `docs/src/provisioning.md`,
+  `docs/src/data-flow.md`, `docs/src/runtime-boundaries.md`,
+  `docs/src/reference/project-structure.md`,
+  `docs/src/code-reference/scripts.md`, and `docs/src/testing.md` when
+  service API behavior changes
 - [x] Keep Boot UI routes in `ui.py` until the `boot-ui-htmx` follow-up splits server-rendered partials
 
 ## Future Dynamic API Direction
@@ -125,7 +131,9 @@
 - [x] Design typed user partial updates such as `PATCH /api/config/users/{name}`
 - [x] Design typed network partial updates such as `PATCH /api/config/network`
 - [x] Design typed container partial updates such as `PATCH /api/config/containers/{name}`
-- [x] Ensure every partial update loads current desired state, applies a typed patch, validates full desired state, renders candidate state, promotes atomically, activates, reports job progress, and rolls back on failure
+- [x] Ensure every partial update loads current desired state, applies a typed
+  patch, validates full desired state, renders candidate state, promotes
+  atomically, activates, reports job progress, and rolls back on failure
 - [x] Do not allow partial API paths to directly mutate derived files or runtime systemd/Quadlet state
 - [x] Define normalized desired-state import and export bookends before implementing partial mutation APIs
 - [ ] Add import/export round-trip tests so API-managed state can always be backed up or cloned as a config bundle
@@ -142,7 +150,8 @@
 
 ## Explicitly Deferred
 
-- [x] Do not add SQLAlchemy, a database, or repository abstractions without a persistent data model that cannot be represented by config state
+- [x] Do not add SQLAlchemy, a database, or repository abstractions without a
+  persistent data model that cannot be represented by config state
 - [x] Do not add Redis/SAQ unless jobs must survive service restarts or run independently of the provisioning process
 - [x] Do not add OAuth/JWT auth unless SSH-signature administration stops meeting operator needs
 - [x] Do not add Vite/SPA integration for the bootstrap UI; prefer server-rendered/HTMX follow-up work

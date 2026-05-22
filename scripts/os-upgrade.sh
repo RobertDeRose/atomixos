@@ -45,6 +45,7 @@ CURRENT_VERSION=$(printf '%s\n' "$RAUC_STATUS_JSON" | jq -r '
   | .value.slot_status.bundle.version // empty
 ' 2>/dev/null || true)
 if [ -z "$CURRENT_VERSION" ] && [ -r /etc/os-release ]; then
+	# shellcheck disable=SC1091
 	CURRENT_VERSION="$(. /etc/os-release && printf '%s\n' "${VERSION_ID:-}")"
 fi
 

@@ -1,7 +1,6 @@
 # Build a signed RAUC bundle containing both boot partition image and rootfs.
 # This is a multi-slot bundle that RAUC installs atomically to the inactive slot pair.
 {
-  lib,
   stdenv,
   rauc,
   dosfstools,
@@ -12,7 +11,6 @@
   bootScript,
   signingCert,
   signingKeyPath,
-  caCert,
 }:
 
 let
