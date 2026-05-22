@@ -28,9 +28,7 @@ GZIP_MAGIC = b"\x1f\x8b"
 ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
 GZIP_BIN = os.environ.get("ATOMIXOS_GZIP", "gzip")
 ZSTD_BIN = os.environ.get("ATOMIXOS_ZSTD", "zstd")
-MAX_SOURCE_BYTES = int(
-    os.environ.get("ATOMIXOS_MAX_CONFIG_UPLOAD_BYTES", str(32 * 1024 * 1024))
-)
+MAX_SOURCE_BYTES = int(os.environ.get("ATOMIXOS_MAX_CONFIG_UPLOAD_BYTES", str(32 * 1024 * 1024)))
 MAX_DECOMPRESSED_BYTES = int(
     os.environ.get("ATOMIXOS_MAX_BUNDLE_DECOMPRESSED_BYTES", str(256 * 1024 * 1024))
 )
@@ -49,9 +47,7 @@ def detect_bundle_kind(source_bytes: bytes, filename: str = "") -> str | None:
     lowered = filename.lower()
     if lowered.endswith((".tar.gz", ".tgz")) or source_bytes.startswith(GZIP_MAGIC):
         return "tar.gz"
-    if lowered.endswith((".tar.zst", ".tar.zstd", ".tzst")) or source_bytes.startswith(
-        ZSTD_MAGIC
-    ):
+    if lowered.endswith((".tar.zst", ".tar.zstd", ".tzst")) or source_bytes.startswith(ZSTD_MAGIC):
         return "tar.zst"
     return None
 
@@ -116,8 +112,7 @@ def _decompress_to_tempfile(command: list[str], source_bytes: bytes, label: str)
                         proc.kill()
                         proc.wait(timeout=DECOMPRESS_TIMEOUT_SECONDS)
                         message = (
-                            f"bundle exceeds {MAX_DECOMPRESSED_BYTES} "
-                            "byte decompressed limit"
+                            f"bundle exceeds {MAX_DECOMPRESSED_BYTES} byte decompressed limit"
                         )
                         raise provision_error(message)
                     output_file.write(chunk)
@@ -172,9 +167,7 @@ def validate_bundle_layout(bundle_root: Path) -> None:
 # --- Extraction ---
 
 
-def extract_bundle_archive(
-    source_bytes: bytes, filename: str, destination: Path
-) -> None:
+def extract_bundle_archive(source_bytes: bytes, filename: str, destination: Path) -> None:
     """Extract a compressed tar bundle to the destination directory."""
     bundle_kind = detect_bundle_kind(source_bytes, filename)
     if bundle_kind == "tar.gz":
@@ -182,10 +175,7 @@ def extract_bundle_archive(
     elif bundle_kind == "tar.zst":
         decompressed_path = _decompress_to_tempfile([ZSTD_BIN, "-dcq"], source_bytes, ".tar.zst")
     else:
-        message = (
-            "supported bundle formats are "
-            ".tar.gz, .tgz, .tar.zst, .tar.zstd, and .tzst"
-        )
+        message = "supported bundle formats are .tar.gz, .tgz, .tar.zst, .tar.zstd, and .tzst"
         raise provision_error(message)
 
     try:
@@ -260,8 +250,7 @@ def prepare_source_path(
     bundle_kind = detect_bundle_kind(source_bytes, source_path.name)
     if bundle_kind is None:
         message = (
-            "supported import inputs are config.toml, "
-            ".tar.gz/.tgz, and .tar.zst/.tar.zstd/.tzst"
+            "supported import inputs are config.toml, .tar.gz/.tgz, and .tar.zst/.tar.zstd/.tzst"
         )
         raise provision_error(message)
     return prepare_bundle_from_bytes(source_bytes, source_path.name)

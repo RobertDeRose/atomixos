@@ -85,11 +85,7 @@ def normalize_directives(directives_table: dict, path: str) -> dict[str, list]:
 
         normalized_values: list[Any] = []
         for idx, value in enumerate(values):
-            item_path = (
-                f"{path}.{key}[{idx}]"
-                if isinstance(raw_value, list)
-                else f"{path}.{key}"
-            )
+            item_path = f"{path}.{key}[{idx}]" if isinstance(raw_value, list) else f"{path}.{key}"
             if isinstance(value, (list, dict)):
                 message = f"expected scalar value at {item_path}"
                 raise provision_error(message)
@@ -99,9 +95,7 @@ def normalize_directives(directives_table: dict, path: str) -> dict[str, list]:
     return normalized
 
 
-def rewrite_rootless_publish_port(
-    value: str, container_name: str, warnings: list[str]
-) -> str:
+def rewrite_rootless_publish_port(value: str, container_name: str, warnings: list[str]) -> str:
     """Rewrite non-loopback PublishPort binds to 127.0.0.1 for rootless containers."""
     if value.startswith("["):
         host_end = value.find("]")
@@ -140,17 +134,13 @@ def rewrite_rootless_publish_port(
     return f"127.0.0.1:{remainder}"
 
 
-def render_section(
-    section_name: str, directives: dict[str, list], config_root: Path
-) -> list[str]:
+def render_section(section_name: str, directives: dict[str, list], config_root: Path) -> list[str]:
     """Render a single Quadlet section as INI-style lines."""
     lines = [f"[{section_name}]"]
     for key, values in directives.items():
         for value in values:
             rendered_value = (
-                substitute_tokens(value, config_root)
-                if isinstance(value, str)
-                else value
+                substitute_tokens(value, config_root) if isinstance(value, str) else value
             )
             lines.append(f"{key}={format_scalar(rendered_value)}")
     lines.append("")
@@ -185,9 +175,7 @@ def render_containers(
             {"privileged", "Unit", "Container", "Install"},
             {"privileged", "Container"},
         )
-        privileged = require_bool(
-            sections.get("privileged"), f"{container_path}.privileged"
-        )
+        privileged = require_bool(sections.get("privileged"), f"{container_path}.privileged")
         container_directives = normalize_directives(
             require_mapping(sections.get("Container"), f"{container_path}.Container"),
             f"{container_path}.Container",
@@ -195,16 +183,12 @@ def render_containers(
 
         image_values = container_directives.get("Image")
         if image_values is None or len(image_values) != 1:
-            message = (
-                f"{container_path}.Container.Image must be a single string value"
-            )
+            message = f"{container_path}.Container.Image must be a single string value"
             raise provision_error(message)
         require_string(image_values[0], f"{container_path}.Container.Image")
 
         if privileged:
-            if "Network" in container_directives and container_directives[
-                "Network"
-            ] != ["host"]:
+            if "Network" in container_directives and container_directives["Network"] != ["host"]:
                 warnings.append(
                     f"container.{container_name}.Container.Network overridden "
                     "to host for privileged container"
@@ -227,9 +211,7 @@ def render_containers(
                         f"{container_path}.Container.PublishPort[{idx}]",
                     )
                     rewritten_ports.append(
-                        rewrite_rootless_publish_port(
-                            port_value, container_name, warnings
-                        )
+                        rewrite_rootless_publish_port(port_value, container_name, warnings)
                     )
                 container_directives["PublishPort"] = rewritten_ports
             runtime_mode = "rootless"
@@ -246,21 +228,21 @@ def render_containers(
 
         if "Install" in sections:
             install_directives = normalize_directives(
-                require_mapping(
-                    sections["Install"], f"{container_path}.Install"
-                ),
+                require_mapping(sections["Install"], f"{container_path}.Install"),
                 f"{container_path}.Install",
             )
             lines.extend(render_section("Install", install_directives, config_root))
 
         filename = f"{container_name}{CONTAINER_SUFFIX}"
         rendered[filename] = "\n".join(lines).rstrip() + "\n"
-        runtime_units.append({
-            "name": container_name,
-            "filename": filename,
-            "service": f"{container_name}.service",
-            "mode": runtime_mode,
-        })
+        runtime_units.append(
+            {
+                "name": container_name,
+                "filename": filename,
+                "service": f"{container_name}.service",
+                "mode": runtime_mode,
+            }
+        )
 
     return rendered, runtime_units, warnings
 
@@ -277,9 +259,7 @@ def render_networks(
     for network_name, raw_sections in network_table.items():
         validate_name(network_name)
         network_path = f"network.{network_name}"
-        sections = require_allowed_keys(
-            raw_sections, network_path, {"Network"}, {"Network"}
-        )
+        sections = require_allowed_keys(raw_sections, network_path, {"Network"}, {"Network"})
         network_directives = normalize_directives(
             require_mapping(sections.get("Network"), f"{network_path}.Network"),
             f"{network_path}.Network",
@@ -288,12 +268,14 @@ def render_networks(
         lines = render_section("Network", network_directives, config_root)
         filename = f"{network_name}{NETWORK_SUFFIX}"
         rendered[filename] = "\n".join(lines).rstrip() + "\n"
-        runtime_units.append({
-            "name": network_name,
-            "filename": filename,
-            "service": f"{network_name}-network.service",
-            "mode": "rootful",
-        })
+        runtime_units.append(
+            {
+                "name": network_name,
+                "filename": filename,
+                "service": f"{network_name}-network.service",
+                "mode": "rootful",
+            }
+        )
 
     return rendered, runtime_units
 
@@ -310,9 +292,7 @@ def render_volumes(
     for volume_name, raw_sections in volume_table.items():
         validate_name(volume_name)
         volume_path = f"volume.{volume_name}"
-        sections = require_allowed_keys(
-            raw_sections, volume_path, {"Volume"}, {"Volume"}
-        )
+        sections = require_allowed_keys(raw_sections, volume_path, {"Volume"}, {"Volume"})
         volume_directives = normalize_directives(
             require_mapping(sections.get("Volume"), f"{volume_path}.Volume"),
             f"{volume_path}.Volume",
@@ -323,12 +303,14 @@ def render_volumes(
         rendered[filename] = "\n".join(lines).rstrip() + "\n"
         modes = sorted((volume_modes or {}).get(volume_name, {"rootful"}))
         for mode in modes:
-            runtime_units.append({
-                "name": volume_name,
-                "filename": filename,
-                "service": f"{volume_name}-volume.service",
-                "mode": mode,
-            })
+            runtime_units.append(
+                {
+                    "name": volume_name,
+                    "filename": filename,
+                    "service": f"{volume_name}-volume.service",
+                    "mode": mode,
+                }
+            )
 
     return rendered, runtime_units
 
@@ -345,9 +327,7 @@ def render_builds(
     for build_name, raw_sections in build_table.items():
         validate_name(build_name)
         build_path = f"build.{build_name}"
-        sections = require_allowed_keys(
-            raw_sections, build_path, {"Build"}, {"Build"}
-        )
+        sections = require_allowed_keys(raw_sections, build_path, {"Build"}, {"Build"})
         build_directives = normalize_directives(
             require_mapping(sections.get("Build"), f"{build_path}.Build"),
             f"{build_path}.Build",
@@ -358,11 +338,13 @@ def render_builds(
         rendered[filename] = "\n".join(lines).rstrip() + "\n"
         modes = sorted((build_modes or {}).get(build_name, {"rootful"}))
         for mode in modes:
-            runtime_units.append({
-                "name": build_name,
-                "filename": filename,
-                "service": f"{build_name}-build.service",
-                "mode": mode,
-            })
+            runtime_units.append(
+                {
+                    "name": build_name,
+                    "filename": filename,
+                    "service": f"{build_name}-build.service",
+                    "mode": mode,
+                }
+            )
 
     return rendered, runtime_units

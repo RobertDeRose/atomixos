@@ -168,9 +168,7 @@ class TestRenderVolumes:
 
     def test_rootless_mode_override(self):
         table = {"data": {"Volume": {"Driver": "local"}}}
-        _rendered, runtime = render_volumes(
-            table, Path("/data/config"), {"data": {"rootless"}}
-        )
+        _rendered, runtime = render_volumes(table, Path("/data/config"), {"data": {"rootless"}})
         assert runtime[0]["mode"] == "rootless"
 
 
@@ -183,7 +181,5 @@ class TestRenderBuilds:
 
     def test_rootless_mode_override(self):
         table = {"custom": {"Build": {"File": "Containerfile"}}}
-        _rendered, runtime = render_builds(
-            table, Path("/data/config"), {"custom": {"rootless"}}
-        )
+        _rendered, runtime = render_builds(table, Path("/data/config"), {"custom": {"rootless"}})
         assert runtime[0]["mode"] == "rootless"

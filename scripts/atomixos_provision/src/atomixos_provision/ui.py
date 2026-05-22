@@ -143,7 +143,6 @@ def uploaded_config_text(payload: bytes, filename: str) -> str:
     return ""
 
 
-
 async def _require_unprovisioned(connection, _: Any) -> None:
     """Guard that rejects requests once the device is provisioned."""
     config_root: Path = connection.app.state.config_root
@@ -205,6 +204,7 @@ async def apply_form(request: Request, state: State) -> Response[str]:
         config_text = uploaded_config_text(payload, filename)
 
     try:
+
         async def provision_work(job):
             return await apply_config_bytes(
                 payload, filename, config_root, job, allow_reapply=False
@@ -235,9 +235,7 @@ async def apply_form(request: Request, state: State) -> Response[str]:
     except ProvisionError as exc:
         rollback = getattr(exc, "rollback_status", None)
         rollback_html = (
-            f"<p><strong>Rollback status:</strong> {html.escape(rollback)}</p>"
-            if rollback
-            else ""
+            f"<p><strong>Rollback status:</strong> {html.escape(rollback)}</p>" if rollback else ""
         )
         return Response(
             f"<html><body><h1>Error</h1><p>{html.escape(str(exc))}</p>"

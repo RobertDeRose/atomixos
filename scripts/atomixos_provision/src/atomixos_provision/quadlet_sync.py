@@ -159,9 +159,7 @@ def sync_quadlet_units(
     # Sync rootless units
     if rootless_target is None:
         if units_by_mode["rootless"]:
-            message = (
-                "rootless target path is required when rootless units are present"
-            )
+            message = "rootless target path is required when rootless units are present"
             raise provision_error(message)
         return
 

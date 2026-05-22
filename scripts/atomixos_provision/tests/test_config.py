@@ -26,8 +26,7 @@ from atomixos_provision.config import (
 )
 
 VALID_ED25519_KEY = (
-    "ssh-ed25519 "
-    "AAAAC3NzaC1lZDI1NTE5AAAAIDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw"
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw"
 )
 
 # --- Fixtures ---
@@ -37,9 +36,7 @@ VALID_ED25519_KEY = (
 def schema_path(tmp_path: Path) -> Path:
     """Locate the real schema file and copy it for test use."""
     repo_schema = (
-        Path(__file__).resolve().parent.parent.parent.parent
-        / "schemas"
-        / "config.schema.json"
+        Path(__file__).resolve().parent.parent.parent.parent / "schemas" / "config.schema.json"
     )
     if not repo_schema.exists():
         pytest.skip("config.schema.json not found in repo; cannot run schema tests")
@@ -186,7 +183,10 @@ class TestRequireNtpServerList:
 
 class TestRequireHttpsUrl:
     def test_accepts_https_base_url(self):
-        assert require_https_url("https://updates.example.com/base/", "url") == "https://updates.example.com/base"
+        assert (
+            require_https_url("https://updates.example.com/base/", "url")
+            == "https://updates.example.com/base"
+        )
 
     def test_rejects_query_and_fragment(self):
         with pytest.raises(ProvisionError, match="query string or fragment"):
@@ -243,31 +243,37 @@ class TestValidateUsername:
 
 class TestLoadUsers:
     def test_valid(self):
-        users, keys = load_users({
-            "admin": {"isAdmin": True, "ssh_key": VALID_ED25519_KEY},
-        })
+        users, keys = load_users(
+            {
+                "admin": {"isAdmin": True, "ssh_key": VALID_ED25519_KEY},
+            }
+        )
         assert users["admin"]["isAdmin"] is True
         assert keys == [VALID_ED25519_KEY]
 
     def test_shell(self):
-        users, _ = load_users({
-            "admin": {
-                "isAdmin": True,
-                "ssh_key": VALID_ED25519_KEY,
-                "shell": "bash",
-            },
-        })
+        users, _ = load_users(
+            {
+                "admin": {
+                    "isAdmin": True,
+                    "ssh_key": VALID_ED25519_KEY,
+                    "shell": "bash",
+                },
+            }
+        )
         assert users["admin"]["shell"] == "bash"
 
     def test_invalid_shell(self):
         with pytest.raises(ProvisionError, match="shell must be one of"):
-            load_users({
-                "admin": {
-                    "isAdmin": True,
-                    "ssh_key": VALID_ED25519_KEY,
-                    "shell": "/bin/bash",
-                },
-            })
+            load_users(
+                {
+                    "admin": {
+                        "isAdmin": True,
+                        "ssh_key": VALID_ED25519_KEY,
+                        "shell": "/bin/bash",
+                    },
+                }
+            )
 
     def test_no_admin_key(self):
         with pytest.raises(ProvisionError, match="at least one admin"):
@@ -297,9 +303,7 @@ class TestLoadFirewallInbound:
         assert load_firewall_inbound(None) == {}
 
     def test_with_ports(self):
-        result = load_firewall_inbound({
-            "firewall": {"inbound": {"wan": {"tcp": [80, 443]}}}
-        })
+        result = load_firewall_inbound({"firewall": {"inbound": {"wan": {"tcp": [80, 443]}}}})
         assert result == {"wan": {"tcp": [80, 443]}}
 
     def test_rejects_reserved_wan_bootstrap_port(self):
@@ -307,9 +311,7 @@ class TestLoadFirewallInbound:
             load_firewall_inbound({"firewall": {"inbound": {"wan": {"tcp": [8080]}}}})
 
     def test_drops_explicit_empty_lan_scope(self):
-        result = load_firewall_inbound({
-            "firewall": {"inbound": {"lan": {"tcp": [], "udp": []}}}
-        })
+        result = load_firewall_inbound({"firewall": {"inbound": {"lan": {"tcp": [], "udp": []}}}})
         assert result == {}
 
 
@@ -364,9 +366,7 @@ class TestLoadConfig:
         with pytest.raises(ProvisionError, match="invalid TOML"):
             load_config(bad)
 
-    def test_rejects_non_current_version(
-        self, tmp_path: Path, schema_path: Path, monkeypatch
-    ):
+    def test_rejects_non_current_version(self, tmp_path: Path, schema_path: Path, monkeypatch):
         monkeypatch.setenv("ATOMIXOS_CONFIG_SCHEMA", str(schema_path))
         config = tmp_path / "config.toml"
         config.write_text(

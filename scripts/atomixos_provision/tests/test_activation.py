@@ -263,9 +263,7 @@ class TestReportRuntimeServices:
             calls.append((service, mode))
             return subprocess.CompletedProcess([], 0 if service == "web.service" else 3)
 
-        monkeypatch.setattr(
-            "atomixos_provision.activation._check_service", fake_check_service
-        )
+        monkeypatch.setattr("atomixos_provision.activation._check_service", fake_check_service)
         progress = ProgressRecorder()
 
         statuses = report_runtime_services(tmp_path, progress)
@@ -293,9 +291,7 @@ class TestReportRuntimeServices:
         def fake_check_service(_service, _mode):
             raise FileNotFoundError
 
-        monkeypatch.setattr(
-            "atomixos_provision.activation._check_service", fake_check_service
-        )
+        monkeypatch.setattr("atomixos_provision.activation._check_service", fake_check_service)
 
         assert report_runtime_services(tmp_path) == {"web.service": "unknown"}
 
@@ -452,6 +448,5 @@ class TestCompleteReapply:
         assert success is False
         assert rollback_status == "failed"
         assert any(
-            "rollback activation/health failed: web.service" in failure
-            for failure in failures
+            "rollback activation/health failed: web.service" in failure for failure in failures
         )

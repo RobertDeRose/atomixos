@@ -191,9 +191,7 @@ class TestPrepareSourcePath:
 
 class TestPrepareSourceBytes:
     def test_plain_toml(self):
-        tmpdir, config_path, files_path = prepare_source_bytes(
-            b"version = 1", "config.toml"
-        )
+        tmpdir, config_path, files_path = prepare_source_bytes(b"version = 1", "config.toml")
         assert config_path.read_text() == "version = 1"
         assert files_path is None
         tmpdir.cleanup()

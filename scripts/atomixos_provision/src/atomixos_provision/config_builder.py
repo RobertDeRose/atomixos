@@ -58,9 +58,7 @@ def generated_required_units(quadlet: str) -> list[str]:
         if isinstance(containers, dict):
             container = containers.get("container")
     if not isinstance(container, dict) or not container:
-        message = (
-            "container TOML snippet must define at least one [container.<name>] table"
-        )
+        message = "container TOML snippet must define at least one [container.<name>] table"
         raise provision_error(message)
 
     return [validate_name(name) for name in container]
@@ -129,11 +127,7 @@ def build_config_from_form(form: dict[str, str]) -> str:
     Raises:
         ProvisionError: If form fields are invalid.
     """
-    ssh_keys = [
-        line.strip()
-        for line in form.get("ssh_keys", "").splitlines()
-        if line.strip()
-    ]
+    ssh_keys = [line.strip() for line in form.get("ssh_keys", "").splitlines() if line.strip()]
     if not ssh_keys:
         raise provision_error("at least one SSH public key is required")
 
@@ -144,23 +138,13 @@ def build_config_from_form(form: dict[str, str]) -> str:
 
     os_upgrade_server_url = form.get("os_upgrade_server_url", "").strip()
     gateway_cidr = (
-        form.get("gateway_cidr", DEFAULT_LAN_GATEWAY_CIDR).strip()
-        or DEFAULT_LAN_GATEWAY_CIDR
+        form.get("gateway_cidr", DEFAULT_LAN_GATEWAY_CIDR).strip() or DEFAULT_LAN_GATEWAY_CIDR
     )
-    dhcp_start = (
-        form.get("dhcp_start", DEFAULT_LAN_DHCP_START).strip()
-        or DEFAULT_LAN_DHCP_START
-    )
-    dhcp_end = (
-        form.get("dhcp_end", DEFAULT_LAN_DHCP_END).strip() or DEFAULT_LAN_DHCP_END
-    )
-    lan_domain = (
-        form.get("lan_domain", DEFAULT_LAN_DOMAIN).strip() or DEFAULT_LAN_DOMAIN
-    )
+    dhcp_start = form.get("dhcp_start", DEFAULT_LAN_DHCP_START).strip() or DEFAULT_LAN_DHCP_START
+    dhcp_end = form.get("dhcp_end", DEFAULT_LAN_DHCP_END).strip() or DEFAULT_LAN_DHCP_END
+    lan_domain = form.get("lan_domain", DEFAULT_LAN_DOMAIN).strip() or DEFAULT_LAN_DOMAIN
     gateway_aliases = [
-        line.strip()
-        for line in form.get("gateway_aliases", "").splitlines()
-        if line.strip()
+        line.strip() for line in form.get("gateway_aliases", "").splitlines() if line.strip()
     ]
     hostname_pattern = (
         form.get("hostname_pattern", DEFAULT_LAN_HOSTNAME_PATTERN).strip()
@@ -168,11 +152,7 @@ def build_config_from_form(form: dict[str, str]) -> str:
     )
     quadlet = form.get("quadlet", "").strip()
     quadlet = normalize_quadlet_headers(quadlet)
-    required = [
-        line.strip()
-        for line in form.get("required", "").splitlines()
-        if line.strip()
-    ]
+    required = [line.strip() for line in form.get("required", "").splitlines() if line.strip()]
     if not required:
         required = generated_required_units(quadlet)
 
@@ -208,10 +188,12 @@ def build_config_from_form(form: dict[str, str]) -> str:
     lan_text = "\n".join(lan_lines)
 
     # Build NTP section
-    ntp_text = "\n".join([
-        "[network.ntp]",
-        f"servers = {json.dumps(DEFAULT_NTP_SERVERS)}",
-    ])
+    ntp_text = "\n".join(
+        [
+            "[network.ntp]",
+            f"servers = {json.dumps(DEFAULT_NTP_SERVERS)}",
+        ]
+    )
 
     # Build OS upgrade section
     os_upgrade_text = ""
@@ -223,22 +205,26 @@ def build_config_from_form(form: dict[str, str]) -> str:
 
     # Assemble final config
     sections = [
-        "\n".join([
-            "version = 1",
-            "",
-            "[users.admin]",
-            "isAdmin = true",
-            f"ssh_key = {json.dumps(ssh_keys[0] if ssh_keys else '')}",
-        ]),
+        "\n".join(
+            [
+                "version = 1",
+                "",
+                "[users.admin]",
+                "isAdmin = true",
+                f"ssh_key = {json.dumps(ssh_keys[0] if ssh_keys else '')}",
+            ]
+        ),
         generated_extra_users(ssh_keys[1:]),
         firewall_text,
         lan_text,
         ntp_text,
         os_upgrade_text,
-        "\n".join([
-            "[activation]",
-            f"required = {json.dumps(required)}",
-        ]),
+        "\n".join(
+            [
+                "[activation]",
+                f"required = {json.dumps(required)}",
+            ]
+        ),
         quadlet,
     ]
     config_text = "\n\n".join(section for section in sections if section).strip() + "\n"

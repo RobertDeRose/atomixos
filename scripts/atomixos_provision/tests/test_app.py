@@ -1,6 +1,5 @@
 """Tests for atomixos_provision.app routes."""
 
-
 from litestar.testing import AsyncTestClient
 
 from atomixos_provision.app import create_app
@@ -31,7 +30,7 @@ async def test_auth_error_response_uses_framework_shape(tmp_path):
     assert "authentication required" in str(body)
 
 
-async def test_config_submission_includes_job_url_and_poll_token(tmp_path, monkeypatch):
+async def test_config_submission_includes_job_url(tmp_path, monkeypatch):
     async def fake_apply_config_bytes(
         body, filename, config_root, progress=None, allow_reapply=True
     ):
@@ -58,11 +57,11 @@ async def test_config_submission_includes_job_url_and_poll_token(tmp_path, monke
     body = response.json()
     assert body["state"] == "submitted"
     assert body["job_url"] == f"/api/jobs/{body['job_id']}"
-    assert len(body["poll_token"]) > 20
+    assert "poll_token" not in body
     assert response.headers["location"] == body["job_url"]
 
 
-async def test_first_boot_job_poll_token_works_after_config_exists(tmp_path, monkeypatch):
+async def test_first_boot_job_polling_uses_job_url_after_config_exists(tmp_path, monkeypatch):
     async def fake_apply_config_bytes(
         body, filename, config_root, progress=None, allow_reapply=True
     ):
@@ -82,12 +81,8 @@ async def test_first_boot_job_poll_token_works_after_config_exists(tmp_path, mon
             headers={"x-atomixos-bootstrap-token": app.state.bootstrap_token},
         )
         body = submit.json()
-        missing_token = await client.get(body["job_url"])
-        response = await client.get(
-            body["job_url"], headers={"x-atomixos-poll-token": body["poll_token"]}
-        )
+        response = await client.get(body["job_url"])
 
-    assert missing_token.status_code == 401
     assert response.status_code == 200
 
 
@@ -205,10 +200,12 @@ async def test_openapi_documents_config_upload_and_auth_headers(tmp_path):
     job_headers = {param["name"] for param in get_job["parameters"]}
     assert "x-config-filename" in submit_headers
     assert "x-atomixos-signature" in submit_headers
+    assert "x-atomixos-key-id" not in submit_headers
     assert "x-config-filename" in validate_headers
     assert "x-atomixos-signature" in validate_headers
-    assert "x-atomixos-poll-token" in job_headers
-    assert "x-atomixos-signature" in job_headers
+    assert "x-atomixos-key-id" not in validate_headers
+    assert "x-atomixos-poll-token" not in job_headers
+    assert "x-atomixos-signature" not in job_headers
     auth_error_ref = submit["responses"]["401"]["content"]["application/json"]["schema"]["$ref"]
     assert "FrameworkErrorResponseBody" in auth_error_ref
     location_header = submit["responses"]["202"]["headers"]["Location"]

@@ -162,7 +162,7 @@ OAuth, Vite, and email plugins are not part of this foundation.
 | GET    | `/`                     | none                                      | HTML     | Boot UI page                           |
 | GET    | `/api/nonce`            | none                                      | JSON     | Issue single-use nonce for auth        |
 | GET    | `/api/health`           | none                                      | JSON     | Liveness check                         |
-| GET    | `/api/jobs/{id}`        | SSH sig or first-boot poll token          | JSON     | Poll async job status                  |
+| GET    | `/api/jobs/{id}`        | job UUID                                  | JSON     | Poll async job status                  |
 | GET    | `/assets/atomixos.png` | none                                      | image    | Static logo                            |
 | POST   | `/api/config`           | SSH sig (provisioned) / none (first-boot) | JSON     | Submit config, returns job ID (async)  |
 | POST   | `/api/validate`         | SSH sig                                   | JSON     | Validate config without applying       |
@@ -191,10 +191,10 @@ All endpoints share a common core:
 - `/api/config` uses the async job manager; returns immediately with job ID.
 - `/apply` calls the provision core synchronously for first-boot upload/paste only.
 
-`POST /api/config` returns `202 Accepted` with `job_id`, `job_url`, optional
-first-boot `poll_token`, and a `Location` header pointing at `/api/jobs/{id}`.
-Clients must poll the job resource for final success, failure, deployment progress,
-rollback status, and forwarding URL.
+`POST /api/config` returns `202 Accepted` with `job_id`, initial `state`,
+`job_url`, and a `Location` header pointing at `/api/jobs/{id}`. Clients must
+poll the job resource for final success, failure, deployment progress, rollback
+status, and forwarding URL.
 
 ### Control-Plane Model
 

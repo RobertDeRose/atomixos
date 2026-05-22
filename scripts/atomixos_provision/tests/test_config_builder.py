@@ -1,6 +1,5 @@
 """Tests for atomixos_provision.config_builder module."""
 
-
 import pytest
 
 from atomixos_provision.config import ProvisionError
@@ -80,7 +79,7 @@ class TestBuildConfigFromForm:
             "ssh_keys": "ssh-ed25519 AAAA test@test",
             "quadlet": (
                 "[container.myapp]\nprivileged = false\n\n"
-                "[container.myapp.Container]\nImage = \"alpine\"\n"
+                '[container.myapp.Container]\nImage = "alpine"\n'
             ),
         }
         result = build_config_from_form(form)
@@ -95,8 +94,7 @@ class TestBuildConfigFromForm:
             "ssh_keys": "ssh-ed25519 AAAA test",
             "wan_tcp": "80\n443",
             "quadlet": (
-                "[container.app]\nprivileged = false\n\n"
-                "[container.app.Container]\nImage = \"x\"\n"
+                '[container.app]\nprivileged = false\n\n[container.app.Container]\nImage = "x"\n'
             ),
         }
         result = build_config_from_form(form)
@@ -108,8 +106,7 @@ class TestBuildConfigFromForm:
             "ssh_keys": "ssh-ed25519 AAAA test",
             "os_upgrade_server_url": "https://updates.example.com",
             "quadlet": (
-                "[container.app]\nprivileged = false\n\n"
-                "[container.app.Container]\nImage = \"x\"\n"
+                '[container.app]\nprivileged = false\n\n[container.app.Container]\nImage = "x"\n'
             ),
         }
         result = build_config_from_form(form)
@@ -121,7 +118,7 @@ class TestBuildConfigFromForm:
             "ssh_keys": "ssh-ed25519 AAAA test",
             "quadlet": (
                 "[container.app]\nprivileged = false\n\n"
-                "[container.app.Container]\nImage = \"x\"\n\n"
+                '[container.app.Container]\nImage = "x"\n\n'
                 "[network.mynet]\n\n[network.mynet.Network]\n"
             ),
         }
@@ -134,7 +131,7 @@ class TestBuildConfigFromForm:
             "ssh_keys": "ssh-ed25519 AAAA test",
             "quadlet": (
                 "[containers.container.app]\nprivileged = false\n\n"
-                "[containers.container.app.Container]\nImage = \"x\"\n"
+                '[containers.container.app.Container]\nImage = "x"\n'
             ),
         }
         result = build_config_from_form(form)

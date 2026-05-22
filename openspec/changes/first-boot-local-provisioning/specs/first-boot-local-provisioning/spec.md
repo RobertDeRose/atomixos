@@ -195,8 +195,7 @@ CSRF token; provisioned reapply clients SHALL use SSH signature authentication.
 
 - **WHEN** a local client POSTs `config.toml` to `/api/config`
 - **THEN** the bootstrap service validates the payload and accepts an apply job
-- **AND** the response is JSON containing `job_id`, `job_url`, and first-boot `poll_token` when authentication is not yet
-  configured
+- **AND** the response is JSON containing `job_id`, initial `state`, and `job_url`
 
 ### Requirement: Bootstrap endpoint narrows after initial provisioning
 

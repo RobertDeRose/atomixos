@@ -47,6 +47,7 @@ class ProgressReporter(Protocol):
         self, name: str, detail: str | None = None, **fields: str | int | float | bool
     ) -> None: ...
 
+
 # --- Constants ---
 
 FIREWALL_INBOUND_FILENAME = "firewall-inbound.json"
@@ -487,9 +488,7 @@ def _provision_sync(
         tmpdir.cleanup()
 
 
-def _validate_sync(
-    payload: bytes, filename: str, config_root: Path
-) -> dict[str, Any]:
+def _validate_sync(payload: bytes, filename: str, config_root: Path) -> dict[str, Any]:
     """Synchronous validation (no state changes)."""
     tmpdir, config_path, _files_path = prepare_source_bytes(payload, filename)
     try:

@@ -60,14 +60,16 @@ def create_app(
             validate_config,
             *ui_routes(),
         ],
-        state=State({
-            "config_root": config_root,
-            "nonce_store": nonce_store,
-            "job_manager": job_manager,
-            "signer_state": signer_state,
-            "settings": settings,
-            "bootstrap_token": secrets.token_urlsafe(32),
-        }),
+        state=State(
+            {
+                "config_root": config_root,
+                "nonce_store": nonce_store,
+                "job_manager": job_manager,
+                "signer_state": signer_state,
+                "settings": settings,
+                "bootstrap_token": secrets.token_urlsafe(32),
+            }
+        ),
         dependencies={
             "settings": Provide(provide_settings, sync_to_thread=False),
             "config_root": Provide(provide_config_root, sync_to_thread=False),

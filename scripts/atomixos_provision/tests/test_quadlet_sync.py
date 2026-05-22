@@ -64,9 +64,7 @@ class TestSyncQuadletUnits:
         target = tmp_path / "rootful"
         target.mkdir()
         (target / "old.container").write_text("stale")
-        (target / ".atomixos-managed-quadlets.json").write_text(
-            json.dumps(["old.container"])
-        )
+        (target / ".atomixos-managed-quadlets.json").write_text(json.dumps(["old.container"]))
         sync_quadlet_units(config_root, target)
         assert not (target / "old.container").exists()
         assert (target / "myapp.container").exists()

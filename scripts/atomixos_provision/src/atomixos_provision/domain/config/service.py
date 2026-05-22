@@ -23,9 +23,7 @@ class ConfigService:
     ) -> dict[str, Any]:
         from atomixos_provision.provision import apply_config_bytes
 
-        return await apply_config_bytes(
-            body, filename, self.config_root, progress, allow_reapply
-        )
+        return await apply_config_bytes(body, filename, self.config_root, progress, allow_reapply)
 
     async def validate_bytes(self, body: bytes, filename: str) -> dict[str, Any]:
         from atomixos_provision.provision import validate_config_bytes

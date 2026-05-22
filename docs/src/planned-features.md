@@ -44,6 +44,14 @@ Quadlet containers on a persistent `/data` partition.
 
 - `POST /api/config` is the programmatic provisioning endpoint; same validation as the
   web console
+- Fresh first-boot `POST /api/config` is intentionally tokenless for programmatic
+  provisioning; the bootstrap token is a Boot UI CSRF control for `/apply`, not
+  operator authentication
+- Provisioned re-apply requires SSH signature authentication; `/api/validate` also
+  requires SSH authentication
+- Bootstrap exposure is WAN/LAN before initial provisioning and LAN-only after
+  successful provisioning; runtime socket rebinding must use `/run/systemd/system`
+  drop-ins because the rootfs is read-only
 - `quadlet-runtime.json` tracks all rendered units (containers, networks, volumes) with
   mode (rootful/rootless) for sync-quadlet
 - Network and volume Quadlet units are always rootful
@@ -52,6 +60,10 @@ Quadlet containers on a persistent `/data` partition.
 - Bundle imports support `files/` directory for operator payload files
 - Re-apply uses authentication, not a reset token
 - Full `/data` wipe is separate from config re-apply
+- WAN TCP `8080` is reserved for bootstrap exposure and cannot be configured as a
+  provisioned WAN inbound rule
+- The repository development RAUC CA is an explicit development convenience only;
+  production fail-closed keyring enforcement remains planned
 
 ## Open Questions
 
@@ -97,6 +109,14 @@ Quadlet containers on a persistent `/data` partition.
   rollback handling. Future changes should build on the same validate, render,
   promote, activate, and rollback pipeline instead of adding parallel mutation
   paths.
+- **Bootstrap API and UI auth split**: Resolved by keeping programmatic first-boot
+  `/api/config` unauthenticated while requiring the Boot UI bootstrap token for
+  browser form submission. After provisioning, unauthenticated mutation routes are
+  unavailable and re-apply requires SSH signatures.
+- **Bootstrap exposure lifecycle**: Resolved by keeping WAN bootstrap exposure
+  only until initial provisioning completes, then rebinding the bootstrap socket
+  to LAN through runtime systemd drop-ins and preserving WAN exposure while an
+  initial promotion marker is pending.
 
 ## Feature Map
 
@@ -365,7 +385,7 @@ Quadlet containers on a persistent `/data` partition.
 - Requirements:
   - Keep first-boot UI available only before provisioning completes
   - Preserve upload and paste config paths
-  - Show async job progress using the existing first-boot poll token
+  - Show async job progress using the returned job URL
   - Reuse server-rendered fragments; no SPA/Vite dependency
   - Maintain Host/Origin/Referer protections and bootstrap token checks
 - Constraints:

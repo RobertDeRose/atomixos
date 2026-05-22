@@ -29,7 +29,8 @@
 - [x] Implement nonce issuance, TTL, and single-use consumption
 - [x] Implement Litestar guards with first-boot bypass
 - [x] Preserve `ssh-keygen -Y verify` subprocess verification
-- [x] Require SSH auth after provisioning for `/api/config`, `/api/validate`, and job polling
+- [x] Require SSH auth after provisioning for `/api/config` and `/api/validate`
+- [x] Keep job polling authorized by unguessable job UUID only
 - [x] Add tests covering valid signatures, invalid signatures, expired nonces, replay, and unprovisioned bypass
 
 ## Quadlet Rendering And Sync
@@ -147,6 +148,7 @@
 - [x] Run the relevant NixOS VM tests after controller/service refactors
 - [ ] Verify rootfs closure remains within the 1 GB squashfs budget after dependency changes
 - [x] Search docs for stale synchronous `/api/config` response descriptions after API changes
+- [x] T999: Reconcile final implementation, feature specs, and docs before close-out
 
 ## Explicitly Deferred
 

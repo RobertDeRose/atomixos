@@ -51,14 +51,12 @@ class SubmitConfigResponse:
     job_id: str
     state: str
     job_url: str
-    poll_token: str | None = None
 
 
 class SubmitConfigResponseBody(TypedDict):
     job_id: str
     state: str
     job_url: str
-    poll_token: NotRequired[str]
 
 
 @dataclass(frozen=True)

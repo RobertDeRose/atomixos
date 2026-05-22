@@ -115,9 +115,7 @@ class TestBuildAllowedSigners:
         assert result is None
 
     def test_with_keys(self, tmp_path):
-        (tmp_path / "admin-signers").write_text(
-            "ssh-ed25519 AAAA key1\nssh-rsa BBBB key2\n"
-        )
+        (tmp_path / "admin-signers").write_text("ssh-ed25519 AAAA key1\nssh-rsa BBBB key2\n")
         result = build_allowed_signers(tmp_path)
         assert result is not None
         content = Path(result).read_text()
@@ -146,10 +144,12 @@ class _Headers(dict):
 class _Connection:
     def __init__(self, tmp_path, signature: str):
         (tmp_path / "admin-signers").write_text("ssh-ed25519 AAAA test\n")
-        self.headers = _Headers({
-            "x-atomixos-nonce": "nonce",
-            "x-atomixos-signature": signature,
-        })
+        self.headers = _Headers(
+            {
+                "x-atomixos-nonce": "nonce",
+                "x-atomixos-signature": signature,
+            }
+        )
         self.url = type("URL", (), {"path": "/api/config"})()
         self.app = type(
             "App",

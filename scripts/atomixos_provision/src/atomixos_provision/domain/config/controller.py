@@ -1,7 +1,6 @@
 """Config API routes."""
 
 import re
-import secrets
 from dataclasses import dataclass
 
 from litestar import Request, post
@@ -55,12 +54,6 @@ _CONFIG_FILENAME_HEADER = Parameter(
     description="Original filename used to detect config.toml or supported bundle formats.",
 )
 _SSH_AUTH_PARAMETERS = [
-    Parameter(
-        name="x-atomixos-key-id",
-        param_in="header",
-        schema=_STRING_SCHEMA,
-        description="Admin signer key identifier.",
-    ),
     Parameter(
         name="x-atomixos-nonce",
         param_in="header",
@@ -152,12 +145,11 @@ async def submit_config(
         enforce_bootstrap_browser_origin(request)
     body = await request.body()
     filename = _sanitize_filename(request.headers.get("x-config-filename", "config.toml"))
-    poll_token = None if allow_reapply else secrets.token_urlsafe(32)
 
     async def provision_work(job):
         return await config_service.apply_bytes(body, filename, job, allow_reapply)
 
-    job = await job_manager.submit(provision_work, poll_token=poll_token)
+    job = await job_manager.submit(provision_work)
     if job is None:
         return api_error_response(ConflictError("a provision job is already running"))
 
@@ -168,7 +160,6 @@ async def submit_config(
                 job_id=job.id,
                 state=job.state.value,
                 job_url=job_url,
-                poll_token=poll_token,
             )
         ),
         headers={"Location": job_url},

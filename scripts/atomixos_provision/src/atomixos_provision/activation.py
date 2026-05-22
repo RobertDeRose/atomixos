@@ -468,10 +468,15 @@ def complete_reapply(
             if not rollback_failures:
                 rollback_failures = check_required_services(config_root, progress)
             if rollback_failures:
-                return False, failures + [
-                    f"rollback activation/health failed: {failure}"
-                    for failure in rollback_failures
-                ], "failed"
+                return (
+                    False,
+                    failures
+                    + [
+                        f"rollback activation/health failed: {failure}"
+                        for failure in rollback_failures
+                    ],
+                    "failed",
+                )
         return False, failures, "completed" if restored else "skipped"
     if progress:
         progress.set_stage("cleanup", "removing rollback state")

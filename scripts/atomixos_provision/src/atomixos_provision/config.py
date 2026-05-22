@@ -28,28 +28,32 @@ DEFAULT_LAN_GATEWAY_ALIASES = ["atomixos"]
 DEFAULT_LAN_HOSTNAME_PATTERN = ""
 DEFAULT_NTP_SERVERS = ["time.cloudflare.com"]
 
-RESERVED_USERNAMES = frozenset({
-    "appsvc",
-    "bin",
-    "chrony",
-    "daemon",
-    "dnsmasq",
-    "nobody",
-    "root",
-    "systemd-network",
-    "systemd-resolve",
-    "systemd-timesync",
-})
+RESERVED_USERNAMES = frozenset(
+    {
+        "appsvc",
+        "bin",
+        "chrony",
+        "daemon",
+        "dnsmasq",
+        "nobody",
+        "root",
+        "systemd-network",
+        "systemd-resolve",
+        "systemd-timesync",
+    }
+)
 
-SSH_KEY_TYPES = frozenset({
-    "ecdsa-sha2-nistp256",
-    "ecdsa-sha2-nistp384",
-    "ecdsa-sha2-nistp521",
-    "sk-ecdsa-sha2-nistp256@openssh.com",
-    "ssh-ed25519",
-    "sk-ssh-ed25519@openssh.com",
-    "ssh-rsa",
-})
+SSH_KEY_TYPES = frozenset(
+    {
+        "ecdsa-sha2-nistp256",
+        "ecdsa-sha2-nistp384",
+        "ecdsa-sha2-nistp521",
+        "sk-ecdsa-sha2-nistp256@openssh.com",
+        "ssh-ed25519",
+        "sk-ssh-ed25519@openssh.com",
+        "ssh-rsa",
+    }
+)
 
 
 # --- Error Handling ---
@@ -77,10 +81,12 @@ def load_config_schema() -> dict[str, Any]:
     # __file__ is src/atomixos_provision/config.py
     # 5 parents: atomixos_provision → src → atomixos_provision(pkg) → scripts → repo root
     repo_root = script_path.parent.parent.parent.parent.parent
-    candidates.extend([
-        repo_root / "share" / "atomixos" / "config.schema.json",
-        repo_root / "schemas" / "config.schema.json",
-    ])
+    candidates.extend(
+        [
+            repo_root / "share" / "atomixos" / "config.schema.json",
+            repo_root / "schemas" / "config.schema.json",
+        ]
+    )
 
     for candidate in candidates:
         if candidate.is_file():
@@ -125,9 +131,7 @@ def validate_schema_property_name(name: str, schema: dict, path: str) -> None:
         raise provision_error(msg)
 
 
-def validate_against_schema(
-    value: Any, schema: dict, path: str, root_schema: dict
-) -> None:
+def validate_against_schema(value: Any, schema: dict, path: str, root_schema: dict) -> None:
     """Recursively validate a value against a JSON Schema subset."""
     if "$ref" in schema:
         validate_against_schema(
@@ -147,9 +151,7 @@ def validate_against_schema(
 
     expected_type = schema.get("type")
     if expected_type is not None:
-        allowed_types = (
-            expected_type if isinstance(expected_type, list) else [expected_type]
-        )
+        allowed_types = expected_type if isinstance(expected_type, list) else [expected_type]
         type_checks: dict[str, Any] = {
             "object": lambda v: isinstance(v, dict),
             "array": lambda v: isinstance(v, list),
@@ -158,9 +160,7 @@ def validate_against_schema(
             "boolean": lambda v: isinstance(v, bool),
         }
         matches_type = any(
-            check(value)
-            for allowed in allowed_types
-            if (check := type_checks.get(allowed))
+            check(value) for allowed in allowed_types if (check := type_checks.get(allowed))
         )
         if not matches_type:
             names = ", ".join(allowed_types)
@@ -201,9 +201,7 @@ def validate_against_schema(
             raise provision_error(msg)
 
 
-def _validate_dict_schema(
-    value: dict, schema: dict, path: str, root_schema: dict
-) -> None:
+def _validate_dict_schema(value: dict, schema: dict, path: str, root_schema: dict) -> None:
     """Validate dict-specific schema constraints."""
     min_properties = schema.get("minProperties")
     if min_properties is not None and len(value) < min_properties:
@@ -467,9 +465,7 @@ def require_https_url(value: Any, path: str) -> str:
 # --- Section Loaders ---
 
 
-def load_lan_settings(
-    lan_value: Any, path: str = "lan"
-) -> dict[str, Any]:
+def load_lan_settings(lan_value: Any, path: str = "lan") -> dict[str, Any]:
     """Parse and validate LAN/dnsmasq settings."""
     if lan_value is None:
         lan_value = {}
@@ -502,9 +498,7 @@ def load_lan_settings(
     dhcp_start_raw = require_string(
         lan.get("dhcp_start", DEFAULT_LAN_DHCP_START), f"{path}.dhcp_start"
     )
-    dhcp_end_raw = require_string(
-        lan.get("dhcp_end", DEFAULT_LAN_DHCP_END), f"{path}.dhcp_end"
-    )
+    dhcp_end_raw = require_string(lan.get("dhcp_end", DEFAULT_LAN_DHCP_END), f"{path}.dhcp_end")
     try:
         dhcp_start = ipaddress.IPv4Address(dhcp_start_raw)
         dhcp_end = ipaddress.IPv4Address(dhcp_end_raw)
@@ -569,9 +563,7 @@ def load_users(users_value: Any) -> tuple[dict[str, dict], list[str]]:
 
     for username, raw_user in users.items():
         validate_username(username)
-        user = require_allowed_keys(
-            raw_user, f"users.{username}", {"isAdmin", "ssh_key", "shell"}
-        )
+        user = require_allowed_keys(raw_user, f"users.{username}", {"isAdmin", "ssh_key", "shell"})
         is_admin = require_bool(user.get("isAdmin", False), f"users.{username}.isAdmin")
         ssh_key_raw = user.get("ssh_key", "")
         if not isinstance(ssh_key_raw, str):
@@ -606,9 +598,7 @@ def load_network_settings(network_value: Any) -> dict[str, Any]:
     """Parse and validate the [network] section, returning LAN settings dict."""
     if network_value is None:
         network_value = {}
-    network = require_allowed_keys(
-        network_value, "network", {"dnsmasq", "ntp", "firewall"}
-    )
+    network = require_allowed_keys(network_value, "network", {"dnsmasq", "ntp", "firewall"})
     dnsmasq = network.get("dnsmasq", {})
     dnsmasq_settings = require_allowed_keys(
         dnsmasq,
@@ -629,8 +619,7 @@ def load_network_settings(network_value: Any) -> dict[str, Any]:
         dnsmasq_settings["enable"], "network.dnsmasq.enable"
     ):
         message = (
-            "network.dnsmasq.enable must remain true; "
-            "disabling LAN DHCP/DNS is not supported"
+            "network.dnsmasq.enable must remain true; disabling LAN DHCP/DNS is not supported"
         )
         raise provision_error(message)
     if "interface" in dnsmasq_settings:
@@ -654,19 +643,13 @@ def load_firewall_inbound(network_value: Any) -> dict[str, dict[str, list[int]]]
     """Parse and validate the [network.firewall.inbound] section."""
     if network_value is None:
         network_value = {}
-    network = require_allowed_keys(
-        network_value, "network", {"dnsmasq", "ntp", "firewall"}
-    )
+    network = require_allowed_keys(network_value, "network", {"dnsmasq", "ntp", "firewall"})
     firewall = network.get("firewall", {})
     firewall = require_allowed_keys(firewall, "network.firewall", {"inbound"})
     inbound_value = firewall.get("inbound", {})
-    inbound = require_allowed_keys(
-        inbound_value, "network.firewall.inbound", {"wan", "lan"}
-    )
+    inbound = require_allowed_keys(inbound_value, "network.firewall.inbound", {"wan", "lan"})
 
-    def normalize_firewall_scope(
-        scope_value: Any, scope_path: str
-    ) -> dict[str, list[int]]:
+    def normalize_firewall_scope(scope_value: Any, scope_path: str) -> dict[str, list[int]]:
         if scope_value is None:
             return {}
         scope = require_allowed_keys(scope_value, scope_path, {"tcp", "udp"})
@@ -682,9 +665,7 @@ def load_firewall_inbound(network_value: Any) -> dict[str, dict[str, list[int]]]
         return normalized
 
     firewall_inbound: dict[str, dict[str, list[int]]] = {}
-    wan_scope = normalize_firewall_scope(
-        inbound.get("wan"), "network.firewall.inbound.wan"
-    )
+    wan_scope = normalize_firewall_scope(inbound.get("wan"), "network.firewall.inbound.wan")
     if 8080 in wan_scope.get("tcp", []):
         raise provision_error(
             "network.firewall.inbound.wan.tcp must not include reserved bootstrap port 8080"
@@ -751,9 +732,7 @@ def load_config(
             root.get("os_upgrade"), "os_upgrade", {"server_url"}, {"server_url"}
         )
         os_upgrade_settings = {
-            "server_url": require_https_url(
-                os_upgrade.get("server_url"), "os_upgrade.server_url"
-            )
+            "server_url": require_https_url(os_upgrade.get("server_url"), "os_upgrade.server_url")
         }
 
     containers = require_allowed_keys(

@@ -38,7 +38,6 @@ class Job:
     rollback_status: str | None = None  # "completed" | "failed" | "skipped"
     stage: str = "submitted"
     events: list[dict[str, Any]] = field(default_factory=list)
-    poll_token: str | None = None
     _lock: threading.RLock = field(default_factory=threading.RLock, init=False, repr=False)
 
     def set_stage(
@@ -70,7 +69,6 @@ class Job:
                 "rollback_status": self.rollback_status,
                 "stage": self.stage,
                 "events": [dict(event) for event in self.events],
-                "poll_token": self.poll_token,
             }
 
     def to_dict(self) -> dict[str, Any]:
@@ -96,15 +94,14 @@ class JobManager:
     @property
     def is_busy(self) -> bool:
         """True if a job is currently running."""
-        return (
-            self._current_job is not None
-            and self._current_job.state in (JobState.SUBMITTED, JobState.RUNNING)
+        return self._current_job is not None and self._current_job.state in (
+            JobState.SUBMITTED,
+            JobState.RUNNING,
         )
 
     async def submit(
         self,
         work: Callable[[Job], Coroutine[Any, Any, dict[str, Any]]],
-        poll_token: str | None = None,
     ) -> Job | None:
         """Submit a new job. Returns the Job if accepted, None if busy (409)."""
         async with self._lock:
@@ -112,7 +109,7 @@ class JobManager:
                 return None
 
             self._evict_old_jobs()
-            job = Job(id=str(uuid.uuid4()), poll_token=poll_token)
+            job = Job(id=str(uuid.uuid4()))
             self._jobs[job.id] = job
             self._current_job = job
             self._task = asyncio.create_task(self._run(job, work))
@@ -163,7 +160,8 @@ class JobManager:
         if len(self._jobs) < _MAX_RETAINED_JOBS:
             return
         completed = [
-            (jid, j) for jid, j in self._jobs.items()
+            (jid, j)
+            for jid, j in self._jobs.items()
             if j.state in (JobState.SUCCEEDED, JobState.FAILED)
         ]
         completed.sort(key=lambda x: x[1].submitted_at)

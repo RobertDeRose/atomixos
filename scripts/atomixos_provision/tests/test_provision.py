@@ -12,8 +12,7 @@ from atomixos_provision.provision import (
 )
 
 VALID_ED25519_KEY = (
-    "ssh-ed25519 "
-    "AAAAC3NzaC1lZDI1NTE5AAAAIDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw"
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw"
 )
 
 
@@ -283,9 +282,7 @@ def test_import_config_from_path_reapply_preserves_rollback_and_managed_state(
         "type": "object",
         "additionalProperties": True,
     }
-    monkeypatch.setattr(
-        "atomixos_provision.config.load_config_schema", lambda: schema
-    )
+    monkeypatch.setattr("atomixos_provision.config.load_config_schema", lambda: schema)
     monkeypatch.setattr(
         "atomixos_provision.provision.complete_reapply",
         lambda _root, _progress=None: (True, [], False),

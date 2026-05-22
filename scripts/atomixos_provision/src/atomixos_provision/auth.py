@@ -33,8 +33,7 @@ MAX_OUTSTANDING_NONCES_PER_CLIENT = int(
 )
 SSH_KEYGEN_BIN = os.environ.get("ATOMIXOS_SSH_KEYGEN", "ssh-keygen")
 AUTH_REQUIRED_MESSAGE = (
-    "authentication required: provide X-Atomicnix-Nonce "
-    "and X-Atomicnix-Signature headers"
+    "authentication required: provide X-Atomicnix-Nonce and X-Atomicnix-Signature headers"
 )
 
 
@@ -131,17 +130,13 @@ def reapply_signature_message(nonce: str, path: str, payload: bytes) -> str:
     return f"atomixos-reapply-v1\nnonce:{nonce}\npath:{path}\nsha256:{digest}\n"
 
 
-def verify_ssh_signature(
-    message: str, signature_blob: bytes, allowed_keys_path: Path
-) -> bool:
+def verify_ssh_signature(message: str, signature_blob: bytes, allowed_keys_path: Path) -> bool:
     """Verify an SSH signature over a request-bound message.
 
     The allowed_keys_path should be a file in ssh allowed_signers format.
     Returns True if verification succeeds.
     """
-    with tempfile.NamedTemporaryFile(
-        mode="wb", suffix=".sig", delete=False
-    ) as sig_file:
+    with tempfile.NamedTemporaryFile(mode="wb", suffix=".sig", delete=False) as sig_file:
         sig_file.write(signature_blob)
         sig_path = sig_file.name
 
@@ -180,19 +175,13 @@ def build_allowed_signers(config_root: Path) -> Path | None:
     if not admin_keys_path.exists():
         return None
 
-    keys = [
-        line.strip()
-        for line in admin_keys_path.read_text().splitlines()
-        if line.strip()
-    ]
+    keys = [line.strip() for line in admin_keys_path.read_text().splitlines() if line.strip()]
     if not keys:
         return None
 
     # allowed_signers format: <principal> <key>
     lines = [f"atomixos-reapply {key}" for key in keys]
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".allowed_signers", delete=False
-    ) as tmp:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".allowed_signers", delete=False) as tmp:
         tmp.write("\n".join(lines) + "\n")
         return Path(tmp.name)
 
@@ -228,9 +217,7 @@ async def _verify_ssh_auth(connection: ASGIConnection, allowed_path: Path) -> No
         Path(allowed_path).unlink(missing_ok=True)
 
 
-async def ssh_auth_guard(
-    connection: ASGIConnection, _: BaseRouteHandler
-) -> None:
+async def ssh_auth_guard(connection: ASGIConnection, _: BaseRouteHandler) -> None:
     """Guard that enforces SSH signature authentication."""
     config_root: Path = connection.app.state.config_root
     signer_state: SignerState = connection.app.state.signer_state
@@ -246,9 +233,7 @@ async def ssh_auth_guard(
     await _verify_ssh_auth(connection, allowed_path)
 
 
-async def ssh_auth_required_guard(
-    connection: ASGIConnection, _: BaseRouteHandler
-) -> None:
+async def ssh_auth_required_guard(connection: ASGIConnection, _: BaseRouteHandler) -> None:
     """Guard that enforces SSH auth without first-boot bypass."""
     config_root: Path = connection.app.state.config_root
     allowed_path = build_allowed_signers(config_root)

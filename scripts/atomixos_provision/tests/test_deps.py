@@ -19,11 +19,13 @@ async def test_dependency_providers_return_state_objects(tmp_path):
     settings = AppSettings(config_root=tmp_path)
     nonce_store = NonceStore()
     job_manager = JobManager()
-    state = State({
-        "settings": settings,
-        "nonce_store": nonce_store,
-        "job_manager": job_manager,
-    })
+    state = State(
+        {
+            "settings": settings,
+            "nonce_store": nonce_store,
+            "job_manager": job_manager,
+        }
+    )
 
     assert provide_settings(state) is settings
     assert provide_config_root(settings) == tmp_path
