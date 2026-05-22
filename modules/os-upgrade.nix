@@ -30,11 +30,6 @@ in
       description = "How often to poll for updates (systemd timer format)";
     };
 
-    serverUrl = lib.mkOption {
-      type = lib.types.str;
-      default = "";
-      description = "Optional fallback URL of the update server";
-    };
   };
 
   config = {
@@ -47,6 +42,12 @@ in
         "os-verification.service"
       ];
       wants = [ "network-online.target" ];
+      requires = [ "os-verification.service" ];
+
+      unitConfig.ConditionPathExists = [
+        "/data/.completed_first_boot"
+        osUpgradeConfigFile
+      ];
 
       path = [
         pkgs.rauc
@@ -60,7 +61,6 @@ in
         Type = "oneshot";
         Environment = [
           "ATOMIXOS_OS_UPGRADE_CONFIG=${osUpgradeConfigFile}"
-          "OS_UPGRADE_URL=${cfg.serverUrl}"
         ];
         ExecStart = upgradeScript;
         TimeoutStartSec = 900; # 15 minutes (download can be slow)

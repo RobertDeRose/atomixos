@@ -4,7 +4,6 @@
 #
 # Environment:
 #   ATOMIXOS_OS_UPGRADE_CONFIG — provisioned JSON config with server_url
-#   OS_UPGRADE_URL — fallback update server base URL for legacy deployments
 #
 # Dependencies (must be on PATH): rauc, curl, jq, systemctl
 set -euo pipefail
@@ -12,14 +11,7 @@ set -euo pipefail
 OS_UPGRADE_CONFIG="${ATOMIXOS_OS_UPGRADE_CONFIG:-/data/config/os-upgrade.json}"
 UPDATE_URL=""
 DEVICE_ID=$(cat /sys/class/net/eth0/address 2>/dev/null | tr -d ':' || echo "unknown")
-BUNDLE_DIR="/data/config/bundles"
-CURRENT_VERSION=$(rauc status --output-format=json 2>/dev/null | jq -r '
-  .booted as $booted
-  | .slots[]
-  | to_entries[]
-  | select(.key == $booted)
-  | .value.slot_status.bundle.version // "unknown"
-' || echo "unknown")
+BUNDLE_DIR="${ATOMIXOS_RAUC_BUNDLE_DIR:-/data/rauc/bundles}"
 
 log() { echo "[os-upgrade] $*"; }
 
@@ -28,13 +20,51 @@ if [ -f "$OS_UPGRADE_CONFIG" ]; then
 fi
 
 if [ -z "$UPDATE_URL" ]; then
-	UPDATE_URL="${OS_UPGRADE_URL:-}"
-fi
-
-if [ -z "$UPDATE_URL" ]; then
 	log "No update server configured; skipping"
 	exit 0
 fi
+
+RAUC_STATUS_JSON="$(rauc status --output-format=json 2>/dev/null || true)"
+BOOT_STATUS=$(printf '%s\n' "$RAUC_STATUS_JSON" | jq -r '
+  .booted as $booted
+  | .slots[]
+  | to_entries[]
+  | select(.key == $booted)
+  | .value.boot_status // empty
+' 2>/dev/null || true)
+if [ "$BOOT_STATUS" != "good" ]; then
+	log "Current slot is not marked good (boot_status=${BOOT_STATUS:-unknown}); skipping update"
+	exit 0
+fi
+
+CURRENT_VERSION=$(printf '%s\n' "$RAUC_STATUS_JSON" | jq -r '
+  .booted as $booted
+  | .slots[]
+  | to_entries[]
+  | select(.key == $booted)
+  | .value.slot_status.bundle.version // empty
+' 2>/dev/null || true)
+if [ -z "$CURRENT_VERSION" ] && [ -r /etc/os-release ]; then
+	CURRENT_VERSION="$(. /etc/os-release && printf '%s\n' "${VERSION_ID:-}")"
+fi
+
+if [ -z "$CURRENT_VERSION" ]; then
+	log "ERROR: cannot determine current version from rauc status"
+	exit 1
+fi
+
+if [[ ! "$CURRENT_VERSION" =~ ^[A-Za-z0-9._-]{1,128}$ ]]; then
+	log "ERROR: invalid current version from rauc status"
+	exit 1
+fi
+
+case "$UPDATE_URL" in
+https://*) ;;
+*)
+	log "ERROR: update server URL must use HTTPS: $UPDATE_URL"
+	exit 1
+	;;
+esac
 
 current_boot_slot() {
 	local arg
@@ -74,7 +104,7 @@ target_boot_slot_from_status() {
 log "Checking for updates (current version: $CURRENT_VERSION, device: $DEVICE_ID)..."
 
 # Query update server for latest version
-RESPONSE=$(curl -sfL -m 30 \
+RESPONSE=$(curl -sfL -m 30 --proto '=https' --proto-redir '=https' \
 	-H "X-Device-ID: $DEVICE_ID" \
 	-H "X-Current-Version: $CURRENT_VERSION" \
 	"$UPDATE_URL/api/v1/updates/latest" 2>/dev/null) || {
@@ -95,6 +125,20 @@ if [ -z "$LATEST_VERSION" ] || [ -z "$BUNDLE_URL" ]; then
 	exit 0
 fi
 
+if [[ ! "$LATEST_VERSION" =~ ^[A-Za-z0-9._-]{1,128}$ ]]; then
+	log "Invalid update version from server: $LATEST_VERSION"
+	exit 1
+fi
+
+# Validate BUNDLE_URL is HTTPS
+case "$BUNDLE_URL" in
+https://*) ;;
+*)
+	log "Rejecting non-HTTPS bundle URL: $BUNDLE_URL"
+	exit 1
+	;;
+esac
+
 if [ "$LATEST_VERSION" = "$CURRENT_VERSION" ]; then
 	log "Already on latest version ($CURRENT_VERSION)"
 	exit 0
@@ -113,7 +157,7 @@ mkdir -p "$BUNDLE_DIR"
 BUNDLE_PATH="$BUNDLE_DIR/update-$LATEST_VERSION.raucb"
 
 log "Downloading bundle to $BUNDLE_PATH..."
-if ! curl -f -m 600 -o "$BUNDLE_PATH.tmp" "$BUNDLE_URL"; then
+if ! curl -f -m 600 --proto '=https' --proto-redir '=https' -o "$BUNDLE_PATH.tmp" "$BUNDLE_URL"; then
 	log "Download failed, cleaning up"
 	rm -f "$BUNDLE_PATH.tmp"
 	exit 0 # Will retry next interval

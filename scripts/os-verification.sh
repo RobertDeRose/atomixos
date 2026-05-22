@@ -9,6 +9,8 @@ SUSTAIN_DURATION="${ATOMIXOS_VERIFICATION_SUSTAIN_DURATION:-60}"
 CHECK_INTERVAL="${ATOMIXOS_VERIFICATION_CHECK_INTERVAL:-5}"
 HEALTH_REQUIRED_FILE="/data/config/health-required.json"
 LAN_SETTINGS_FILE="/data/config/lan-settings.json"
+RUNTIME_METADATA_FILE="/data/config/quadlet-runtime.json"
+APP_RUNTIME_USER="${ATOMIXOS_APP_RUNTIME_USER:-appsvc}"
 
 log() { echo "[os-verification] $*" >&2; }
 
@@ -71,11 +73,11 @@ BOOT_GOOD=$(printf '%s\n' "$RAUC_STATUS_JSON" | jq -r '
 	| .value.boot_status // "unknown"
 ' 2>/dev/null || true)
 if [ "$BOOT_GOOD" = "good" ]; then
-	log "Slot already marked good, nothing to do"
-	exit 0
+	log "Slot already marked good, running health checks without marking slot"
+else
+	log "Slot is pending confirmation, running health checks..."
 fi
 
-log "Slot is pending confirmation, running health checks..."
 BOOT_SLOT="$(current_boot_slot || true)"
 if [ -z "$BOOT_SLOT" ]; then
 	log "Could not determine boot slot from /proc/cmdline"
@@ -121,18 +123,67 @@ check_lan_gateway_ip() {
 	fi
 }
 
+check_apply_unit() {
+	local unit="$1"
+	if systemctl is-failed --quiet "$unit" 2>/dev/null; then
+		log "  FAIL $unit failed"
+		return 1
+	fi
+	if systemctl is-active --quiet "$unit" 2>/dev/null; then
+		log "  OK $unit active"
+		return 0
+	fi
+	if systemctl show -P ActiveState "$unit" 2>/dev/null | grep -qx inactive; then
+		log "  OK $unit completed"
+		return 0
+	fi
+	log "  FAIL $unit did not complete successfully"
+	return 1
+}
+
 check_required_units() {
 	local required_units="$1"
-	local required_unit
+	local required_unit service mode uid runtime_dir
 	while IFS= read -r required_unit; do
 		[ -n "$required_unit" ] || continue
-		if systemctl is-active --quiet "${required_unit}.service" 2>/dev/null; then
-			log "  OK ${required_unit}.service is active"
+		service="${required_unit}.service"
+		mode="$(unit_mode "$service")"
+		if [ "$mode" = "rootless" ]; then
+			uid="$(id -u "$APP_RUNTIME_USER" 2>/dev/null || true)"
+			if [ -z "$uid" ]; then
+				log "  FAIL $service rootless user $APP_RUNTIME_USER does not exist"
+				return 1
+			fi
+			runtime_dir="/run/user/$uid"
+			if runuser -u "$APP_RUNTIME_USER" -- env \
+				"XDG_RUNTIME_DIR=$runtime_dir" \
+				"DBUS_SESSION_BUS_ADDRESS=unix:path=$runtime_dir/bus" \
+				systemctl --user is-active --quiet "$service" 2>/dev/null; then
+				log "  OK $service is active ($mode)"
+			else
+				log "  FAIL $service is NOT active ($mode)"
+				return 1
+			fi
+		elif systemctl is-active --quiet "$service" 2>/dev/null; then
+			log "  OK $service is active ($mode)"
 		else
-			log "  FAIL ${required_unit}.service is NOT active"
+			log "  FAIL $service is NOT active ($mode)"
 			return 1
 		fi
 	done <<<"$required_units"
+}
+
+unit_mode() {
+	local service="$1"
+	if [ ! -f "$RUNTIME_METADATA_FILE" ]; then
+		printf '%s\n' rootful
+		return 0
+	fi
+	jq -r --arg service "$service" '
+		(.units // [])
+		| map(select(.service == $service))
+		| .[0].mode // "rootful"
+	' "$RUNTIME_METADATA_FILE" 2>/dev/null || printf '%s\n' rootful
 }
 
 run_health_checks() {
@@ -141,7 +192,9 @@ run_health_checks() {
 
 	check_service "dnsmasq.service" || system_ok=false
 	check_service "chronyd.service" || system_ok=false
-	check_interface_ipv4 "eth0" "eth0 has WAN address" || system_ok=false
+	check_apply_unit "lan-gateway-apply.service" || system_ok=false
+	check_apply_unit "provisioned-firewall-inbound.service" || system_ok=false
+	check_interface_ipv4 "eth0" "eth0 has WAN address" || log "  WARN eth0 has no WAN address"
 	check_lan_gateway_ip || system_ok=false
 	check_required_units "$required_units" || system_ok=false
 
@@ -173,6 +226,11 @@ while [ "$ELAPSED" -lt "$SUSTAIN_DURATION" ]; do
 done
 
 log "Sustained health check passed (${SUSTAIN_DURATION}s)"
+
+if [ "$BOOT_GOOD" = "good" ]; then
+	log "Slot was already good; health verification complete"
+	exit 0
+fi
 
 # ── Step 4: Commit the slot ──
 BOOT_SLOT="$(current_boot_slot || true)"

@@ -86,6 +86,18 @@ in
       description = "Allowed RAUC bundle formats.";
     };
 
+    keyringCert = lib.mkOption {
+      type = lib.types.nullOr lib.types.path;
+      default = null;
+      description = "Production RAUC CA certificate path. Overrides the development keyring.";
+    };
+
+    allowDevelopmentKeyring = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "Allow installing the repository development RAUC CA certificate.";
+    };
+
     slots = {
       boot0 = lib.mkOption {
         type = lib.types.str;
@@ -107,6 +119,13 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    assertions = [
+      {
+        assertion = cfg.keyringCert != null || cfg.allowDevelopmentKeyring;
+        message = "atomixos.rauc.keyringCert must be set when the development RAUC keyring is disabled";
+      }
+    ];
+
     services.rauc = {
       enable = true;
       client.enable = true;
@@ -162,9 +181,14 @@ in
       serviceConfig.ExecStartPre = [ "${pkgs.coreutils}/bin/mkdir -p ${statusDir}" ];
     };
 
-    # CA certificate for bundle verification.
-    # Uses the development CA by default. Production devices override this
-    # with a production CA cert provisioned separately.
-    environment.etc."rauc/ca.cert.pem".source = ../certs/dev.ca.cert.pem;
+    environment.etc."rauc/ca.cert.pem".source =
+      if cfg.keyringCert != null then cfg.keyringCert else ../certs/dev.ca.cert.pem;
+
+    environment.etc.issue.text = lib.mkIf (cfg.keyringCert == null) (lib.mkAfter ''
+
+      WARNING: DEVELOPMENT BUILD
+      This image uses the repository development RAUC keyring and must not be used for production OTA updates.
+
+    '');
   };
 }

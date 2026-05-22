@@ -23,13 +23,21 @@ in
   systemd.services.os-verification = lib.mkIf cfg.enable {
     description = "OS update verification - local health check";
     after = [
+      "atomixos-apply-users.service"
+      "atomixos-config-recover.service"
       "data.mount"
       "lan-gateway-apply.service"
+      "provisioned-firewall-inbound.service"
+      "quadlet-sync.service"
       "rauc.service"
     ];
     wants = [
+      "atomixos-apply-users.service"
+      "atomixos-config-recover.service"
       "data.mount"
       "lan-gateway-apply.service"
+      "provisioned-firewall-inbound.service"
+      "quadlet-sync.service"
       "rauc.service"
     ];
     wantedBy = [ "multi-user.target" ];
@@ -46,6 +54,8 @@ in
       pkgs.iproute2
       pkgs.coreutils
       pkgs.gnugrep
+      pkgs.shadow
+      pkgs.util-linux
     ];
 
     serviceConfig = {
