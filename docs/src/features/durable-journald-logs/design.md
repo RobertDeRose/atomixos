@@ -1,6 +1,61 @@
-# Design
+# Feature: durable-journald-logs
 
-## Context
+## Overview
+
+### Why
+
+- The current root filesystem uses a tmpfs-backed overlay, so host logs
+  disappear on reboot and power loss. That makes boot failures, failed
+  updates, watchdog resets, and rollback events hard to reconstruct after the
+  device recovers.
+- At the same time, the image intentionally favors tmpfs-backed runtime state
+  to reduce eMMC write amplification. The logging design needs to preserve that
+  wear benefit while still keeping the most important forensic breadcrumbs
+  durable.
+
+### What Changes
+
+- Keep general host journald tmpfs-first during runtime as the log ingress
+  point, without allowing journald itself to write routine logs directly to
+  persistent media
+- Add an `rsyslog` RAM queue behind volatile journald so general host and
+  container logs are collected in memory and written to `/data/logs` in large,
+  infrequent, sequential batches rather than in many small writes
+- Flush the in-memory buffered log queue to `/data/logs` during orderly
+  shutdown so the last clean shutdown captures the latest buffered host
+  diagnostics
+- Align Podman container logging with the same journald-plus-rsyslog buffering
+  policy so routine application logs also remain memory-first during runtime
+  while following the same large-batch persistent append path
+- Document retention, durability guarantees, and the boundary between durable
+  host forensics and buffered general host/application logs
+
+### Capabilities
+
+### Modified Capabilities
+
+- `durable-journald-logs`: Tmpfs-first host journald feeding an in-memory
+  `rsyslog` batch queue, with large sequential appends to `/data/logs`,
+  orderly shutdown flush, and Podman logging aligned to the same buffering
+  model
+
+### Impact
+
+- **Affected code**: boot/update services, host logging configuration in the
+  base system, and the `/data` log export path
+- **Affected docs**: partition layout, boot/update architecture, and
+  operational debugging guidance
+- **Operational impact**: Devices keep normal host and application logging
+  memory-first during runtime and append broader diagnostics to `/data/logs` in
+  large, sequential batches plus orderly shutdown flushes
+
+This change resolves the broader tmpfs-first journald plus `/data` durable
+logging path explicitly as a RAM-queued `rsyslog` batch append path to
+`/data/logs` rather than timer-driven journal checkpoints.
+
+## Design
+
+### Context
 
 The Rock64 image runs from a read-only squashfs with a tmpfs-backed overlay for
 mutable root state. That keeps the runtime root clean on every boot and
@@ -23,7 +78,7 @@ rooted on `/data`. That means this change does not need to invent a general
 persistent application-data model. The problem here is host-platform forensics
 under tight write-wear constraints.
 
-## Goals / Non-Goals
+### Goals / Non-Goals
 
 **Goals:**
 
@@ -39,7 +94,7 @@ under tight write-wear constraints.
 - Defining long-term application log retention policy beyond establishing the boundary with Podman logging
 - Changing the overall partition layout or introducing a dedicated log partition
 
-## Decisions
+### Decisions
 
 ### 1. Use a three-tier logging model
 
@@ -280,7 +335,7 @@ durability semantics.
 - **Ignore app logs entirely**: leaves an important design boundary
   undocumented.
 
-## Tier 1 / Tier 2 Resolution
+### Tier 1 / Tier 2 Resolution
 
 The recovered explore session was most settled on the Tier 0 `/boot` forensic
 model. The broader journald-to-`/data` path was clearly part of the intended
@@ -300,7 +355,7 @@ The remaining implementation-time decisions are narrower:
 - exact journald filtering and rate-limiting thresholds
 - whether `/data` should also gain mount options such as `noatime`
 
-## Risks / Trade-offs
+### Risks / Trade-offs
 
 - **FAT boot storage is not a perfect forensic medium** -> Mitigate by keeping
   the Tier 0 format simple, bounded, append-oriented, and tolerant of a torn
@@ -320,7 +375,7 @@ The remaining implementation-time decisions are narrower:
 - **Metadata corruption could obscure the active segment** -> Keep metadata
   minimal and recoverable by scanning segment files if needed.
 
-## Post-Review Hardening
+### Post-Review Hardening
 
 The initial implementation satisfied the core change goals, but a later review
 found a small set of durability and correctness gaps that were fixed before
@@ -345,7 +400,7 @@ closing validation.
   explicit negative `mark-good` confirmation path in `rauc-confirm`, including
   test harness steps needed to avoid stale cached RAUC state across phases.
 
-## Migration Plan
+### Migration Plan
 
 Existing devices pick up the new configuration on the next deployed image. The
 boot partitions gain a reserved forensic directory within the existing slot
@@ -356,7 +411,7 @@ Rollback is straightforward: remove the Tier 0 writer and return to the prior
 general journald policy. No data migration is required for Tier 0 because the
 forensic store is bounded, slot-local, and self-contained.
 
-## Final Scope Notes
+### Final Scope Notes
 
 - The explored design did not choose always-persistent journald on `/data`.
   Instead it chose tmpfs-first journald feeding a RAM-queued `rsyslog` batch
@@ -371,3 +426,182 @@ forensic store is bounded, slot-local, and self-contained.
   same buffered host logging path.
 - Queue sizing, rate limits, and `/data/logs` retention remain tunable
   implementation details rather than core architecture changes.
+
+## Requirements
+
+### durable-journald-logs
+
+#### ADDED Requirements
+
+### Requirement: Host journald is tmpfs-first during runtime
+
+The system SHALL configure host journald to keep general runtime logs in
+volatile storage during normal runtime so routine host logging remains
+memory-first rather than continuously writing to persistent media.
+
+#### Scenario: Runtime host logs stay memory-first
+
+- **WHEN** the device writes a non-critical host journal entry during normal
+  runtime
+- **THEN** that entry is written into the volatile runtime journal rather than
+  directly to persistent journal storage on `/data`
+
+### Requirement: Runtime journal usage is explicitly bounded
+
+The system SHALL apply an explicit runtime journal size cap so memory-first
+logging does not grow without bound.
+
+#### Scenario: Runtime journal stays within the configured cap
+
+- **WHEN** runtime journal usage reaches the configured storage cap
+- **THEN** journald rotates or removes older runtime journal data before
+  exceeding that cap
+
+### Requirement: General logs are written to `/data/logs` in large sequential batches
+
+The system SHALL use a RAM-queued batching layer behind volatile journald so
+general host log data is appended to persistent storage under `/data/logs` in
+large, infrequent, sequential writes rather than in many small direct writes.
+
+#### Scenario: Buffered host logs are appended during runtime buffering flushes
+
+- **WHEN** the device continues normal runtime logging and the buffering layer
+  reaches its configured write threshold or flush interval
+- **THEN** buffered general host journal data is appended to persistent storage
+  under `/data/logs` in a large sequential write
+
+### Requirement: Buffered general logs are flushed to `/data/logs` on orderly shutdown
+
+The system SHALL flush the current buffered general log state to persistent
+storage under `/data/logs` during orderly shutdown so the latest clean shutdown
+retains the most recent buffered host diagnostics.
+
+#### Scenario: Orderly shutdown persists buffered host logs
+
+- **WHEN** the device performs an orderly reboot or poweroff
+- **THEN** the buffered general log queue is flushed to persistent storage
+  under `/data/logs` before shutdown completes
+
+### Requirement: Container logs follow the same buffered journald boundary
+
+The system SHALL configure Podman to use the `journald` log driver so routine
+container stdout and stderr are recorded through journald instead of file-based
+container logs, and SHALL keep those logs inside the same tmpfs-first,
+RAM-queued, batched-append, and shutdown-flushed pipeline as other non-Tier 0
+logs.
+
+#### Scenario: Container logs are sent to journald
+
+- **WHEN** a container writes to stdout or stderr during normal operation
+- **THEN** that log traffic is emitted through journald and follows the same
+  buffered runtime retention policy and batched `/data/logs` append path as
+  other non-Tier 0 logs
+
+### forensic-log-durability
+
+#### ADDED Requirements
+
+### Requirement: Critical lifecycle events are mirrored to slot-local forensic storage
+
+The system SHALL mirror critical host lifecycle events into a bounded forensic
+store on the active boot slot so they remain available after reboot, slot
+rollback, and as many power-loss scenarios as practical. The initrd portion of
+this path remains incomplete until the early-boot persistence design is revised
+to avoid fragile direct boot-partition mounts during normal initrd execution.
+
+#### Scenario: Critical boot event is retained after reboot
+
+- **WHEN** the device records a critical boot or update lifecycle event and then reboots
+- **THEN** that event remains available from the slot-local forensic store after the reboot
+
+#### Scenario: Failed update leaves forensic evidence
+
+- **WHEN** an update attempt fails and the device later rolls back to a previous slot
+- **THEN** the affected slot retains its recent mirrored lifecycle events for forensic inspection
+
+### Requirement: Slot-local forensic storage is strictly bounded
+
+The system SHALL cap slot-local forensic storage at `28 MiB` per boot slot.
+The system SHALL represent that budget as seven `4 MiB` segment files plus
+minimal metadata, and SHALL rotate or overwrite the oldest forensic records
+when that limit is reached.
+
+#### Scenario: Forensic store reaches capacity
+
+- **WHEN** new mirrored lifecycle events would exceed the `28 MiB` storage budget on a boot slot
+- **THEN** the system retains newer events and removes or overwrites the oldest retained forensic records within that slot
+
+#### Scenario: Segment rollover preserves bounded retention
+
+- **WHEN** the active `4 MiB` segment fills during normal operation
+- **THEN** the system advances to the next segment, reuses the oldest segment
+  when necessary, and continues writing without exceeding the `28 MiB` slot
+  budget
+
+### Requirement: Tier 0 records use boot-scoped ordering
+
+The system SHALL encode each Tier 0 forensic record as a single-line key/value
+record. Each record SHALL include `boot_id`, `seq`, `ts`, `slot`, `stage`, and
+`event`. The system SHALL reset `seq` at the start of each new `boot_id`.
+
+#### Scenario: Events within a boot are strictly ordered
+
+- **WHEN** multiple Tier 0 events are written during the same boot session
+- **THEN** their `seq` values increase monotonically within that `boot_id`
+
+#### Scenario: New boot starts a new forensic sequence
+
+- **WHEN** the device reboots into a new boot session on the same slot
+- **THEN** the device writes records with a new `boot_id` and restarts `seq` from the beginning for that boot session
+
+### Requirement: Tier 0 event scope is limited to high-value lifecycle records
+
+The system SHALL limit slot-local forensic storage to high-value lifecycle
+events. Allowed Tier 0 stages SHALL include `initrd`, `boot`, `firstboot`,
+`rauc`, `verify`, `rollback`, `watchdog`, and `shutdown`. Tier 0 events SHALL
+cover boot progression, slot selection, `/data` mount outcome, update
+lifecycle events, update-confirmation outcome, rollback detection,
+watchdog-related reset markers, orderly shutdown flush markers, and managed
+reboot or poweroff request markers where those flows are part of the system.
+The initrd stage specifically requires redesign before this requirement can be
+considered complete.
+
+#### Scenario: Noisy routine logs are excluded from Tier 0
+
+- **WHEN** ordinary service or application log traffic is emitted during normal runtime
+- **THEN** that traffic is not mirrored wholesale into the slot-local forensic store
+
+#### Scenario: Failed slot keeps its own forensic history
+
+- **WHEN** the device boots into an updated slot, fails, and later rolls back to the previous slot
+- **THEN** the failed slot retains its own recent Tier 0 forensic records on its boot partition for later inspection
+
+### Requirement: General host logging remains memory-first outside Tier 0
+
+The system SHALL keep general host journald logging memory-first during runtime
+and SHALL reserve the slot-local forensic store for critical lifecycle evidence
+rather than for general-purpose log persistence.
+
+#### Scenario: Runtime host logs are not automatically durable
+
+- **WHEN** a non-critical host log entry is written only to the general runtime journal
+- **THEN** that entry is not guaranteed to survive an abrupt power loss
+
+#### Scenario: Tier 0 remains focused on critical evidence
+
+- **WHEN** routine host or application log traffic is emitted during normal
+  operation
+- **THEN** that traffic is handled through the general volatile-journald plus
+  RAM-queued batch logging path rather than being mirrored wholesale into the
+  slot-local forensic store
+
+## Source Metadata
+
+```yaml
+schema: spec-driven
+created: 2026-04-25
+```
+
+## Source
+
+Converted from `openspec/changes/durable-journald-logs/` during the OpenSpec-to-feature-spec migration.

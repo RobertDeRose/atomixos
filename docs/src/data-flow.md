@@ -41,7 +41,7 @@ fails.
 Mutating bootstrap POST paths on an already-provisioned device require SSH signature authentication. The operator
 requests a nonce via `GET /api/nonce`, then signs a request-bound message containing the nonce, target path, and
 SHA-256 digest of the submitted config payload (`ssh-keygen -Y sign -n atomixos-reapply`). The request includes the
-nonce and base64 signature in the `X-Atomicnix-Nonce` and `X-Atomicnix-Signature` headers. Nonces are single-use and
+nonce and base64 signature in the `X-AtomixOS-Nonce` and `X-AtomixOS-Signature` headers. Nonces are single-use and
 expire after 5 minutes (configurable via `ATOMIXOS_NONCE_TTL`).
 
 Re-apply uses atomic candidate promotion:

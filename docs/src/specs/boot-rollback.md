@@ -1,6 +1,6 @@
 # Boot & Rollback
 
-> Source: `openspec/changes/rock64-ab-image/specs/boot-rollback/spec.md`
+> Source: `docs/src/features/rock64-ab-image/design.md#boot-rollback`
 
 ## Requirements
 

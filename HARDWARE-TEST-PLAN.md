@@ -376,7 +376,7 @@ cat /proc/sys/kernel/watchdog         # expect: 1
 
 ## Task Checklist
 
-Mark each task as you complete it. Update `openspec/changes/rock64-ab-image/tasks.md` with results.
+Mark each task as you complete it. Update `docs/src/features/rock64-ab-image/tasks.md` with results.
 
 | Task | Description                                  | Result |
 |------|----------------------------------------------|--------|

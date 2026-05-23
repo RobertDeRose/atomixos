@@ -64,7 +64,7 @@ application at `/Users/DeRoseR/workspace/personal/litestar-fullstack`.
   - `GET /api/nonce` issues a single-use `secrets.token_urlsafe(32)` nonce (TTL 300s).
   - Signed message format:
     `"atomixos-reapply-v1\nnonce:{nonce}\npath:{request_path}\nsha256:{payload_sha256_hex}\n"`
-  - Headers: `X-Atomicnix-Nonce` + `X-Atomicnix-Signature` (base64 SSH sig blob).
+  - Headers: `X-AtomixOS-Nonce` + `X-AtomixOS-Signature` (base64 SSH sig blob).
   - Verification via `ssh-keygen -Y verify` against `{config_root}/admin-signers`.
 - Must preserve the first-boot provisioning flow without SSH signatures. The Boot UI
   form includes an in-memory bootstrap token to prevent cross-site form posts; this

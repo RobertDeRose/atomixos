@@ -1,6 +1,6 @@
 # RAUC Integration
 
-> Source: `openspec/changes/rock64-ab-image/specs/rauc-integration/spec.md`
+> Source: `docs/src/features/rock64-ab-image/design.md#rauc-integration`
 
 ## Requirements
 

@@ -1,6 +1,6 @@
 # LAN Gateway
 
-> Source: `openspec/changes/rock64-ab-image/specs/lan-gateway/spec.md`
+> Source: `docs/src/features/rock64-ab-image/design.md#lan-gateway`
 
 ## Requirements
 

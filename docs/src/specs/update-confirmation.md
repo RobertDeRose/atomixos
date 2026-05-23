@@ -1,6 +1,6 @@
 # Update Confirmation
 
-> Source: `openspec/changes/rock64-ab-image/specs/update-confirmation/spec.md`
+> Source: `docs/src/features/rock64-ab-image/design.md#update-confirmation`
 
 ## Requirements
 

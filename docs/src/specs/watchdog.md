@@ -1,6 +1,6 @@
 # Watchdog
 
-> Source: `openspec/changes/rock64-ab-image/specs/watchdog/spec.md`
+> Source: `docs/src/features/rock64-ab-image/design.md#watchdog`
 
 ## Requirements
 

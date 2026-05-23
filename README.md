@@ -367,4 +367,4 @@ console. The remaining 17 tasks require physical hardware testing or network acc
 - **Integration tests needing containers (2 tasks)** — remaining hardware/runtime validation tied to real
   provisioned workloads and on-device confirmation behavior
 
-See `openspec/changes/rock64-ab-image/tasks.md` for the full task breakdown.
+See `docs/src/features/rock64-ab-image/tasks.md` for the full task breakdown.

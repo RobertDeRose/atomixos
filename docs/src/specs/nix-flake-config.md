@@ -1,6 +1,6 @@
 # Nix Flake Configuration
 
-> Source: `openspec/changes/rock64-ab-image/specs/nix-flake-config/spec.md`
+> Source: `docs/src/features/rock64-ab-image/design.md#nix-flake-config`
 
 ## Requirements
 

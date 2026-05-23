@@ -44,6 +44,19 @@
 
 - [Design Decisions](./design-decisions.md)
 - [Planned Features](./planned-features.md)
+- [Features](./features.md)
+  - [Rock64 A/B Image](./features/rock64-ab-image/design.md)
+    - [Tasks](./features/rock64-ab-image/tasks.md)
+  - [First-Boot Local Provisioning](./features/first-boot-local-provisioning/design.md)
+    - [Tasks](./features/first-boot-local-provisioning/tasks.md)
+  - [Durable Journald Logs](./features/durable-journald-logs/design.md)
+    - [Tasks](./features/durable-journald-logs/tasks.md)
+  - [Config Reapply Improvements](./features/config-reapply-improvements/design.md)
+    - [Tasks](./features/config-reapply-improvements/tasks.md)
+  - [Provisioning API Service](./features/provisioning-api-service/design.md)
+    - [Tasks](./features/provisioning-api-service/tasks.md)
+  - [Caddy AuthCrunch Cockpit Tutorial](./features/caddy-authcrunch-cockpit-tutorial/design.md)
+    - [Tasks](./features/caddy-authcrunch-cockpit-tutorial/tasks.md)
 
 # Reference
 

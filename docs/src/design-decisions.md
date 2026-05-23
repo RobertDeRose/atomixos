@@ -1,6 +1,6 @@
 # Design Decisions
 
-> Source: `openspec/changes/rock64-ab-image/design.md`
+> Source: `docs/src/features/rock64-ab-image/design.md`
 
 This chapter documents the key architectural decisions made during the design of AtomixOS, including the rationale,
 alternatives considered, and known trade-offs.

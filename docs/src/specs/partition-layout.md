@@ -1,6 +1,6 @@
 # Partition Layout Specification
 
-> Source: `openspec/changes/rock64-ab-image/specs/partition-layout/spec.md`
+> Source: `docs/src/features/rock64-ab-image/design.md#partition-layout`
 
 ## Requirements
 
