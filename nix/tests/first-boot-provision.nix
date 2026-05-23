@@ -213,6 +213,7 @@ nixos-lib.runTest {
         gateway.succeed("grep -F '[lan-gateway-apply] command failed: networkctl reload: reload failed' /tmp/lan-apply/restart-fail.err")
 
         gateway.succeed("rm -rf /tmp/quadlet-sync && mkdir -p /tmp/quadlet-sync/bin /var/lib/appsvc/.config/containers/systemd /var/lib/appsvc")
+        gateway.succeed("id appsvc >/dev/null 2>&1 || useradd --system --home-dir /var/lib/appsvc --shell /bin/sh appsvc")
         gateway.succeed("touch /etc/containers/systemd/obsolete.container /var/lib/appsvc/.config/containers/systemd/oldapp.container")
         gateway.succeed("cat > /tmp/quadlet-sync/bin/chronyc <<'EOF'\n#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' \"$*\" >>/tmp/quadlet-sync/chronyc.log\ncase \"$*\" in\n  tracking) printf 'Reference ID    : 7F7F0101 ()\\nLeap status     : Not synchronised\\n'; exit 0 ;;&\n  'waitsync 1 1') exit 1 ;;&\n  *) echo unexpected chronyc invocation >&2; exit 1 ;;&\nesac\nEOF\nchmod +x /tmp/quadlet-sync/bin/chronyc")
         gateway.succeed("cat > /tmp/quadlet-sync/bin/id <<'EOF'\n#!/usr/bin/env bash\nset -euo pipefail\nif [ \"$#\" -eq 2 ] && [ \"$1\" = \"-u\" ] && [ \"$2\" = \"appsvc\" ]; then\n  echo 999\n  exit 0\nfi\necho unexpected id invocation >&2\nexit 1\nEOF\nchmod +x /tmp/quadlet-sync/bin/id")
