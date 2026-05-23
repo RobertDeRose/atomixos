@@ -86,9 +86,6 @@ Quadlet containers on a persistent `/data` partition.
   section for operator-controlled DNS, default route, and NIC configuration.
   These keys are not currently consumed but may be needed for multi-NIC or
   custom DNS setups.
-- **User shell configuration**: Allow operators to set `shell = "zsh"` or
-  `shell = "bash"` per user in `[users.<name>]`. Currently admin users default
-  to `/bin/zsh` and system accounts to `/bin/sh`, with no config override.
 - **Additional `[activation]` options**: Evaluate adding activation controls beyond
   `required`, such as `timeout_seconds` for max wait/check windows,
   `rollback_on_failure` for whether to restore previous config, `restart` for an
@@ -117,6 +114,9 @@ Quadlet containers on a persistent `/data` partition.
   only until initial provisioning completes, then rebinding the bootstrap socket
   to LAN through runtime systemd drop-ins and preserving WAN exposure while an
   initial promotion marker is pending.
+- **User shell configuration**: Resolved by supporting
+  `[users.<name>].shell = "bash" | "sh" | "zsh"`. Admin users still default to
+  zsh and system users default to sh when no override is set.
 
 ## Feature Map
 
