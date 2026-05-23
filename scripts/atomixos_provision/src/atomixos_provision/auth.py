@@ -33,7 +33,7 @@ MAX_OUTSTANDING_NONCES_PER_CLIENT = int(
 )
 SSH_KEYGEN_BIN = os.environ.get("ATOMIXOS_SSH_KEYGEN", "ssh-keygen")
 AUTH_REQUIRED_MESSAGE = (
-    "authentication required: provide X-Atomicnix-Nonce and X-Atomicnix-Signature headers"
+    "authentication required: provide X-AtomixOS-Nonce and X-AtomixOS-Signature headers"
 )
 
 

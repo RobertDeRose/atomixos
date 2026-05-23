@@ -27,7 +27,11 @@ async def test_auth_error_response_uses_framework_shape(tmp_path):
 
     assert response.status_code == 401
     body = response.json()
-    assert "authentication required" in str(body)
+    body_text = str(body)
+    assert "authentication required" in body_text
+    assert "X-AtomixOS-Nonce" in body_text
+    assert "X-AtomixOS-Signature" in body_text
+    assert "Atomicnix" not in body_text
 
 
 async def test_config_submission_includes_job_url(tmp_path, monkeypatch):

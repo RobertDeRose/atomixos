@@ -423,19 +423,19 @@ nixos-lib.runTest {
         gateway.succeed("/tmp/sign-reapply /tmp/auth-nonce.txt /api/config /tmp/no-health-config.toml /tmp/auth-test-key /tmp/auth-signature-b64.txt")
 
         # Authenticated POST should succeed
-        gateway.succeed("curl -fsS -H 'Content-Type: text/plain' -H \"X-Atomicnix-Nonce: $(cat /tmp/auth-nonce.txt)\" -H \"X-Atomicnix-Signature: $(cat /tmp/auth-signature-b64.txt)\" --data-binary @/tmp/no-health-config.toml http://127.0.0.1:18081/api/config > /tmp/auth-success-response.json")
+        gateway.succeed("curl -fsS -H 'Content-Type: text/plain' -H \"X-AtomixOS-Nonce: $(cat /tmp/auth-nonce.txt)\" -H \"X-AtomixOS-Signature: $(cat /tmp/auth-signature-b64.txt)\" --data-binary @/tmp/no-health-config.toml http://127.0.0.1:18081/api/config > /tmp/auth-success-response.json")
         gateway.succeed("python3 /tmp/assert-api-job http://127.0.0.1:18081 /tmp/auth-success-response.json succeeded")
 
         # Signature is bound to the submitted payload digest.
         gateway.succeed("curl -fsS http://127.0.0.1:18081/api/nonce > /tmp/auth-tamper-nonce-response.json")
         gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nnonce = json.loads(Path('/tmp/auth-tamper-nonce-response.json').read_text())['nonce']\nPath('/tmp/auth-tamper-nonce.txt').write_text(nonce)\nPY")
         gateway.succeed("/tmp/sign-reapply /tmp/auth-tamper-nonce.txt /api/config /tmp/no-health-config.toml /tmp/auth-test-key /tmp/auth-tamper-signature-b64.txt")
-        gateway.succeed("curl -s -o /tmp/auth-tamper-response.json -w '%{http_code}' -H 'Content-Type: text/plain' -H \"X-Atomicnix-Nonce: $(cat /tmp/auth-tamper-nonce.txt)\" -H \"X-Atomicnix-Signature: $(cat /tmp/auth-tamper-signature-b64.txt)\" --data-binary @/tmp/config.toml http://127.0.0.1:18081/api/config > /tmp/auth-tamper-code")
+        gateway.succeed("curl -s -o /tmp/auth-tamper-response.json -w '%{http_code}' -H 'Content-Type: text/plain' -H \"X-AtomixOS-Nonce: $(cat /tmp/auth-tamper-nonce.txt)\" -H \"X-AtomixOS-Signature: $(cat /tmp/auth-tamper-signature-b64.txt)\" --data-binary @/tmp/config.toml http://127.0.0.1:18081/api/config > /tmp/auth-tamper-code")
         gateway.succeed("grep '^401$' /tmp/auth-tamper-code")
         gateway.succeed("grep 'signature verification failed' /tmp/auth-tamper-response.json")
 
         # Nonce replay must fail (nonce was consumed)
-        gateway.succeed("curl -s -o /tmp/auth-replay-response.json -w '%{http_code}' -H 'Content-Type: text/plain' -H \"X-Atomicnix-Nonce: $(cat /tmp/auth-nonce.txt)\" -H \"X-Atomicnix-Signature: $(cat /tmp/auth-signature-b64.txt)\" --data-binary @/tmp/config.toml http://127.0.0.1:18081/api/config > /tmp/auth-replay-code")
+        gateway.succeed("curl -s -o /tmp/auth-replay-response.json -w '%{http_code}' -H 'Content-Type: text/plain' -H \"X-AtomixOS-Nonce: $(cat /tmp/auth-nonce.txt)\" -H \"X-AtomixOS-Signature: $(cat /tmp/auth-signature-b64.txt)\" --data-binary @/tmp/config.toml http://127.0.0.1:18081/api/config > /tmp/auth-replay-code")
         gateway.succeed("grep '^401$' /tmp/auth-replay-code")
         gateway.succeed("grep 'expired' /tmp/auth-replay-response.json")
 
@@ -472,7 +472,7 @@ nixos-lib.runTest {
         gateway.succeed("/tmp/sign-reapply /tmp/atomic-nonce.txt /api/config /tmp/no-health-config.toml /tmp/atomic-key /tmp/atomic-sig-b64.txt")
 
         # Authenticated re-apply: rollback is cleaned after successful activation
-        gateway.succeed("curl -fsS -H 'Content-Type: text/plain' -H \"X-Atomicnix-Nonce: $(cat /tmp/atomic-nonce.txt)\" -H \"X-Atomicnix-Signature: $(cat /tmp/atomic-sig-b64.txt)\" --data-binary @/tmp/no-health-config.toml http://127.0.0.1:18082/api/config > /tmp/atomic-apply-response.json")
+        gateway.succeed("curl -fsS -H 'Content-Type: text/plain' -H \"X-AtomixOS-Nonce: $(cat /tmp/atomic-nonce.txt)\" -H \"X-AtomixOS-Signature: $(cat /tmp/atomic-sig-b64.txt)\" --data-binary @/tmp/no-health-config.toml http://127.0.0.1:18082/api/config > /tmp/atomic-apply-response.json")
         gateway.succeed("python3 /tmp/assert-api-job http://127.0.0.1:18082 /tmp/atomic-apply-response.json succeeded")
         # Rollback was created then cleaned after successful activation
         gateway.succeed("test ! -d /tmp/atomic-root-rollback")
@@ -509,7 +509,7 @@ nixos-lib.runTest {
         gateway.succeed("curl -fsS http://127.0.0.1:18087/api/nonce > /tmp/rootless-health-nonce.json")
         gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nnonce = json.loads(Path('/tmp/rootless-health-nonce.json').read_text())['nonce']\nPath('/tmp/rootless-health-nonce.txt').write_text(nonce)\nPY")
         gateway.succeed("/tmp/sign-reapply /tmp/rootless-health-nonce.txt /api/config /tmp/config.toml /tmp/rootless-health-key /tmp/rootless-health-sig-b64.txt")
-        gateway.succeed("curl -fsS -H 'Content-Type: text/plain' -H \"X-Atomicnix-Nonce: $(cat /tmp/rootless-health-nonce.txt)\" -H \"X-Atomicnix-Signature: $(cat /tmp/rootless-health-sig-b64.txt)\" --data-binary @/tmp/config.toml http://127.0.0.1:18087/api/config > /tmp/rootless-health-response.json")
+        gateway.succeed("curl -fsS -H 'Content-Type: text/plain' -H \"X-AtomixOS-Nonce: $(cat /tmp/rootless-health-nonce.txt)\" -H \"X-AtomixOS-Signature: $(cat /tmp/rootless-health-sig-b64.txt)\" --data-binary @/tmp/config.toml http://127.0.0.1:18087/api/config > /tmp/rootless-health-response.json")
         gateway.succeed("python3 /tmp/assert-api-job http://127.0.0.1:18087 /tmp/rootless-health-response.json succeeded")
         gateway.succeed("grep -- '--user is-active --quiet myapp.service' /tmp/rootless-health-runuser.log")
         gateway.succeed("kill $(cat /tmp/rootless-health.pid)")
@@ -528,7 +528,7 @@ nixos-lib.runTest {
         gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nnonce = json.loads(Path('/tmp/reapply-invalid-nonce.json').read_text())['nonce']\nPath('/tmp/reapply-invalid-nonce.txt').write_text(nonce)\nPY")
         gateway.succeed("/tmp/sign-reapply /tmp/reapply-invalid-nonce.txt /api/config /tmp/invalid-config.toml /tmp/reapply-invalid-key /tmp/reapply-invalid-sig-b64.txt")
         # Submit invalid config via authenticated API — accepted as a job, then fails.
-        gateway.succeed("curl -fsS -H 'Content-Type: text/plain' -H \"X-Atomicnix-Nonce: $(cat /tmp/reapply-invalid-nonce.txt)\" -H \"X-Atomicnix-Signature: $(cat /tmp/reapply-invalid-sig-b64.txt)\" --data-binary @/tmp/invalid-config.toml http://127.0.0.1:18083/api/config > /tmp/reapply-invalid-response.json")
+        gateway.succeed("curl -fsS -H 'Content-Type: text/plain' -H \"X-AtomixOS-Nonce: $(cat /tmp/reapply-invalid-nonce.txt)\" -H \"X-AtomixOS-Signature: $(cat /tmp/reapply-invalid-sig-b64.txt)\" --data-binary @/tmp/invalid-config.toml http://127.0.0.1:18083/api/config > /tmp/reapply-invalid-response.json")
         gateway.succeed("python3 /tmp/assert-api-job http://127.0.0.1:18083 /tmp/reapply-invalid-response.json failed")
         # Active config must be unchanged — same hash, no candidate/rollback debris
         gateway.succeed("sha256sum /tmp/reapply-invalid-root/config.toml | awk '{print $1}' > /tmp/reapply-invalid-hash-after")
@@ -552,7 +552,7 @@ nixos-lib.runTest {
         gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nnonce = json.loads(Path('/tmp/rollback-nonce.json').read_text())['nonce']\nPath('/tmp/rollback-nonce.txt').write_text(nonce)\nPY")
         gateway.succeed("/tmp/sign-reapply /tmp/rollback-nonce.txt /api/config /tmp/config.toml /tmp/rollback-key /tmp/rollback-sig-b64.txt")
         # Submit valid config — activation fails inside the async job and rolls back.
-        gateway.succeed("curl -fsS -H 'Content-Type: text/plain' -H \"X-Atomicnix-Nonce: $(cat /tmp/rollback-nonce.txt)\" -H \"X-Atomicnix-Signature: $(cat /tmp/rollback-sig-b64.txt)\" --data-binary @/tmp/config.toml http://127.0.0.1:18084/api/config > /tmp/rollback-response.json")
+        gateway.succeed("curl -fsS -H 'Content-Type: text/plain' -H \"X-AtomixOS-Nonce: $(cat /tmp/rollback-nonce.txt)\" -H \"X-AtomixOS-Signature: $(cat /tmp/rollback-sig-b64.txt)\" --data-binary @/tmp/config.toml http://127.0.0.1:18084/api/config > /tmp/rollback-response.json")
         gateway.succeed("python3 /tmp/assert-api-job http://127.0.0.1:18084 /tmp/rollback-response.json failed")
         gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\njob = json.loads(Path('/tmp/rollback-response.json.job').read_text())\nassert 'activation failed' in job['error'], job\nassert 'rollback activation/health failed' in job['error'], job\nassert job['rollback_status'] == 'failed', job\nPY")
         # Config should be restored to the original (rollback consumed)
@@ -574,7 +574,7 @@ nixos-lib.runTest {
         gateway.succeed("curl -fsS http://127.0.0.1:18086/api/nonce > /tmp/apply-rollback-nonce.json")
         gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nnonce = json.loads(Path('/tmp/apply-rollback-nonce.json').read_text())['nonce']\nPath('/tmp/apply-rollback-nonce.txt').write_text(nonce)\nPY")
         gateway.succeed("/tmp/sign-reapply /tmp/apply-rollback-nonce.txt /api/config /tmp/config.toml /tmp/apply-rollback-key /tmp/apply-rollback-sig-b64.txt")
-        gateway.succeed("curl -fsS -H 'Content-Type: text/plain' -H \"X-Atomicnix-Nonce: $(cat /tmp/apply-rollback-nonce.txt)\" -H \"X-Atomicnix-Signature: $(cat /tmp/apply-rollback-sig-b64.txt)\" --data-binary @/tmp/config.toml http://127.0.0.1:18086/api/config > /tmp/apply-rollback-response.json")
+        gateway.succeed("curl -fsS -H 'Content-Type: text/plain' -H \"X-AtomixOS-Nonce: $(cat /tmp/apply-rollback-nonce.txt)\" -H \"X-AtomixOS-Signature: $(cat /tmp/apply-rollback-sig-b64.txt)\" --data-binary @/tmp/config.toml http://127.0.0.1:18086/api/config > /tmp/apply-rollback-response.json")
         gateway.succeed("python3 /tmp/assert-api-job http://127.0.0.1:18086 /tmp/apply-rollback-response.json failed")
         gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\njob = json.loads(Path('/tmp/apply-rollback-response.json.job').read_text())\nassert job['rollback_status'] == 'failed', job\nassert 'activation failed' in job['error'], job\nassert 'rollback activation/health failed' in job['error'], job\nPY")
         gateway.succeed("sha256sum /tmp/apply-rollback-root/config.toml | awk '{print $1}' > /tmp/apply-rollback-hash-after")
@@ -596,7 +596,7 @@ nixos-lib.runTest {
         gateway.succeed("curl -fsS http://127.0.0.1:18085/api/nonce > /tmp/health-rollback-nonce.json")
         gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nnonce = json.loads(Path('/tmp/health-rollback-nonce.json').read_text())['nonce']\nPath('/tmp/health-rollback-nonce.txt').write_text(nonce)\nPY")
         gateway.succeed("/tmp/sign-reapply /tmp/health-rollback-nonce.txt /api/config /tmp/config.toml /tmp/health-rollback-key /tmp/health-rollback-sig-b64.txt")
-        gateway.succeed("curl -fsS -H 'Content-Type: text/plain' -H \"X-Atomicnix-Nonce: $(cat /tmp/health-rollback-nonce.txt)\" -H \"X-Atomicnix-Signature: $(cat /tmp/health-rollback-sig-b64.txt)\" --data-binary @/tmp/config.toml http://127.0.0.1:18085/api/config > /tmp/health-rollback-response.json")
+        gateway.succeed("curl -fsS -H 'Content-Type: text/plain' -H \"X-AtomixOS-Nonce: $(cat /tmp/health-rollback-nonce.txt)\" -H \"X-AtomixOS-Signature: $(cat /tmp/health-rollback-sig-b64.txt)\" --data-binary @/tmp/config.toml http://127.0.0.1:18085/api/config > /tmp/health-rollback-response.json")
         gateway.succeed("python3 /tmp/assert-api-job http://127.0.0.1:18085 /tmp/health-rollback-response.json failed")
         gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\njob = json.loads(Path('/tmp/health-rollback-response.json.job').read_text())\nassert job['rollback_status'] == 'failed', job\nassert 'edgeproxy.service' in job['error'], job\nassert 'rollback activation/health failed' in job['error'], job\nPY")
         gateway.succeed("sha256sum /tmp/health-rollback-root/config.toml | awk '{print $1}' > /tmp/health-rollback-hash-after")
