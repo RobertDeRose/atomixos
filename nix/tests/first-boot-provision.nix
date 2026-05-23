@@ -216,6 +216,8 @@ nixos-lib.runTest {
         gateway.succeed("getent group appsvc >/dev/null 2>&1 || groupadd --system appsvc")
         gateway.succeed("id appsvc >/dev/null 2>&1 || useradd --system --gid appsvc --home-dir /var/lib/appsvc --shell /bin/sh appsvc")
         gateway.succeed("touch /etc/containers/systemd/obsolete.container /var/lib/appsvc/.config/containers/systemd/oldapp.container")
+        gateway.succeed("printf '[\"obsolete.container\"]\n' >/etc/containers/systemd/.atomixos-managed-quadlets.json")
+        gateway.succeed("printf '[\"oldapp.container\"]\n' >/var/lib/appsvc/.config/containers/systemd/.atomixos-managed-quadlets.json")
         gateway.succeed("cat > /tmp/quadlet-sync/bin/chronyc <<'EOF'\n#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' \"$*\" >>/tmp/quadlet-sync/chronyc.log\ncase \"$*\" in\n  tracking) printf 'Reference ID    : 7F7F0101 ()\\nLeap status     : Not synchronised\\n'; exit 0 ;;&\n  'waitsync 1 1') exit 1 ;;&\n  *) echo unexpected chronyc invocation >&2; exit 1 ;;&\nesac\nEOF\nchmod +x /tmp/quadlet-sync/bin/chronyc")
         gateway.succeed("cat > /tmp/quadlet-sync/bin/id <<'EOF'\n#!/usr/bin/env bash\nset -euo pipefail\nif [ \"$#\" -eq 2 ] && [ \"$1\" = \"-u\" ] && [ \"$2\" = \"appsvc\" ]; then\n  echo 999\n  exit 0\nfi\necho unexpected id invocation >&2\nexit 1\nEOF\nchmod +x /tmp/quadlet-sync/bin/id")
         gateway.succeed("cat > /tmp/quadlet-sync/bin/chown <<'EOF'\n#!/usr/bin/env bash\nexit 0\nEOF\nchmod +x /tmp/quadlet-sync/bin/chown")
@@ -245,7 +247,7 @@ nixos-lib.runTest {
         gateway.succeed("grep '^sync-quadlet /data/config /etc/containers/systemd /var/lib/appsvc/.config/containers/systemd$' /tmp/quadlet-sync/provision.log")
         gateway.succeed("grep '^daemon-reload$' /tmp/quadlet-sync/systemctl.log")
         gateway.succeed("grep '^restart edgeproxy.service$' /tmp/quadlet-sync/systemctl.log")
-        gateway.succeed("test ! -e /tmp/quadlet-sync/loginctl.log")
+        gateway.succeed("grep '^enable-linger appsvc$' /tmp/quadlet-sync/loginctl.log")
         gateway.succeed("grep '^--user stop oldapp.service$' /tmp/quadlet-sync/systemctl.log")
         gateway.succeed("cat > /tmp/quadlet-sync/bin/first-boot-provision <<'EOF'\n#!/usr/bin/env bash\nset -euo pipefail\nif [ \"$1\" = \"sync-quadlet\" ]; then\n  exit 1\nfi\necho unexpected first-boot-provision invocation >&2\nexit 1\nEOF\nchmod +x /tmp/quadlet-sync/bin/first-boot-provision")
         gateway.fail("ATOMIXOS_ALLOW_UNSAFE_PATH=1 PATH=/tmp/quadlet-sync/bin:$PATH quadlet-sync >/tmp/quadlet-sync/fatal.log 2>&1")
@@ -552,7 +554,7 @@ nixos-lib.runTest {
         # Submit valid config — activation fails inside the async job and rolls back.
         gateway.succeed("curl -fsS -H 'Content-Type: text/plain' -H \"X-Atomicnix-Nonce: $(cat /tmp/rollback-nonce.txt)\" -H \"X-Atomicnix-Signature: $(cat /tmp/rollback-sig-b64.txt)\" --data-binary @/tmp/config.toml http://127.0.0.1:18084/api/config > /tmp/rollback-response.json")
         gateway.succeed("python3 /tmp/assert-api-job http://127.0.0.1:18084 /tmp/rollback-response.json failed")
-        gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\njob = json.loads(Path('/tmp/rollback-response.json.job').read_text())\nassert 'activation failed' in job['error'], job\nassert 'rollback activation failed' in job['error'], job\nassert job['rollback_status'] == 'skipped', job\nPY")
+        gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\njob = json.loads(Path('/tmp/rollback-response.json.job').read_text())\nassert 'activation failed' in job['error'], job\nassert 'rollback activation/health failed' in job['error'], job\nassert job['rollback_status'] == 'failed', job\nPY")
         # Config should be restored to the original (rollback consumed)
         gateway.succeed("sha256sum /tmp/rollback-root/config.toml | awk '{print $1}' > /tmp/rollback-hash-after")
         gateway.succeed("diff /tmp/rollback-hash-before /tmp/rollback-hash-after")
@@ -574,7 +576,7 @@ nixos-lib.runTest {
         gateway.succeed("/tmp/sign-reapply /tmp/apply-rollback-nonce.txt /api/config /tmp/config.toml /tmp/apply-rollback-key /tmp/apply-rollback-sig-b64.txt")
         gateway.succeed("curl -fsS -H 'Content-Type: text/plain' -H \"X-Atomicnix-Nonce: $(cat /tmp/apply-rollback-nonce.txt)\" -H \"X-Atomicnix-Signature: $(cat /tmp/apply-rollback-sig-b64.txt)\" --data-binary @/tmp/config.toml http://127.0.0.1:18086/api/config > /tmp/apply-rollback-response.json")
         gateway.succeed("python3 /tmp/assert-api-job http://127.0.0.1:18086 /tmp/apply-rollback-response.json failed")
-        gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\njob = json.loads(Path('/tmp/apply-rollback-response.json.job').read_text())\nassert job['rollback_status'] == 'skipped', job\nassert 'activation failed' in job['error'], job\nassert 'rollback activation failed' in job['error'], job\nPY")
+        gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\njob = json.loads(Path('/tmp/apply-rollback-response.json.job').read_text())\nassert job['rollback_status'] == 'failed', job\nassert 'activation failed' in job['error'], job\nassert 'rollback activation/health failed' in job['error'], job\nPY")
         gateway.succeed("sha256sum /tmp/apply-rollback-root/config.toml | awk '{print $1}' > /tmp/apply-rollback-hash-after")
         gateway.succeed("diff /tmp/apply-rollback-hash-before /tmp/apply-rollback-hash-after")
         gateway.succeed("test ! -d /tmp/apply-rollback-root-rollback")
@@ -596,7 +598,7 @@ nixos-lib.runTest {
         gateway.succeed("/tmp/sign-reapply /tmp/health-rollback-nonce.txt /api/config /tmp/config.toml /tmp/health-rollback-key /tmp/health-rollback-sig-b64.txt")
         gateway.succeed("curl -fsS -H 'Content-Type: text/plain' -H \"X-Atomicnix-Nonce: $(cat /tmp/health-rollback-nonce.txt)\" -H \"X-Atomicnix-Signature: $(cat /tmp/health-rollback-sig-b64.txt)\" --data-binary @/tmp/config.toml http://127.0.0.1:18085/api/config > /tmp/health-rollback-response.json")
         gateway.succeed("python3 /tmp/assert-api-job http://127.0.0.1:18085 /tmp/health-rollback-response.json failed")
-        gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\njob = json.loads(Path('/tmp/health-rollback-response.json.job').read_text())\nassert job['rollback_status'] == 'completed', job\nassert 'edgeproxy.service' in job['error'], job\nPY")
+        gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\njob = json.loads(Path('/tmp/health-rollback-response.json.job').read_text())\nassert job['rollback_status'] == 'failed', job\nassert 'edgeproxy.service' in job['error'], job\nassert 'rollback activation/health failed' in job['error'], job\nPY")
         gateway.succeed("sha256sum /tmp/health-rollback-root/config.toml | awk '{print $1}' > /tmp/health-rollback-hash-after")
         gateway.succeed("diff /tmp/health-rollback-hash-before /tmp/health-rollback-hash-after")
         gateway.succeed("test ! -d /tmp/health-rollback-root-rollback")
@@ -611,10 +613,10 @@ nixos-lib.runTest {
         gateway.succeed("printf '[\"candidate\"]\n' >/tmp/managed-rollback-root/managed-users.json && printf '[\"rollback\"]\n' >/tmp/managed-rollback-root-rollback/managed-users.json")
         gateway.succeed("python3 - <<'PY'\nimport json, os, sys\nfrom pathlib import Path\nos.environ['ATOMIXOS_CONFIG_SCHEMA'] = '${provisionCli}/share/atomixos/config.schema.json'\nsys.path.insert(0, '${provisionCli}/${python3.sitePackages}')\nfrom atomixos_provision.activation import restore_rollback\nassert restore_rollback(Path('/tmp/managed-rollback-root')) is True\nmanaged = json.loads(Path('/tmp/managed-rollback-root/managed-users.json').read_text())\nassert managed == ['candidate', 'rollback'], managed\nPY")
 
-        # Test interrupted promotion recovery prefers candidate when active is missing.
+        # Test unmarked interrupted candidate recovery discards partial state.
         gateway.succeed("rm -rf /tmp/recover-root /tmp/recover-root-candidate /tmp/recover-root-rollback && mkdir -p /tmp/recover-root-candidate /tmp/recover-root-rollback")
         gateway.succeed("printf 'candidate\n' >/tmp/recover-root-candidate/config.toml && printf 'rollback\n' >/tmp/recover-root-rollback/config.toml")
-        gateway.succeed("python3 - <<'PY'\nimport sys, os\nfrom pathlib import Path\nos.environ['ATOMIXOS_CONFIG_SCHEMA'] = '${provisionCli}/share/atomixos/config.schema.json'\nsys.path.insert(0, '${provisionCli}/${python3.sitePackages}')\nfrom atomixos_provision.activation import recover_config_root\nrecover_config_root(Path('/tmp/recover-root'))\nassert Path('/tmp/recover-root/config.toml').read_text() == 'candidate\\n'\nassert not Path('/tmp/recover-root-candidate').exists()\nPY")
+        gateway.succeed("python3 - <<'PY'\nimport sys, os\nfrom pathlib import Path\nos.environ['ATOMIXOS_CONFIG_SCHEMA'] = '${provisionCli}/share/atomixos/config.schema.json'\nsys.path.insert(0, '${provisionCli}/${python3.sitePackages}')\nfrom atomixos_provision.activation import recover_config_root\nrecover_config_root(Path('/tmp/recover-root'))\nassert not Path('/tmp/recover-root').exists()\nassert not Path('/tmp/recover-root-candidate').exists()\nassert Path('/tmp/recover-root-rollback/config.toml').read_text() == 'rollback\\n'\nPY")
         gateway.succeed("rm -rf /tmp/recover-active-root /tmp/recover-active-root-candidate /tmp/recover-active-root-rollback && mkdir -p /tmp/recover-active-root /tmp/recover-active-root-rollback")
         gateway.succeed("printf 'candidate\n' >/tmp/recover-active-root/config.toml && printf 'rollback\n' >/tmp/recover-active-root-rollback/config.toml")
         gateway.succeed("printf 'pending\n' >/tmp/recover-active-root.atomixos-promotion-pending")
@@ -622,7 +624,7 @@ nixos-lib.runTest {
         gateway.succeed("rm -rf /tmp/recover-cli-root /tmp/recover-cli-root-candidate /tmp/recover-cli-root-rollback && mkdir -p /tmp/recover-cli-root-candidate /tmp/recover-cli-root-rollback")
         gateway.succeed("printf 'candidate\n' >/tmp/recover-cli-root-candidate/config.toml && printf 'rollback\n' >/tmp/recover-cli-root-rollback/config.toml")
         gateway.succeed("first-boot-provision recover /tmp/recover-cli-root")
-        gateway.succeed("grep '^candidate$' /tmp/recover-cli-root/config.toml")
+        gateway.succeed("test ! -e /tmp/recover-cli-root/config.toml")
         gateway.succeed("test ! -d /tmp/recover-cli-root-candidate")
 
         # Test cleanup_rollback
