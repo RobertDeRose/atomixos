@@ -116,7 +116,7 @@ Quadlet containers on a persistent `/data` partition.
   initial promotion marker is pending.
 - **User shell configuration**: Resolved by supporting
   `[users.<name>].shell = "bash" | "sh" | "zsh"`. Admin users still default to
-  zsh and system users default to sh when no override is set.
+  zsh and system users default to bash when no override is set.
 
 ## Feature Map
 
