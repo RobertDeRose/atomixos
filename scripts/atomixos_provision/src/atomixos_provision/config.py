@@ -402,6 +402,14 @@ def require_bool(value: Any, path: str) -> bool:
     return value
 
 
+def require_int_range(value: Any, path: str, minimum: int, maximum: int) -> int:
+    """Require an integer within an inclusive range."""
+    if not isinstance(value, int) or isinstance(value, bool) or value < minimum or value > maximum:
+        message = f"expected integer in range {minimum}..{maximum} at {path}"
+        raise provision_error(message)
+    return value
+
+
 def require_port_list(value: Any, path: str) -> list[int]:
     """Require a list of valid port integers (1-65535)."""
     if not isinstance(value, list):
@@ -851,6 +859,57 @@ def load_firewall_inbound(network_value: Any) -> dict[str, dict[str, list[int]]]
     return firewall_inbound
 
 
+def load_activation_policy(activation_value: Any, known_units: set[str]) -> dict[str, Any]:
+    """Parse and validate activation policy."""
+    activation = require_allowed_keys(
+        activation_value,
+        "activation",
+        {"required", "timeout_seconds", "settle_seconds", "restart", "allow_degraded", "strategy"},
+        {"required"},
+    )
+    required_units = require_string_list(activation.get("required"), "activation.required")
+    restart = require_optional_string_list(activation.get("restart"), "activation.restart")
+    allow_degraded = require_optional_string_list(
+        activation.get("allow_degraded"), "activation.allow_degraded"
+    )
+
+    for field, units in {
+        "activation.required": required_units,
+        "activation.restart": restart,
+        "activation.allow_degraded": allow_degraded,
+    }.items():
+        for unit in units:
+            if unit not in known_units:
+                message = f"{field} references unknown unit: {unit}"
+                raise provision_error(message)
+
+    overlap = sorted(set(required_units) & set(allow_degraded))
+    if overlap:
+        message = (
+            "activation.allow_degraded must not include required units: " + ", ".join(overlap)
+        )
+        raise provision_error(message)
+
+    strategy = activation.get("strategy", "rollback")
+    if strategy != "rollback":
+        message = "activation.strategy must be rollback"
+        raise provision_error(message)
+
+    return {
+        "required": required_units,
+        "timeout_seconds": require_int_range(
+            activation.get("timeout_seconds", 300), "activation.timeout_seconds", 1, 3600
+        ),
+        "settle_seconds": require_int_range(
+            activation.get("settle_seconds", 0), "activation.settle_seconds", 0, 300
+        ),
+        "restart": restart,
+        "allow_degraded": allow_degraded,
+        "allow_degraded_configured": "allow_degraded" in activation,
+        "strategy": strategy,
+    }
+
+
 # --- Main Config Loader ---
 
 
@@ -892,11 +951,6 @@ def load_config(
     users, ssh_keys = load_users(root.get("users"))
     firewall_inbound = load_firewall_inbound(root.get("network"))
 
-    activation = require_allowed_keys(
-        root.get("activation"), "activation", {"required"}, {"required"}
-    )
-    required_units = require_string_list(activation.get("required"), "activation.required")
-
     lan_settings = load_network_settings(root.get("network"))
     host_network = load_host_network_settings(root.get("network"))
 
@@ -916,12 +970,8 @@ def load_config(
         {"container"},
     )
     container_table = require_mapping(containers.get("container"), "containers.container")
-
-    # Validate activation.required references known containers
-    for unit in required_units:
-        if unit not in container_table:
-            message = f"activation.required references unknown unit: {unit}"
-            raise provision_error(message)
+    activation_policy = load_activation_policy(root.get("activation"), set(container_table))
+    required_units = activation_policy["required"]
 
     result: dict[str, Any] = {
         "ssh_keys": ssh_keys,
@@ -931,6 +981,7 @@ def load_config(
         "host_network": host_network,
         "os_upgrade": os_upgrade_settings,
         "required_units": required_units,
+        "activation_policy": activation_policy,
         "containers": {
             "container": container_table,
             "network": containers.get("network"),

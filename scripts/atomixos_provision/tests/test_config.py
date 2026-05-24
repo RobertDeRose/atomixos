@@ -557,7 +557,109 @@ class TestLoadConfig:
         assert result["users"]["admin"]["isAdmin"] is True
         assert result["ssh_keys"] == [f"{VALID_ED25519_KEY} test@test"]
         assert result["required_units"] == ["myapp"]
+        assert result["activation_policy"] == {
+            "required": ["myapp"],
+            "timeout_seconds": 300,
+            "settle_seconds": 0,
+            "restart": [],
+            "allow_degraded": [],
+            "allow_degraded_configured": False,
+            "strategy": "rollback",
+        }
         assert "myapp" in result["containers"]["container"]
+
+    def test_activation_options_valid(self, tmp_path: Path, schema_path: Path, monkeypatch):
+        monkeypatch.setenv("ATOMIXOS_CONFIG_SCHEMA", str(schema_path))
+        config = tmp_path / "config.toml"
+        config.write_text(
+            f"""\
+version = 1
+
+[users.admin]
+isAdmin = true
+ssh_key = "{VALID_ED25519_KEY} test@test"
+
+[activation]
+required = ["myapp"]
+timeout_seconds = 120
+settle_seconds = 5
+restart = ["myapp"]
+allow_degraded = ["sidecar"]
+strategy = "rollback"
+
+[containers.container.myapp]
+privileged = false
+
+[containers.container.myapp.Container]
+Image = "docker.io/library/alpine:latest"
+
+[containers.container.sidecar]
+privileged = false
+
+[containers.container.sidecar.Container]
+Image = "docker.io/library/alpine:latest"
+"""
+        )
+        result = load_config(config)
+        assert result["activation_policy"] == {
+            "required": ["myapp"],
+            "timeout_seconds": 120,
+            "settle_seconds": 5,
+            "restart": ["myapp"],
+            "allow_degraded": ["sidecar"],
+            "allow_degraded_configured": True,
+            "strategy": "rollback",
+        }
+
+    @pytest.mark.parametrize(
+        ("activation_snippet", "error"),
+        [
+            ('required = ["myapp"]\ntimeout_seconds = 0', "activation.timeout_seconds"),
+            ('required = ["myapp"]\ntimeout_seconds = 3601', "activation.timeout_seconds"),
+            ('required = ["myapp"]\nsettle_seconds = -1', "activation.settle_seconds"),
+            ('required = ["myapp"]\nsettle_seconds = 301', "activation.settle_seconds"),
+            ('required = ["missing"]', "activation.required references unknown unit: missing"),
+            (
+                'required = ["myapp"]\nrestart = ["missing"]',
+                "activation.restart references unknown unit: missing",
+            ),
+            (
+                'required = ["myapp"]\nallow_degraded = ["missing"]',
+                "activation.allow_degraded references unknown unit: missing",
+            ),
+            (
+                'required = ["myapp"]\nallow_degraded = ["myapp"]',
+                "allow_degraded must not include required units",
+            ),
+            ('required = ["myapp"]\nstrategy = "keep-failed"', "activation.strategy"),
+            ('required = ["myapp"]\nstrategy = "manual-confirm"', "activation.strategy"),
+        ],
+    )
+    def test_activation_options_invalid(
+        self, tmp_path: Path, schema_path: Path, monkeypatch, activation_snippet: str, error: str
+    ):
+        monkeypatch.setenv("ATOMIXOS_CONFIG_SCHEMA", str(schema_path))
+        config = tmp_path / "config.toml"
+        config.write_text(
+            f"""\
+version = 1
+
+[users.admin]
+isAdmin = true
+ssh_key = "{VALID_ED25519_KEY} test@test"
+
+[activation]
+{activation_snippet}
+
+[containers.container.myapp]
+privileged = false
+
+[containers.container.myapp.Container]
+Image = "docker.io/library/alpine:latest"
+"""
+        )
+        with pytest.raises(ProvisionError, match=error):
+            load_config(config)
 
     def test_network_extensions_valid(self, tmp_path: Path, schema_path: Path, monkeypatch):
         monkeypatch.setenv("ATOMIXOS_CONFIG_SCHEMA", str(schema_path))
