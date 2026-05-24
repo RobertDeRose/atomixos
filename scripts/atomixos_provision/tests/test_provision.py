@@ -88,6 +88,14 @@ def test_write_imported_state_uses_private_permissions_and_cleans_quadlet(tmp_pa
         },
         "os_upgrade": {"server_url": "https://updates.example"},
         "required_units": ["app"],
+        "activation_policy": {
+            "required": ["app"],
+            "timeout_seconds": 120,
+            "settle_seconds": 5,
+            "restart": ["app"],
+            "allow_degraded": [],
+            "strategy": "rollback",
+        },
         "containers": {
             "container": {
                 "app": {
@@ -107,12 +115,16 @@ def test_write_imported_state_uses_private_permissions_and_cleans_quadlet(tmp_pa
         "host-network.json",
         "os-upgrade.json",
         "health-required.json",
+        "activation-policy.json",
         "quadlet-runtime.json",
     ]:
         assert (config_root / name).stat().st_mode & 0o777 == 0o600
     assert not stale_quadlet.exists()
     assert (config_root / "quadlet" / "app.container").exists()
     assert json.loads((config_root / "host-network.json").read_text()) == parsed["host_network"]
+    assert json.loads((config_root / "activation-policy.json").read_text()) == parsed[
+        "activation_policy"
+    ]
 
 
 def test_write_imported_state_marks_build_rootless_when_consumed_by_rootless_container(tmp_path):

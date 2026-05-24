@@ -5,6 +5,7 @@ import os
 import pwd
 import shutil
 import subprocess
+import time
 from pathlib import Path
 from typing import Protocol
 
@@ -25,6 +26,18 @@ __all__ = [
 BOOTSTRAP_ACTIVATION_ENV = "ATOMIXOS_BOOTSTRAP_ACTIVATION"
 BOOTSTRAP_ACTIVATION_TIMEOUT_SECONDS = 300
 APP_RUNTIME_USER = "appsvc"
+DEFAULT_ACTIVATION_POLICY = {
+    "required": [],
+    "timeout_seconds": 300,
+    "settle_seconds": 0,
+    "restart": [],
+    "allow_degraded": [],
+    "strategy": "rollback",
+}
+
+
+class ActivationPolicyError(ValueError):
+    """Raised when rendered activation policy is invalid at apply time."""
 
 
 class ProgressReporter(Protocol):
@@ -269,7 +282,76 @@ def restore_rollback(config_root: Path) -> bool:
 # --- Activation ---
 
 
-def activate_services(progress: ProgressReporter | None = None) -> list[str]:
+def load_activation_policy(config_root: Path) -> dict[str, object]:
+    """Load activation policy, falling back to the legacy health-required file."""
+    policy_path = config_root / "activation-policy.json"
+    policy = dict(DEFAULT_ACTIVATION_POLICY)
+    if policy_path.exists():
+        try:
+            raw_policy = json.loads(policy_path.read_text())
+        except (json.JSONDecodeError, OSError) as exc:
+            raise ActivationPolicyError(f"invalid activation policy: {policy_path}") from exc
+        if not isinstance(raw_policy, dict):
+            raise ActivationPolicyError(f"activation policy must be an object: {policy_path}")
+        policy.update(raw_policy)
+        policy["strict_units"] = True
+        validate_runtime_activation_policy(config_root, policy, strict_units=True)
+        return policy
+
+    health_path = config_root / "health-required.json"
+    if health_path.exists():
+        try:
+            required = json.loads(health_path.read_text())
+        except (json.JSONDecodeError, OSError):
+            return policy
+        if isinstance(required, list):
+            policy["required"] = [unit for unit in required if isinstance(unit, str)]
+    policy["strict_units"] = False
+    validate_runtime_activation_policy(config_root, policy, strict_units=False)
+    return policy
+
+
+def validate_runtime_activation_policy(
+    config_root: Path, policy: dict[str, object], *, strict_units: bool
+) -> None:
+    runtime_services = {unit.get("service", "") for unit in _load_runtime_units(config_root)}
+    for key in ("required", "restart", "allow_degraded"):
+        values = policy.get(key, [])
+        if not isinstance(values, list):
+            raise ActivationPolicyError(f"activation policy {key} must be a list")
+        for value in values:
+            if not isinstance(value, str):
+                raise ActivationPolicyError(f"activation policy {key} entries must be strings")
+            service = service_name(value)
+            if strict_units and service not in runtime_services:
+                raise ActivationPolicyError(
+                    f"activation policy {key} references unknown provisioned service: {value}"
+                )
+
+    timeout_seconds = policy.get("timeout_seconds", BOOTSTRAP_ACTIVATION_TIMEOUT_SECONDS)
+    settle_seconds = policy.get("settle_seconds", 0)
+    if not isinstance(timeout_seconds, int) or isinstance(timeout_seconds, bool):
+        raise ActivationPolicyError("activation policy timeout_seconds must be an integer")
+    if not isinstance(settle_seconds, int) or isinstance(settle_seconds, bool):
+        raise ActivationPolicyError("activation policy settle_seconds must be an integer")
+    if not 1 <= timeout_seconds <= 3600:
+        raise ActivationPolicyError("activation policy timeout_seconds must be in range 1..3600")
+    if not 0 <= settle_seconds <= 300:
+        raise ActivationPolicyError("activation policy settle_seconds must be in range 0..300")
+    if policy.get("strategy", "rollback") != "rollback":
+        raise ActivationPolicyError("activation policy strategy must be rollback")
+    if "allow_degraded_configured" in policy and not isinstance(
+        policy["allow_degraded_configured"], bool
+    ):
+        raise ActivationPolicyError(
+            "activation policy allow_degraded_configured must be a boolean"
+        )
+
+
+def activate_services(
+    progress: ProgressReporter | None = None,
+    timeout_seconds: int = BOOTSTRAP_ACTIVATION_TIMEOUT_SECONDS,
+) -> list[str]:
     """Run the activation script. Returns list of failure messages."""
     command = os.environ.get(BOOTSTRAP_ACTIVATION_ENV)
     if not command:
@@ -288,13 +370,13 @@ def activate_services(progress: ProgressReporter | None = None) -> list[str]:
             [command],
             capture_output=True,
             text=True,
-            timeout=BOOTSTRAP_ACTIVATION_TIMEOUT_SECONDS,
+            timeout=timeout_seconds,
         )
         if result.returncode != 0:
             stderr = result.stderr.strip()
             return [f"activation script failed (exit {result.returncode}): {stderr[:200]}"]
     except subprocess.TimeoutExpired:
-        return [f"activation script timed out after {BOOTSTRAP_ACTIVATION_TIMEOUT_SECONDS}s"]
+        return [f"activation script timed out after {timeout_seconds}s"]
     except FileNotFoundError:
         return ["activation script not found"]
     return []
@@ -330,7 +412,15 @@ def _load_runtime_units(config_root: Path) -> list[dict[str, str]]:
     return [unit for unit in units if isinstance(unit, dict)]
 
 
-def _check_rootless_service(service: str) -> subprocess.CompletedProcess:
+def command_timeout(deadline: float | None) -> float:
+    if deadline is None:
+        return 10
+    return max(0.001, min(10, remaining_timeout(deadline)))
+
+
+def _check_rootless_service(
+    service: str, deadline: float | None = None
+) -> subprocess.CompletedProcess:
     """Check if a rootless user service is active."""
     try:
         uid = pwd.getpwnam(APP_RUNTIME_USER).pw_uid
@@ -353,18 +443,28 @@ def _check_rootless_service(service: str) -> subprocess.CompletedProcess:
             "--quiet",
             service,
         ],
-        timeout=10,
+        timeout=command_timeout(deadline),
     )
 
 
-def _check_service(service: str, mode: str) -> subprocess.CompletedProcess:
+def _check_service(
+    service: str, mode: str, deadline: float | None = None
+) -> subprocess.CompletedProcess:
     if mode == "rootless":
-        return _check_rootless_service(service)
-    return subprocess.run(["systemctl", "is-active", "--quiet", service], timeout=10)
+        return _check_rootless_service(service, deadline)
+    return subprocess.run(
+        ["systemctl", "is-active", "--quiet", service], timeout=command_timeout(deadline)
+    )
+
+
+def remaining_timeout(deadline: float) -> float:
+    return max(0.0, deadline - time.monotonic())
 
 
 def report_runtime_services(
-    config_root: Path, progress: ProgressReporter | None = None
+    config_root: Path,
+    progress: ProgressReporter | None = None,
+    deadline: float | None = None,
 ) -> dict[str, str]:
     """Report status for every rendered runtime unit without failing the apply."""
     statuses: dict[str, str] = {}
@@ -374,7 +474,7 @@ def report_runtime_services(
             continue
         mode = unit.get("mode", "rootful")
         try:
-            result = _check_service(service, mode)
+            result = _check_service(service, mode, deadline)
             status = "running" if result.returncode == 0 else "failed"
         except (FileNotFoundError, subprocess.TimeoutExpired):
             status = "unknown"
@@ -388,6 +488,25 @@ def report_runtime_services(
                 status=status,
             )
     return statuses
+
+
+def degraded_service_failures(
+    policy: dict[str, object], statuses: dict[str, str]
+) -> list[str]:
+    """Return failed non-required services that are not explicitly allowed degraded."""
+    if not policy.get("strict_units", False) or not policy.get(
+        "allow_degraded_configured", False
+    ):
+        return []
+    required = {service_name(unit) for unit in policy.get("required", []) if isinstance(unit, str)}
+    allowed = {
+        service_name(unit) for unit in policy.get("allow_degraded", []) if isinstance(unit, str)
+    }
+    return [
+        service
+        for service, status in statuses.items()
+        if status != "running" and service not in required and service not in allowed
+    ]
 
 
 def report_runtime_deploy_start(
@@ -412,29 +531,40 @@ def report_runtime_deploy_start(
         )
 
 
+def service_name(unit: str) -> str:
+    return unit if unit.endswith(".service") else f"{unit}.service"
+
+
 def check_required_services(
-    config_root: Path, progress: ProgressReporter | None = None
+    config_root: Path,
+    progress: ProgressReporter | None = None,
+    policy: dict[str, object] | None = None,
+    deadline: float | None = None,
 ) -> list[str]:
     """Check that required health services are active. Returns failed units."""
-    health_path = config_root / "health-required.json"
-    if not health_path.exists():
-        return []
-    try:
-        required = json.loads(health_path.read_text())
-    except (json.JSONDecodeError, OSError):
-        return []
+    activation_policy = policy or load_activation_policy(config_root)
+    required = activation_policy.get("required", [])
     if not isinstance(required, list) or not required:
         return []
 
     runtime_modes = _load_runtime_unit_modes(config_root)
+    strict_units = bool(activation_policy.get("strict_units", False))
     failed: list[str] = []
     for unit in required:
-        service = f"{unit}.service"
+        if deadline is not None and remaining_timeout(deadline) <= 0:
+            failed.append("activation health checks timed out")
+            break
+        if not isinstance(unit, str):
+            continue
+        service = service_name(unit)
+        if strict_units and service not in runtime_modes:
+            failed.append(service)
+            continue
         mode = runtime_modes.get(service, "rootful")
         if progress:
             progress.set_stage("health-check", f"checking {service} ({mode})")
         try:
-            result = _check_service(service, mode)
+            result = _check_service(service, mode, deadline)
             if result.returncode != 0:
                 failed.append(service)
         except (FileNotFoundError, subprocess.TimeoutExpired):
@@ -442,7 +572,108 @@ def check_required_services(
     return failed
 
 
+def restart_activation_services(
+    config_root: Path,
+    policy: dict[str, object],
+    progress: ProgressReporter | None = None,
+    deadline: float | None = None,
+) -> list[str]:
+    restart = policy.get("restart", [])
+    if not isinstance(restart, list) or not restart:
+        return []
+    runtime_modes = _load_runtime_unit_modes(config_root)
+    failures: list[str] = []
+    for unit in restart:
+        if deadline is not None and remaining_timeout(deadline) <= 0:
+            failures.append("activation restart timed out")
+            break
+        if not isinstance(unit, str):
+            continue
+        service = service_name(unit)
+        if service not in runtime_modes:
+            failures.append(service)
+            continue
+        mode = runtime_modes[service]
+        if progress:
+            progress.set_stage("service-restart", f"restarting {service} ({mode})")
+        try:
+            result = _restart_service(service, mode, deadline)
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            failures.append(service)
+            continue
+        if result.returncode != 0:
+            failures.append(service)
+    return failures
+
+
+def _restart_service(
+    service: str, mode: str, deadline: float | None = None
+) -> subprocess.CompletedProcess:
+    if mode == "rootless":
+        return _restart_rootless_service(service, deadline)
+    return subprocess.run(["systemctl", "restart", service], timeout=command_timeout(deadline))
+
+
+def _restart_rootless_service(
+    service: str, deadline: float | None = None
+) -> subprocess.CompletedProcess:
+    try:
+        uid = pwd.getpwnam(APP_RUNTIME_USER).pw_uid
+    except KeyError:
+        return subprocess.CompletedProcess([], 1)
+    runtime_dir = f"/run/user/{uid}"
+    return subprocess.run(
+        [
+            "runuser",
+            "-u",
+            APP_RUNTIME_USER,
+            "--",
+            "env",
+            f"HOME=/var/lib/{APP_RUNTIME_USER}",
+            f"XDG_RUNTIME_DIR={runtime_dir}",
+            f"DBUS_SESSION_BUS_ADDRESS=unix:path={runtime_dir}/bus",
+            "systemctl",
+            "--user",
+            "restart",
+            service,
+        ],
+        timeout=command_timeout(deadline),
+    )
+
+
 # --- Complete Reapply Orchestration ---
+
+
+def run_activation_sequence(
+    config_root: Path, progress: ProgressReporter | None = None
+) -> list[str]:
+    policy = load_activation_policy(config_root)
+    timeout_seconds = int(policy.get("timeout_seconds", BOOTSTRAP_ACTIVATION_TIMEOUT_SECONDS))
+    settle_seconds = int(policy.get("settle_seconds", 0))
+    deadline = time.monotonic() + timeout_seconds
+
+    report_runtime_deploy_start(config_root, progress)
+    activation_failures = activate_services(progress, timeout_seconds)
+    restart_failures = [] if activation_failures else restart_activation_services(
+        config_root, policy, progress, deadline
+    )
+    if not restart_failures and not activation_failures and settle_seconds:
+        if settle_seconds > remaining_timeout(deadline):
+            return ["activation timed out before health checks"]
+        if progress:
+            progress.set_stage("settle", f"waiting {settle_seconds}s before health checks")
+        time.sleep(settle_seconds)
+    if not restart_failures and not activation_failures:
+        statuses = report_runtime_services(config_root, progress, deadline)
+        degraded_failures = degraded_service_failures(policy, statuses)
+    else:
+        degraded_failures = []
+    health_failures = (
+        []
+        if restart_failures or activation_failures
+        else check_required_services(config_root, progress, policy, deadline)
+    )
+    return activation_failures + restart_failures + degraded_failures + health_failures
 
 
 def complete_reapply(
@@ -453,20 +684,19 @@ def complete_reapply(
     Returns:
         (success, failures_list, rollback_status)
     """
-    report_runtime_deploy_start(config_root, progress)
-    activation_failures = activate_services(progress)
-    if not activation_failures:
-        report_runtime_services(config_root, progress)
-    health_failures = [] if activation_failures else check_required_services(config_root, progress)
-    failures = activation_failures + health_failures
+    try:
+        failures = run_activation_sequence(config_root, progress)
+    except ActivationPolicyError as exc:
+        failures = [str(exc)]
     if failures:
         if progress:
             progress.set_stage("rollback", "restoring previous config")
         restored = restore_rollback(config_root)
         if restored:
-            rollback_failures = activate_services(progress)
-            if not rollback_failures:
-                rollback_failures = check_required_services(config_root, progress)
+            try:
+                rollback_failures = run_activation_sequence(config_root, progress)
+            except ActivationPolicyError as exc:
+                rollback_failures = [str(exc)]
             if rollback_failures:
                 return (
                     False,

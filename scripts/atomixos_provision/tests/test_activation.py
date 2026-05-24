@@ -16,6 +16,7 @@ from atomixos_provision.activation import (
     recover_config_root,
     report_runtime_deploy_start,
     report_runtime_services,
+    restart_activation_services,
     restore_rollback,
     write_managed_state,
 )
@@ -244,6 +245,46 @@ class TestCheckRequiredServices:
         (tmp_path / "health-required.json").write_text("[]")
         assert check_required_services(tmp_path) == []
 
+    def test_activation_policy_replaces_health_file(self, tmp_path, monkeypatch):
+        (tmp_path / "health-required.json").write_text(json.dumps(["old"]))
+        (tmp_path / "activation-policy.json").write_text(json.dumps({"required": ["web"]}))
+        (tmp_path / "quadlet-runtime.json").write_text(
+            json.dumps({"units": [{"service": "web.service", "mode": "rootful"}]})
+        )
+        calls = []
+
+        def fake_check(service, _mode, _deadline=None):
+            calls.append(service)
+            return subprocess.CompletedProcess([], 0)
+
+        monkeypatch.setattr("atomixos_provision.activation._check_service", fake_check)
+
+        assert check_required_services(tmp_path) == []
+        assert calls == ["web.service"]
+
+
+class TestRestartActivationServices:
+    def test_restarts_configured_services(self, tmp_path, monkeypatch):
+        (tmp_path / "quadlet-runtime.json").write_text(
+            json.dumps({"units": [{"service": "web.service", "mode": "rootful"}]})
+        )
+        calls = []
+
+        def fake_restart(service, mode, _deadline=None):
+            calls.append((service, mode))
+            return subprocess.CompletedProcess([], 0)
+
+        monkeypatch.setattr("atomixos_provision.activation._restart_service", fake_restart)
+        progress = ProgressRecorder()
+
+        assert restart_activation_services(tmp_path, {"restart": ["web"]}, progress) == []
+        assert calls == [("web.service", "rootful")]
+        assert (
+            "service-restart",
+            "restarting web.service (rootful)",
+            {},
+        ) in progress.stages
+
 
 class TestReportRuntimeServices:
     def test_reports_every_runtime_unit(self, tmp_path, monkeypatch):
@@ -259,7 +300,7 @@ class TestReportRuntimeServices:
         )
         calls = []
 
-        def fake_check_service(service, mode):
+        def fake_check_service(service, mode, _deadline=None):
             calls.append((service, mode))
             return subprocess.CompletedProcess([], 0 if service == "web.service" else 3)
 
@@ -288,12 +329,27 @@ class TestReportRuntimeServices:
             json.dumps({"units": [{"service": "web.service", "mode": "rootful"}]})
         )
 
-        def fake_check_service(_service, _mode):
+        def fake_check_service(_service, _mode, _deadline=None):
             raise FileNotFoundError
 
         monkeypatch.setattr("atomixos_provision.activation._check_service", fake_check_service)
 
         assert report_runtime_services(tmp_path) == {"web.service": "unknown"}
+
+    def test_passes_deadline_to_status_checks(self, tmp_path, monkeypatch):
+        (tmp_path / "quadlet-runtime.json").write_text(
+            json.dumps({"units": [{"service": "web.service", "mode": "rootful"}]})
+        )
+        calls = []
+
+        def fake_check_service(_service, _mode, deadline=None):
+            calls.append(deadline)
+            return subprocess.CompletedProcess([], 0)
+
+        monkeypatch.setattr("atomixos_provision.activation._check_service", fake_check_service)
+
+        assert report_runtime_services(tmp_path, deadline=123.0) == {"web.service": "running"}
+        assert calls == [123.0]
 
 
 class TestReportRuntimeDeployStart:
@@ -350,10 +406,12 @@ class TestCompleteReapply:
         (config_root / "health-required.json").write_text(json.dumps(["web"]))
         progress = ProgressRecorder()
 
-        monkeypatch.setattr("atomixos_provision.activation.activate_services", lambda _p: [])
+        monkeypatch.setattr(
+            "atomixos_provision.activation.activate_services", lambda _p, _timeout=300: []
+        )
         monkeypatch.setattr(
             "atomixos_provision.activation._check_service",
-            lambda _service, _mode: subprocess.CompletedProcess([], 0),
+            lambda _service, _mode, _deadline=None: subprocess.CompletedProcess([], 0),
         )
 
         assert complete_reapply(config_root, progress) == (True, [], "skipped")
@@ -371,6 +429,122 @@ class TestCompleteReapply:
             ("health-check", "checking web.service (rootful)", {}),
         ]
 
+    def test_uses_activation_policy_timeout_and_settle(self, tmp_path, monkeypatch):
+        config_root = tmp_path / "config"
+        config_root.mkdir()
+        rollback = tmp_path / "config-rollback"
+        rollback.mkdir()
+        (config_root / "activation-policy.json").write_text(
+            json.dumps({"required": [], "timeout_seconds": 42, "settle_seconds": 1})
+        )
+        calls = []
+
+        def fake_activate(_progress, timeout_seconds):
+            calls.append(("activate", timeout_seconds))
+            return []
+
+        monkeypatch.setattr("atomixos_provision.activation.activate_services", fake_activate)
+        monkeypatch.setattr("time.sleep", lambda seconds: calls.append(("sleep", seconds)))
+
+        assert complete_reapply(config_root) == (True, [], "skipped")
+        assert calls == [("activate", 42), ("sleep", 1)]
+
+    def test_restart_failure_rolls_back_before_activation(self, tmp_path, monkeypatch):
+        config_root = tmp_path / "config"
+        config_root.mkdir()
+        rollback = tmp_path / "config-rollback"
+        rollback.mkdir()
+        (rollback / "config.toml").write_text("previous")
+        (config_root / "activation-policy.json").write_text(json.dumps({"restart": ["web"]}))
+        (config_root / "quadlet-runtime.json").write_text(
+            json.dumps({"units": [{"service": "web.service", "mode": "rootful"}]})
+        )
+
+        monkeypatch.setattr(
+            "atomixos_provision.activation._restart_service",
+            lambda _service, _mode, _deadline=None: subprocess.CompletedProcess([], 1),
+        )
+        monkeypatch.setattr(
+            "atomixos_provision.activation.activate_services", lambda _progress, _timeout=300: []
+        )
+
+        success, failures, rollback_status = complete_reapply(config_root)
+
+        assert success is False
+        assert failures == ["web.service"]
+        assert rollback_status == "completed"
+        assert (config_root / "config.toml").read_text() == "previous"
+
+    def test_activation_runs_before_policy_restart(self, tmp_path, monkeypatch):
+        config_root = tmp_path / "config"
+        config_root.mkdir()
+        rollback = tmp_path / "config-rollback"
+        rollback.mkdir()
+        (config_root / "activation-policy.json").write_text(json.dumps({"restart": ["web"]}))
+        (config_root / "quadlet-runtime.json").write_text(
+            json.dumps({"units": [{"service": "web.service", "mode": "rootful"}]})
+        )
+        calls = []
+        monkeypatch.setattr(
+            "atomixos_provision.activation.activate_services",
+            lambda _progress, _timeout=300: calls.append("activate") or [],
+        )
+        monkeypatch.setattr(
+            "atomixos_provision.activation._restart_service",
+            lambda _service, _mode, _deadline=None: calls.append("restart")
+            or subprocess.CompletedProcess([], 0),
+        )
+        monkeypatch.setattr(
+            "atomixos_provision.activation._check_service",
+            lambda _service, _mode, _deadline=None: subprocess.CompletedProcess([], 0),
+        )
+
+        assert complete_reapply(config_root) == (True, [], "skipped")
+        assert calls == ["activate", "restart"]
+
+    def test_timeout_bounds_settle_and_health_checks(self, tmp_path, monkeypatch):
+        config_root = tmp_path / "config"
+        config_root.mkdir()
+        rollback = tmp_path / "config-rollback"
+        rollback.mkdir()
+        (config_root / "activation-policy.json").write_text(
+            json.dumps({"required": ["web"], "timeout_seconds": 1, "settle_seconds": 2})
+        )
+        (config_root / "quadlet-runtime.json").write_text(
+            json.dumps({"units": [{"service": "web.service", "mode": "rootful"}]})
+        )
+        monkeypatch.setattr(
+            "atomixos_provision.activation.activate_services", lambda _progress, _timeout=300: []
+        )
+        monkeypatch.setattr(
+            "atomixos_provision.activation._check_service",
+            lambda _service, _mode, _deadline=None: subprocess.CompletedProcess([], 0),
+        )
+
+        success, failures, rollback_status = complete_reapply(config_root)
+
+        assert success is False
+        assert failures == ["activation timed out before health checks"]
+        assert rollback_status == "completed"
+
+    def test_invalid_activation_policy_rolls_back(self, tmp_path, monkeypatch):
+        config_root = tmp_path / "config"
+        config_root.mkdir()
+        rollback = tmp_path / "config-rollback"
+        rollback.mkdir()
+        (rollback / "config.toml").write_text("previous")
+        (config_root / "activation-policy.json").write_text("not json")
+        monkeypatch.setattr(
+            "atomixos_provision.activation.activate_services", lambda _progress, _timeout=300: []
+        )
+
+        success, failures, rollback_status = complete_reapply(config_root)
+
+        assert success is False
+        assert rollback_status == "completed"
+        assert "invalid activation policy" in failures[0]
+        assert (config_root / "config.toml").read_text() == "previous"
+
     def test_inactive_non_required_unit_does_not_fail_reapply(self, tmp_path, monkeypatch):
         config_root = tmp_path / "config"
         config_root.mkdir()
@@ -381,10 +555,12 @@ class TestCompleteReapply:
         )
         progress = ProgressRecorder()
 
-        monkeypatch.setattr("atomixos_provision.activation.activate_services", lambda _p: [])
+        monkeypatch.setattr(
+            "atomixos_provision.activation.activate_services", lambda _p, _timeout=300: []
+        )
         monkeypatch.setattr(
             "atomixos_provision.activation._check_service",
-            lambda _service, _mode: subprocess.CompletedProcess([], 3),
+            lambda _service, _mode, _deadline=None: subprocess.CompletedProcess([], 3),
         )
 
         assert complete_reapply(config_root, progress) == (True, [], "skipped")
@@ -393,6 +569,109 @@ class TestCompleteReapply:
             "sidecar.service (rootful) is failed",
             {"service": "sidecar.service", "mode": "rootful", "status": "failed"},
         ) in progress.stages
+
+    def test_default_rendered_policy_keeps_non_required_unit_compatibility(
+        self, tmp_path, monkeypatch
+    ):
+        config_root = tmp_path / "config"
+        config_root.mkdir()
+        rollback = tmp_path / "config-rollback"
+        rollback.mkdir()
+        (config_root / "activation-policy.json").write_text(
+            json.dumps({"required": [], "allow_degraded": []})
+        )
+        (config_root / "quadlet-runtime.json").write_text(
+            json.dumps({"units": [{"service": "sidecar.service", "mode": "rootful"}]})
+        )
+        monkeypatch.setattr(
+            "atomixos_provision.activation.activate_services", lambda _p, _timeout=300: []
+        )
+        monkeypatch.setattr(
+            "atomixos_provision.activation._check_service",
+            lambda _service, _mode, _deadline=None: subprocess.CompletedProcess([], 3),
+        )
+
+        assert complete_reapply(config_root) == (True, [], "skipped")
+
+    def test_policy_requires_allow_degraded_for_failed_non_required_unit(
+        self, tmp_path, monkeypatch
+    ):
+        config_root = tmp_path / "config"
+        config_root.mkdir()
+        rollback = tmp_path / "config-rollback"
+        rollback.mkdir()
+        (rollback / "config.toml").write_text("previous")
+        (config_root / "activation-policy.json").write_text(
+            json.dumps(
+                {
+                    "required": [],
+                    "allow_degraded": [],
+                    "allow_degraded_configured": True,
+                }
+            )
+        )
+        (config_root / "quadlet-runtime.json").write_text(
+            json.dumps({"units": [{"service": "sidecar.service", "mode": "rootful"}]})
+        )
+        monkeypatch.setattr(
+            "atomixos_provision.activation.activate_services", lambda _p, _timeout=300: []
+        )
+        monkeypatch.setattr(
+            "atomixos_provision.activation._check_service",
+            lambda _service, _mode, _deadline=None: subprocess.CompletedProcess([], 3),
+        )
+
+        success, failures, rollback_status = complete_reapply(config_root)
+
+        assert success is False
+        assert failures == ["sidecar.service"]
+        assert rollback_status == "completed"
+
+    def test_allow_degraded_tolerates_failed_non_required_unit(self, tmp_path, monkeypatch):
+        config_root = tmp_path / "config"
+        config_root.mkdir()
+        rollback = tmp_path / "config-rollback"
+        rollback.mkdir()
+        (config_root / "activation-policy.json").write_text(
+            json.dumps(
+                {
+                    "required": [],
+                    "allow_degraded": ["sidecar"],
+                    "allow_degraded_configured": True,
+                }
+            )
+        )
+        (config_root / "quadlet-runtime.json").write_text(
+            json.dumps({"units": [{"service": "sidecar.service", "mode": "rootful"}]})
+        )
+        monkeypatch.setattr(
+            "atomixos_provision.activation.activate_services", lambda _p, _timeout=300: []
+        )
+        monkeypatch.setattr(
+            "atomixos_provision.activation._check_service",
+            lambda _service, _mode, _deadline=None: subprocess.CompletedProcess([], 3),
+        )
+
+        assert complete_reapply(config_root) == (True, [], "skipped")
+
+    def test_invalid_numeric_activation_policy_rolls_back(self, tmp_path, monkeypatch):
+        config_root = tmp_path / "config"
+        config_root.mkdir()
+        rollback = tmp_path / "config-rollback"
+        rollback.mkdir()
+        (rollback / "config.toml").write_text("previous")
+        (config_root / "activation-policy.json").write_text(
+            json.dumps({"timeout_seconds": "30"})
+        )
+        monkeypatch.setattr(
+            "atomixos_provision.activation.activate_services", lambda _progress, _timeout=300: []
+        )
+
+        success, failures, rollback_status = complete_reapply(config_root)
+
+        assert success is False
+        assert rollback_status == "completed"
+        assert "timeout_seconds must be an integer" in failures[0]
 
     def test_rollback_activation_failure_is_reported(self, tmp_path, monkeypatch):
         config_root = tmp_path / "config"
@@ -403,7 +682,7 @@ class TestCompleteReapply:
         (rollback / "config.toml").write_text("previous")
         calls = []
 
-        def fake_activate(_progress):
+        def fake_activate(_progress, _timeout=300):
             calls.append("activate")
             if len(calls) == 1:
                 return []
@@ -412,7 +691,7 @@ class TestCompleteReapply:
         monkeypatch.setattr("atomixos_provision.activation.activate_services", fake_activate)
         monkeypatch.setattr(
             "atomixos_provision.activation._check_service",
-            lambda _service, _mode: subprocess.CompletedProcess([], 3),
+            lambda _service, _mode, _deadline=None: subprocess.CompletedProcess([], 3),
         )
 
         success, failures, rollback_status = complete_reapply(config_root)
@@ -434,10 +713,10 @@ class TestCompleteReapply:
         checks = []
 
         monkeypatch.setattr(
-            "atomixos_provision.activation.activate_services", lambda _progress: []
+            "atomixos_provision.activation.activate_services", lambda _progress, _timeout=300: []
         )
 
-        def fake_check(service, _mode):
+        def fake_check(service, _mode, _deadline=None):
             checks.append(service)
             return subprocess.CompletedProcess([], 1)
 

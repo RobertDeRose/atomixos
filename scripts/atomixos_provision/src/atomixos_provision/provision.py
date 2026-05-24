@@ -53,6 +53,7 @@ class ProgressReporter(Protocol):
 FIREWALL_INBOUND_FILENAME = "firewall-inbound.json"
 LAN_SETTINGS_FILENAME = "lan-settings.json"
 HOST_NETWORK_FILENAME = "host-network.json"
+ACTIVATION_POLICY_FILENAME = "activation-policy.json"
 OS_UPGRADE_FILENAME = "os-upgrade.json"
 HEALTH_REQUIRED_FILENAME = "health-required.json"
 APP_RUNTIME_USER = "appsvc"
@@ -175,6 +176,12 @@ def write_imported_state(
     health_path = config_root / HEALTH_REQUIRED_FILENAME
     health_path.write_text(json.dumps(required_units, indent=2) + "\n")
     health_path.chmod(0o600)
+
+    # Write activation policy consumed by the re-apply activation path.
+    activation_policy = parsed.get("activation_policy", {"required": required_units})
+    activation_path = config_root / ACTIVATION_POLICY_FILENAME
+    activation_path.write_text(json.dumps(activation_policy, indent=2) + "\n")
+    activation_path.chmod(0o600)
 
     # Render and write Quadlet units
     containers = parsed.get("containers", {})
