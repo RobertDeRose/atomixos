@@ -72,11 +72,11 @@ version; the important values are the provider name (`google`), realm
 
 ```caddyfile
 oauth identity provider google {
-	realm google
-	driver google
-	client_id {env.GOOGLE_CLIENT_ID}
-	client_secret {env.GOOGLE_CLIENT_SECRET}
-	scopes openid email profile
+    realm google
+    driver google
+    client_id {env.GOOGLE_CLIENT_ID}
+    client_secret {env.GOOGLE_CLIENT_SECRET}
+    scopes openid email profile
 }
 ```
 

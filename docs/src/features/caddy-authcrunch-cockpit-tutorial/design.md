@@ -242,8 +242,10 @@ provides a foundation for moving to bridge networking later.
     # Add user-facing applications here. They can use user-policy to allow
     # both admin and user roles.
     # route /app/* {
-    #     authorize with user-policy
-    #     reverse_proxy localhost:8080
+    # authorize with user-policy
+
+    # reverse_proxy localhost:8080
+
     # }
 }
 ```

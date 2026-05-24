@@ -64,8 +64,8 @@ application at `/Users/DeRoseR/workspace/personal/litestar-fullstack`.
   - `GET /api/nonce` issues a single-use `secrets.token_urlsafe(32)` nonce (TTL 300s).
   - Signed message format:
     `"atomixos-reapply-v1\nnonce:{nonce}\npath:{request_path}\nsha256:{payload_sha256_hex}\n"`
-  - Headers: `X-AtomixOS-Nonce` + `X-AtomixOS-Signature` (base64 SSH sig blob).
-  - Verification via `ssh-keygen -Y verify` against `{config_root}/admin-signers`.
+- Headers: `X-AtomixOS-Nonce` + `X-AtomixOS-Signature` (base64 SSH sig blob).
+- Verification via `ssh-keygen -Y verify` against `{config_root}/admin-signers`.
 - Must preserve the first-boot provisioning flow without SSH signatures. The Boot UI
   form includes an in-memory bootstrap token to prevent cross-site form posts; this
   is a CSRF control, not operator authentication. Programmatic `/api/config`
@@ -157,16 +157,16 @@ OAuth, Vite, and email plugins are not part of this foundation.
 
 ### HTTP Endpoints
 
-| Method | Path                    | Auth                                      | Response | Description                            |
-|--------|-------------------------|-------------------------------------------|----------|----------------------------------------|
-| GET    | `/`                     | none                                      | HTML     | Boot UI page                           |
-| GET    | `/api/nonce`            | none                                      | JSON     | Issue single-use nonce for auth        |
-| GET    | `/api/health`           | none                                      | JSON     | Liveness check                         |
-| GET    | `/api/jobs/{id}`        | job UUID                                  | JSON     | Poll async job status                  |
+| Method | Path                   | Auth                                      | Response | Description                            |
+|--------|------------------------|-------------------------------------------|----------|----------------------------------------|
+| GET    | `/`                    | none                                      | HTML     | Boot UI page                           |
+| GET    | `/api/nonce`           | none                                      | JSON     | Issue single-use nonce for auth        |
+| GET    | `/api/health`          | none                                      | JSON     | Liveness check                         |
+| GET    | `/api/jobs/{id}`       | job UUID                                  | JSON     | Poll async job status                  |
 | GET    | `/assets/atomixos.png` | none                                      | image    | Static logo                            |
-| POST   | `/api/config`           | SSH sig (provisioned) / none (first-boot) | JSON     | Submit config, returns job ID (async)  |
-| POST   | `/api/validate`         | SSH sig                                   | JSON     | Validate config without applying       |
-| POST   | `/apply`                | bootstrap token (first-boot only)         | HTML     | Form upload → sync apply → result page |
+| POST   | `/api/config`          | SSH sig (provisioned) / none (first-boot) | JSON     | Submit config, returns job ID (async)  |
+| POST   | `/api/validate`        | SSH sig                                   | JSON     | Validate config without applying       |
+| POST   | `/apply`               | bootstrap token (first-boot only)         | HTML     | Form upload → sync apply → result page |
 
 Future dynamic API endpoints should be typed resource operations that reuse the
 same config service and job pipeline, for example:

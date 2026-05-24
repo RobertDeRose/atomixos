@@ -245,15 +245,15 @@ avoids treating the form submission as a write-only UX.
 
 ### Risks / Trade-offs
 
-- **[Risk] Bootstrap UI becomes a second management plane** -> Keep it narrowly scoped to upload/paste/apply during
+- **\[Risk\] Bootstrap UI becomes a second management plane** -> Keep it narrowly scoped to upload/paste/apply during
   unprovisioned state only
-- **[Risk] Structured TOML diverges from raw Quadlet capabilities** -> Start with a bounded supported subset and render
+- **\[Risk\] Structured TOML diverges from raw Quadlet capabilities** -> Start with a bounded supported subset and render
   deterministically; expand only when real needs appear
-- **[Risk] Reprovisioning may surprise operators by ignoring `/boot/config.toml`** -> Document the fresh-flash vs
+- **\[Risk\] Reprovisioning may surprise operators by ignoring `/boot/config.toml`** -> Document the fresh-flash vs
   reprovision distinction clearly and prefer USB/web for reprovision workflows
-- **[Risk] Existing first-boot assumptions in docs/tests drift from the new contract** -> Update specs, docs, and tests
+- **\[Risk\] Existing first-boot assumptions in docs/tests drift from the new contract** -> Update specs, docs, and tests
   together as part of the implementation change
-- **[Trade-off] Operators cannot paste raw Quadlet files verbatim** -> Accept the translation cost in exchange for a
+- **\[Trade-off\] Operators cannot paste raw Quadlet files verbatim** -> Accept the translation cost in exchange for a
   structured, validatable provisioning contract
 
 ### Migration Plan
@@ -536,7 +536,7 @@ SHALL reset the device to an unprovisioned state without removing the existing s
 
 ### update-confirmation
 
-#### MODIFIED Requirements
+#### Update Confirmation Modified Requirements
 
 ### Requirement: Manifest-driven container health checks
 

@@ -134,32 +134,32 @@ Quadlet containers on a persistent `/data` partition.
   - AuthCrunch container (`ghcr.io/authcrunch/authcrunch`) as rootful with host networking
   - Caddyfile configuring Microsoft Entra OIDC provider, authentication portal, and
     authorization policies
-  - OIDC group mapping to local roles: `authp/admin` (sudoless admin) and `authp/user`
-    (generic user) based on Entra security group membership
-  - JWT token generation with configurable lifetime and signing key
-  - Cockpit-ws container (`quay.io/fedora/fedora`) for device/container management, built
-    from a custom Containerfile that adds Cockpit management modules
-  - Caddy-gated Cockpit local session: Caddy restricts `/cockpit/*` to `authp/admin`,
-    and cockpit-ws runs `--local-session` behind the proxy -- eliminates double
-    authentication
-  - Quadlet `.build` support for building custom container images from Containerfiles
-  - Podman module integration so operators can manage provisioned pods from Cockpit
-  - Quadlet network definition for inter-container communication
-  - Quadlet volume definition for persistent Caddy state
-  - Bundle `files/` directory with Caddyfile and cockpit.conf
-  - Clear documentation of Azure App Registration prerequisites
-  - Clear documentation of how to swap the Caddyfile identity provider block for Google
-    or another OIDC provider
-  - Clear documentation of the authentication flow and role-based access
+- OIDC group mapping to local roles: `authp/admin` (sudoless admin) and `authp/user`
+  (generic user) based on Entra security group membership
+- JWT token generation with configurable lifetime and signing key
+- Cockpit-ws container (`quay.io/fedora/fedora`) for device/container management, built
+  from a custom Containerfile that adds Cockpit management modules
+- Caddy-gated Cockpit local session: Caddy restricts `/cockpit/*` to `authp/admin`,
+  and cockpit-ws runs `--local-session` behind the proxy -- eliminates double
+  authentication
+- Quadlet `.build` support for building custom container images from Containerfiles
+- Podman module integration so operators can manage provisioned pods from Cockpit
+- Quadlet network definition for inter-container communication
+- Quadlet volume definition for persistent Caddy state
+- Bundle `files/` directory with Caddyfile and cockpit.conf
+- Clear documentation of Azure App Registration prerequisites
+- Clear documentation of how to swap the Caddyfile identity provider block for Google
+  or another OIDC provider
+- Clear documentation of the authentication flow and role-based access
 - Constraints:
   - Must use only config.toml features that exist today or are added as part of this
     feature (containers, networks, volumes, builds, bundle files,
     `${CONFIG_DIR}`/`${FILES_DIR}` tokens)
-  - Caddy must be rootful (needs host network for ports 80/443)
-  - Cockpit-ws uses `--local-session` behind Caddy/AuthCrunch (no double auth)
-  - Must not require changes to the AtomixOS base image or schema beyond `.build`
-    support
-  - Tutorial values (tenant ID, client ID, domain) must use obvious placeholders
+- Caddy must be rootful (needs host network for ports 80/443)
+- Cockpit-ws uses `--local-session` behind Caddy/AuthCrunch (no double auth)
+- Must not require changes to the AtomixOS base image or schema beyond `.build`
+  support
+- Tutorial values (tenant ID, client ID, domain) must use obvious placeholders
 - Non-goals:
   - Modifying the AtomixOS base image to include Cockpit or cockpit-podman
   - Production-hardening the example (certificate pinning, secret rotation, HA)
@@ -167,19 +167,19 @@ Quadlet containers on a persistent `/data` partition.
 - Success criteria:
   - An operator can copy the tutorial config, substitute their Azure/domain values, flash
     a device, and have a working OIDC-authenticated Caddy + Cockpit stack
-  - The tutorial config passes `first-boot-provision validate`
-  - Role mapping is demonstrated: Entra group A gets admin, group B gets user
-  - The tutorial clearly explains the powerful host socket mounts used by the admin
-    Cockpit container
+- The tutorial config passes `first-boot-provision validate`
+- Role mapping is demonstrated: Entra group A gets admin, group B gets user
+- The tutorial clearly explains the powerful host socket mounts used by the admin
+  Cockpit container
 - Risks and tradeoffs:
   - **Cockpit local-session risk**: Cockpit does not perform a second login. Caddy must
     remain the only public entry point and `/cockpit/*` must remain admin-only.
-  - **AuthCrunch version churn**: AuthCrunch/caddy-security evolves rapidly; Caddyfile
-    syntax may change between versions.
-  - **Entra group claim configuration**: Requires Azure portal configuration (Token
-    Configuration > Add groups claim) that is outside AtomixOS control.
-  - **Cockpit package drift**: Container-installed Cockpit modules may not match host
-    service versions exactly; native host packaging can be added later if needed.
+- **AuthCrunch version churn**: AuthCrunch/caddy-security evolves rapidly; Caddyfile
+  syntax may change between versions.
+- **Entra group claim configuration**: Requires Azure portal configuration (Token
+  Configuration > Add groups claim) that is outside AtomixOS control.
+- **Cockpit package drift**: Container-installed Cockpit modules may not match host
+  service versions exactly; native host packaging can be added later if needed.
 - Dependencies:
   - Network and volume Quadlet support (completed: `85ec53c`)
   - Bundle file support with `${FILES_DIR}` token substitution (completed)
@@ -305,8 +305,8 @@ Quadlet containers on a persistent `/data` partition.
 - Success criteria:
   - Compromise of the HTTP process does not directly grant root shell or arbitrary
     filesystem mutation
-  - Apply/recover/rollback paths still pass existing Python and Nix VM tests
-  - Systemd hardening is documented and enforced in the service unit
+- Apply/recover/rollback paths still pass existing Python and Nix VM tests
+- Systemd hardening is documented and enforced in the service unit
 - Risks and tradeoffs:
   - Helper boundary adds implementation and test complexity
   - Progress reporting may need a simple IPC contract
@@ -322,9 +322,9 @@ Quadlet containers on a persistent `/data` partition.
 - Requirements:
   - Keep API routes documented with accurate request bodies, headers, responses, and
     error shapes
-  - Exclude Boot UI/static routes from the API schema unless deliberately documented
-  - Add tests that assert schema coverage for new API endpoints
-  - Preserve operation IDs and domain tags for client generation
+- Exclude Boot UI/static routes from the API schema unless deliberately documented
+- Add tests that assert schema coverage for new API endpoints
+- Preserve operation IDs and domain tags for client generation
 - Constraints:
   - Live schema exposure is intentional for online clients
   - Must not expose inaccurate write-only implementation routes
@@ -335,7 +335,7 @@ Quadlet containers on a persistent `/data` partition.
 - Success criteria:
   - Generated clients can submit config, poll jobs, validate config, and handle errors
     using the live schema
-  - CI fails when a new API route lacks schema assertions
+- CI fails when a new API route lacks schema assertions
 - Risks and tradeoffs:
   - Litestar defaults may need explicit overrides for raw binary endpoints
   - Schema tests add maintenance cost but prevent client drift
@@ -353,10 +353,10 @@ Quadlet containers on a persistent `/data` partition.
 - Requirements:
   - Add typed endpoints for users, network/LAN settings, container services, volumes,
     and firewall inbound rules in priority order
-  - Load current desired state, apply the typed patch, validate the full result, render
-    a candidate, promote atomically, activate, and roll back on failure
-  - Return async jobs with progress just like full config submission
-  - Preserve config export/backup semantics after partial changes
+- Load current desired state, apply the typed patch, validate the full result, render
+  a candidate, promote atomically, activate, and roll back on failure
+- Return async jobs with progress just like full config submission
+- Preserve config export/backup semantics after partial changes
 - Constraints:
   - Must not mutate derived files directly under `/data/config`
   - Must not introduce a database or divergent state store

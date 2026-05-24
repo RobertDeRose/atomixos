@@ -245,7 +245,7 @@ tracked in `durable-journald-logs`.
 - **Initrd forensic durability is incomplete**: runtime durability exists, but the earliest boot persistence path still
   needs a safer redesign.
 
-### Follow-on Changes
+### Related Follow-on Changes
 
 - `first-boot-local-provisioning` refines the provisioning contract, source-order logic, and `/data/config/` layout
 - `durable-journald-logs` refines the runtime log-durability model and tracks the incomplete initrd redesign
@@ -324,7 +324,7 @@ rather than relying on ad hoc slot bookkeeping in Linux.
 
 ### lan-gateway
 
-#### ADDED Requirements
+#### LAN Gateway Requirements
 
 ### Requirement: Network interfaces are named deterministically
 
@@ -521,7 +521,7 @@ for update confirmation, fleet management, and device registration.
 
 ### nix-flake-config
 
-#### ADDED Requirements
+#### Nix Flake Requirements
 
 ### Requirement: The flake defines Rock64 and QEMU system configurations
 
@@ -624,7 +624,7 @@ pieces needed for `aarch64-virt` test execution.
 
 ### partition-layout
 
-#### ADDED Requirements
+#### Partition Layout Requirements
 
 ### Requirement: eMMC partition layout supports A/B boot and root filesystem slots
 
@@ -707,7 +707,7 @@ slot. RAUC bootmeth SHALL provide the selected boot and root partition identitie
 
 ### rauc-integration
 
-#### ADDED Requirements
+#### RAUC Integration Requirements
 
 ### Requirement: RAUC is configured with A/B multi-slot definitions
 
@@ -815,7 +815,7 @@ CA certificate path.
 
 ### update-confirmation
 
-#### ADDED Requirements
+#### Update Confirmation Requirements
 
 ### Requirement: `os-verification.service` validates local post-update health
 
@@ -873,7 +873,7 @@ using a 5-second interval.
 - **THEN** `os-verification.service` exits with a non-zero status
 - **AND** the slot remains uncommitted
 
-### Requirement: Successful confirmation commits the slot with RAUC
+### Requirement: Sustained confirmation commits the slot with RAUC
 
 When the confirmation checks succeed, `os-verification.service` SHALL call `rauc status mark-good` for the booted slot.
 
@@ -905,7 +905,7 @@ Initial first boot SHALL be handled by `first-boot.service`, not `os-verificatio
 
 ### watchdog
 
-#### ADDED Requirements
+#### Watchdog Requirements
 
 ### Requirement: Hardware watchdog target is defined but deferred
 

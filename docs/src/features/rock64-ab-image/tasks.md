@@ -188,6 +188,7 @@
   host port 22 conflict)
 - [x] 15.5 Verify RAUC slot logic works in QEMU with virtual block devices — validated via `nix build
   .#checks.aarch64-linux.rauc-slots`: VM boots with 4 virtio disks, RAUC service starts (D-Bus), `rauc status`
+
   reports all 4 slots (boot.0/1, rootfs.0/1) with correct device paths (/dev/vdb-vde)
 
 ## 16. End-to-End Integration Testing
@@ -201,7 +202,7 @@
   bootloader backend (`bootloader=custom` in hardware-qemu.nix) that simulates U-Boot env via files in /var/lib/rauc
 - [x] 16.3 Confirmation test: verify os-verification.service checks system health and marks the slot good after
   successful update — validated via `nix build .#checks.aarch64-linux.rauc-confirm`: boots QEMU VM with RAUC + dnsmasq
-  - chronyd + dummy eth1 (172.20.30.1), creates first-boot sentinel, runs os-verification service which checks all
+- chronyd + dummy eth1 (172.20.30.1), creates first-boot sentinel, runs os-verification service which checks all
   services/IPs, waits 60s sustained check, then calls `rauc status mark-good` to commit slot A
 - [ ] 16.4 Hardware confirmation test: install an update on Rock64 and verify the local-only confirmation path commits the
   slot on real hardware
@@ -222,7 +223,7 @@
   172.20.30.0/24, gateway NTP reachable, WAN isolation verified via ip_forward=0 + unreachable WAN host ping
 - [x] 16.9 Firewall test: verify WAN allows only HTTPS and VPN, LAN allows SSH/DHCP/NTP, no forwarding between
   interfaces — validated via `nix build .#checks.aarch64-linux.firewall`: 2-node VLAN test (gateway + probe with
-  vlans=[1,2], redesigned from 3-node to avoid OOM under TCG). Uses inline nftables rules (eth1=WAN, eth2=LAN) with
+  vlans=\[1,2\], redesigned from 3-node to avoid OOM under TCG). Uses inline nftables rules (eth1=WAN, eth2=LAN) with
   eth0 backdoor passthrough. Verifies port-level allow/deny from both WAN and LAN sides using ncat listeners
 - [x] 16.10 SSH-on-WAN toggle test: create/remove flag file, verify SSH access on WAN is enabled/disabled accordingly
   — validated via `nix build .#checks.aarch64-linux.ssh-wan-toggle`: creates /data/config/ssh-wan-enabled, reloads

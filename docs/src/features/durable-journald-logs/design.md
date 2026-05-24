@@ -499,7 +499,7 @@ logs.
 
 ### forensic-log-durability
 
-#### ADDED Requirements
+#### Forensic Log Durability Requirements
 
 ### Requirement: Critical lifecycle events are mirrored to slot-local forensic storage
 
