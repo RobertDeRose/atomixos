@@ -283,7 +283,7 @@ Quadlet containers on a persistent `/data` partition.
 
 ### `provisioning-api-live-schema-contract`
 
-- Status: planned
+- Status: completed
 - Overview: Treat the live OpenAPI schema exposed by the provisioning service as a
   supported client contract, not incidental framework output.
 - Requirements:
@@ -309,6 +309,9 @@ Quadlet containers on a persistent `/data` partition.
 - Dependencies: Provisioning API foundation
 - Suggested validation: Python tests against `/schema/openapi.json`
 - Suggested first workflow command: `/start-feature provisioning-api-live-schema-contract`
+- Delivered by adding focused OpenAPI schema assertions for public route coverage, operation
+  IDs, domain tags, binary config upload bodies, auth headers, response schemas, error schemas,
+  and Boot UI/static route exclusion.
 
 ### `typed-partial-provisioning-api`
 

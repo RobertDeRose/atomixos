@@ -184,36 +184,93 @@ async def test_boot_ui_returns_404_when_config_exists_without_signers(tmp_path):
     assert response.status_code == 404
 
 
-async def test_openapi_documents_config_upload_and_auth_headers(tmp_path):
+async def test_openapi_documents_public_api_contract(tmp_path):
     async with AsyncTestClient(app=create_app(config_root=tmp_path)) as client:
         response = await client.get("/schema/openapi.json")
 
     assert response.status_code == 200
     schema = response.json()
+    assert {
+        path: set(methods)
+        for path, methods in schema["paths"].items()
+    } == {
+        "/api/health": {"get"},
+        "/api/nonce": {"get"},
+        "/api/config": {"post"},
+        "/api/validate": {"post"},
+        "/api/jobs/{job_id}": {"get"},
+    }
+
+    health = schema["paths"]["/api/health"]["get"]
+    nonce = schema["paths"]["/api/nonce"]["get"]
     submit = schema["paths"]["/api/config"]["post"]
     validate = schema["paths"]["/api/validate"]["post"]
     get_job = schema["paths"]["/api/jobs/{job_id}"]["get"]
+
+    assert health["operationId"] == "systemHealth"
+    assert health["tags"] == ["system"]
+    assert nonce["operationId"] == "authIssueNonce"
+    assert nonce["tags"] == ["auth"]
+    assert submit["operationId"] == "configSubmit"
+    assert submit["tags"] == ["config"]
+    assert validate["operationId"] == "configValidate"
+    assert validate["tags"] == ["config"]
+    assert get_job["operationId"] == "jobsGet"
+    assert get_job["tags"] == ["jobs"]
 
     assert submit["requestBody"]["content"]["application/octet-stream"]["schema"] == {
         "type": "string",
         "format": "binary",
     }
     assert validate["requestBody"] == submit["requestBody"]
-    submit_headers = {param["name"] for param in submit["parameters"]}
-    validate_headers = {param["name"] for param in validate["parameters"]}
-    job_headers = {param["name"] for param in get_job["parameters"]}
-    assert "x-config-filename" in submit_headers
-    assert "x-atomixos-signature" in submit_headers
+
+    submit_headers = {param["name"]: param for param in submit["parameters"]}
+    validate_headers = {param["name"]: param for param in validate["parameters"]}
+    job_headers = {param["name"]: param for param in get_job["parameters"]}
+    assert set(submit_headers) == {
+        "x-config-filename",
+        "x-atomixos-nonce",
+        "x-atomixos-signature",
+    }
     assert "x-atomixos-key-id" not in submit_headers
-    assert "x-config-filename" in validate_headers
-    assert "x-atomixos-signature" in validate_headers
+    assert set(validate_headers) == set(submit_headers)
     assert "x-atomixos-key-id" not in validate_headers
     assert "x-atomixos-poll-token" not in job_headers
     assert "x-atomixos-signature" not in job_headers
+    assert submit_headers["x-config-filename"]["required"] is False
+    assert submit_headers["x-atomixos-nonce"]["required"] is False
+    assert submit_headers["x-atomixos-signature"]["required"] is False
+    assert "provisioned-device re-apply" in submit_headers["x-atomixos-nonce"]["description"]
+    assert "provisioned-device re-apply" in submit_headers["x-atomixos-signature"]["description"]
+    assert validate_headers["x-config-filename"]["required"] is False
+    assert validate_headers["x-atomixos-nonce"]["required"] is True
+    assert validate_headers["x-atomixos-signature"]["required"] is True
+
+    assert nonce["responses"]["200"]["content"]["application/json"]["schema"]["$ref"].endswith(
+        "/NonceResponseBody"
+    )
+    assert submit["responses"]["202"]["content"]["application/json"]["schema"]["$ref"].endswith(
+        "/SubmitConfigResponseBody"
+    )
+    assert validate["responses"]["200"]["content"]["application/json"]["schema"]["$ref"].endswith(
+        "/ValidationResponseBody"
+    )
+    assert get_job["responses"]["200"]["content"]["application/json"]["schema"]["$ref"].endswith(
+        "/JobResponseBody"
+    )
     auth_error_ref = submit["responses"]["401"]["content"]["application/json"]["schema"]["$ref"]
     assert "FrameworkErrorResponseBody" in auth_error_ref
+    submit_409_ref = submit["responses"]["409"]["content"]["application/json"]["schema"]["$ref"]
+    validate_400_ref = validate["responses"]["400"]["content"]["application/json"][
+        "schema"
+    ]["$ref"]
+    get_job_404_ref = get_job["responses"]["404"]["content"]["application/json"]["schema"]["$ref"]
+    assert "ApiErrorResponseBody" in submit_409_ref
+    assert "ValidationResponseBody" in validate_400_ref
+    assert "ApiErrorResponseBody" in get_job_404_ref
     location_header = submit["responses"]["202"]["headers"]["Location"]
     assert location_header["schema"] == {"type": "string"}
+
     assert "/" not in schema["paths"]
     assert "/apply" not in schema["paths"]
     assert "/assets/atomixos.png" not in schema["paths"]

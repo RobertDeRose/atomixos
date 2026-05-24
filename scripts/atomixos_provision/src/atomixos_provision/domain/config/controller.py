@@ -53,16 +53,35 @@ _CONFIG_FILENAME_HEADER = Parameter(
     schema=_STRING_SCHEMA,
     description="Original filename used to detect config.toml or supported bundle formats.",
 )
-_SSH_AUTH_PARAMETERS = [
+_OPTIONAL_SSH_AUTH_PARAMETERS = [
     Parameter(
         name="x-atomixos-nonce",
         param_in="header",
+        schema=_STRING_SCHEMA,
+        description="Nonce returned by /api/nonce. Required for provisioned-device re-apply.",
+    ),
+    Parameter(
+        name="x-atomixos-signature",
+        param_in="header",
+        schema=_STRING_SCHEMA,
+        description=(
+            "SSH signature over the authenticated request payload. Required for "
+            "provisioned-device re-apply."
+        ),
+    ),
+]
+_REQUIRED_SSH_AUTH_PARAMETERS = [
+    Parameter(
+        name="x-atomixos-nonce",
+        param_in="header",
+        required=True,
         schema=_STRING_SCHEMA,
         description="Nonce returned by /api/nonce.",
     ),
     Parameter(
         name="x-atomixos-signature",
         param_in="header",
+        required=True,
         schema=_STRING_SCHEMA,
         description="SSH signature over the authenticated request payload.",
     ),
@@ -86,7 +105,7 @@ class ConfigOperation(Operation):
             self.parameters = [
                 *(self.parameters or []),
                 _CONFIG_FILENAME_HEADER,
-                *_SSH_AUTH_PARAMETERS,
+                *_OPTIONAL_SSH_AUTH_PARAMETERS,
             ]
             if self.responses and (response := self.responses.get("202")):
                 response.headers = response.headers or {}
@@ -99,7 +118,7 @@ class ConfigOperation(Operation):
             self.parameters = [
                 *(self.parameters or []),
                 _CONFIG_FILENAME_HEADER,
-                *_SSH_AUTH_PARAMETERS,
+                *_REQUIRED_SSH_AUTH_PARAMETERS,
             ]
 
 
@@ -174,7 +193,10 @@ async def submit_config(
     summary="Validate a config bundle without applying it",
     status_code=200,
     operation_class=ConfigOperation,
-    responses=_API_ERROR_RESPONSES,
+    responses={
+        **_API_ERROR_RESPONSES,
+        400: ResponseSpec(ValidationResponseBody, description="Config validation failed"),
+    },
     tags=["config"],
 )
 async def validate_config(
