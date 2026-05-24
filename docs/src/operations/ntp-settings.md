@@ -39,8 +39,15 @@ For production networks with an enterprise or site-local time service, prefer th
 and managed. Keep all configured upstreams in the same leap-second behavior family: either all standard non-smearing
 sources or all sources from the same smearing provider.
 
-AtomixOS currently sets the upstream in `modules/lan-gateway.nix`. After changing the upstream, rebuild and redeploy the
-image, then verify synchronization with:
+Set upstream NTP servers with `[network.ntp].servers` in `config.toml`. The provisioning pipeline renders the values into
+`/data/config/lan-settings.json`, and `lan-gateway-apply.service` updates the chrony runtime snippet during first
+provisioning, re-apply, and rollback.
+
+Host DNS resolver settings are separate from NTP. Use `network.dns_servers`, `network.dns_search_domains`, or
+interface-specific DNS settings when the host resolver needs explicit DNS configuration; LAN clients still receive the
+gateway address for DNS and NTP via DHCP options 6 and 42.
+
+After applying NTP changes, verify synchronization with:
 
 ```sh
 chronyc sources -v

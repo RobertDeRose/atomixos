@@ -10,6 +10,9 @@ from pathlib import Path
 
 
 CONFIG_FILE = Path(os.environ.get("ATOMIXOS_LAN_SETTINGS_FILE", "/data/config/lan-settings.json"))
+HOST_NETWORK_FILE = Path(
+    os.environ.get("ATOMIXOS_HOST_NETWORK_FILE", "/data/config/host-network.json")
+)
 DNSMASQ_CONFIG_DIR = Path(os.environ.get("ATOMIXOS_DNSMASQ_CONFIG_DIR", "/etc/dnsmasq.d"))
 DNSMASQ_CONFIG_FILE = DNSMASQ_CONFIG_DIR / "atomixos-lan.conf"
 DNSMASQ_HOSTS_FILE = Path(os.environ.get("ATOMIXOS_DNSMASQ_HOSTS_FILE", "/etc/atomixos/dnsmasq-hosts"))
@@ -26,6 +29,13 @@ NETWORK_FILE = Path(
         "/etc/systemd/network/20-lan.network.d/50-atomixos.conf",
     )
 )
+HOST_NETWORK_CONFIG_DIR = Path(os.environ.get("ATOMIXOS_HOST_NETWORK_CONFIG_DIR", "/etc/systemd/network"))
+ETH0_NETWORK_DROPIN = Path(
+    os.environ.get(
+        "ATOMIXOS_ETH0_NETWORK_DROPIN",
+        "/etc/systemd/network/10-wan.network.d/50-atomixos.conf",
+    )
+)
 ETC_HOSTS_FILE = Path(os.environ.get("ATOMIXOS_ETC_HOSTS_FILE", "/etc/hosts"))
 LAN_INTERFACE = os.environ.get("ATOMIXOS_LAN_INTERFACE", "eth1")
 SYS_CLASS_NET_DIR = Path(os.environ.get("ATOMIXOS_SYS_CLASS_NET_DIR", "/sys/class/net"))
@@ -40,6 +50,7 @@ REQUIRED_STRING_FIELDS = (
 )
 DNS_LABEL_PATTERN = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
 DEFAULT_NTP_SERVERS = ["time.cloudflare.com"]
+HOST_INTERFACE_RE = re.compile(r"^eth[0-9]+$")
 
 
 def replace_file(path: Path, content: str) -> bool:
@@ -115,11 +126,16 @@ def host_names(alias: str, domain: str) -> list[str]:
 def parse_ipv4_interface(value: str, key: str) -> ipaddress.IPv4Interface:
     try:
         return ipaddress.IPv4Interface(value)
-    except ipaddress.AddressValueError as exc:
+    except (ipaddress.AddressValueError, ipaddress.NetmaskValueError) as exc:
         msg = f"{key} must be a valid IPv4 interface in {CONFIG_FILE}: {value!r}"
         raise ValueError(msg) from exc
-    except ipaddress.NetmaskValueError as exc:
-        msg = f"{key} must be a valid IPv4 interface in {CONFIG_FILE}: {value!r}"
+
+
+def parse_host_ipv4_interface(value: str, key: str) -> ipaddress.IPv4Interface:
+    try:
+        return ipaddress.IPv4Interface(value)
+    except (ipaddress.AddressValueError, ipaddress.NetmaskValueError) as exc:
+        msg = f"{key} must be a valid IPv4 interface in {HOST_NETWORK_FILE}: {value!r}"
         raise ValueError(msg) from exc
 
 
@@ -201,6 +217,272 @@ def ntp_servers(payload: dict[str, object]) -> list[str]:
     return servers
 
 
+def parse_ip_address(value: str, key: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address:
+    try:
+        return ipaddress.ip_address(value)
+    except ValueError as exc:
+        msg = f"{key} must be a valid IP address in {HOST_NETWORK_FILE}: {value!r}"
+        raise ValueError(msg) from exc
+
+
+def parse_host_ipv4_address(value: str, key: str) -> ipaddress.IPv4Address:
+    try:
+        return ipaddress.IPv4Address(value)
+    except ValueError as exc:
+        msg = f"{key} must be a valid IPv4 address in {HOST_NETWORK_FILE}: {value!r}"
+        raise ValueError(msg) from exc
+
+
+def require_host_keys(payload: dict[str, object], allowed: set[str], path: str) -> None:
+    unexpected = set(payload) - allowed
+    if unexpected:
+        keys = ", ".join(sorted(unexpected))
+        msg = f"unsupported keys at {path} in {HOST_NETWORK_FILE}: {keys}"
+        raise ValueError(msg)
+
+
+def require_host_string(payload: dict[str, object], key: str) -> str:
+    value = payload.get(key)
+    if not isinstance(value, str) or not value:
+        msg = f"{key} must be a non-empty string in {HOST_NETWORK_FILE}"
+        raise ValueError(msg)
+    return value
+
+
+def host_string_list(payload: dict[str, object], key: str) -> list[str]:
+    values = payload.get(key, [])
+    if not isinstance(values, list) or any(not isinstance(value, str) or not value for value in values):
+        msg = f"{key} must be a list of non-empty strings in {HOST_NETWORK_FILE}"
+        raise ValueError(msg)
+    return values
+
+
+def host_ip_list(payload: dict[str, object], key: str) -> list[str]:
+    return [str(parse_ip_address(value, key)) for value in host_string_list(payload, key)]
+
+
+def host_search_domains(payload: dict[str, object], key: str) -> list[str]:
+    return [validate_host_dns_name(value, key) for value in host_string_list(payload, key)]
+
+
+def validate_host_dns_name(value: str, key: str) -> str:
+    if len(value) > 253:
+        msg = f"{key} must be a valid DNS name in {HOST_NETWORK_FILE}: {value!r}"
+        raise ValueError(msg)
+
+    labels = value.split(".")
+    if not labels or any(not label or not DNS_LABEL_PATTERN.fullmatch(label) for label in labels):
+        msg = f"{key} must be a valid DNS name in {HOST_NETWORK_FILE}: {value!r}"
+        raise ValueError(msg)
+    return value
+
+
+def load_host_network_settings() -> dict[str, object]:
+    if not HOST_NETWORK_FILE.exists():
+        return {"dns_servers": [], "dns_search_domains": [], "interfaces": {}}
+    try:
+        raw_payload = json.loads(HOST_NETWORK_FILE.read_text())
+    except OSError as exc:
+        msg = f"unable to read {HOST_NETWORK_FILE}: {exc}"
+        raise ValueError(msg) from exc
+    except json.JSONDecodeError as exc:
+        msg = f"invalid JSON in {HOST_NETWORK_FILE}: {exc.msg}"
+        raise ValueError(msg) from exc
+    if not isinstance(raw_payload, dict):
+        msg = f"{HOST_NETWORK_FILE} must contain a JSON object"
+        raise ValueError(msg)
+
+    payload = dict(raw_payload)
+    require_host_keys(
+        payload,
+        {"dns_servers", "dns_search_domains", "default_gateway", "interfaces"},
+        "host-network",
+    )
+    result: dict[str, object] = {
+        "dns_servers": host_ip_list(payload, "dns_servers"),
+        "dns_search_domains": host_search_domains(payload, "dns_search_domains"),
+        "interfaces": {},
+    }
+    if "default_gateway" in payload:
+        result["default_gateway"] = str(
+            parse_host_ipv4_address(require_host_string(payload, "default_gateway"), "default_gateway")
+        )
+
+    interfaces = payload.get("interfaces", {})
+    if not isinstance(interfaces, dict):
+        msg = f"interfaces must be an object in {HOST_NETWORK_FILE}"
+        raise ValueError(msg)
+    normalized_interfaces: dict[str, dict[str, object]] = {}
+    for name, value in interfaces.items():
+        if not isinstance(name, str) or not HOST_INTERFACE_RE.fullmatch(name):
+            msg = f"unsupported interface name in {HOST_NETWORK_FILE}: {name!r}"
+            raise ValueError(msg)
+        if not isinstance(value, dict):
+            msg = f"interfaces.{name} must be an object in {HOST_NETWORK_FILE}"
+            raise ValueError(msg)
+        interface = dict(value)
+        require_host_keys(
+            interface,
+            {"mode", "address", "gateway", "dns_servers", "dns_search_domains"},
+            f"interfaces.{name}",
+        )
+        mode = require_host_string(interface, "mode")
+        if mode not in {"dhcp", "static"}:
+            msg = f"interfaces.{name}.mode must be dhcp or static in {HOST_NETWORK_FILE}"
+            raise ValueError(msg)
+        if name == LAN_INTERFACE and mode != "static":
+            msg = f"interfaces.{name}.mode must be static because {name} is the LAN gateway in {HOST_NETWORK_FILE}"
+            raise ValueError(msg)
+        normalized: dict[str, object] = {"mode": mode}
+        if mode == "static":
+            normalized["address"] = str(
+                parse_host_ipv4_interface(
+                    require_host_string(interface, "address"), f"interfaces.{name}.address"
+                )
+            )
+        elif "address" in interface:
+            msg = f"interfaces.{name}.address is only supported for static mode in {HOST_NETWORK_FILE}"
+            raise ValueError(msg)
+        if "gateway" in interface:
+            normalized["gateway"] = str(
+                parse_host_ipv4_address(
+                    require_host_string(interface, "gateway"), f"interfaces.{name}.gateway"
+                )
+            )
+        if "dns_servers" in interface:
+            normalized["dns_servers"] = [
+                str(parse_ip_address(server, f"interfaces.{name}.dns_servers"))
+                for server in host_string_list(interface, "dns_servers")
+            ]
+        if "dns_search_domains" in interface:
+            normalized["dns_search_domains"] = [
+                validate_host_dns_name(domain, f"interfaces.{name}.dns_search_domains")
+                for domain in host_string_list(interface, "dns_search_domains")
+            ]
+        normalized_interfaces[name] = normalized
+    result["interfaces"] = normalized_interfaces
+    return result
+
+
+def network_unit_name(interface: str) -> str:
+    return f"30-atomixos-{interface}.network"
+
+
+def network_config_path(interface: str) -> Path:
+    if interface == "eth0":
+        return ETH0_NETWORK_DROPIN
+    if interface == LAN_INTERFACE:
+        return NETWORK_FILE
+    return HOST_NETWORK_CONFIG_DIR / network_unit_name(interface)
+
+
+def render_domains(domains: list[str]) -> str:
+    return " ".join(domains)
+
+
+def render_interface_network(
+    interface: str,
+    settings: dict[str, object],
+    host_settings: dict[str, object],
+    lan_gateway_cidr: str | None = None,
+) -> str:
+    is_dropin = interface in {"eth0", LAN_INTERFACE}
+    lines = [] if is_dropin else ["[Match]", f"Name={interface}", ""]
+    lines.append("[Network]")
+    mode = settings["mode"]
+    if mode == "dhcp":
+        lines.append("DHCP=ipv4")
+        lines.append("IPv6AcceptRA=false")
+    else:
+        lines.append(f"Address={settings['address']}")
+        lines.append("DHCP=no")
+        lines.append("IPv6AcceptRA=false")
+        if interface == LAN_INTERFACE and settings["address"] != lan_gateway_cidr:
+            msg = (
+                f"interfaces.{interface}.address must match gateway_cidr in "
+                f"{CONFIG_FILE} and {HOST_NETWORK_FILE}"
+            )
+            raise ValueError(msg)
+        if not is_dropin and interface == LAN_INTERFACE:
+            lines.append("DHCPServer=false")
+            lines.append("ConfigureWithoutCarrier=true")
+
+    gateway = settings.get("gateway")
+    if not gateway and interface == "eth0":
+        gateway = host_settings.get("default_gateway")
+    if gateway:
+        lines.append(f"Gateway={gateway}")
+
+    dns_servers = settings.get("dns_servers")
+    if not dns_servers and interface == "eth0":
+        dns_servers = host_settings.get("dns_servers", [])
+    for server in dns_servers:
+        lines.append(f"DNS={server}")
+    domains = settings.get("dns_search_domains")
+    if not domains and interface == "eth0":
+        domains = host_settings.get("dns_search_domains", [])
+    if domains:
+        lines.append(f"Domains={render_domains(domains)}")
+    dhcpv4_lines = []
+    if gateway and mode == "dhcp":
+        dhcpv4_lines.append("UseRoutes=false")
+    if dns_servers and mode == "dhcp":
+        dhcpv4_lines.append("UseDNS=false")
+    if dhcpv4_lines:
+        lines.extend(["", "[DHCPv4]", *dhcpv4_lines])
+    return "\n".join(lines) + "\n"
+
+
+def apply_host_network_settings(
+    host_settings: dict[str, object], lan_gateway_cidr: str | None = None
+) -> bool:
+    planned = plan_host_network_settings(host_settings, lan_gateway_cidr)
+    return apply_planned_host_network_settings(planned)
+
+
+def apply_planned_host_network_settings(planned: dict[Path, str]) -> bool:
+    changed = False
+    desired_files = set(planned)
+    for path, content in planned.items():
+        changed = replace_file(path, content) or changed
+
+    if ETH0_NETWORK_DROPIN.exists() and ETH0_NETWORK_DROPIN not in desired_files:
+        ETH0_NETWORK_DROPIN.unlink()
+        changed = True
+
+    if HOST_NETWORK_CONFIG_DIR.exists():
+        for existing in HOST_NETWORK_CONFIG_DIR.glob("30-atomixos-eth*.network"):
+            if existing not in desired_files:
+                existing.unlink()
+                changed = True
+
+    return changed
+
+
+def plan_host_network_settings(
+    host_settings: dict[str, object], lan_gateway_cidr: str | None = None
+) -> dict[Path, str]:
+    interfaces = host_settings.get("interfaces", {})
+    if not isinstance(interfaces, dict):
+        msg = f"interfaces must be an object in {HOST_NETWORK_FILE}"
+        raise ValueError(msg)
+    if (
+        host_settings.get("default_gateway")
+        or host_settings.get("dns_servers")
+        or host_settings.get("dns_search_domains")
+    ) and "eth0" not in interfaces:
+        interfaces = {"eth0": {"mode": "dhcp"}, **interfaces}
+
+    planned: dict[Path, str] = {}
+    for name, settings in interfaces.items():
+        if not isinstance(settings, dict):
+            msg = f"interfaces.{name} must be an object in {HOST_NETWORK_FILE}"
+            raise ValueError(msg)
+        path = network_config_path(name)
+        planned[path] = render_interface_network(name, settings, host_settings, lan_gateway_cidr)
+    return planned
+
+
 def load_settings() -> dict[str, object]:
     try:
         raw_payload = json.loads(CONFIG_FILE.read_text())
@@ -274,6 +556,7 @@ def main() -> int:
         return 0
 
     payload = load_settings()
+    host_settings = load_host_network_settings()
 
     gateway_cidr = payload["gateway_cidr"]
     gateway_ip = payload["gateway_ip"]
@@ -286,6 +569,10 @@ def main() -> int:
     ntp_server_values = payload.get("ntp_servers", DEFAULT_NTP_SERVERS)
     hostname_pattern = payload.get("hostname_pattern", "")
 
+    # Validate all host-network render decisions before mutating runtime files.
+    planned_network_files = plan_host_network_settings(host_settings, gateway_cidr)
+    planned_network_files.setdefault(NETWORK_FILE, "[Network]\n" f"Address={gateway_cidr}\n")
+
     gateway_names: list[str] = []
     if hostname_pattern:
         mac_suffix = read_mac_suffix(LAN_INTERFACE)
@@ -297,11 +584,6 @@ def main() -> int:
     for name in gateway_names:
         if name and name not in resolved_names:
             resolved_names.append(name)
-
-    network_changed = replace_file(
-        NETWORK_FILE,
-        "[Network]\n" f"Address={gateway_cidr}\n",
-    )
 
     dnsmasq_changed = replace_file(
         DNSMASQ_CONFIG_FILE,
@@ -343,9 +625,10 @@ def main() -> int:
         )
     replace_file(ETC_HOSTS_FILE, "\n".join(existing_hosts) + "\n")
 
-    if network_changed:
+    if apply_planned_host_network_settings(planned_network_files):
         run_command(["networkctl", "reload"])
         run_command(["systemctl", "try-restart", "systemd-networkd.service"])
+        run_command(["systemctl", "try-restart", "systemd-resolved.service"])
 
     if dnsmasq_changed or dnsmasq_hosts_changed:
         run_command(["systemctl", "try-restart", "dnsmasq.service"])

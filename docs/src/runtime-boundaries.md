@@ -38,6 +38,18 @@ ssh_key = "ssh-ed25519 ..."
 tcp = [443]
 udp = [1194]
 
+[network]
+dns_servers = ["1.1.1.1"]
+dns_search_domains = ["lan.example"]
+default_gateway = "192.0.2.1"
+
+[network.interfaces.eth0]
+mode = "dhcp"
+
+[network.interfaces.eth1]
+mode = "static"
+address = "172.20.30.1/24"
+
 [network.dnsmasq]
 gateway_cidr = "172.20.30.1/24"
 dhcp_start = "172.20.30.10"
@@ -63,6 +75,11 @@ PublishPort = ["10080:8080"]
 WAN ports stay deny-by-default unless listed. LAN stays open by default; if `[network.firewall.inbound.lan]` is
 present with any ports, LAN switches to an explicit allowlist for only those ports. `[network.dnsmasq]` is optional;
 omitted fields use the fallback LAN gateway contract. `[network.ntp]` is optional and defaults to Cloudflare NTP.
+Top-level `network.dns_servers`, `network.dns_search_domains`, `network.default_gateway`, and
+`network.interfaces.<ethN>` are optional host network controls. Interface-specific DNS/search values override top-level
+DNS/search values for that interface. Absence means no static gateway is rendered; empty gateway strings are invalid.
+The top-level IPv4 default gateway applies to `eth0`; use an interface-specific IPv4 gateway for other Ethernet
+interfaces. `eth1` must remain static because it is the LAN gateway.
 The machine-readable schema is committed at
 `schemas/config.schema.json` and the import path validates against it before semantic checks.
 
@@ -106,7 +123,39 @@ rule with the configured allowlist. Forwarding remains dropped.
 }
 ```
 
-The DHCP range must stay inside the `/24` gateway subnet, must be ordered, and must not include the gateway IP.
+The DHCP range must stay inside the gateway subnet, must be ordered, and must not include the gateway IP. Supported LAN
+gateway prefixes are `/16` through `/30`.
+
+`network.interfaces.eth1.address` and `network.dnsmasq.gateway_cidr` both describe the LAN gateway CIDR. If either is set,
+the import path renders one effective LAN gateway CIDR into `lan-settings.json`; if both are set and differ, validation
+fails before candidate promotion.
+
+## Host Network JSON
+
+`/data/config/host-network.json` is generated from `config.toml` and includes the validated host resolver, route, and
+interface fields consumed by `lan-gateway-apply.py`. Top-level DNS/search/default-gateway values render into the generated
+`10-wan.network` drop-in for `eth0` unless an explicit `eth0` value overrides them. Additional Ethernet interfaces render
+as `30-atomixos-ethN.network` units when explicitly configured.
+
+```json
+{
+  "dns_servers": ["1.1.1.1"],
+  "dns_search_domains": ["lan.example"],
+  "default_gateway": "192.0.2.1",
+  "interfaces": {
+    "eth0": {"mode": "dhcp"},
+    "eth1": {
+      "mode": "static",
+      "address": "172.20.30.1/24",
+      "dns_servers": ["172.20.30.1"],
+      "dns_search_domains": ["lan"]
+    }
+  }
+}
+```
+
+Only supported Ethernet names matching `ethN` are accepted. WiFi remains unsupported. Rendering these files does not add
+firewall rules, NAT, IP forwarding, or FORWARD-chain exceptions.
 
 ## Quadlet Safety Boundary
 

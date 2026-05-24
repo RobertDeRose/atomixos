@@ -15,7 +15,7 @@
 - [x] Define `[users]` schema with default `isAdmin = false` and default empty `ssh_key`.
 - [x] Add username validation and reserved-system-user rejection.
 - [x] Define `[network]` schema for dnsmasq and firewall rules.
-- [ ] Define `[network]` schema for DNS servers, search domains, interfaces, and default gateway once runtime support is
+- [x] Define `[network]` schema for DNS servers, search domains, interfaces, and default gateway once runtime support is
   implemented.
 - [x] Define `[containers]` schema for nested container, network, volume, and build Quadlet units.
 - [x] Add cross-field validation for admin SSH keys, LAN subnet, DHCP range, port ranges, and required service references.
@@ -94,8 +94,8 @@
 
 Deferred work recorded at merge time:
 
-- `[network]` schema fields for DNS servers, search domains, interfaces, and default gateway are deferred until runtime
-  support is implemented.
+- `[network]` schema fields for DNS servers, search domains, interfaces, and default gateway were implemented by
+  `network-config-extensions`.
 - Managed user reboot materialization VM test deferred; requires persistent VM disk configuration.
 - Provisioned-device re-apply authentication applies to all mutating bootstrap POST paths: `/api/config`, `/apply`, and
   `/generate`.

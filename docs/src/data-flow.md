@@ -26,6 +26,7 @@ Persisted outputs are:
 | User SSH keys            | `/data/config/ssh-authorized-keys/<user>` |
 | WAN inbound policy       | `/data/config/firewall-inbound.json`      |
 | LAN runtime settings     | `/data/config/lan-settings.json`          |
+| Host network settings    | `/data/config/host-network.json`          |
 | OS upgrade settings      | `/data/config/os-upgrade.json`            |
 | Required health units    | `/data/config/health-required.json`       |
 | Rendered Quadlets        | `/data/config/quadlet/*.container`        |
@@ -49,7 +50,7 @@ Re-apply uses atomic candidate promotion:
 1. Validate and render candidate config in `/data/config-candidate/`.
 2. Rename active `/data/config` to `/data/config-rollback`.
 3. Rename candidate to `/data/config`.
-4. Run activation services synchronously (user apply, Quadlet sync, LAN apply, firewall).
+4. Run activation services synchronously (user apply, Quadlet sync, LAN/host network apply, firewall).
 5. On success, clean up `/data/config-rollback`.
 6. On failure, restore `/data/config-rollback` to `/data/config` and re-activate.
 
@@ -78,11 +79,15 @@ the sustained verification window.
 
 ## Firewall and LAN Apply Flow
 
-`lan-gateway-apply.service` consumes `/data/config/lan-settings.json`, writes the eth1 network drop-in, updates dnsmasq
-and chrony runtime snippets, and restarts the affected services. `provisioned-firewall-inbound.service` consumes
-`/data/config/firewall-inbound.json` and applies the requested WAN and LAN nftables rules for the configured scopes.
-WAN remains deny-by-default unless explicitly opened. LAN is open by default, but an explicit `lan` scope replaces that
-default-open rule with an allowlist of the configured ports merged with platform-required LAN ports.
+`lan-gateway-apply.service` consumes `/data/config/lan-settings.json` and `/data/config/host-network.json`. It writes
+drop-ins for built-in `eth0`/`eth1`, generated host interface `.network` files for additional Ethernet interfaces, dnsmasq
+runtime snippets, and chrony runtime snippets, then restarts affected services only when derived files change.
+`host-network.json` is candidate-rendered state, so resolver, route, and interface changes roll back with the rest of
+`/data/config`.
+`provisioned-firewall-inbound.service` consumes `/data/config/firewall-inbound.json` and applies the requested WAN and LAN
+nftables rules for the configured scopes. WAN remains deny-by-default unless explicitly opened. LAN is open by default,
+but an explicit `lan` scope replaces that default-open rule with an allowlist of the configured ports merged with
+platform-required LAN ports.
 
 ## Application Runtime Flow
 

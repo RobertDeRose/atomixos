@@ -29,14 +29,23 @@ The WAN interface acquires its address via DHCP v4. IPv6 RA is disabled. The DHC
 
 ### ADDED: eth1 as LAN (static IP)
 
-The LAN interface has a static IP from the provisioned LAN config. When no provisioned LAN config exists or it is
-malformed, the fallback static IP is `172.20.30.1/24`. It does not run a DHCP client.
+The LAN interface has a static IP from the provisioned LAN config. `network.dnsmasq.gateway_cidr` and
+`network.interfaces.eth1.address` describe the same effective LAN gateway CIDR; if both are present they must match before
+candidate promotion. When no provisioned LAN config exists or it is malformed, the fallback static IP is
+`172.20.30.1/24`. It does not run a DHCP client.
 
 #### Scenario: LAN has static IP
 
 - Given the device has booted
 - And `/data/config/lan-settings.json` contains `gateway_ip`
 - Then `ip addr show eth1` shows the configured `gateway_ip` with its provisioned prefix
+
+#### Scenario: LAN gateway sources must agree
+
+- Given `config.toml` sets `network.dnsmasq.gateway_cidr`
+- And `config.toml` sets `network.interfaces.eth1.address`
+- When the values differ
+- Then provisioning validation fails before candidate promotion
 
 #### Scenario: LAN uses fallback static IP
 
