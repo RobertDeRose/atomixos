@@ -41,7 +41,7 @@ render, promote, activate, and rollback pipeline.
 - Adding partial activation APIs.
 - Adding a separate mutable activation control plane outside `/data/config`.
 - Disabling authentication or weakening re-apply authorization.
-- Making failed units silently acceptable by default.
+- Making explicitly governed failed units silently acceptable.
 - Implementing service-specific recovery logic beyond configured restart and
   health-check policy.
 - Changing Quadlet safety boundaries or network/firewall behavior.
@@ -89,7 +89,9 @@ Defaults when optional fields are absent:
 - `activation.allow_degraded`: list of provisioned services whose failed runtime
   status is reported but does not cause rollback. Values must refer to known
   declared container service names without the `.service` suffix and must not
-  overlap with `required`.
+  overlap with `required`. Omitting the field preserves compatibility by
+  reporting but tolerating failed non-required services; explicitly setting the
+  field makes failed non-required services outside the list fail activation.
 - `activation.strategy`: activation failure strategy. The first implementation
   supports only `rollback`, which restores the previous config on activation
   failure. Other strategies remain deferred.
@@ -103,6 +105,8 @@ When new activation options are absent, current behavior must remain unchanged:
 - Candidate promotion rolls back on activation failure.
 - Required units are checked with the existing default timeout/check behavior.
 - `strategy` defaults to `rollback`.
+- Omitted `allow_degraded` preserves existing non-required service reporting
+  behavior.
 
 Any new default must be documented and covered by tests.
 
@@ -135,8 +139,8 @@ The activation path must remain single-flight and candidate-scoped:
 - Re-apply authentication must remain required on provisioned devices.
 - Activation options must not allow arbitrary command execution or arbitrary
   systemd unit manipulation.
-- Unit references must be restricted to provisioned Quadlet services already
-  rendered in `quadlet-runtime.json`; this feature must not expose arbitrary
+- Unit references must be restricted to declared container service names already
+  validated by the config parser; this feature must not expose arbitrary
   platform unit restarts.
 - Activation options must not change firewall exposure, IP forwarding, or Quadlet
   network safety boundaries.
@@ -181,7 +185,7 @@ Likely affected docs:
 
 - `strategy = "keep-failed"` and `strategy = "manual-confirm"` are deferred.
 - Restarting platform-managed units is deferred; `activation.restart` is limited
-  to provisioned Quadlet services.
+  to declared container services.
 
 ## Open Questions
 

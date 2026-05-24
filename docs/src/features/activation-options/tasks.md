@@ -15,7 +15,7 @@
   fields.
 - [x] Extend the provisioning parser for activation policy.
 - [x] Validate numeric bounds for timeout and settle values.
-- [x] Validate unit references against provisioned Quadlet services.
+- [x] Validate unit references against declared container services.
 - [x] Reject unknown keys and unsupported strategy values.
 - [x] Reject conflicting policy, including overlap between `required` and
   `allow_degraded`.
