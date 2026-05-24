@@ -66,7 +66,7 @@
 ## Litestar HTTP Application
 
 - [x] Create `app.py` with Litestar app factory
-- [x] Wire API routes: GET `/api/nonce`, POST `/api/config`, GET `/api/jobs/{id}`, GET `/api/health`, POST `/api/validate`
+- [x] Wire API routes: GET `/api/nonce`, POST `/api/config`, GET `/api/jobs/{job_id}`, GET `/api/health`, POST `/api/validate`
 - [x] Integrate SSH auth guards with first-boot bypass
 - [x] Integrate job manager for POST `/api/config`
 
@@ -113,7 +113,7 @@
 - [x] Convert job response serialization to use the typed schemas
 - [x] Split `/api/health` into a `domain/system/controller.py`
 - [x] Split `/api/nonce` into a `domain/auth/controller.py`
-- [x] Split `/api/jobs/{id}` into a `domain/jobs/controller.py`
+- [x] Split `/api/jobs/{job_id}` into a `domain/jobs/controller.py`
 - [x] Split `/api/config` and `/api/validate` into a `domain/config/controller.py`
 - [x] Add a `ConfigService` facade for apply and validate operations
 - [x] Keep `create_app()` route wiring explicit; do not add domain auto-discovery yet

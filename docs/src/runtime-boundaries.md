@@ -17,7 +17,7 @@ Before initial provisioning, the bootstrap API is reachable on WAN and LAN and e
 authentication; first-boot programmatic `/api/config` submissions do not require that UI token. After provisioning, the
 bootstrap API narrows to the LAN gateway endpoint. It uses the same validation, candidate promotion, activation, and
 rollback path as the web console. Programmatic
-clients receive `202 Accepted` with `job_id`, initial `state`, `job_url`, and a `Location: /api/jobs/{id}` header, then
+clients receive `202 Accepted` with `job_id`, initial `state`, `job_url`, and a `Location: /api/jobs/{job_id}` header, then
 poll the job resource for final success, failure, rollback status, and service deployment events.
 
 The API routes retain operation IDs and domain tags in code, and the production

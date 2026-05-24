@@ -124,13 +124,29 @@ class JobResponse:
     duration_seconds: float | None = None
 
 
+class ProvisionResultResponseBody(TypedDict):
+    warnings: list[str]
+    reapply: NotRequired[bool]
+    rolled_back: NotRequired[bool]
+    forwarding_url: NotRequired[str]
+
+
+class JobEventResponseBody(TypedDict):
+    step: str
+    elapsed_seconds: float
+    message: NotRequired[str]
+    service: NotRequired[str]
+    mode: NotRequired[str]
+    status: NotRequired[str]
+
+
 class JobResponseBody(TypedDict):
     id: str
     state: str
     current_step: str
-    events: NotRequired[list[dict[str, Any]]]
+    events: NotRequired[list[JobEventResponseBody]]
     error: NotRequired[str]
-    result: NotRequired[dict[str, Any]]
+    result: NotRequired[ProvisionResultResponseBody]
     rollback_status: NotRequired[str]
     duration_seconds: NotRequired[float]
 

@@ -308,7 +308,6 @@ Quadlet containers on a persistent `/data` partition.
   - Schema tests add maintenance cost but prevent client drift
 - Dependencies: Provisioning API foundation
 - Suggested validation: Python tests against `/schema/openapi.json`
-- Suggested first workflow command: `/start-feature provisioning-api-live-schema-contract`
 - Delivered by adding focused OpenAPI schema assertions for public route coverage, operation
   IDs, domain tags, binary config upload bodies, auth headers, response schemas, error schemas,
   and Boot UI/static route exclusion.

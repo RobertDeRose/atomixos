@@ -45,7 +45,7 @@ are expected to call:
 - `GET /api/nonce`
 - `POST /api/validate`
 - `POST /api/config`
-- `GET /api/jobs/{id}`
+- `GET /api/jobs/{job_id}`
 
 The schema should include:
 
@@ -81,7 +81,7 @@ envelope unless existing runtime behavior changes.
 - Existing first-boot token behavior and provisioned-device SSH signature authentication must
   remain unchanged.
 - Programmatic clients should continue to submit full configs through `POST /api/config` and
-  poll jobs through `GET /api/jobs/{id}`.
+  poll jobs through `GET /api/jobs/{job_id}`.
 
 ## Validation Requirements
 

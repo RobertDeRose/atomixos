@@ -23,7 +23,7 @@
 - [x] Ensure each public API route has the intended operation ID.
 - [x] Ensure each public API route has the intended domain tag.
 - [x] Ensure `POST /api/config` and `POST /api/validate` document accepted request bodies.
-- [x] Ensure `GET /api/nonce` and `GET /api/jobs/{id}` document response schemas.
+- [x] Ensure `GET /api/nonce` and `GET /api/jobs/{job_id}` document response schemas.
 - [x] Ensure success and error status codes are documented accurately.
 - [x] Add schema assertions for route metadata and response coverage.
 
@@ -44,10 +44,9 @@
 
 ## T050 - Update docs
 
-- [x] Update `docs/src/specs/provisioning-api.md` for the live schema contract.
-  Not applicable: this repo has no standalone provisioning API spec page; the contract is
-  documented in `docs/src/provisioning.md`, `docs/src/runtime-boundaries.md`, and
-  `docs/src/data-flow.md`.
+- [x] Reconcile live schema contract docs with existing provisioning API docs.
+  This repo has no standalone provisioning API spec page; the contract is documented in
+  `docs/src/provisioning.md`, `docs/src/runtime-boundaries.md`, and `docs/src/data-flow.md`.
 - [x] Update runtime or data-flow docs if schema exposure or route semantics change.
 - [x] Update provisioning docs if client usage guidance changes.
 - [x] Update `docs/src/planned-features.md` after implementation is complete.

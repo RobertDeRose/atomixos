@@ -135,7 +135,7 @@ scripts/atomixos_provision/src/atomixos_provision/
 │   │   ├── service.py        # import/export/patch orchestration facade
 │   │   └── schemas.py        # typed request/response DTOs
 │   ├── jobs/
-│   │   ├── controller.py     # /api/jobs/{id}
+│   │   ├── controller.py     # /api/jobs/{job_id}
 │   │   ├── service.py        # single-flight job manager facade if needed
 │   │   └── schemas.py        # JobResponse, JobEvent
 │   └── system/
@@ -162,7 +162,7 @@ OAuth, Vite, and email plugins are not part of this foundation.
 | GET    | `/`                    | none                                      | HTML     | Boot UI page                           |
 | GET    | `/api/nonce`           | none                                      | JSON     | Issue single-use nonce for auth        |
 | GET    | `/api/health`          | none                                      | JSON     | Liveness check                         |
-| GET    | `/api/jobs/{id}`       | job UUID                                  | JSON     | Poll async job status                  |
+| GET    | `/api/jobs/{job_id}`   | job UUID                                  | JSON     | Poll async job status                  |
 | GET    | `/assets/atomixos.png` | none                                      | image    | Static logo                            |
 | POST   | `/api/config`          | SSH sig (provisioned) / none (first-boot) | JSON     | Submit config, returns job ID (async)  |
 | POST   | `/api/validate`        | SSH sig                                   | JSON     | Validate config without applying       |
@@ -192,7 +192,7 @@ All endpoints share a common core:
 - `/apply` calls the provision core synchronously for first-boot upload/paste only.
 
 `POST /api/config` returns `202 Accepted` with `job_id`, initial `state`,
-`job_url`, and a `Location` header pointing at `/api/jobs/{id}`. Clients must
+`job_url`, and a `Location` header pointing at `/api/jobs/{job_id}`. Clients must
 poll the job resource for final success, failure, deployment progress, rollback
 status, and forwarding URL.
 
@@ -283,7 +283,7 @@ SUBMITTED → RUNNING → SUCCEEDED
 
 - Only one job at a time; concurrent submissions return 409 Conflict.
 - Job state persists in memory (lost on restart; acceptable — single-request model).
-- Client polls `GET /api/jobs/{id}` for completion.
+- Client polls `GET /api/jobs/{job_id}` for completion.
 
 Structured job events should distinguish provisioning steps from service deployment
 state:
@@ -487,7 +487,7 @@ Explicitly avoid adding these until there is a concrete need:
 - `pyproject.toml` defines the package with all dependencies.
 - Existing HTTP endpoint paths and authentication semantics are preserved, with documented
   response-shape changes for the async job API.
-- Async job API works: POST `/api/config` returns job ID, GET `/api/jobs/{id}` returns
+- Async job API works: POST `/api/config` returns job ID, GET `/api/jobs/{job_id}` returns
   status, concurrent submissions return 409.
 - pytest suite passes with >80% coverage on module boundaries.
 - Existing NixOS VM integration tests pass unchanged.

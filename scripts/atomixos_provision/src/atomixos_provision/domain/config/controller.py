@@ -145,7 +145,7 @@ def _sanitize_filename(raw: str) -> str:
         )
     },
     responses={
-        **_API_ERROR_RESPONSES,
+        401: _API_ERROR_RESPONSES[401],
         409: ResponseSpec(
             ApiErrorResponseBody,
             description="A provision job is already running",

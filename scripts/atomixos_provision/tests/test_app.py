@@ -265,9 +265,17 @@ async def test_openapi_documents_public_api_contract(tmp_path):
         "schema"
     ]["$ref"]
     get_job_404_ref = get_job["responses"]["404"]["content"]["application/json"]["schema"]["$ref"]
+    assert "400" not in submit["responses"]
     assert "ApiErrorResponseBody" in submit_409_ref
     assert "ValidationResponseBody" in validate_400_ref
     assert "ApiErrorResponseBody" in get_job_404_ref
+    job_schema = schema["components"]["schemas"]["JobResponseBody"]
+    assert job_schema["properties"]["events"]["items"]["$ref"].endswith(
+        "/JobEventResponseBody"
+    )
+    assert job_schema["properties"]["result"]["$ref"].endswith(
+        "/ProvisionResultResponseBody"
+    )
     location_header = submit["responses"]["202"]["headers"]["Location"]
     assert location_header["schema"] == {"type": "string"}
 
