@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Set LAN gateway/DHCP range across all configs"
+#MISE description="Set built-in fallback LAN gateway/DHCP defaults"
 #USAGE flag "--gateway-cidr <value>" help="LAN gateway CIDR for eth1 (e.g. 172.20.30.1/24)" default="172.20.30.1/24"
 #USAGE flag "--dhcp-start <value>" help="DHCP range start IP (e.g. 172.20.30.10)" default="172.20.30.10"
 #USAGE flag "--dhcp-end <value>" help="DHCP range end IP (e.g. 172.20.30.254)" default="172.20.30.254"
@@ -101,4 +101,4 @@ echo "  modules/lan-gateway.nix"
 echo ""
 echo "Next steps:"
 echo "  mise run check"
-echo "  mise run build:image"
+echo "  mise run build"

@@ -324,7 +324,7 @@ All tasks are run with `mise run <task>`. Run `mise tasks` to list them.
 | **Provisioning**        |                                                             |
 | `flash`                 | Flash image to disk device with dd + progress (macOS/Linux) |
 | **Configuration**       |                                                             |
-| `config:lan-range`      | Update LAN gateway/DHCP range across all config files       |
+| `config:lan-range`      | Update built-in fallback LAN gateway/DHCP defaults          |
 | **Documentation**       |                                                             |
 | `docs:build`            | Build the documentation site (mdBook) → `book/`             |
 | `docs:serve`            | Serve the documentation site locally with hot-reload        |
