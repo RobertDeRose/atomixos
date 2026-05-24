@@ -73,9 +73,6 @@ Quadlet containers on a persistent `/data` partition.
   This means the base image must include it, which crosses the "no on-device web
   management" non-goal boundary. Alternative: treat cockpit-podman as an optional NixOS
   module that operators can enable.
-- **hawkBit integration**: `useHawkbit` option exists but no operational service is
-  configured. Needs server configuration, credentials, and verification tests before
-  promotion.
 - **Nixstasis client**: Enrollment, tunnel lifecycle, and credential rotation are
   documented but not implemented.
 - **USB WiFi**: Kernel WiFi/Bluetooth stacks are disabled. Hardware selection needed
@@ -222,34 +219,6 @@ Quadlet containers on a persistent `/data` partition.
   - NixOS VM test with mock Nixstasis server
   - Integration test with real Nixstasis instance
 - Suggested first workflow command: `/start-feature nixstasis-client`
-
-### `hawkbit-updates`
-
-- Status: planned
-- Overview: Configure the `rauc-hawkbit-updater` service for server-push OTA updates,
-  replacing the simple HTTP polling model for fleet-scale deployments.
-- Requirements:
-  - Define hawkBit server configuration and credential provisioning
-  - Create systemd unit for `rauc-hawkbit-updater`
-  - Integrate with existing RAUC slot management
-  - Add `config.toml` support for hawkBit server URL and credentials
-- Constraints:
-  - Must coexist with polling mode (operator chooses one)
-  - Must not break existing `os-upgrade.service` behavior
-  - Credentials must not be embedded in the base image
-- Non-goals:
-  - Running a hawkBit server (server-side concern)
-  - Delta updates
-- Success criteria:
-  - Device registers with hawkBit server and receives push updates
-  - RAUC install and slot management work identically to polling mode
-  - NixOS VM test with mock hawkBit server
-- Risks and tradeoffs:
-  - hawkBit server availability becomes a deployment dependency
-  - Additional credential management complexity
-- Dependencies: None
-- Suggested validation: NixOS VM test with mock hawkBit DDI API
-- Suggested first workflow command: `/start-feature hawkbit-updates`
 
 ### `rauc-production-keyring-policy`
 
