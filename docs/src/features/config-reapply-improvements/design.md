@@ -204,7 +204,7 @@ Proposed flow:
 5. Snapshot or rename the previous `/data/config` into a rollback location.
 6. Atomically promote the candidate directory into `/data/config`.
 7. Apply LAN, firewall, and Quadlet sync using the same services as boot.
-8. Confirm required services become healthy.
+8. Apply activation timing/restart policy and confirm required services become healthy.
 9. Delete or age out rollback state only after successful apply.
 10. Restore the previous config and re-apply it if activation fails.
 
@@ -223,6 +223,8 @@ trust model.
 - Crash after promotion but before confirmation must be recoverable on next boot or next apply by detecting incomplete
   re-apply state.
 - Failed service activation restores previous config and reports the failed services.
+- Activation options are limited to provisioned Quadlet services and fail-closed rollback; arbitrary systemd unit control
+  and kept-failed candidates are intentionally out of scope.
 - Rollback must not delete container volumes or arbitrary `/data` content.
 
 ## Documentation Impact

@@ -308,6 +308,11 @@ Required table.
 Allowed keys:
 
 - `required`
+- `timeout_seconds`
+- `settle_seconds`
+- `restart`
+- `allow_degraded`
+- `strategy`
 
 Required keys:
 
@@ -318,6 +323,37 @@ Required keys:
 - type: non-empty array of non-empty strings
 - each item names a required application/service unit
 - each item must correspond to a declared container name
+
+#### `activation.timeout_seconds`
+
+- type: integer in range `1..3600`
+- optional; defaults to `300`
+
+#### `activation.settle_seconds`
+
+- type: integer in range `0..300`
+- optional; defaults to `0`
+
+#### `activation.restart`
+
+- type: array of non-empty strings
+- optional; defaults to `[]`
+- each item must correspond to a declared container name
+
+#### `activation.allow_degraded`
+
+- type: array of non-empty strings
+- optional; defaults to `[]`
+- each item must correspond to a declared container name
+- must not overlap with `activation.required`
+- if omitted, failed non-required services are reported but tolerated for compatibility
+- if explicitly set, failed non-required services outside this list fail activation
+
+#### `activation.strategy`
+
+- type: string
+- optional; defaults to `"rollback"`
+- only `"rollback"` is currently supported
 
 ### `containers`
 

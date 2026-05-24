@@ -27,6 +27,7 @@ Persisted outputs are:
 | WAN inbound policy       | `/data/config/firewall-inbound.json`      |
 | LAN runtime settings     | `/data/config/lan-settings.json`          |
 | Host network settings    | `/data/config/host-network.json`          |
+| Activation policy        | `/data/config/activation-policy.json`     |
 | OS upgrade settings      | `/data/config/os-upgrade.json`            |
 | Required health units    | `/data/config/health-required.json`       |
 | Rendered Quadlets        | `/data/config/quadlet/*.container`        |
@@ -50,9 +51,10 @@ Re-apply uses atomic candidate promotion:
 1. Validate and render candidate config in `/data/config-candidate/`.
 2. Rename active `/data/config` to `/data/config-rollback`.
 3. Rename candidate to `/data/config`.
-4. Run activation services synchronously (user apply, Quadlet sync, LAN/host network apply, firewall).
+4. Run activation services synchronously (user apply, Quadlet sync, LAN/host network apply, firewall), then apply
+   `/data/config/activation-policy.json` timing, restart, and health-check policy.
 5. On success, clean up `/data/config-rollback`.
-6. On failure, restore `/data/config-rollback` to `/data/config` and re-activate.
+6. On failure, restore `/data/config-rollback` to `/data/config` and re-activate with the restored activation policy.
 
 `POST /api/config` is asynchronous for programmatic clients. It returns a typed response with `job_id`, `state`, and
 `job_url`; the `Location` header points to the same job resource. The job records provisioning steps, service

@@ -63,6 +63,11 @@ servers = ["time.cloudflare.com"]
 
 [activation]
 required = ["myapp"]
+timeout_seconds = 300
+settle_seconds = 0
+restart = []
+allow_degraded = []
+strategy = "rollback"
 
 [containers.container.myapp]
 privileged = false
@@ -82,6 +87,12 @@ The top-level IPv4 default gateway applies to `eth0`; use an interface-specific 
 interfaces. `eth1` must remain static because it is the LAN gateway.
 The machine-readable schema is committed at
 `schemas/config.schema.json` and the import path validates against it before semantic checks.
+
+`[activation]` controls candidate activation and health-check behavior. `required` lists provisioned Quadlet services that
+must become active. Optional `timeout_seconds`, `settle_seconds`, `restart`, and `allow_degraded` values render into
+`/data/config/activation-policy.json`. Unit references are limited to declared container services; activation policy does
+not allow arbitrary systemd unit manipulation. `strategy` currently supports only `rollback`, preserving fail-closed
+candidate rollback on activation failure.
 
 ## Firewall JSON
 
@@ -156,6 +167,29 @@ as `30-atomixos-ethN.network` units when explicitly configured.
 
 Only supported Ethernet names matching `ethN` are accepted. WiFi remains unsupported. Rendering these files does not add
 firewall rules, NAT, IP forwarding, or FORWARD-chain exceptions.
+
+## Activation Policy JSON
+
+`/data/config/activation-policy.json` is generated from `[activation]` and consumed by the re-apply activation path.
+
+```json
+{
+  "required": ["myapp"],
+  "timeout_seconds": 300,
+  "settle_seconds": 0,
+  "restart": [],
+  "allow_degraded": [],
+  "allow_degraded_configured": false,
+  "strategy": "rollback"
+}
+```
+
+The activation path runs the existing activation hook first, then applies configured provisioned-service restarts, waits
+for `settle_seconds`, and checks required service health within `timeout_seconds`. Invalid rendered activation policy fails
+closed through the normal rollback path. Legacy `health-required.json` remains as a compatibility input when no activation
+policy file exists. `allow_degraded_configured` records whether the operator explicitly set `allow_degraded`; omitted
+`allow_degraded` preserves the previous behavior of reporting but tolerating failed non-required services, while an
+explicit list makes other failed non-required services fail activation.
 
 ## Quadlet Safety Boundary
 

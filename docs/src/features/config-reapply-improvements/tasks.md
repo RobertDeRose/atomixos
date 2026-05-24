@@ -96,6 +96,8 @@ Deferred work recorded at merge time:
 
 - `[network]` schema fields for DNS servers, search domains, interfaces, and default gateway were implemented by
   `network-config-extensions`.
+- `[activation]` timing, restart, degraded-reporting, and rollback strategy schema fields were implemented by
+  `activation-options`. Kept-failed/manual-confirm strategies remain deferred.
 - Managed user reboot materialization VM test deferred; requires persistent VM disk configuration.
 - Provisioned-device re-apply authentication applies to all mutating bootstrap POST paths: `/api/config`, `/apply`, and
   `/generate`.
