@@ -8,9 +8,7 @@ set -euo pipefail
 
 ROOT_DIR="$(git rev-parse --show-toplevel)"
 
-NETWORKING_NIX="$ROOT_DIR/modules/networking.nix"
 LAN_GATEWAY_NIX="$ROOT_DIR/modules/lan-gateway.nix"
-OS_VERIFICATION_SH="$ROOT_DIR/scripts/os-verification.sh"
 
 GATEWAY_CIDR="${usage_gateway_cidr:-172.20.30.1/24}"
 DHCP_START="${usage_dhcp_start:-172.20.30.10}"
@@ -63,12 +61,12 @@ for ip in "$DHCP_START" "$DHCP_END"; do
 	fi
 done
 
-python3 - <<'PY' "$NETWORKING_NIX" "$LAN_GATEWAY_NIX" "$OS_VERIFICATION_SH" "$GATEWAY_CIDR" "$GATEWAY_IP" "$DHCP_START" "$DHCP_END" "$NETMASK" "$SUBNET_CIDR"
+python3 - <<'PY' "$LAN_GATEWAY_NIX" "$GATEWAY_CIDR" "$GATEWAY_IP" "$DHCP_START" "$DHCP_END" "$NETMASK" "$SUBNET_CIDR"
 import pathlib
 import re
 import sys
 
-networking, lan_gateway, os_verification, gateway_cidr, gateway_ip, dhcp_start, dhcp_end, netmask, subnet_cidr = sys.argv[1:]
+lan_gateway, gateway_cidr, gateway_ip, dhcp_start, dhcp_end, netmask, subnet_cidr = sys.argv[1:]
 
 def replace_file(path: str, patterns: list[tuple[str, str]]) -> None:
     p = pathlib.Path(path)
@@ -81,23 +79,16 @@ def replace_file(path: str, patterns: list[tuple[str, str]]) -> None:
     if text != original:
         p.write_text(text)
 
-replace_file(networking, [
-    (r'Address\s*=\s*"[0-9.]+/[0-9]+";', f'Address = "{gateway_cidr}";'),
-])
-
 replace_file(lan_gateway, [
-    (r'dhcp-range\s*=\s*"[0-9.]+,[0-9.]+,[0-9.]+,24h";', f'dhcp-range = "{dhcp_start},{dhcp_end},{netmask},24h";'),
-    (r'"3,[0-9.]+"', f'"3,{gateway_ip}"'),
-    (r'"42,[0-9.]+"', f'"42,{gateway_ip}"'),
+    (r'Address=[0-9.]+/[0-9]+', f'Address={gateway_cidr}'),
+    (r'dhcp-range=[0-9.]+,[0-9.]+,[0-9.]+,24h', f'dhcp-range={dhcp_start},{dhcp_end},{netmask},24h'),
+    (r'dhcp-option=3,[0-9.]+', f'dhcp-option=3,{gateway_ip}'),
+    (r'dhcp-option=6,[0-9.]+', f'dhcp-option=6,{gateway_ip}'),
+    (r'dhcp-option=42,[0-9.]+', f'dhcp-option=42,{gateway_ip}'),
+    (r'[0-9.]+ atomixos atomixos\.local', f'{gateway_ip} atomixos atomixos.local'),
     (r'allow\s+[0-9.]+/[0-9]+', f'allow {subnet_cidr}'),
 ])
 
-replace_file(os_verification, [
-    (r'# Check eth1 is [0-9.]+ \(LAN\)', f'# Check eth1 is {gateway_ip} (LAN)'),
-    (r'if \[ "\$ETH1_IP" = "[0-9.]+" \]; then', f'if [ "$ETH1_IP" = "{gateway_ip}" ]; then'),
-    (r'OK eth1 is [0-9.]+', f'OK eth1 is {gateway_ip}'),
-    (r'FAIL eth1 is not [0-9.]+', f'FAIL eth1 is not {gateway_ip}'),
-])
 PY
 
 echo "Updated LAN settings:"
@@ -106,9 +97,7 @@ echo "  subnet:     $SUBNET_CIDR"
 echo "  dhcp range: $DHCP_START - $DHCP_END"
 echo ""
 echo "Updated files:"
-echo "  modules/networking.nix"
 echo "  modules/lan-gateway.nix"
-echo "  scripts/os-verification.sh"
 echo ""
 echo "Next steps:"
 echo "  mise run check"

@@ -253,7 +253,8 @@ resolve the minicom binary.
 
 **Location:** `.mise/tasks/config/lan-range`
 
-Updates LAN gateway/DHCP configuration across all files.
+Updates built-in fallback LAN gateway/DHCP configuration across image-source files. Runtime LAN changes should use
+`[network.dnsmasq]` or `[network.interfaces.eth1]` in `config.toml` instead.
 
 | Flag             | Default          | Description           |
 |------------------|------------------|-----------------------|
@@ -261,4 +262,4 @@ Updates LAN gateway/DHCP configuration across all files.
 | `--dhcp-start`   | `172.20.30.10`   | DHCP pool start       |
 | `--dhcp-end`     | `172.20.30.254`  | DHCP pool end         |
 
-Modifies: `modules/networking.nix`, `modules/lan-gateway.nix`, `scripts/os-verification.sh`.
+Modifies: `modules/lan-gateway.nix`.

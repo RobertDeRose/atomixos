@@ -34,13 +34,11 @@ mise run config:lan-range \
 
 ## What it Updates
 
-The task modifies four files to keep the LAN configuration consistent:
+The task modifies the built-in fallback LAN defaults used by development images:
 
-| File                         | What Changes                                                                               |
-|------------------------------|--------------------------------------------------------------------------------------------|
-| `modules/networking.nix`     | eth1 static `Address`                                                                      |
-| `modules/lan-gateway.nix`    | dnsmasq `dhcp-range`, gateway DHCP option (3), NTP DHCP option (42), chrony `allow` subnet |
-| `scripts/os-verification.sh` | Expected eth1 IP in health checks                                                          |
+| File                      | What Changes                                                                                             |
+|---------------------------|----------------------------------------------------------------------------------------------------------|
+| `modules/lan-gateway.nix` | fallback eth1 `Address`, dnsmasq `dhcp-range`, DHCP options 3/6/42, gateway hosts, chrony `allow` subnet |
 
 ## After Changing
 
