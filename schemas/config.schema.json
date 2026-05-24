@@ -25,6 +25,26 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "dns_servers": {
+          "$ref": "#/$defs/ipAddressList"
+        },
+        "dns_search_domains": {
+          "$ref": "#/$defs/dnsSearchDomainList"
+        },
+        "default_gateway": {
+          "type": "string",
+          "minLength": 1
+        },
+        "interfaces": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^eth[0-9]+$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/interfaceDefinition"
+          }
+        },
         "dnsmasq": {
           "$ref": "#/$defs/dnsmasqDefinition"
         },
@@ -196,6 +216,47 @@
             "type": "string",
             "minLength": 1
           }
+        }
+      }
+    },
+    "ipAddressList": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "dnsSearchDomainList": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "interfaceDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode"],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["dhcp", "static"]
+        },
+        "address": {
+          "type": "string",
+          "minLength": 1
+        },
+        "gateway": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dns_servers": {
+          "$ref": "#/$defs/ipAddressList"
+        },
+        "dns_search_domains": {
+          "$ref": "#/$defs/dnsSearchDomainList"
         }
       }
     },

@@ -8,19 +8,26 @@ from atomixos_provision.config import (
     ProvisionError,
     load_config,
     load_firewall_inbound,
+    load_host_network_settings,
     load_lan_settings,
+    load_network_interfaces,
     load_network_settings,
     load_users,
     require_allowed_keys,
     require_bool,
     require_dns_name,
+    require_dns_search_domains,
     require_https_url,
+    require_ip_address,
+    require_ip_address_list,
+    require_ipv4_address,
     require_mapping,
     require_ntp_server_list,
     require_port_list,
     require_string,
     require_string_list,
     validate_against_schema,
+    validate_interface_name,
     validate_name,
     validate_username,
 )
@@ -181,6 +188,42 @@ class TestRequireNtpServerList:
             require_ntp_server_list(["bad/name"], "ntp")
 
 
+class TestNetworkValidationHelpers:
+    def test_require_ip_address(self):
+        assert require_ip_address("192.0.2.1", "network.default_gateway") == "192.0.2.1"
+        assert require_ip_address("2001:db8::1", "network.default_gateway") == "2001:db8::1"
+
+    def test_require_ipv4_address(self):
+        assert require_ipv4_address("192.0.2.1", "network.default_gateway") == "192.0.2.1"
+        with pytest.raises(ProvisionError, match="invalid IPv4 address"):
+            require_ipv4_address("2001:db8::1", "network.default_gateway")
+
+    def test_require_ip_address_rejects_invalid_and_empty(self):
+        with pytest.raises(ProvisionError, match="invalid IP address"):
+            require_ip_address("not-an-ip", "network.default_gateway")
+        with pytest.raises(ProvisionError, match="expected non-empty string"):
+            require_ip_address("", "network.default_gateway")
+
+    def test_require_ip_address_list(self):
+        assert require_ip_address_list(["1.1.1.1", "2001:db8::1"], "network.dns_servers") == [
+            "1.1.1.1",
+            "2001:db8::1",
+        ]
+
+    def test_require_dns_search_domains(self):
+        assert require_dns_search_domains(
+            ["LAN.Example.", "site.local"], "network.dns_search_domains"
+        ) == ["lan.example", "site.local"]
+
+    def test_validate_interface_name(self):
+        assert validate_interface_name("eth0") == "eth0"
+        assert validate_interface_name("eth12") == "eth12"
+        with pytest.raises(ProvisionError, match="unsupported network interface name"):
+            validate_interface_name("wlan0")
+        with pytest.raises(ProvisionError, match="unsupported network interface name"):
+            validate_interface_name("eth0/../../bad")
+
+
 class TestRequireHttpsUrl:
     def test_accepts_https_base_url(self):
         assert (
@@ -321,6 +364,163 @@ class TestLoadNetworkSettings:
         assert result["gateway_ip"] == "172.20.30.1"
         assert result["ntp_servers"] == ["time.cloudflare.com"]
 
+    def test_reconciles_eth1_address_with_dnsmasq_gateway(self):
+        result = load_network_settings(
+            {
+                "interfaces": {"eth1": {"mode": "static", "address": "10.50.0.1/24"}},
+                "dnsmasq": {"dhcp_start": "10.50.0.10", "dhcp_end": "10.50.0.254"},
+            }
+        )
+        assert result["gateway_cidr"] == "10.50.0.1/24"
+        assert result["gateway_ip"] == "10.50.0.1"
+
+    def test_reconciles_equivalent_eth1_and_dnsmasq_gateway_values(self):
+        result = load_network_settings(
+            {
+                "interfaces": {"eth1": {"mode": "static", "address": " 10.50.0.1/24 "}},
+                "dnsmasq": {
+                    "gateway_cidr": "10.50.0.1/24",
+                    "dhcp_start": "10.50.0.10",
+                    "dhcp_end": "10.50.0.254",
+                },
+            }
+        )
+        assert result["gateway_cidr"] == "10.50.0.1/24"
+
+    def test_rejects_conflicting_eth1_address_and_dnsmasq_gateway(self):
+        with pytest.raises(ProvisionError, match=r"must match network\.dnsmasq\.gateway_cidr"):
+            load_network_settings(
+                {
+                    "interfaces": {"eth1": {"mode": "static", "address": "10.50.0.1/24"}},
+                    "dnsmasq": {
+                        "gateway_cidr": "10.51.0.1/24",
+                        "dhcp_start": "10.51.0.10",
+                        "dhcp_end": "10.51.0.254",
+                    },
+                }
+            )
+
+
+class TestLoadHostNetworkSettings:
+    def test_defaults_omit_default_gateway(self):
+        assert load_host_network_settings(None) == {
+            "dns_servers": [],
+            "dns_search_domains": [],
+            "interfaces": {},
+        }
+
+    def test_top_level_host_network_settings(self):
+        assert load_host_network_settings(
+            {
+                "dns_servers": ["1.1.1.1", "9.9.9.9"],
+                "dns_search_domains": ["LAN.Example"],
+                "default_gateway": "192.0.2.1",
+            }
+        ) == {
+            "dns_servers": ["1.1.1.1", "9.9.9.9"],
+            "dns_search_domains": ["lan.example"],
+            "interfaces": {},
+            "default_gateway": "192.0.2.1",
+        }
+
+    def test_rejects_invalid_default_gateway(self):
+        with pytest.raises(
+            ProvisionError, match=r"invalid IPv4 address at network\.default_gateway"
+        ):
+            load_host_network_settings({"default_gateway": "not-an-ip"})
+
+    def test_rejects_ipv6_default_gateway(self):
+        with pytest.raises(
+            ProvisionError, match=r"invalid IPv4 address at network\.default_gateway"
+        ):
+            load_host_network_settings({"default_gateway": "2001:db8::1"})
+
+    def test_rejects_empty_default_gateway_sentinel(self):
+        with pytest.raises(ProvisionError, match="expected non-empty string"):
+            load_host_network_settings({"default_gateway": ""})
+
+    def test_rejects_invalid_dns_server(self):
+        with pytest.raises(
+            ProvisionError, match=r"invalid IP address at network\.dns_servers\[0\]"
+        ):
+            load_host_network_settings({"dns_servers": ["bad"]})
+
+    def test_rejects_invalid_search_domain(self):
+        with pytest.raises(
+            ProvisionError, match=r"invalid DNS name at network\.dns_search_domains\[0\]"
+        ):
+            load_host_network_settings({"dns_search_domains": ["bad/domain"]})
+
+    def test_rejects_unknown_network_key(self):
+        with pytest.raises(ProvisionError, match="unsupported keys at network: bad"):
+            load_host_network_settings({"bad": True})
+
+
+class TestLoadNetworkInterfaces:
+    def test_dhcp_interface(self):
+        assert load_network_interfaces({"eth0": {"mode": "dhcp"}}) == {"eth0": {"mode": "dhcp"}}
+
+    def test_static_interface(self):
+        assert load_network_interfaces(
+            {
+                "eth1": {
+                    "mode": "static",
+                    "address": "172.20.30.1/24",
+                    "gateway": "172.20.30.254",
+                    "dns_servers": ["172.20.30.1"],
+                    "dns_search_domains": ["lan"],
+                }
+            }
+        ) == {
+            "eth1": {
+                "mode": "static",
+                "address": "172.20.30.1/24",
+                "gateway": "172.20.30.254",
+                "dns_servers": ["172.20.30.1"],
+                "dns_search_domains": ["lan"],
+            }
+        }
+
+    def test_static_requires_address(self):
+        with pytest.raises(
+            ProvisionError, match=r"missing required keys at network\.interfaces\.eth1: address"
+        ):
+            load_network_interfaces({"eth1": {"mode": "static"}})
+
+    def test_dhcp_rejects_address(self):
+        with pytest.raises(ProvisionError, match="address is only supported when mode is static"):
+            load_network_interfaces({"eth0": {"mode": "dhcp", "address": "192.0.2.10/24"}})
+
+    def test_rejects_invalid_mode(self):
+        with pytest.raises(ProvisionError, match="mode must be one of: dhcp, static"):
+            load_network_interfaces({"eth0": {"mode": "manual"}})
+
+    def test_rejects_invalid_static_cidr(self):
+        with pytest.raises(
+            ProvisionError, match=r"invalid IPv4 CIDR at network\.interfaces\.eth1\.address"
+        ):
+            load_network_interfaces({"eth1": {"mode": "static", "address": "not-a-cidr"}})
+
+    def test_rejects_unknown_interface_key(self):
+        with pytest.raises(
+            ProvisionError, match=r"unsupported keys at network\.interfaces\.eth0: mtu"
+        ):
+            load_network_interfaces({"eth0": {"mode": "dhcp", "mtu": 1500}})
+
+    def test_rejects_empty_gateway_sentinel(self):
+        with pytest.raises(ProvisionError, match="expected non-empty string"):
+            load_network_interfaces(
+                {"eth1": {"mode": "static", "address": "172.20.30.1/24", "gateway": ""}}
+            )
+
+    def test_rejects_wifi_interface(self):
+        with pytest.raises(ProvisionError, match="unsupported network interface name"):
+            load_network_interfaces({"wlan0": {"mode": "dhcp"}})
+
+    def test_rejects_eth1_dhcp(self):
+        with pytest.raises(ProvisionError, match="eth1 is the LAN gateway"):
+            load_network_interfaces({"eth1": {"mode": "dhcp"}})
+
 
 # --- Schema Validation Tests ---
 
@@ -358,6 +558,45 @@ class TestLoadConfig:
         assert result["ssh_keys"] == [f"{VALID_ED25519_KEY} test@test"]
         assert result["required_units"] == ["myapp"]
         assert "myapp" in result["containers"]["container"]
+
+    def test_network_extensions_valid(self, tmp_path: Path, schema_path: Path, monkeypatch):
+        monkeypatch.setenv("ATOMIXOS_CONFIG_SCHEMA", str(schema_path))
+        config = tmp_path / "config.toml"
+        config.write_text(
+            f"""\
+version = 1
+
+[users.admin]
+isAdmin = true
+ssh_key = "{VALID_ED25519_KEY} test@test"
+
+[network]
+dns_servers = ["1.1.1.1"]
+dns_search_domains = ["lan.example"]
+default_gateway = "192.0.2.1"
+
+[network.interfaces.eth0]
+mode = "dhcp"
+
+[network.interfaces.eth1]
+mode = "static"
+address = "172.20.30.1/24"
+dns_servers = ["172.20.30.1"]
+dns_search_domains = ["lan"]
+
+[activation]
+required = ["myapp"]
+
+[containers.container.myapp]
+privileged = false
+
+[containers.container.myapp.Container]
+Image = "docker.io/library/alpine:latest"
+"""
+        )
+        result = load_config(config)
+        assert result["host_network"]["default_gateway"] == "192.0.2.1"
+        assert result["host_network"]["interfaces"]["eth1"]["dns_servers"] == ["172.20.30.1"]
 
     def test_invalid_toml(self, tmp_path: Path, schema_path: Path, monkeypatch):
         monkeypatch.setenv("ATOMIXOS_CONFIG_SCHEMA", str(schema_path))

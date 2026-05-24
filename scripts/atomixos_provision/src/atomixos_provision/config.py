@@ -27,6 +27,7 @@ DEFAULT_LAN_DOMAIN = "local"
 DEFAULT_LAN_GATEWAY_ALIASES = ["atomixos"]
 DEFAULT_LAN_HOSTNAME_PATTERN = ""
 DEFAULT_NTP_SERVERS = ["time.cloudflare.com"]
+SUPPORTED_INTERFACE_RE = re.compile(r"eth[0-9]+")
 
 RESERVED_USERNAMES = frozenset(
     {
@@ -434,6 +435,56 @@ def require_dns_name(value: Any, path: str) -> str:
     return name
 
 
+def require_ip_address(value: Any, path: str) -> str:
+    """Require an IPv4 or IPv6 address literal."""
+    raw = require_string(value, path)
+    try:
+        return str(ipaddress.ip_address(raw))
+    except ValueError as exc:
+        message = f"invalid IP address at {path}: {raw}"
+        raise provision_error(message) from exc
+
+
+def require_ipv4_address(value: Any, path: str) -> str:
+    """Require an IPv4 address literal."""
+    raw = require_string(value, path)
+    try:
+        return str(ipaddress.IPv4Address(raw))
+    except ValueError as exc:
+        message = f"invalid IPv4 address at {path}: {raw}"
+        raise provision_error(message) from exc
+
+
+def require_ip_address_list(value: Any, path: str) -> list[str]:
+    """Require a non-empty list of IP address literals."""
+    items = require_string_list(value, path)
+    return [require_ip_address(item, f"{path}[{idx}]") for idx, item in enumerate(items)]
+
+
+def require_dns_search_domains(value: Any, path: str) -> list[str]:
+    """Require a non-empty list of DNS search domains."""
+    items = require_string_list(value, path)
+    return [require_dns_name(item, f"{path}[{idx}]") for idx, item in enumerate(items)]
+
+
+def validate_interface_name(name: str) -> str:
+    """Validate a supported Ethernet interface name."""
+    if not SUPPORTED_INTERFACE_RE.fullmatch(name):
+        message = f"unsupported network interface name: {name!r}"
+        raise provision_error(message)
+    return name
+
+
+def require_ipv4_interface(value: Any, path: str) -> ipaddress.IPv4Interface:
+    """Require an IPv4 CIDR address."""
+    raw = require_string(value, path)
+    try:
+        return ipaddress.IPv4Interface(raw)
+    except ValueError as exc:
+        message = f"invalid IPv4 CIDR at {path}: {raw}"
+        raise provision_error(message) from exc
+
+
 def require_https_url(value: Any, path: str) -> str:
     """Require an HTTPS base URL suitable for path concatenation."""
     url = require_string(value, path)
@@ -483,14 +534,9 @@ def load_lan_settings(lan_value: Any, path: str = "lan") -> dict[str, Any]:
         },
     )
 
-    gateway_cidr = require_string(
+    gateway = require_ipv4_interface(
         lan.get("gateway_cidr", DEFAULT_LAN_GATEWAY_CIDR), f"{path}.gateway_cidr"
     )
-    try:
-        gateway = ipaddress.IPv4Interface(gateway_cidr)
-    except ValueError as exc:
-        message = f"invalid IPv4 CIDR at {path}.gateway_cidr: {gateway_cidr}"
-        raise provision_error(message) from exc
     if not 16 <= gateway.network.prefixlen <= 30:
         message = f"{path}.gateway_cidr prefix must be between /16 and /30"
         raise provision_error(message)
@@ -598,7 +644,19 @@ def load_network_settings(network_value: Any) -> dict[str, Any]:
     """Parse and validate the [network] section, returning LAN settings dict."""
     if network_value is None:
         network_value = {}
-    network = require_allowed_keys(network_value, "network", {"dnsmasq", "ntp", "firewall"})
+    network = require_allowed_keys(
+        network_value,
+        "network",
+        {
+            "dns_servers",
+            "dns_search_domains",
+            "default_gateway",
+            "interfaces",
+            "dnsmasq",
+            "ntp",
+            "firewall",
+        },
+    )
     dnsmasq = network.get("dnsmasq", {})
     dnsmasq_settings = require_allowed_keys(
         dnsmasq,
@@ -628,10 +686,28 @@ def load_network_settings(network_value: Any) -> dict[str, Any]:
             message = "network.dnsmasq.interface must be eth1"
             raise provision_error(message)
 
-    lan_settings = load_lan_settings(
-        {k: v for k, v in dnsmasq_settings.items() if k not in ("enable", "interface")},
-        "network.dnsmasq",
-    )
+    lan_input = {k: v for k, v in dnsmasq_settings.items() if k not in ("enable", "interface")}
+    interfaces = load_network_interfaces(network.get("interfaces"))
+    eth1 = interfaces.get("eth1")
+    if eth1 and eth1.get("mode") == "static":
+        eth1_gateway = require_ipv4_interface(
+            eth1["address"], "network.interfaces.eth1.address"
+        )
+        if "gateway_cidr" in lan_input:
+            dnsmasq_gateway = require_ipv4_interface(
+                lan_input["gateway_cidr"], "network.dnsmasq.gateway_cidr"
+            )
+        else:
+            dnsmasq_gateway = None
+        if dnsmasq_gateway is not None and dnsmasq_gateway != eth1_gateway:
+            message = (
+                "network.interfaces.eth1.address must match "
+                "network.dnsmasq.gateway_cidr when both are set"
+            )
+            raise provision_error(message)
+        lan_input["gateway_cidr"] = str(eth1_gateway)
+
+    lan_settings = load_lan_settings(lan_input, "network.dnsmasq")
     ntp = require_allowed_keys(network.get("ntp", {}), "network.ntp", {"servers"})
     lan_settings["ntp_servers"] = require_ntp_server_list(
         ntp.get("servers", DEFAULT_NTP_SERVERS), "network.ntp.servers"
@@ -639,11 +715,108 @@ def load_network_settings(network_value: Any) -> dict[str, Any]:
     return lan_settings
 
 
+def load_host_network_settings(network_value: Any) -> dict[str, Any]:
+    """Parse and validate host resolver, route, and interface settings."""
+    if network_value is None:
+        network_value = {}
+    network = require_allowed_keys(
+        network_value,
+        "network",
+        {
+            "dns_servers",
+            "dns_search_domains",
+            "default_gateway",
+            "interfaces",
+            "dnsmasq",
+            "ntp",
+            "firewall",
+        },
+    )
+    result = {
+        "dns_servers": require_ip_address_list(network["dns_servers"], "network.dns_servers")
+        if "dns_servers" in network
+        else [],
+        "dns_search_domains": require_dns_search_domains(
+            network["dns_search_domains"], "network.dns_search_domains"
+        )
+        if "dns_search_domains" in network
+        else [],
+        "interfaces": load_network_interfaces(network.get("interfaces")),
+    }
+    if "default_gateway" in network:
+        result["default_gateway"] = require_ipv4_address(
+            network["default_gateway"], "network.default_gateway"
+        )
+    return result
+
+
+def load_network_interfaces(interfaces_value: Any) -> dict[str, dict[str, Any]]:
+    """Parse and validate [network.interfaces] settings."""
+    if interfaces_value is None:
+        return {}
+    interfaces = require_mapping(interfaces_value, "network.interfaces")
+    normalized: dict[str, dict[str, Any]] = {}
+    for name, raw_interface in interfaces.items():
+        validate_interface_name(name)
+        path = f"network.interfaces.{name}"
+        interface = require_allowed_keys(
+            raw_interface,
+            path,
+            {"mode", "address", "gateway", "dns_servers", "dns_search_domains"},
+            {"mode"},
+        )
+        mode = require_string(interface["mode"], f"{path}.mode")
+        if mode not in {"dhcp", "static"}:
+            message = f"{path}.mode must be one of: dhcp, static"
+            raise provision_error(message)
+        if name == "eth1" and mode != "static":
+            message = "network.interfaces.eth1.mode must be static because eth1 is the LAN gateway"
+            raise provision_error(message)
+
+        normalized_interface: dict[str, Any] = {"mode": mode}
+        if mode == "static":
+            if "address" not in interface:
+                message = f"missing required keys at {path}: address"
+                raise provision_error(message)
+            address = require_ipv4_interface(interface["address"], f"{path}.address")
+            normalized_interface["address"] = str(address)
+        elif "address" in interface:
+            message = f"{path}.address is only supported when mode is static"
+            raise provision_error(message)
+
+        if "gateway" in interface:
+            normalized_interface["gateway"] = require_ipv4_address(
+                interface["gateway"], f"{path}.gateway"
+            )
+        if "dns_servers" in interface:
+            normalized_interface["dns_servers"] = require_ip_address_list(
+                interface["dns_servers"], f"{path}.dns_servers"
+            )
+        if "dns_search_domains" in interface:
+            normalized_interface["dns_search_domains"] = require_dns_search_domains(
+                interface["dns_search_domains"], f"{path}.dns_search_domains"
+            )
+        normalized[name] = normalized_interface
+    return normalized
+
+
 def load_firewall_inbound(network_value: Any) -> dict[str, dict[str, list[int]]]:
     """Parse and validate the [network.firewall.inbound] section."""
     if network_value is None:
         network_value = {}
-    network = require_allowed_keys(network_value, "network", {"dnsmasq", "ntp", "firewall"})
+    network = require_allowed_keys(
+        network_value,
+        "network",
+        {
+            "dns_servers",
+            "dns_search_domains",
+            "default_gateway",
+            "interfaces",
+            "dnsmasq",
+            "ntp",
+            "firewall",
+        },
+    )
     firewall = network.get("firewall", {})
     firewall = require_allowed_keys(firewall, "network.firewall", {"inbound"})
     inbound_value = firewall.get("inbound", {})
@@ -725,6 +898,7 @@ def load_config(
     required_units = require_string_list(activation.get("required"), "activation.required")
 
     lan_settings = load_network_settings(root.get("network"))
+    host_network = load_host_network_settings(root.get("network"))
 
     os_upgrade_settings = None
     if root.get("os_upgrade") is not None:
@@ -754,6 +928,7 @@ def load_config(
         "users": users,
         "firewall_inbound": firewall_inbound,
         "lan_settings": lan_settings,
+        "host_network": host_network,
         "os_upgrade": os_upgrade_settings,
         "required_units": required_units,
         "containers": {

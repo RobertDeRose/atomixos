@@ -52,6 +52,7 @@ class ProgressReporter(Protocol):
 
 FIREWALL_INBOUND_FILENAME = "firewall-inbound.json"
 LAN_SETTINGS_FILENAME = "lan-settings.json"
+HOST_NETWORK_FILENAME = "host-network.json"
 OS_UPGRADE_FILENAME = "os-upgrade.json"
 HEALTH_REQUIRED_FILENAME = "health-required.json"
 APP_RUNTIME_USER = "appsvc"
@@ -153,6 +154,12 @@ def write_imported_state(
     lan_path = config_root / LAN_SETTINGS_FILENAME
     lan_path.write_text(json.dumps(lan_settings, indent=2) + "\n")
     lan_path.chmod(0o600)
+
+    # Write host network settings consumed by lan-gateway-apply.service
+    host_network = parsed.get("host_network", {})
+    host_network_path = config_root / HOST_NETWORK_FILENAME
+    host_network_path.write_text(json.dumps(host_network, indent=2) + "\n")
+    host_network_path.chmod(0o600)
 
     # Write OS upgrade settings
     os_upgrade = parsed.get("os_upgrade")

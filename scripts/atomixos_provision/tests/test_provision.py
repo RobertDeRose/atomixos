@@ -77,6 +77,15 @@ def test_write_imported_state_uses_private_permissions_and_cleans_quadlet(tmp_pa
         },
         "firewall_inbound": {"wan": {"tcp": [443]}},
         "lan_settings": {"gateway_ip": "172.20.30.1"},
+        "host_network": {
+            "dns_servers": ["1.1.1.1"],
+            "dns_search_domains": ["lan.example"],
+            "default_gateway": "192.0.2.1",
+            "interfaces": {
+                "eth0": {"mode": "dhcp"},
+                "eth1": {"mode": "static", "address": "172.20.30.1/24"},
+            },
+        },
         "os_upgrade": {"server_url": "https://updates.example"},
         "required_units": ["app"],
         "containers": {
@@ -95,6 +104,7 @@ def test_write_imported_state_uses_private_permissions_and_cleans_quadlet(tmp_pa
         "config.toml",
         "firewall-inbound.json",
         "lan-settings.json",
+        "host-network.json",
         "os-upgrade.json",
         "health-required.json",
         "quadlet-runtime.json",
@@ -102,6 +112,7 @@ def test_write_imported_state_uses_private_permissions_and_cleans_quadlet(tmp_pa
         assert (config_root / name).stat().st_mode & 0o777 == 0o600
     assert not stale_quadlet.exists()
     assert (config_root / "quadlet" / "app.container").exists()
+    assert json.loads((config_root / "host-network.json").read_text()) == parsed["host_network"]
 
 
 def test_write_imported_state_marks_build_rootless_when_consumed_by_rootless_container(tmp_path):
@@ -320,6 +331,67 @@ Image = "docker.io/library/alpine:latest"
     assert "busybox:latest" in (config_root / "config.toml").read_text()
     assert "alpine:latest" in (tmp_path / "config-rollback" / "config.toml").read_text()
     assert (config_root / "managed-users.json").read_text() == '["admin"]\n'
+
+
+def test_reapply_renders_network_settings_and_rolls_back_on_activation_failure(
+    tmp_path, monkeypatch
+):
+    from atomixos_provision.activation import restore_rollback
+
+    monkeypatch.setenv("ATOMIXOS_BOOTSTRAP_ACTIVATION", "/tmp/fake-activation")
+    monkeypatch.setattr(
+        "atomixos_provision.config.load_config_schema",
+        lambda: {"type": "object", "additionalProperties": True},
+    )
+
+    def complete_reapply_with_network_failure(root, _progress=None):
+        if not hasattr(complete_reapply_with_network_failure, "called"):
+            complete_reapply_with_network_failure.called = True
+            return True, [], ""
+        assert restore_rollback(root)
+        return False, ["lan-gateway-apply.service"], "completed"
+
+    monkeypatch.setattr(
+        "atomixos_provision.provision.complete_reapply",
+        complete_reapply_with_network_failure,
+    )
+    first = tmp_path / "first.toml"
+    first.write_text(
+        f"""\
+version = 1
+
+[users.admin]
+isAdmin = true
+ssh_key = "{VALID_ED25519_KEY} admin@example"
+
+[network]
+dns_servers = ["1.1.1.1"]
+
+[network.interfaces.eth1]
+mode = "static"
+address = "172.20.30.1/24"
+
+[activation]
+required = ["app"]
+
+[containers.container.app]
+privileged = false
+
+[containers.container.app.Container]
+Image = "docker.io/library/alpine:latest"
+"""
+    )
+    second = tmp_path / "second.toml"
+    second.write_text(first.read_text().replace("1.1.1.1", "9.9.9.9"))
+    config_root = tmp_path / "config"
+
+    import_config_from_path(first, config_root)
+
+    with pytest.raises(ProvisionError, match="activation failed"):
+        import_config_from_path(second, config_root)
+
+    host_network = json.loads((config_root / "host-network.json").read_text())
+    assert host_network["dns_servers"] == ["1.1.1.1"]
 
 
 def test_initial_import_skips_activation_without_bootstrap_hook(tmp_path, monkeypatch):
