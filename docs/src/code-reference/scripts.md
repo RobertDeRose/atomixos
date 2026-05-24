@@ -253,7 +253,7 @@ resolve the minicom binary.
 
 **Location:** `.mise/tasks/config/lan-range`
 
-Updates built-in fallback LAN gateway/DHCP configuration across image-source files. Runtime LAN changes should use
+Updates built-in fallback LAN gateway/DHCP configuration in `modules/lan-gateway.nix`. Runtime LAN changes should use
 `[network.dnsmasq]` or `[network.interfaces.eth1]` in `config.toml` instead.
 
 | Flag             | Default          | Description           |

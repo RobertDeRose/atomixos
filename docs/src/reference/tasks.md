@@ -40,7 +40,7 @@ All `build:*` tasks accept `--lima` to run inside a Lima VM and `--vm <name>` to
 
 ## Configuration Tasks
 
-`config:lan-range`: Update built-in fallback LAN gateway/DHCP defaults in image-source files.
+`config:lan-range`: Update built-in fallback LAN gateway/DHCP defaults in `modules/lan-gateway.nix`.
 
 ## Utility Tasks
 
