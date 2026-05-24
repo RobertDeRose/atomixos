@@ -63,7 +63,7 @@ scripts/
     capture                        Serial console capture (1.5 Mbaud, --bg for background)
     shell                          Interactive serial console (minicom)
   config/
-    lan-range                      Update LAN gateway/DHCP range across all configs
+    lan-range                      Update built-in fallback LAN gateway/DHCP defaults
   e2e/
     rauc-slots ... ssh-wan-toggle  Individual E2E test runners
     debug                          Interactive QEMU debugging

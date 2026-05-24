@@ -121,7 +121,8 @@ SSH credentials. The device itself keeps SSH-based LAN recovery and local gatewa
 
 ## LAN Range Configuration
 
-Use the `mise` helper task to update LAN settings across all required files in one command.
+Runtime LAN changes should use `[network.dnsmasq]` or `[network.interfaces.eth1]` in `config.toml` and the normal
+candidate promotion path. The `mise` helper task only updates built-in fallback LAN defaults for development images.
 
 ```sh
 mise run config:lan-range --gateway-cidr 10.50.0.1/24 --dhcp-start 10.50.0.10 --dhcp-end 10.50.0.254
@@ -129,9 +130,7 @@ mise run config:lan-range --gateway-cidr 10.50.0.1/24 --dhcp-start 10.50.0.10 --
 
 This updates:
 
-- `modules/networking.nix` (`eth1` static address)
-- `modules/lan-gateway.nix` (DHCP pool, DHCP options, chrony allow subnet)
-- `scripts/os-verification.sh` (expected `eth1` IP)
+- `modules/lan-gateway.nix` (fallback `eth1` address, DHCP pool, DHCP options, gateway hosts, chrony allow subnet)
 
 After changing the range, rebuild:
 
