@@ -21,8 +21,10 @@ Use the user's message as the implementation input.
 10. Select the next actionable task based on task status and dependencies.
 11. Implement tasks in dependency order while respecting explicit parallelism information.
 12. Update task status in `tasks.md` when that can be done confidently from the implemented state.
-13. Run relevant validation for the implemented tasks.
-14. Run a second-agent review pass focused on quality, security, and maintainability before reporting the implementation step complete.
+13. Run relevant validation for each implemented task boundary or cohesive task group.
+14. Run a second-agent review pass focused on quality, security, and maintainability for each implemented task boundary or cohesive task group.
+15. If validation and review pass and more non-deferred tasks remain, immediately continue to the next actionable task.
+16. Only report implementation complete when all non-deferred tasks through `T999` are complete, validated, reviewed, and committed, or when blocked by unresolved ambiguity or an issue that cannot be safely resolved.
 
 ## Ambiguity Handling
 
@@ -38,13 +40,17 @@ Use the user's message as the implementation input.
 - Keep docs and implementation aligned in the same unit of work.
 - Respect task boundaries when they map cleanly to isolated commits.
 - If the user did not specify a task, pick the next actionable one from `tasks.md`.
+- Do not stop after completing a single task unless the user explicitly requested only that task, the next task is blocked, or all non-deferred feature tasks through `T999` are complete.
+- After committing a completed task boundary, immediately select the next actionable incomplete task from `tasks.md` and continue.
+- Treat "implementation complete" as the whole feature implementation being complete, not the current task boundary.
+- If implementation must stop before all non-deferred tasks are complete, return a blocked or partial result and state exactly why.
 - Do not implement from the wrong worktree just because the current shell happens to be elsewhere.
 - Do not silently strand untracked feature files in another worktree.
 - If `wt` does not land in the intended feature worktree, stop before making code changes.
 - Treat stdout from `wt switch --format json` as the authoritative source for the resulting branch and worktree path; ignore the human-readable stderr status lines.
 - The review pass must use a second agent via the `task` tool with `subagent_type: general`.
-- The review pass must focus on quality risks, security issues, and maintainability concerns in the implemented task scope.
-- If the review pass finds actionable problems, address them before declaring the task implementation complete.
+- The review pass must focus on quality risks, security issues, and maintainability concerns in the implemented task or task-group scope.
+- If the review pass finds actionable problems, address them before moving to the next task or declaring feature implementation complete.
 
 ## Commit Rules
 
@@ -56,8 +62,8 @@ Use the user's message as the implementation input.
 
 ## Completion Guardrails
 
-- Before reporting implementation complete, verify the feature branch is ahead of its base branch when implementation work was performed.
-- Before reporting implementation complete, verify intended feature changes are not left uncommitted in the feature worktree.
+- Before reporting feature implementation complete, verify the feature branch is ahead of its base branch when implementation work was performed.
+- Before reporting feature implementation complete, verify intended feature changes are not left uncommitted in the feature worktree.
 - If intended feature changes remain uncommitted, create the appropriate workflow commit before declaring the feature ready for review.
 
 ## Return
