@@ -57,6 +57,7 @@ grouped by domain but still wired explicitly by the app factory:
 
 Mutating apply jobs are single-flight. Clients poll the returned job URL for
 progress and final status. `POST /api/validate` always requires SSH-signature
+authentication; provisioned-device re-apply through `POST /api/config` requires
 the same nonce and signature headers, while first-boot programmatic config
 submission remains unauthenticated.
 
