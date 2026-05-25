@@ -22,7 +22,7 @@ Start here when working in this repository.
   - `scripts`
   - `tests`
   - `docs`
-  - `openspec`
+  - `spec`
   - `ci`
   - `tooling`
   - `repo`

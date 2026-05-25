@@ -12,7 +12,7 @@ module.exports = {
         "scripts",
         "tests",
         "docs",
-        "openspec",
+        "spec",
         "ci",
         "tooling",
         "repo",
