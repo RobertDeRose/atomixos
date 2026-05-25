@@ -18,8 +18,7 @@ from litestar.exceptions import NotFoundException
 from litestar.response import Response
 
 from atomixos_provision.bootstrap_security import enforce_bootstrap_browser_origin
-from atomixos_provision.config import ProvisionError
-from atomixos_provision.jobs import JobManager
+from atomixos_provision.jobs import Job, JobManager
 
 __all__ = ["ui_routes"]
 
@@ -38,11 +37,13 @@ PublishPort = ["10080:8080"]
 WantedBy = ["default.target"]
 """
 
+_BOOT_UI_JOB_IDS = "boot_ui_job_ids"
+
 
 def render_bootstrap_page(
     config_text: str = "", message_html: str = "", bootstrap_token: str = ""
 ) -> str:
-    message_block = f'<section class="message">{message_html}</section>' if message_html else ""
+    message_block = f'<section id="job-status" class="message">{message_html}</section>' if message_html else '<section id="job-status"></section>'
     return f"""<!doctype html>
 <html>
   <head>
@@ -63,6 +64,9 @@ def render_bootstrap_page(
       textarea {{ min-height: 18rem; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }}
       .short {{ min-height: 6rem; }} .medium {{ min-height: 8rem; }}
       button {{ margin-top: 1rem; border: 0; border-radius: 999px; background: var(--accent); color: #f4f9ff; cursor: pointer; font: inherit; font-weight: 700; padding: .75rem 1.15rem; }}
+      .events {{ margin: .75rem 0 0; padding-left: 1.15rem; }}
+      .status-failed {{ border-color: rgba(255, 116, 116, .6); }}
+      .status-succeeded {{ border-color: rgba(86, 214, 150, .6); }}
       code {{ color: #c6defe; }}
     </style>
     <script>
@@ -75,41 +79,21 @@ def render_bootstrap_page(
         link.href = href; link.download = 'config.toml'; document.body.appendChild(link);
         link.click(); link.remove(); URL.revokeObjectURL(href);
       }}
-      function bytesToHex(bytes) {{
-        return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+      async function applyConfig(event) {{
+        event.preventDefault();
+        const form = event.currentTarget;
+        const target = document.querySelector('#job-status');
+        target.innerHTML = '<div class="message"><p><strong>Submitting configuration...</strong></p></div>';
+        const response = await fetch(form.action, {{ method: 'POST', body: new FormData(form) }});
+        const body = await response.text();
+        target.outerHTML = body;
       }}
-      function bytesToBase64(bytes) {{
-        let binary = '';
-        bytes.forEach((b) => binary += String.fromCharCode(b));
-        return btoa(binary);
-      }}
-      async function prepareApplyChallenge() {{
-        const form = document.querySelector('form[action="/apply"]');
-        const fileInput = form.querySelector('input[name="config_file"]');
-        const textInput = form.querySelector('textarea[name="config"]');
-        const encoder = new TextEncoder();
-        const payload = fileInput.files.length ? await fileInput.files[0].arrayBuffer() : encoder.encode(textInput.value).buffer;
-        const nonceResponse = await fetch('/api/nonce');
-        if (!nonceResponse.ok) throw new Error('failed to fetch nonce');
-        const nonce = (await nonceResponse.json()).nonce;
-        const hash = await crypto.subtle.digest('SHA-256', payload);
-        const challenge = `atomixos-reapply-v1\nnonce:${{nonce}}\npath:/apply\nsha256:${{bytesToHex(new Uint8Array(hash))}}\n`;
-        form.querySelector('input[name="auth_nonce"]').value = nonce;
-        form.querySelector('textarea[name="auth_challenge"]').value = challenge;
-        form.querySelector('textarea[name="auth_signature"]').value = '';
-        const blob = new Blob([challenge], {{ type: 'text/plain;charset=utf-8' }});
-        const href = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = href; link.download = 'atomixos-reapply-challenge.txt'; document.body.appendChild(link);
-        link.click(); link.remove(); URL.revokeObjectURL(href);
-      }}
-      function normalizeSignature(event) {{
-        const file = event.target.files[0];
-        if (!file) return;
-        file.arrayBuffer().then((buffer) => {{
-          const bytes = new Uint8Array(buffer);
-          event.target.form.querySelector('textarea[name="auth_signature"]').value = bytesToBase64(bytes);
-        }});
+      async function refreshJobStatus(url) {{
+        const target = document.querySelector('#job-status[data-poll="true"]');
+        if (!target) return;
+        const response = await fetch(url);
+        const body = await response.text();
+        target.outerHTML = body;
       }}
     </script>
   </head>
@@ -121,7 +105,7 @@ def render_bootstrap_page(
         <p>Import an existing <code>config.toml</code> or supported config bundle.</p>
       </section>
       <section class="grid">
-        <form class="panel" method="post" action="/apply" enctype="multipart/form-data">
+        <form class="panel" method="post" action="/apply" enctype="multipart/form-data" onsubmit="applyConfig(event)">
           <h2>Apply Existing Configuration</h2>
           <p>Upload a prepared config or paste a plain <code>config.toml</code> payload.</p>
           <input type="hidden" name="bootstrap_token" value="{html.escape(bootstrap_token)}">
@@ -143,10 +127,87 @@ def uploaded_config_text(payload: bytes, filename: str) -> str:
     return ""
 
 
+def _html_page_fragment(content: str, status_class: str = "") -> str:
+    classes = "message" + (f" {status_class}" if status_class else "")
+    return f'<section id="job-status" class="{classes}">{content}</section>'
+
+
+def render_job_fragment(job: Job) -> str:
+    snapshot = job.snapshot()
+    state = str(snapshot["state"])
+    stage = html.escape(str(snapshot["stage"]))
+    events = snapshot["events"][-6:]
+    event_items = "".join(
+        "<li>"
+        f"<code>{html.escape(str(event['step']))}</code>"
+        f"{': ' + html.escape(str(event.get('message', ''))) if event.get('message') else ''}"
+        "</li>"
+        for event in events
+    )
+    event_html = f'<ol class="events">{event_items}</ol>' if event_items else ""
+
+    if state in {"submitted", "running"}:
+        fragment = _html_page_fragment(
+            f"<p><strong>Applying configuration...</strong></p>"
+            f"<p>Current stage: <code>{stage}</code></p>"
+            f"{event_html}"
+            f'<script>setTimeout(() => refreshJobStatus("/ui/jobs/{html.escape(job.id)}"), 1200);</script>'
+        )
+        return fragment.replace(
+            'id="job-status"', 'id="job-status" data-poll="true"', 1
+        )
+
+    if state == "succeeded":
+        result = snapshot["result"]
+        warnings = result.get("warnings", []) if isinstance(result, dict) else []
+        forwarding_url = result.get("forwarding_url") if isinstance(result, dict) else None
+        warning_html = "".join(f"<li>{html.escape(str(w))}</li>" for w in warnings)
+        forwarding_html = (
+            f'<p>Continue at <a href="{html.escape(str(forwarding_url))}">{html.escape(str(forwarding_url))}</a>.</p>'
+            if forwarding_url
+            else ""
+        )
+        return _html_page_fragment(
+            "<p><strong>Configuration applied.</strong></p>"
+            f"{forwarding_html}"
+            f"{'<h2>Warnings</h2><ul>' + warning_html + '</ul>' if warnings else ''}",
+            "status-succeeded",
+        )
+
+    rollback = snapshot.get("rollback_status")
+    rollback_html = (
+        f"<p><strong>Rollback status:</strong> {html.escape(str(rollback))}</p>" if rollback else ""
+    )
+    return _html_page_fragment(
+        f"<p><strong>Configuration failed.</strong></p>"
+        f"<p>{html.escape(str(snapshot.get('error') or 'unknown error'))}</p>"
+        f"{rollback_html}"
+        f"{event_html}",
+        "status-failed",
+    )
+
+
 async def _require_unprovisioned(connection, _: Any) -> None:
     """Guard that rejects requests once the device is provisioned."""
     config_root: Path = connection.app.state.config_root
     if (config_root / "config.toml").exists() or (config_root / "admin-signers").exists():
+        raise NotFoundException()
+
+
+async def _require_unprovisioned_or_boot_ui_terminal_job(connection, _: Any) -> None:
+    config_root: Path = connection.app.state.config_root
+    if not (config_root / "config.toml").exists() and not (
+        config_root / "admin-signers"
+    ).exists():
+        return
+
+    job_id = str(connection.path_params.get("job_id", ""))
+    if not job_id or job_id not in connection.app.state.get(_BOOT_UI_JOB_IDS, set()):
+        raise NotFoundException()
+
+    job_manager: JobManager = connection.app.state.job_manager
+    job = job_manager.get(job_id)
+    if job is None or str(job.snapshot()["state"]) not in {"succeeded", "failed"}:
         raise NotFoundException()
 
 
@@ -160,7 +221,7 @@ async def boot_ui(request: Request, state: State) -> Response[str]:
     )
 
 
-@get("/assets/atomixos.png", include_in_schema=False)
+@get("/assets/atomixos.png", guards=[_require_unprovisioned], include_in_schema=False)
 async def serve_logo(state: State) -> Response[Any]:
     """GET /assets/atomixos.png — serve the static logo."""
     logo: Path | None = state.get("logo_path")
@@ -172,7 +233,7 @@ async def serve_logo(state: State) -> Response[Any]:
 
 @post("/apply", guards=[_require_unprovisioned], include_in_schema=False)
 async def apply_form(request: Request, state: State) -> Response[str]:
-    """POST /apply — multipart form upload -> sync provision -> HTML result."""
+    """POST /apply — multipart form upload -> async provision job fragment."""
     from atomixos_provision.provision import apply_config_bytes
 
     config_root: Path = state.config_root
@@ -188,7 +249,8 @@ async def apply_form(request: Request, state: State) -> Response[str]:
         )
 
     config_file = form.get("config_file")
-    if config_file is None:
+    upload_filename = getattr(config_file, "filename", "") if config_file is not None else ""
+    if config_file is None or not upload_filename:
         config_text = form.get("config", "")
         if not config_text:
             return Response(
@@ -200,57 +262,45 @@ async def apply_form(request: Request, state: State) -> Response[str]:
         filename = "config.toml"
     else:
         payload = await config_file.read()
-        filename = getattr(config_file, "filename", "config.toml") or "config.toml"
+        filename = upload_filename or "config.toml"
         config_text = uploaded_config_text(payload, filename)
 
-    try:
+    async def provision_work(job):
+        return await apply_config_bytes(payload, filename, config_root, job, allow_reapply=False)
 
-        async def provision_work(job):
-            return await apply_config_bytes(
-                payload, filename, config_root, job, allow_reapply=False
-            )
+    job = await job_manager.submit(provision_work)
+    if job is None:
+        return Response(
+            _html_page_fragment("<p>A provision job is already running.</p>", "status-failed"),
+            status_code=409,
+            media_type="text/html",
+        )
 
-        result = await job_manager.run_sync(provision_work)
-        if result is None:
-            return Response(
-                "<html><body><h1>Error</h1>"
-                "<p>A provision job is already running.</p></body></html>",
-                status_code=409,
-                media_type="text/html",
-            )
-        warnings = result.get("warnings", [])
-        warning_html = "".join(f"<li>{html.escape(w)}</li>" for w in warnings)
-        message = (
-            "<p><strong>Configuration applied.</strong> Use the button below to save "
-            "the rendered <code>config.toml</code> directly from this page.</p>"
-            '<div class="message-actions"><button type="button" '
-            'onclick="downloadAppliedConfig()">Download applied config.toml</button></div>'
-            f"{'<h2>Warnings</h2><ul>' + warning_html + '</ul>' if warnings else ''}"
-        )
+    state.setdefault(_BOOT_UI_JOB_IDS, set()).add(job.id)
+
+    return Response(render_job_fragment(job), status_code=202, media_type="text/html")
+
+
+@get(
+    "/ui/jobs/{job_id:str}",
+    guards=[_require_unprovisioned_or_boot_ui_terminal_job],
+    include_in_schema=False,
+)
+async def job_fragment(job_id: str, job_manager: JobManager, state: State) -> Response[str]:
+    """GET /ui/jobs/{id} — render first-boot HTML job status."""
+    job = job_manager.get(job_id)
+    if job is None:
         return Response(
-            render_bootstrap_page(config_text=config_text, message_html=message),
-            status_code=201,
+            _html_page_fragment("<p>Provisioning job not found.</p>", "status-failed"),
+            status_code=404,
             media_type="text/html",
         )
-    except ProvisionError as exc:
-        rollback = getattr(exc, "rollback_status", None)
-        rollback_html = (
-            f"<p><strong>Rollback status:</strong> {html.escape(rollback)}</p>" if rollback else ""
-        )
-        return Response(
-            f"<html><body><h1>Error</h1><p>{html.escape(str(exc))}</p>"
-            f"{rollback_html}</body></html>",
-            status_code=400,
-            media_type="text/html",
-        )
-    except Exception as exc:
-        return Response(
-            f"<html><body><h1>Error</h1><p>{html.escape(str(exc))}</p></body></html>",
-            status_code=500,
-            media_type="text/html",
-        )
+    body = render_job_fragment(job)
+    if str(job.snapshot()["state"]) in {"succeeded", "failed"}:
+        state.get(_BOOT_UI_JOB_IDS, set()).discard(job_id)
+    return Response(body, media_type="text/html")
 
 
 def ui_routes() -> list:
     """Return the Boot UI route handlers for inclusion in the Litestar app."""
-    return [boot_ui, serve_logo, apply_form]
+    return [boot_ui, serve_logo, apply_form, job_fragment]

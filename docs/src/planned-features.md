@@ -350,7 +350,7 @@ Quadlet containers on a persistent `/data` partition.
 
 ### `boot-ui-htmx`
 
-- Status: planned
+- Status: completed
 - Overview: Redesign the first-boot Boot UI as a small server-rendered HTMX interface
   while preserving the current upload/paste provisioning flow and bootstrap CSRF token
   controls.
@@ -376,7 +376,9 @@ Quadlet containers on a persistent `/data` partition.
   - HTMX fragments must stay aligned with API/job behavior
 - Dependencies: Provisioning API foundation
 - Suggested validation: Python route tests and manual browser test in VM
-- Suggested first workflow command: `/start-feature boot-ui-htmx`
+- Delivered by making `/apply` submit asynchronous provisioning jobs, rendering
+  first-boot-only job status fragments, preserving bootstrap CSRF and browser
+  origin checks, and keeping Boot UI routes excluded from live OpenAPI.
 
 ### `watchdog-enforcement`
 

@@ -1,8 +1,11 @@
 """Tests for atomixos_provision.app routes."""
 
+import asyncio
+
 from litestar.testing import AsyncTestClient
 
 from atomixos_provision.app import create_app
+from atomixos_provision.config import ProvisionError
 
 
 async def test_nonce_response_returns_nonce(tmp_path):
@@ -111,6 +114,28 @@ async def test_first_boot_config_submit_accepts_programmatic_upload_without_toke
     assert response.status_code == 202
 
 
+async def test_first_boot_config_submit_rejects_missing_host(tmp_path):
+    async with AsyncTestClient(app=create_app(config_root=tmp_path)) as client:
+        response = await client.post(
+            "/api/config",
+            content=b"version = 1\n",
+            headers={"host": ""},
+        )
+
+    assert response.status_code == 401
+
+
+async def test_first_boot_config_submit_rejects_invalid_host(tmp_path):
+    async with AsyncTestClient(app=create_app(config_root=tmp_path)) as client:
+        response = await client.post(
+            "/api/config",
+            content=b"version = 1\n",
+            headers={"host": "evil.example"},
+        )
+
+    assert response.status_code == 401
+
+
 async def test_first_boot_config_submit_rejects_mismatched_origin(tmp_path):
     app = create_app(config_root=tmp_path)
     async with AsyncTestClient(app=app) as client:
@@ -135,6 +160,21 @@ async def test_first_boot_config_submit_rejects_mismatched_origin_port(tmp_path)
             headers={
                 "host": "172.20.30.1:8080",
                 "origin": "http://172.20.30.1:9999",
+            },
+        )
+
+    assert response.status_code == 401
+
+
+async def test_first_boot_config_submit_rejects_malformed_origin(tmp_path):
+    app = create_app(config_root=tmp_path)
+    async with AsyncTestClient(app=app) as client:
+        response = await client.post(
+            "/api/config",
+            content=b"version = 1\n",
+            headers={
+                "host": "172.20.30.1:8080",
+                "origin": "null",
             },
         )
 
@@ -218,6 +258,247 @@ async def test_boot_ui_serves_configuration_forms(tmp_path):
     assert 'name="config_file"' in body
     assert "Generate New Configuration" not in body
     assert "Download signing challenge" not in body
+    assert "atomixos-reapply-challenge" not in body
+    assert "auth_signature" not in body
+
+
+async def test_apply_form_returns_async_job_fragment(tmp_path, monkeypatch):
+    started = asyncio.Event()
+    finish = asyncio.Event()
+
+    async def fake_apply_config_bytes(
+        body, filename, config_root, progress=None, allow_reapply=True
+    ):
+        assert body == b"version = 1\n"
+        assert filename == "config.toml"
+        assert config_root == tmp_path
+        assert allow_reapply is False
+        started.set()
+        await finish.wait()
+        return {"warnings": ["careful"], "forwarding_url": "http://172.20.30.1:8080"}
+
+    monkeypatch.setattr(
+        "atomixos_provision.provision.apply_config_bytes",
+        fake_apply_config_bytes,
+    )
+
+    app = create_app(config_root=tmp_path)
+    async with AsyncTestClient(app=app) as client:
+        response = await client.post(
+            "/apply",
+            data={"bootstrap_token": app.state.bootstrap_token, "config": "version = 1\n"},
+        )
+
+        assert response.status_code == 202
+        assert "Applying configuration" in response.text
+        assert "/ui/jobs/" in response.text
+        await asyncio.wait_for(started.wait(), timeout=1)
+        finish.set()
+
+        async def poll_until_done():
+            for _ in range(20):
+                fragment = await client.get(
+                    response.text.split('refreshJobStatus("')[1].split('"')[0]
+                )
+                if "Configuration applied" in fragment.text:
+                    return fragment
+                await asyncio.sleep(0.05)
+            raise AssertionError("job did not complete")
+
+        fragment = await poll_until_done()
+
+    assert fragment.status_code == 200
+    assert "careful" in fragment.text
+    assert "http://172.20.30.1:8080" in fragment.text
+
+
+async def test_apply_form_uses_pasted_config_when_no_file_selected(tmp_path, monkeypatch):
+    async def fake_apply_config_bytes(
+        body, filename, config_root, progress=None, allow_reapply=True
+    ):
+        assert body == b"version = 1\n"
+        assert filename == "config.toml"
+        return {"warnings": []}
+
+    monkeypatch.setattr(
+        "atomixos_provision.provision.apply_config_bytes",
+        fake_apply_config_bytes,
+    )
+
+    app = create_app(config_root=tmp_path)
+    async with AsyncTestClient(app=app) as client:
+        response = await client.post(
+            "/apply",
+            data={"bootstrap_token": app.state.bootstrap_token, "config": "version = 1\n"},
+        )
+        fragment_url = response.text.split('refreshJobStatus("')[1].split('"')[0]
+
+        async def poll_until_done():
+            for _ in range(20):
+                fragment = await client.get(fragment_url)
+                if "Configuration applied" in fragment.text:
+                    return fragment
+                await asyncio.sleep(0.05)
+            raise AssertionError("job did not complete")
+
+        fragment = await poll_until_done()
+
+    assert response.status_code == 202
+    assert fragment.status_code == 200
+
+
+async def test_apply_form_renders_failure_and_rollback(tmp_path, monkeypatch):
+    async def fake_apply_config_bytes(
+        body, filename, config_root, progress=None, allow_reapply=True
+    ):
+        exc = ProvisionError("activation failed: app.service")
+        exc.rollback_status = "completed"
+        raise exc
+
+    monkeypatch.setattr(
+        "atomixos_provision.provision.apply_config_bytes",
+        fake_apply_config_bytes,
+    )
+
+    app = create_app(config_root=tmp_path)
+    async with AsyncTestClient(app=app) as client:
+        response = await client.post(
+            "/apply",
+            data={"bootstrap_token": app.state.bootstrap_token, "config": "version = 1\n"},
+        )
+        fragment_url = response.text.split('refreshJobStatus("')[1].split('"')[0]
+
+        async def poll_until_failed():
+            for _ in range(20):
+                fragment = await client.get(fragment_url)
+                if "Configuration failed" in fragment.text:
+                    return fragment
+                await asyncio.sleep(0.05)
+            raise AssertionError("job did not fail")
+
+        fragment = await poll_until_failed()
+
+    assert response.status_code == 202
+    assert fragment.status_code == 200
+    assert "activation failed: app.service" in fragment.text
+    assert "Rollback status:</strong> completed" in fragment.text
+
+
+async def test_apply_form_can_render_terminal_fragment_after_provisioning(
+    tmp_path, monkeypatch
+):
+    started = asyncio.Event()
+    finish = asyncio.Event()
+
+    async def fake_apply_config_bytes(
+        body, filename, config_root, progress=None, allow_reapply=True
+    ):
+        started.set()
+        await finish.wait()
+        (tmp_path / "config.toml").write_text("version = 1\n")
+        return {"warnings": [], "forwarding_url": "http://172.20.30.1:8080"}
+
+    monkeypatch.setattr(
+        "atomixos_provision.provision.apply_config_bytes",
+        fake_apply_config_bytes,
+    )
+
+    app = create_app(config_root=tmp_path)
+    async with AsyncTestClient(app=app) as client:
+        response = await client.post(
+            "/apply",
+            data={"bootstrap_token": app.state.bootstrap_token, "config": "version = 1\n"},
+        )
+        await asyncio.wait_for(started.wait(), timeout=1)
+        finish.set()
+        fragment_url = response.text.split('refreshJobStatus("')[1].split('"')[0]
+
+        async def poll_until_done():
+            for _ in range(20):
+                fragment = await client.get(fragment_url)
+                if "Configuration applied" in fragment.text:
+                    return fragment
+                await asyncio.sleep(0.05)
+            raise AssertionError("job did not complete")
+
+        terminal = await poll_until_done()
+        second_terminal = await client.get(fragment_url)
+
+    assert terminal.status_code == 200
+    assert "http://172.20.30.1:8080" in terminal.text
+    assert second_terminal.status_code == 404
+
+
+async def test_apply_form_reports_conflict_while_job_running(tmp_path, monkeypatch):
+    finish = asyncio.Event()
+
+    async def fake_apply_config_bytes(
+        body, filename, config_root, progress=None, allow_reapply=True
+    ):
+        await finish.wait()
+        return {"warnings": []}
+
+    monkeypatch.setattr(
+        "atomixos_provision.provision.apply_config_bytes",
+        fake_apply_config_bytes,
+    )
+
+    app = create_app(config_root=tmp_path)
+    async with AsyncTestClient(app=app) as client:
+        first = await client.post(
+            "/apply",
+            data={"bootstrap_token": app.state.bootstrap_token, "config": "version = 1\n"},
+        )
+        second = await client.post(
+            "/apply",
+            data={"bootstrap_token": app.state.bootstrap_token, "config": "version = 1\n"},
+        )
+        finish.set()
+
+    assert first.status_code == 202
+    assert second.status_code == 409
+    assert "already running" in second.text
+
+
+async def test_apply_form_rejects_invalid_bootstrap_token(tmp_path):
+    async with AsyncTestClient(app=create_app(config_root=tmp_path)) as client:
+        response = await client.post(
+            "/apply",
+            data={"bootstrap_token": "wrong", "config": "version = 1\n"},
+        )
+
+    assert response.status_code == 403
+
+
+async def test_apply_form_rejects_mismatched_origin(tmp_path):
+    app = create_app(config_root=tmp_path)
+    async with AsyncTestClient(app=app) as client:
+        response = await client.post(
+            "/apply",
+            data={"bootstrap_token": app.state.bootstrap_token, "config": "version = 1\n"},
+            headers={
+                "host": "172.20.30.1:8080",
+                "origin": "http://localhost:8080",
+            },
+        )
+
+    assert response.status_code == 401
+
+
+async def test_ui_job_fragment_returns_404_on_provisioned_device(tmp_path):
+    (tmp_path / "admin-signers").write_text("ssh-ed25519 AAAA test\n")
+    async with AsyncTestClient(app=create_app(config_root=tmp_path)) as client:
+        response = await client.get("/ui/jobs/missing")
+
+    assert response.status_code == 404
+
+
+async def test_logo_returns_404_on_provisioned_device(tmp_path):
+    (tmp_path / "admin-signers").write_text("ssh-ed25519 AAAA test\n")
+    async with AsyncTestClient(app=create_app(config_root=tmp_path)) as client:
+        response = await client.get("/assets/atomixos.png")
+
+    assert response.status_code == 404
 
 
 async def test_apply_form_returns_404_on_provisioned_device(tmp_path):
@@ -417,4 +698,5 @@ async def test_openapi_documents_public_api_contract(tmp_path):
 
     assert "/" not in schema["paths"]
     assert "/apply" not in schema["paths"]
+    assert "/ui/jobs/{job_id}" not in schema["paths"]
     assert "/assets/atomixos.png" not in schema["paths"]

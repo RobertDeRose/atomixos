@@ -59,5 +59,5 @@ def enforce_bootstrap_browser_origin(request: Request) -> None:
         if not value:
             continue
         header_origin = _header_origin(value)
-        if header_origin and header_origin != host_origin:
+        if header_origin is None or header_origin != host_origin:
             raise NotAuthorizedException(detail=f"bootstrap {header} is not allowed")

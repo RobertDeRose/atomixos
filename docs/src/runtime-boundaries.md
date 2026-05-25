@@ -20,6 +20,13 @@ rollback path as the web console. Programmatic
 clients receive `202 Accepted` with `job_id`, initial `state`, `job_url`, and a `Location: /api/jobs/{job_id}` header, then
 poll the job resource for final success, failure, rollback status, and service deployment events.
 
+The first-boot Boot UI is a browser-only wrapper around that same boundary. It
+submits upload or pasted config sources through `/apply`, uses the bootstrap CSRF
+token plus browser origin checks, and renders first-boot-only HTML job fragments
+from the in-memory job state. It is not a post-provision management UI and does
+not add a durable polling token or unauthenticated mutation path after
+provisioning.
+
 Authenticated partial config endpoints are only another input to that same boundary. They load the
 current desired `config.toml`, produce a complete candidate config, preserve existing bundle
 `files/` payloads, and run the normal candidate promotion and activation path. They never edit

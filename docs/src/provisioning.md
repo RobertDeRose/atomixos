@@ -71,6 +71,13 @@ authentication; provisioned-device re-apply through `POST /api/config` requires
 the same nonce and signature headers, while first-boot programmatic config
 submission remains unauthenticated.
 
+Before initial provisioning, browser operators can use the Boot UI at `/` to
+upload a config bundle or paste `config.toml`. Browser submissions post to
+`/apply` with the bootstrap CSRF token, receive an asynchronous job progress
+view, and poll first-boot-only HTML fragments until the apply job succeeds or
+fails. These UI routes are hidden from the live OpenAPI schema and are unavailable
+after provisioning completes.
+
 Partial config endpoints always require SSH-signature authentication, including before initial
 provisioning. Mutating partial endpoints load the current `/data/config/config.toml`, merge the typed
 request into a full desired-state document, render canonical generated TOML, and submit that full
