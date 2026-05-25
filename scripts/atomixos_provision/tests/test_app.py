@@ -148,6 +148,24 @@ async def test_validate_requires_auth_even_before_provisioning(tmp_path):
     assert response.status_code == 401
 
 
+async def test_partial_config_update_requires_auth_even_before_provisioning(tmp_path):
+    async with AsyncTestClient(app=create_app(config_root=tmp_path)) as client:
+        response = await client.put(
+            "/api/config/users/alice",
+            json={"isAdmin": False, "ssh_key": "ssh-ed25519 AAAA alice"},
+        )
+
+    assert response.status_code == 401
+
+
+async def test_config_export_requires_auth(tmp_path):
+    (tmp_path / "config.toml").write_text("version = 1\n")
+    async with AsyncTestClient(app=create_app(config_root=tmp_path)) as client:
+        response = await client.get("/api/config/export")
+
+    assert response.status_code == 401
+
+
 async def test_boot_ui_serves_configuration_forms(tmp_path):
     async with AsyncTestClient(app=create_app(config_root=tmp_path)) as client:
         response = await client.get("/")
@@ -197,6 +215,12 @@ async def test_openapi_documents_public_api_contract(tmp_path):
         "/api/health": {"get"},
         "/api/nonce": {"get"},
         "/api/config": {"post"},
+        "/api/config/export": {"get"},
+        "/api/config/users/{name}": {"put", "delete"},
+        "/api/config/network": {"patch"},
+        "/api/config/containers/{name}": {"put", "delete"},
+        "/api/config/container-networks/{name}": {"put", "delete"},
+        "/api/config/container-volumes/{name}": {"put", "delete"},
         "/api/validate": {"post"},
         "/api/jobs/{job_id}": {"get"},
     }
@@ -204,6 +228,16 @@ async def test_openapi_documents_public_api_contract(tmp_path):
     health = schema["paths"]["/api/health"]["get"]
     nonce = schema["paths"]["/api/nonce"]["get"]
     submit = schema["paths"]["/api/config"]["post"]
+    export = schema["paths"]["/api/config/export"]["get"]
+    put_user = schema["paths"]["/api/config/users/{name}"]["put"]
+    delete_user = schema["paths"]["/api/config/users/{name}"]["delete"]
+    patch_network = schema["paths"]["/api/config/network"]["patch"]
+    put_container = schema["paths"]["/api/config/containers/{name}"]["put"]
+    delete_container = schema["paths"]["/api/config/containers/{name}"]["delete"]
+    put_container_network = schema["paths"]["/api/config/container-networks/{name}"]["put"]
+    delete_container_network = schema["paths"]["/api/config/container-networks/{name}"]["delete"]
+    put_container_volume = schema["paths"]["/api/config/container-volumes/{name}"]["put"]
+    delete_container_volume = schema["paths"]["/api/config/container-volumes/{name}"]["delete"]
     validate = schema["paths"]["/api/validate"]["post"]
     get_job = schema["paths"]["/api/jobs/{job_id}"]["get"]
 
@@ -213,6 +247,28 @@ async def test_openapi_documents_public_api_contract(tmp_path):
     assert nonce["tags"] == ["auth"]
     assert submit["operationId"] == "configSubmit"
     assert submit["tags"] == ["config"]
+    assert export["operationId"] == "configExport"
+    assert export["tags"] == ["config"]
+    assert put_user["operationId"] == "configUsersPut"
+    assert delete_user["operationId"] == "configUsersDelete"
+    assert patch_network["operationId"] == "configNetworkPatch"
+    assert put_container["operationId"] == "configContainersPut"
+    assert delete_container["operationId"] == "configContainersDelete"
+    assert put_container_network["operationId"] == "configContainerNetworksPut"
+    assert delete_container_network["operationId"] == "configContainerNetworksDelete"
+    assert put_container_volume["operationId"] == "configContainerVolumesPut"
+    assert delete_container_volume["operationId"] == "configContainerVolumesDelete"
+    assert {operation["tags"][0] for operation in [
+        put_user,
+        delete_user,
+        patch_network,
+        put_container,
+        delete_container,
+        put_container_network,
+        delete_container_network,
+        put_container_volume,
+        delete_container_volume,
+    ]} == {"config"}
     assert validate["operationId"] == "configValidate"
     assert validate["tags"] == ["config"]
     assert get_job["operationId"] == "jobsGet"
@@ -227,6 +283,18 @@ async def test_openapi_documents_public_api_contract(tmp_path):
     submit_headers = {param["name"]: param for param in submit["parameters"]}
     validate_headers = {param["name"]: param for param in validate["parameters"]}
     job_headers = {param["name"]: param for param in get_job["parameters"]}
+    authenticated_operations = [
+        export,
+        put_user,
+        delete_user,
+        patch_network,
+        put_container,
+        delete_container,
+        put_container_network,
+        delete_container_network,
+        put_container_volume,
+        delete_container_volume,
+    ]
     assert set(submit_headers) == {
         "x-config-filename",
         "x-atomixos-nonce",
@@ -245,6 +313,36 @@ async def test_openapi_documents_public_api_contract(tmp_path):
     assert validate_headers["x-config-filename"]["required"] is False
     assert validate_headers["x-atomixos-nonce"]["required"] is True
     assert validate_headers["x-atomixos-signature"]["required"] is True
+    for operation in authenticated_operations:
+        headers = {param["name"]: param for param in operation["parameters"]}
+        assert {"x-atomixos-nonce", "x-atomixos-signature"} <= set(headers)
+        assert headers["x-atomixos-nonce"]["required"] is True
+        assert headers["x-atomixos-signature"]["required"] is True
+    assert put_user["requestBody"]["content"]["application/json"]["schema"]["$ref"].endswith(
+        "/PartialUserRequestBody"
+    )
+    assert patch_network["requestBody"]["content"]["application/json"]["schema"]["$ref"].endswith(
+        "/PartialNetworkRequestBody"
+    )
+    assert put_container["requestBody"]["content"]["application/json"]["schema"]["$ref"].endswith(
+        "/PartialContainerRequestBody"
+    )
+    assert put_container_network["requestBody"]["content"]["application/json"]["schema"][
+        "$ref"
+    ].endswith("/PartialContainerNetworkRequestBody")
+    assert put_container_volume["requestBody"]["content"]["application/json"]["schema"][
+        "$ref"
+    ].endswith("/PartialContainerVolumeRequestBody")
+    assert set(schema["components"]["schemas"]["PartialContainerRequestBody"]["required"]) == {
+        "privileged",
+        "Container",
+    }
+    assert schema["components"]["schemas"]["PartialContainerNetworkRequestBody"]["required"] == [
+        "Network"
+    ]
+    assert schema["components"]["schemas"]["PartialContainerVolumeRequestBody"]["required"] == [
+        "Volume"
+    ]
 
     assert nonce["responses"]["200"]["content"]["application/json"]["schema"]["$ref"].endswith(
         "/NonceResponseBody"
@@ -252,6 +350,7 @@ async def test_openapi_documents_public_api_contract(tmp_path):
     assert submit["responses"]["202"]["content"]["application/json"]["schema"]["$ref"].endswith(
         "/SubmitConfigResponseBody"
     )
+    assert "application/toml" in export["responses"]["200"]["content"]
     assert validate["responses"]["200"]["content"]["application/json"]["schema"]["$ref"].endswith(
         "/ValidationResponseBody"
     )

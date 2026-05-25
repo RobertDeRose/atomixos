@@ -34,7 +34,9 @@ from atomixos_provision.quadlet import (
 
 __all__ = [
     "apply_config_bytes",
+    "apply_config_transform",
     "import_config_from_path",
+    "locked_export_config_bytes",
     "provisioning_lock",
     "validate_config_bytes",
     "validate_config_from_path",
@@ -502,6 +504,24 @@ def _provision_sync(
         tmpdir.cleanup()
 
 
+def _apply_config_transform_sync(
+    transform,
+    config_root: Path,
+    progress: ProgressReporter | None = None,
+) -> dict[str, Any]:
+    with provisioning_lock(config_root):
+        from atomixos_provision.partial_config import canonical_config_bytes, load_current_config
+
+        current = load_current_config(config_root)
+        candidate = canonical_config_bytes(transform(current))
+        tmpdir, config_path, _files_path = prepare_source_bytes(candidate, "config.toml")
+        try:
+            files_path = config_root / "files" if (config_root / "files").exists() else None
+            return _provision_prepared_sync(config_path, files_path, config_root, progress, True)
+        finally:
+            tmpdir.cleanup()
+
+
 def _validate_sync(payload: bytes, filename: str, config_root: Path) -> dict[str, Any]:
     """Synchronous validation (no state changes)."""
     tmpdir, config_path, _files_path = prepare_source_bytes(payload, filename)
@@ -561,6 +581,25 @@ async def apply_config_bytes(
     return await asyncio.to_thread(
         _provision_sync, payload, filename, config_root, progress, allow_reapply
     )
+
+
+async def apply_config_transform(
+    transform,
+    config_root: Path,
+    progress: ProgressReporter | None = None,
+) -> dict[str, Any]:
+    """Apply a config transform under the same lock and pipeline as full imports."""
+    return await asyncio.to_thread(_apply_config_transform_sync, transform, config_root, progress)
+
+
+def locked_export_config_bytes(config_root: Path) -> bytes:
+    """Read active config.toml under the provisioning lock."""
+    from atomixos_provision.partial_config import export_config_bytes
+
+    config_root = validate_config_root(config_root)
+    with provisioning_lock(config_root):
+        recover_config_root(config_root)
+        return export_config_bytes(config_root)
 
 
 async def validate_config_bytes(

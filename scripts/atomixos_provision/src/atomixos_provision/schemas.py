@@ -13,6 +13,11 @@ __all__ = [
     "JobResponseBody",
     "NonceResponse",
     "NonceResponseBody",
+    "PartialContainerNetworkRequestBody",
+    "PartialContainerRequestBody",
+    "PartialContainerVolumeRequestBody",
+    "PartialNetworkRequestBody",
+    "PartialUserRequestBody",
     "ProvisionResultResponse",
     "SubmitConfigResponse",
     "SubmitConfigResponseBody",
@@ -57,6 +62,37 @@ class SubmitConfigResponseBody(TypedDict):
     job_id: str
     state: str
     job_url: str
+
+
+class PartialUserRequestBody(TypedDict):
+    isAdmin: bool
+    ssh_key: str
+    shell: NotRequired[str]
+
+
+class PartialNetworkRequestBody(TypedDict, total=False):
+    dns_servers: list[str]
+    dns_search_domains: list[str]
+    default_gateway: str | None
+    interfaces: dict[str, Any]
+    dnsmasq: dict[str, Any]
+    ntp: dict[str, Any]
+    firewall: dict[str, Any]
+
+
+class PartialContainerRequestBody(TypedDict):
+    privileged: bool
+    Container: dict[str, Any]
+    Unit: NotRequired[dict[str, Any]]
+    Install: NotRequired[dict[str, Any]]
+
+
+class PartialContainerNetworkRequestBody(TypedDict):
+    Network: dict[str, Any]
+
+
+class PartialContainerVolumeRequestBody(TypedDict):
+    Volume: dict[str, Any]
 
 
 @dataclass(frozen=True)

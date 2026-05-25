@@ -1,9 +1,11 @@
 """Config API routes."""
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
-from litestar import Request, post
+from litestar import Request, delete, get, patch, post, put
 from litestar.datastructures import ResponseHeader
 from litestar.openapi.datastructures import ResponseSpec
 from litestar.openapi.spec import (
@@ -13,6 +15,7 @@ from litestar.openapi.spec import (
     OpenAPIType,
     Operation,
     Parameter,
+    Reference,
     RequestBody,
     Schema,
 )
@@ -26,6 +29,11 @@ from atomixos_provision.jobs import JobManager
 from atomixos_provision.schemas import (
     ApiErrorResponseBody,
     FrameworkErrorResponseBody,
+    PartialContainerNetworkRequestBody,
+    PartialContainerRequestBody,
+    PartialContainerVolumeRequestBody,
+    PartialNetworkRequestBody,
+    PartialUserRequestBody,
     SubmitConfigResponse,
     SubmitConfigResponseBody,
     ValidationResponse,
@@ -33,7 +41,20 @@ from atomixos_provision.schemas import (
     schema_dict,
 )
 
-__all__ = ["submit_config", "validate_config"]
+__all__ = [
+    "delete_container",
+    "delete_container_network",
+    "delete_container_volume",
+    "delete_partial_user",
+    "export_config",
+    "patch_partial_network",
+    "put_container",
+    "put_container_network",
+    "put_container_volume",
+    "put_partial_user",
+    "submit_config",
+    "validate_config",
+]
 
 _MAX_FILENAME_LEN = 255
 _SAFE_FILENAME_RE = re.compile(r"^[\w\-. ]+$")
@@ -46,6 +67,36 @@ _BINARY_CONFIG_BODY = RequestBody(
             schema=Schema(type=OpenAPIType.STRING, format=OpenAPIFormat.BINARY)
         )
     },
+)
+
+
+def _json_body(schema_ref: str, description: str) -> RequestBody:
+    return RequestBody(
+        required=True,
+        description=description,
+        content={
+            "application/json": OpenAPIMediaType(
+                schema=Reference(ref=f"#/components/schemas/{schema_ref}")
+            )
+        },
+    )
+
+
+_USER_BODY = _json_body("PartialUserRequestBody", "User declaration to merge into config.toml.")
+_NETWORK_BODY = _json_body(
+    "PartialNetworkRequestBody", "Network fields to merge into config.toml."
+)
+_CONTAINER_BODY = _json_body(
+    "PartialContainerRequestBody",
+    "Quadlet container declaration to merge into config.toml.",
+)
+_CONTAINER_NETWORK_BODY = _json_body(
+    "PartialContainerNetworkRequestBody",
+    "Quadlet network declaration to merge into config.toml.",
+)
+_CONTAINER_VOLUME_BODY = _json_body(
+    "PartialContainerVolumeRequestBody",
+    "Quadlet volume declaration to merge into config.toml.",
 )
 _CONFIG_FILENAME_HEADER = Parameter(
     name="x-config-filename",
@@ -93,11 +144,35 @@ _API_ERROR_RESPONSES = {
         description="Authentication required or browser origin rejected",
     ),
 }
+_PARTIAL_RESPONSES = {
+    **_API_ERROR_RESPONSES,
+    409: ResponseSpec(ApiErrorResponseBody, description="A provision job is already running"),
+}
+_REQUIRED_AUTH_OPERATION_IDS = {
+    "configExport",
+    "configUsersPut",
+    "configUsersDelete",
+    "configNetworkPatch",
+    "configContainersPut",
+    "configContainersDelete",
+    "configContainerNetworksPut",
+    "configContainerNetworksDelete",
+    "configContainerVolumesPut",
+    "configContainerVolumesDelete",
+    "configValidate",
+}
+_PARTIAL_REQUEST_BODIES = {
+    "configUsersPut": _USER_BODY,
+    "configNetworkPatch": _NETWORK_BODY,
+    "configContainersPut": _CONTAINER_BODY,
+    "configContainerNetworksPut": _CONTAINER_NETWORK_BODY,
+    "configContainerVolumesPut": _CONTAINER_VOLUME_BODY,
+}
 
 
 @dataclass
 class ConfigOperation(Operation):
-    """Patch Litestar-generated operations for raw binary config uploads."""
+    """Patch generated config operations for binary uploads and auth docs."""
 
     def __post_init__(self) -> None:
         if self.operation_id == "configSubmit":
@@ -113,13 +188,27 @@ class ConfigOperation(Operation):
                     schema=Schema(type=OpenAPIType.STRING),
                     description="Job status resource URL.",
                 )
-        elif self.operation_id == "configValidate":
-            self.request_body = _BINARY_CONFIG_BODY
+        elif self.operation_id in _REQUIRED_AUTH_OPERATION_IDS:
+            if self.operation_id in _PARTIAL_REQUEST_BODIES:
+                self.request_body = _PARTIAL_REQUEST_BODIES[self.operation_id]
+            if self.operation_id == "configExport" and self.responses:
+                self.responses["200"].content = {
+                    "application/toml": OpenAPIMediaType(schema=Schema(type=OpenAPIType.STRING))
+                }
+            if self.operation_id == "configValidate":
+                self.request_body = _BINARY_CONFIG_BODY
             self.parameters = [
                 *(self.parameters or []),
-                _CONFIG_FILENAME_HEADER,
                 *_REQUIRED_SSH_AUTH_PARAMETERS,
             ]
+            if self.operation_id == "configValidate":
+                self.parameters.insert(len(self.parameters) - 2, _CONFIG_FILENAME_HEADER)
+            if self.responses and (response := self.responses.get("202")):
+                response.headers = response.headers or {}
+                response.headers["Location"] = OpenAPIHeader(
+                    schema=Schema(type=OpenAPIType.STRING),
+                    description="Job status resource URL.",
+                )
 
 
 def _sanitize_filename(raw: str) -> str:
@@ -181,6 +270,215 @@ async def submit_config(
                 job_url=job_url,
             )
         ),
+        headers={"Location": job_url},
+        status_code=202,
+    )
+
+
+@get(
+    "/api/config/export",
+    guards=[ssh_auth_required_guard],
+    operation_id="configExport",
+    summary="Export the current canonical config.toml",
+    operation_class=ConfigOperation,
+    responses={**_API_ERROR_RESPONSES},
+    tags=["config"],
+)
+async def export_config(config_service: ConfigService) -> Response[bytes]:
+    return Response(
+        config_service.export_config(),
+        media_type="application/toml",
+        headers={"content-disposition": 'attachment; filename="config.toml"'},
+    )
+
+
+@put(
+    "/api/config/users/{name:str}",
+    guards=[ssh_auth_required_guard],
+    operation_id="configUsersPut",
+    summary="Create or replace a user and asynchronously apply config",
+    status_code=202,
+    operation_class=ConfigOperation,
+    responses=_PARTIAL_RESPONSES,
+    tags=["config"],
+)
+async def put_partial_user(
+    name: str,
+    data: PartialUserRequestBody,
+    config_service: ConfigService,
+    job_manager: JobManager,
+) -> Response[SubmitConfigResponseBody]:
+    return await _submit_partial_job(
+        job_manager, lambda job: config_service.put_user(name, dict(data), job)
+    )
+
+
+@delete(
+    "/api/config/users/{name:str}",
+    guards=[ssh_auth_required_guard],
+    operation_id="configUsersDelete",
+    summary="Delete a user and asynchronously apply config",
+    status_code=202,
+    operation_class=ConfigOperation,
+    responses=_PARTIAL_RESPONSES,
+    tags=["config"],
+)
+async def delete_partial_user(
+    name: str,
+    config_service: ConfigService,
+    job_manager: JobManager,
+) -> Response[SubmitConfigResponseBody]:
+    return await _submit_partial_job(
+        job_manager, lambda job: config_service.delete_user(name, job)
+    )
+
+
+@patch(
+    "/api/config/network",
+    guards=[ssh_auth_required_guard],
+    operation_id="configNetworkPatch",
+    summary="Patch network config and asynchronously apply config",
+    status_code=202,
+    operation_class=ConfigOperation,
+    responses=_PARTIAL_RESPONSES,
+    tags=["config"],
+)
+async def patch_partial_network(
+    data: PartialNetworkRequestBody,
+    config_service: ConfigService,
+    job_manager: JobManager,
+) -> Response[SubmitConfigResponseBody]:
+    return await _submit_partial_job(
+        job_manager, lambda job: config_service.patch_network(dict(data), job)
+    )
+
+
+@put(
+    "/api/config/containers/{name:str}",
+    guards=[ssh_auth_required_guard],
+    operation_id="configContainersPut",
+    summary="Create or replace a container and asynchronously apply config",
+    status_code=202,
+    operation_class=ConfigOperation,
+    responses=_PARTIAL_RESPONSES,
+    tags=["config"],
+)
+async def put_container(
+    name: str,
+    data: PartialContainerRequestBody,
+    config_service: ConfigService,
+    job_manager: JobManager,
+) -> Response[SubmitConfigResponseBody]:
+    return await _submit_partial_job(
+        job_manager, lambda job: config_service.put_resource("container", name, dict(data), job)
+    )
+
+
+@delete(
+    "/api/config/containers/{name:str}",
+    guards=[ssh_auth_required_guard],
+    operation_id="configContainersDelete",
+    summary="Delete a container and asynchronously apply config",
+    status_code=202,
+    operation_class=ConfigOperation,
+    responses=_PARTIAL_RESPONSES,
+    tags=["config"],
+)
+async def delete_container(
+    name: str, config_service: ConfigService, job_manager: JobManager
+) -> Response[SubmitConfigResponseBody]:
+    return await _submit_partial_job(
+        job_manager, lambda job: config_service.delete_resource("container", name, job)
+    )
+
+
+@put(
+    "/api/config/container-networks/{name:str}",
+    guards=[ssh_auth_required_guard],
+    operation_id="configContainerNetworksPut",
+    summary="Create or replace a container network and asynchronously apply config",
+    status_code=202,
+    operation_class=ConfigOperation,
+    responses=_PARTIAL_RESPONSES,
+    tags=["config"],
+)
+async def put_container_network(
+    name: str,
+    data: PartialContainerNetworkRequestBody,
+    config_service: ConfigService,
+    job_manager: JobManager,
+) -> Response[SubmitConfigResponseBody]:
+    return await _submit_partial_job(
+        job_manager, lambda job: config_service.put_resource("network", name, dict(data), job)
+    )
+
+
+@delete(
+    "/api/config/container-networks/{name:str}",
+    guards=[ssh_auth_required_guard],
+    operation_id="configContainerNetworksDelete",
+    summary="Delete a container network and asynchronously apply config",
+    status_code=202,
+    operation_class=ConfigOperation,
+    responses=_PARTIAL_RESPONSES,
+    tags=["config"],
+)
+async def delete_container_network(
+    name: str, config_service: ConfigService, job_manager: JobManager
+) -> Response[SubmitConfigResponseBody]:
+    return await _submit_partial_job(
+        job_manager, lambda job: config_service.delete_resource("network", name, job)
+    )
+
+
+@put(
+    "/api/config/container-volumes/{name:str}",
+    guards=[ssh_auth_required_guard],
+    operation_id="configContainerVolumesPut",
+    summary="Create or replace a container volume and asynchronously apply config",
+    status_code=202,
+    operation_class=ConfigOperation,
+    responses=_PARTIAL_RESPONSES,
+    tags=["config"],
+)
+async def put_container_volume(
+    name: str,
+    data: PartialContainerVolumeRequestBody,
+    config_service: ConfigService,
+    job_manager: JobManager,
+) -> Response[SubmitConfigResponseBody]:
+    return await _submit_partial_job(
+        job_manager, lambda job: config_service.put_resource("volume", name, dict(data), job)
+    )
+
+
+@delete(
+    "/api/config/container-volumes/{name:str}",
+    guards=[ssh_auth_required_guard],
+    operation_id="configContainerVolumesDelete",
+    summary="Delete a container volume and asynchronously apply config",
+    status_code=202,
+    operation_class=ConfigOperation,
+    responses=_PARTIAL_RESPONSES,
+    tags=["config"],
+)
+async def delete_container_volume(
+    name: str, config_service: ConfigService, job_manager: JobManager
+) -> Response[SubmitConfigResponseBody]:
+    return await _submit_partial_job(
+        job_manager, lambda job: config_service.delete_resource("volume", name, job)
+    )
+
+
+async def _submit_partial_job(
+    job_manager: JobManager, work: Callable[[Any], Any]
+) -> Response[SubmitConfigResponseBody]:
+    job = await job_manager.submit(work)
+    if job is None:
+        return api_error_response(ConflictError("a provision job is already running"))
+    job_url = f"/api/jobs/{job.id}"
+    return Response(
+        schema_dict(SubmitConfigResponse(job_id=job.id, state=job.state.value, job_url=job_url)),
         headers={"Location": job_url},
         status_code=202,
     )

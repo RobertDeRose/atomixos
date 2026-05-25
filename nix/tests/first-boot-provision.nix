@@ -311,8 +311,8 @@ nixos-lib.runTest {
         gateway.fail("grep '^root:.*:/bin/sh$' /etc/passwd")
         gateway.succeed("rm -rf /tmp/bootstrap-root")
         gateway.succeed("mkdir -p /tmp/bootstrap-root")
-        gateway.succeed("first-boot-provision serve /tmp/bootstrap-root --host 127.0.0.1 --port 18080 >/tmp/bootstrap.log 2>&1 & echo $! >/tmp/bootstrap.pid")
-        gateway.wait_until_succeeds("ss -tln | grep ':18080'", timeout=30)
+        gateway.succeed("ATOMIXOS_ALLOW_UNSAFE_CONFIG_ROOT=1 first-boot-provision serve /tmp/bootstrap-root --host 127.0.0.1 --port 18080 >/tmp/bootstrap.log 2>&1 & echo $! >/tmp/bootstrap.pid")
+        gateway.succeed("for i in $(seq 1 30); do ss -tln | grep ':18080' && exit 0; sleep 1; done; cat /tmp/bootstrap.log >&2; false")
         gateway.succeed("curl -fsS http://127.0.0.1:18080/assets/atomixos.png >/tmp/bootstrap-logo.png")
         gateway.succeed("curl -fsS http://127.0.0.1:18080/ >/tmp/bootstrap-index.html")
         gateway.succeed("test -s /tmp/bootstrap-logo.png")
@@ -330,9 +330,10 @@ nixos-lib.runTest {
         gateway.succeed("grep 'version = 1' /tmp/bootstrap-response.html")
         gateway.succeed("grep 'ghcr.io/example/edgeproxy:latest' /tmp/bootstrap-response.html")
         gateway.succeed("kill -0 $(cat /tmp/bootstrap.pid)")
-        gateway.succeed("rm -rf /tmp/bootstrap-root-api && mkdir -p /tmp/bootstrap-root-api")
         gateway.succeed("kill $(cat /tmp/bootstrap.pid)")
-        gateway.succeed("first-boot-provision serve /tmp/bootstrap-root-api --host 127.0.0.1 --port 18080 >/tmp/bootstrap.log 2>&1 & echo $! >/tmp/bootstrap.pid")
+        gateway.succeed("while ss -tln | grep ':18080'; do sleep 0.2; done")
+        gateway.succeed("rm -rf /tmp/bootstrap-root-api && mkdir -p /tmp/bootstrap-root-api")
+        gateway.succeed("ATOMIXOS_ALLOW_UNSAFE_CONFIG_ROOT=1 first-boot-provision serve /tmp/bootstrap-root-api --host 127.0.0.1 --port 18080 >/tmp/bootstrap.log 2>&1 & echo $! >/tmp/bootstrap.pid")
         gateway.wait_until_succeeds("ss -tln | grep ':18080'", timeout=30)
         gateway.succeed("curl -fsS -H 'Content-Type: text/plain; charset=utf-8' --data-binary @/tmp/config.toml http://127.0.0.1:18080/api/config >/tmp/bootstrap-api-response.json")
         gateway.succeed("python3 /tmp/assert-api-job http://127.0.0.1:18080 /tmp/bootstrap-api-response.json succeeded")
@@ -341,9 +342,10 @@ nixos-lib.runTest {
         gateway.succeed("test -f /tmp/bootstrap-root-api/health-required.json")
         gateway.succeed("kill -0 $(cat /tmp/bootstrap.pid)")
         gateway.succeed("kill $(cat /tmp/bootstrap.pid)")
+        gateway.succeed("while ss -tln | grep ':18080'; do sleep 0.2; done")
 
         gateway.succeed("rm -rf /tmp/bootstrap-root-invalid && mkdir -p /tmp/bootstrap-root-invalid")
-        gateway.succeed("first-boot-provision serve /tmp/bootstrap-root-invalid --host 127.0.0.1 --port 18080 >/tmp/bootstrap.log 2>&1 & echo $! >/tmp/bootstrap.pid")
+        gateway.succeed("ATOMIXOS_ALLOW_UNSAFE_CONFIG_ROOT=1 first-boot-provision serve /tmp/bootstrap-root-invalid --host 127.0.0.1 --port 18080 >/tmp/bootstrap.log 2>&1 & echo $! >/tmp/bootstrap.pid")
         gateway.wait_until_succeeds("ss -tln | grep ':18080'", timeout=30)
         gateway.succeed("curl -fsS http://127.0.0.1:18080/ >/tmp/bootstrap-invalid-index.html")
         gateway.succeed("python3 - <<'PY'\nimport html.parser\nfrom pathlib import Path\n\nclass TokenParser(html.parser.HTMLParser):\n    def __init__(self):\n        super().__init__()\n        self.token = None\n    def handle_starttag(self, tag, attrs):\n        values = dict(attrs)\n        if tag == 'input' and values.get('name') == 'bootstrap_token':\n            self.token = values.get('value')\n\nparser = TokenParser()\nparser.feed(Path('/tmp/bootstrap-invalid-index.html').read_text())\nassert parser.token, 'missing bootstrap token'\nPath('/tmp/bootstrap-invalid-token.txt').write_text(parser.token)\nPY")
@@ -377,7 +379,7 @@ nixos-lib.runTest {
         gateway.succeed("test -f /tmp/import-bundle-dot-zstd/files/app/config.yaml")
 
         gateway.succeed("rm -rf /tmp/bootstrap-root-zstd-upload && mkdir -p /tmp/bootstrap-root-zstd-upload")
-        gateway.succeed("first-boot-provision serve /tmp/bootstrap-root-zstd-upload --host 127.0.0.1 --port 18080 >/tmp/bootstrap.log 2>&1 & echo $! >/tmp/bootstrap.pid")
+        gateway.succeed("ATOMIXOS_ALLOW_UNSAFE_CONFIG_ROOT=1 first-boot-provision serve /tmp/bootstrap-root-zstd-upload --host 127.0.0.1 --port 18080 >/tmp/bootstrap.log 2>&1 & echo $! >/tmp/bootstrap.pid")
         gateway.wait_until_succeeds("ss -tln | grep ':18080'", timeout=30)
         gateway.succeed("curl -fsS http://127.0.0.1:18080/ >/tmp/bootstrap-zstd-index.html")
         gateway.succeed("python3 - <<'PY'\nimport html.parser\nfrom pathlib import Path\n\nclass TokenParser(html.parser.HTMLParser):\n    def __init__(self):\n        super().__init__()\n        self.token = None\n    def handle_starttag(self, tag, attrs):\n        values = dict(attrs)\n        if tag == 'input' and values.get('name') == 'bootstrap_token':\n            self.token = values.get('value')\n\nparser = TokenParser()\nparser.feed(Path('/tmp/bootstrap-zstd-index.html').read_text())\nassert parser.token, 'missing bootstrap token'\nPath('/tmp/bootstrap-zstd-token.txt').write_text(parser.token)\nPY")
@@ -386,6 +388,7 @@ nixos-lib.runTest {
         gateway.succeed("test -f /tmp/bootstrap-root-zstd-upload/config.toml")
         gateway.succeed("test -f /tmp/bootstrap-root-zstd-upload/files/app/config.yaml")
         gateway.succeed("kill $(cat /tmp/bootstrap.pid)")
+        gateway.succeed("while ss -tln | grep ':18080'; do sleep 0.2; done")
 
         gateway.fail("first-boot-provision validate /tmp/invalid-config.toml")
         gateway.fail("first-boot-provision validate /tmp/gateway-contained-config.toml >/tmp/gateway-contained.out 2>/tmp/gateway-contained.err")
@@ -403,7 +406,7 @@ nixos-lib.runTest {
         # Start bootstrap server pointing at provisioned root
         gateway.succeed("mkdir -p /tmp/auth-bin && cat > /tmp/auth-bin/systemctl <<'EOF'\n#!/usr/bin/env bash\nif [ \"$1\" = is-active ]; then\n  exit 0\nfi\nexec /run/current-system/sw/bin/systemctl \"$@\"\nEOF\nchmod +x /tmp/auth-bin/systemctl")
         gateway.succeed("cat > /tmp/auth-bin/runuser <<'EOF'\n#!/usr/bin/env bash\nprintf '%s\n' \"$*\" >>/tmp/auth-runuser.log\nexit 0\nEOF\nchmod +x /tmp/auth-bin/runuser")
-        gateway.succeed("PATH=/tmp/auth-bin:$PATH first-boot-provision serve /tmp/auth-root --host 127.0.0.1 --port 18081 >/tmp/auth-bootstrap.log 2>&1 & echo $! >/tmp/auth-bootstrap.pid")
+        gateway.succeed("PATH=/tmp/auth-bin:$PATH ATOMIXOS_ALLOW_UNSAFE_CONFIG_ROOT=1 first-boot-provision serve /tmp/auth-root --host 127.0.0.1 --port 18081 >/tmp/auth-bootstrap.log 2>&1 & echo $! >/tmp/auth-bootstrap.pid")
         gateway.wait_until_succeeds("ss -tln | grep ':18081'", timeout=30)
 
         # Unauthenticated POST to provisioned device must be rejected (401)
@@ -425,6 +428,32 @@ nixos-lib.runTest {
         # Authenticated POST should succeed
         gateway.succeed("curl -fsS -H 'Content-Type: text/plain' -H \"X-AtomixOS-Nonce: $(cat /tmp/auth-nonce.txt)\" -H \"X-AtomixOS-Signature: $(cat /tmp/auth-signature-b64.txt)\" --data-binary @/tmp/no-health-config.toml http://127.0.0.1:18081/api/config > /tmp/auth-success-response.json")
         gateway.succeed("python3 /tmp/assert-api-job http://127.0.0.1:18081 /tmp/auth-success-response.json succeeded")
+        gateway.succeed("cat /tmp/auth-test-key.pub > /tmp/auth-root/admin-signers")
+
+        # Authenticated partial endpoints produce full config apply jobs.
+        gateway.succeed("curl -fsS http://127.0.0.1:18081/api/nonce > /tmp/partial-user-nonce.json")
+        gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nnonce = json.loads(Path('/tmp/partial-user-nonce.json').read_text())['nonce']\nPath('/tmp/partial-user-nonce.txt').write_text(nonce)\nPY")
+        gateway.succeed("cat > /tmp/partial-user.json <<'EOF'\n{\"isAdmin\": false, \"ssh_key\": \"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFGTDzwiQNe3nwhmg/G81QDhQBbpgOyvrKXeYnQHYOUd alice@example\"}\nEOF")
+        gateway.succeed("/tmp/sign-reapply /tmp/partial-user-nonce.txt /api/config/users/alice /tmp/partial-user.json /tmp/auth-test-key /tmp/partial-user-signature-b64.txt")
+        gateway.succeed("curl -fsS -X PUT -H 'Content-Type: application/json' -H \"X-AtomixOS-Nonce: $(cat /tmp/partial-user-nonce.txt)\" -H \"X-AtomixOS-Signature: $(cat /tmp/partial-user-signature-b64.txt)\" --data-binary @/tmp/partial-user.json http://127.0.0.1:18081/api/config/users/alice > /tmp/partial-user-response.json")
+        gateway.succeed("python3 /tmp/assert-api-job http://127.0.0.1:18081 /tmp/partial-user-response.json succeeded")
+        gateway.succeed("grep '\[users.alice\]' /tmp/auth-root/config.toml")
+        gateway.succeed("cat /tmp/auth-test-key.pub > /tmp/auth-root/admin-signers")
+
+        gateway.succeed("curl -fsS http://127.0.0.1:18081/api/nonce > /tmp/partial-network-nonce.json")
+        gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nnonce = json.loads(Path('/tmp/partial-network-nonce.json').read_text())['nonce']\nPath('/tmp/partial-network-nonce.txt').write_text(nonce)\nPY")
+        gateway.succeed("cat > /tmp/partial-network.json <<'EOF'\n{\"dns_servers\": [\"9.9.9.9\"], \"interfaces\": {\"eth0\": {\"mode\": \"dhcp\"}}}\nEOF")
+        gateway.succeed("/tmp/sign-reapply /tmp/partial-network-nonce.txt /api/config/network /tmp/partial-network.json /tmp/auth-test-key /tmp/partial-network-signature-b64.txt")
+        gateway.succeed("curl -fsS -X PATCH -H 'Content-Type: application/json' -H \"X-AtomixOS-Nonce: $(cat /tmp/partial-network-nonce.txt)\" -H \"X-AtomixOS-Signature: $(cat /tmp/partial-network-signature-b64.txt)\" --data-binary @/tmp/partial-network.json http://127.0.0.1:18081/api/config/network > /tmp/partial-network-response.json")
+        gateway.succeed("python3 /tmp/assert-api-job http://127.0.0.1:18081 /tmp/partial-network-response.json succeeded")
+        gateway.succeed("grep '9.9.9.9' /tmp/auth-root/config.toml")
+        gateway.succeed("cat /tmp/auth-test-key.pub > /tmp/auth-root/admin-signers")
+
+        gateway.succeed("curl -fsS http://127.0.0.1:18081/api/nonce > /tmp/partial-export-nonce.json")
+        gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nnonce = json.loads(Path('/tmp/partial-export-nonce.json').read_text())['nonce']\nPath('/tmp/partial-export-nonce.txt').write_text(nonce)\nPath('/tmp/empty-body').write_bytes(bytes())\nPY")
+        gateway.succeed("/tmp/sign-reapply /tmp/partial-export-nonce.txt /api/config/export /tmp/empty-body /tmp/auth-test-key /tmp/partial-export-signature-b64.txt")
+        gateway.succeed("curl -fsS -H \"X-AtomixOS-Nonce: $(cat /tmp/partial-export-nonce.txt)\" -H \"X-AtomixOS-Signature: $(cat /tmp/partial-export-signature-b64.txt)\" http://127.0.0.1:18081/api/config/export > /tmp/partial-export.toml")
+        gateway.succeed("grep '\[users.alice\]' /tmp/partial-export.toml")
 
         # Signature is bound to the submitted payload digest.
         gateway.succeed("curl -fsS http://127.0.0.1:18081/api/nonce > /tmp/auth-tamper-nonce-response.json")
@@ -442,7 +471,7 @@ nixos-lib.runTest {
         # GET /api/nonce on UNPROVISIONED device still returns a nonce; auth is bypassed.
         gateway.succeed("kill $(cat /tmp/auth-bootstrap.pid)")
         gateway.succeed("rm -rf /tmp/auth-root-empty && mkdir -p /tmp/auth-root-empty")
-        gateway.succeed("first-boot-provision serve /tmp/auth-root-empty --host 127.0.0.1 --port 18081 >/tmp/auth-bootstrap2.log 2>&1 & echo $! >/tmp/auth-bootstrap.pid")
+        gateway.succeed("ATOMIXOS_ALLOW_UNSAFE_CONFIG_ROOT=1 first-boot-provision serve /tmp/auth-root-empty --host 127.0.0.1 --port 18081 >/tmp/auth-bootstrap2.log 2>&1 & echo $! >/tmp/auth-bootstrap.pid")
         gateway.wait_until_succeeds("ss -tln | grep ':18081'", timeout=30)
         gateway.succeed("curl -fsS http://127.0.0.1:18081/api/nonce > /tmp/auth-nonce-empty.json")
         gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nresp = json.loads(Path('/tmp/auth-nonce-empty.json').read_text())\nassert set(resp) == {'nonce'}, resp\nassert len(resp['nonce']) > 20, resp\nPY")
@@ -463,7 +492,7 @@ nixos-lib.runTest {
         gateway.succeed("cat /tmp/atomic-key.pub > /tmp/atomic-root/admin-signers")
         gateway.succeed("mkdir -p /tmp/atomic-bin && cat > /tmp/atomic-bin/systemctl <<'EOF'\n#!/usr/bin/env bash\nif [ \"$1\" = is-active ]; then\n  exit 0\nfi\nexec /run/current-system/sw/bin/systemctl \"$@\"\nEOF\nchmod +x /tmp/atomic-bin/systemctl")
         gateway.succeed("cat > /tmp/atomic-bin/runuser <<'EOF'\n#!/usr/bin/env bash\nprintf '%s\n' \"$*\" >>/tmp/atomic-runuser.log\nexit 0\nEOF\nchmod +x /tmp/atomic-bin/runuser")
-        gateway.succeed("PATH=/tmp/atomic-bin:$PATH first-boot-provision serve /tmp/atomic-root --host 127.0.0.1 --port 18082 >/tmp/atomic-bootstrap.log 2>&1 & echo $! >/tmp/atomic-bootstrap.pid")
+        gateway.succeed("PATH=/tmp/atomic-bin:$PATH ATOMIXOS_ALLOW_UNSAFE_CONFIG_ROOT=1 first-boot-provision serve /tmp/atomic-root --host 127.0.0.1 --port 18082 >/tmp/atomic-bootstrap.log 2>&1 & echo $! >/tmp/atomic-bootstrap.pid")
         gateway.wait_until_succeeds("ss -tln | grep ':18082'", timeout=30)
 
         # Get nonce and sign
@@ -504,7 +533,7 @@ nixos-lib.runTest {
         gateway.succeed("cat /tmp/rootless-health-key.pub > /tmp/rootless-health-root/admin-signers")
         gateway.succeed("cat > /tmp/rootless-health-bin/systemctl <<'EOF'\n#!/usr/bin/env bash\nif [ \"$1\" = is-active ]; then\n  exit 0\nfi\nexec /run/current-system/sw/bin/systemctl \"$@\"\nEOF\nchmod +x /tmp/rootless-health-bin/systemctl")
         gateway.succeed("cat > /tmp/rootless-health-bin/runuser <<'EOF'\n#!/usr/bin/env bash\nprintf '%s\n' \"$*\" >>/tmp/rootless-health-runuser.log\nexit 0\nEOF\nchmod +x /tmp/rootless-health-bin/runuser")
-        gateway.succeed("PATH=/tmp/rootless-health-bin:$PATH first-boot-provision serve /tmp/rootless-health-root --host 127.0.0.1 --port 18087 >/tmp/rootless-health.log 2>&1 & echo $! >/tmp/rootless-health.pid")
+        gateway.succeed("PATH=/tmp/rootless-health-bin:$PATH ATOMIXOS_ALLOW_UNSAFE_CONFIG_ROOT=1 first-boot-provision serve /tmp/rootless-health-root --host 127.0.0.1 --port 18087 >/tmp/rootless-health.log 2>&1 & echo $! >/tmp/rootless-health.pid")
         gateway.wait_until_succeeds("ss -tln | grep ':18087'", timeout=30)
         gateway.succeed("curl -fsS http://127.0.0.1:18087/api/nonce > /tmp/rootless-health-nonce.json")
         gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nnonce = json.loads(Path('/tmp/rootless-health-nonce.json').read_text())['nonce']\nPath('/tmp/rootless-health-nonce.txt').write_text(nonce)\nPY")
@@ -521,7 +550,7 @@ nixos-lib.runTest {
         gateway.succeed("cat /tmp/reapply-invalid-key.pub > /tmp/reapply-invalid-root/admin-signers")
         # Capture a hash of active config before re-apply attempt
         gateway.succeed("sha256sum /tmp/reapply-invalid-root/config.toml | awk '{print $1}' > /tmp/reapply-invalid-hash-before")
-        gateway.succeed("first-boot-provision serve /tmp/reapply-invalid-root --host 127.0.0.1 --port 18083 >/tmp/reapply-invalid.log 2>&1 & echo $! >/tmp/reapply-invalid.pid")
+        gateway.succeed("ATOMIXOS_ALLOW_UNSAFE_CONFIG_ROOT=1 first-boot-provision serve /tmp/reapply-invalid-root --host 127.0.0.1 --port 18083 >/tmp/reapply-invalid.log 2>&1 & echo $! >/tmp/reapply-invalid.pid")
         gateway.wait_until_succeeds("ss -tln | grep ':18083'", timeout=30)
         # Get nonce and sign
         gateway.succeed("curl -fsS http://127.0.0.1:18083/api/nonce > /tmp/reapply-invalid-nonce.json")
@@ -545,7 +574,7 @@ nixos-lib.runTest {
         gateway.succeed("sha256sum /tmp/rollback-root/config.toml | awk '{print $1}' > /tmp/rollback-hash-before")
         # Create a activation hook that always fails (simulates activation failure)
         gateway.succeed("cat > /tmp/rollback-activation-hook <<'EOF'\n#!/usr/bin/env bash\nexit 1\nEOF\nchmod +x /tmp/rollback-activation-hook")
-        gateway.succeed("ATOMIXOS_BOOTSTRAP_ACTIVATION=/tmp/rollback-activation-hook first-boot-provision serve /tmp/rollback-root --host 127.0.0.1 --port 18084 >/tmp/rollback.log 2>&1 & echo $! >/tmp/rollback.pid")
+        gateway.succeed("ATOMIXOS_BOOTSTRAP_ACTIVATION=/tmp/rollback-activation-hook ATOMIXOS_ALLOW_UNSAFE_CONFIG_ROOT=1 first-boot-provision serve /tmp/rollback-root --host 127.0.0.1 --port 18084 >/tmp/rollback.log 2>&1 & echo $! >/tmp/rollback.pid")
         gateway.wait_until_succeeds("ss -tln | grep ':18084'", timeout=30)
         # Get nonce and sign
         gateway.succeed("curl -fsS http://127.0.0.1:18084/api/nonce > /tmp/rollback-nonce.json")
@@ -569,7 +598,7 @@ nixos-lib.runTest {
         gateway.succeed("cat /tmp/apply-rollback-key.pub > /tmp/apply-rollback-root/admin-signers")
         gateway.succeed("sha256sum /tmp/apply-rollback-root/config.toml | awk '{print $1}' > /tmp/apply-rollback-hash-before")
         gateway.succeed("cat > /tmp/apply-rollback-hook <<'EOF'\n#!/usr/bin/env bash\nexit 1\nEOF\nchmod +x /tmp/apply-rollback-hook")
-        gateway.succeed("ATOMIXOS_BOOTSTRAP_ACTIVATION=/tmp/apply-rollback-hook first-boot-provision serve /tmp/apply-rollback-root --host 127.0.0.1 --port 18086 >/tmp/apply-rollback.log 2>&1 & echo $! >/tmp/apply-rollback.pid")
+        gateway.succeed("ATOMIXOS_BOOTSTRAP_ACTIVATION=/tmp/apply-rollback-hook ATOMIXOS_ALLOW_UNSAFE_CONFIG_ROOT=1 first-boot-provision serve /tmp/apply-rollback-root --host 127.0.0.1 --port 18086 >/tmp/apply-rollback.log 2>&1 & echo $! >/tmp/apply-rollback.pid")
         gateway.wait_until_succeeds("ss -tln | grep ':18086'", timeout=30)
         gateway.succeed("curl -fsS http://127.0.0.1:18086/api/nonce > /tmp/apply-rollback-nonce.json")
         gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nnonce = json.loads(Path('/tmp/apply-rollback-nonce.json').read_text())['nonce']\nPath('/tmp/apply-rollback-nonce.txt').write_text(nonce)\nPY")
@@ -591,7 +620,7 @@ nixos-lib.runTest {
         gateway.succeed("sha256sum /tmp/health-rollback-root/config.toml | awk '{print $1}' > /tmp/health-rollback-hash-before")
         gateway.succeed("cat > /tmp/health-bin/systemctl <<'EOF'\n#!/usr/bin/env bash\nif [ \"$1\" = is-active ]; then\n  exit 1\nfi\nexec /run/current-system/sw/bin/systemctl \"$@\"\nEOF\nchmod +x /tmp/health-bin/systemctl")
         gateway.succeed("cat > /tmp/health-activation-hook <<'EOF'\n#!/usr/bin/env bash\nexit 0\nEOF\nchmod +x /tmp/health-activation-hook")
-        gateway.succeed("PATH=/tmp/health-bin:$PATH ATOMIXOS_BOOTSTRAP_ACTIVATION=/tmp/health-activation-hook first-boot-provision serve /tmp/health-rollback-root --host 127.0.0.1 --port 18085 >/tmp/health-rollback.log 2>&1 & echo $! >/tmp/health-rollback.pid")
+        gateway.succeed("PATH=/tmp/health-bin:$PATH ATOMIXOS_BOOTSTRAP_ACTIVATION=/tmp/health-activation-hook ATOMIXOS_ALLOW_UNSAFE_CONFIG_ROOT=1 first-boot-provision serve /tmp/health-rollback-root --host 127.0.0.1 --port 18085 >/tmp/health-rollback.log 2>&1 & echo $! >/tmp/health-rollback.pid")
         gateway.wait_until_succeeds("ss -tln | grep ':18085'", timeout=30)
         gateway.succeed("curl -fsS http://127.0.0.1:18085/api/nonce > /tmp/health-rollback-nonce.json")
         gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nnonce = json.loads(Path('/tmp/health-rollback-nonce.json').read_text())['nonce']\nPath('/tmp/health-rollback-nonce.txt').write_text(nonce)\nPY")

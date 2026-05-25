@@ -60,6 +60,13 @@ Re-apply uses atomic candidate promotion:
 `job_url`; the `Location` header points to the same job resource. The job records provisioning steps, service
 deployment/status events, activation failures, final result, and rollback status.
 
+Typed partial endpoints use the same job and promotion flow. The service takes the provisioning lock,
+loads the active `/data/config/config.toml`, applies the typed request to an in-memory full config,
+writes generated TOML for the candidate, carries forward active bundle `files/` payloads, and then
+runs the same validation, rendering, atomic promotion, activation, and rollback steps. If validation
+or activation fails, the previous active `/data/config` tree remains active or is restored by the same
+rollback path used by full re-apply.
+
 First provisioning (no existing `config.toml`) remains unauthenticated and writes directly.
 
 ## Managed Users Flow

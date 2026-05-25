@@ -314,7 +314,7 @@ Quadlet containers on a persistent `/data` partition.
 
 ### `typed-partial-provisioning-api`
 
-- Status: planned
+- Status: completed
 - Overview: Add typed partial configuration endpoints for common operations while
   preserving `config.toml` and bundles as the canonical import/export/backup format.
   Partial changes must always produce a full desired state and reuse the existing
@@ -343,7 +343,10 @@ Quadlet containers on a persistent `/data` partition.
 - Dependencies: Provisioning API foundation, live schema contract
 - Suggested validation: Python tests for typed patch-to-full-state conversion plus VM
   tests for at least one user and one container partial update
-- Suggested first workflow command: `/start-feature typed-partial-provisioning-api`
+- Delivered by adding authenticated partial endpoints for users, network, containers,
+  container networks, container volumes, and config export. Partial mutations produce full
+  canonical `config.toml` candidates and reuse the existing async validation, render,
+  promotion, activation, rollback, and job pipeline.
 
 ### `boot-ui-htmx`
 

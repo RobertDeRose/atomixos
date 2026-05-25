@@ -47,19 +47,37 @@ files, admin SSH authorized keys, and other provisioning-derived runtime inputs.
 The bootstrap console is backed by a long-lived Litestar service. API routes are
 grouped by domain but still wired explicitly by the app factory:
 
-| Route                    | Behavior                                                                     |
-|--------------------------|------------------------------------------------------------------------------|
-| `GET /api/health`        | Returns service liveness.                                                    |
-| `GET /api/nonce`         | Issues a single-use nonce for SSH-signature authentication.                  |
-| `POST /api/validate`     | Validates a `config.toml` or config bundle without applying it.              |
-| `POST /api/config`       | Accepts a config source and returns `202 Accepted` with a job URL.           |
-| `GET /api/jobs/{job_id}` | Returns current provisioning job status, events, result, and rollback state. |
+| Route                                          | Behavior                                                                        |
+|------------------------------------------------|---------------------------------------------------------------------------------|
+| `GET /api/health`                              | Returns service liveness.                                                       |
+| `GET /api/nonce`                               | Issues a single-use nonce for SSH-signature authentication.                     |
+| `POST /api/validate`                           | Validates a `config.toml` or config bundle without applying it.                 |
+| `POST /api/config`                             | Accepts a config source and returns `202 Accepted` with a job URL.              |
+| `GET /api/config/export`                       | Returns the current canonical `config.toml` bytes.                              |
+| `PUT /api/config/users/{name}`                 | Creates or replaces a declared user and applies the full config.                |
+| `DELETE /api/config/users/{name}`              | Removes a declared user and applies the full config.                            |
+| `PATCH /api/config/network`                    | Merges network, LAN, NTP, DNS, and firewall fields and applies the full config. |
+| `PUT /api/config/containers/{name}`            | Creates or replaces a declared Quadlet container.                               |
+| `DELETE /api/config/containers/{name}`         | Removes a declared Quadlet container.                                           |
+| `PUT /api/config/container-networks/{name}`    | Creates or replaces a declared Quadlet network.                                 |
+| `DELETE /api/config/container-networks/{name}` | Removes a declared Quadlet network.                                             |
+| `PUT /api/config/container-volumes/{name}`     | Creates or replaces a declared Quadlet volume.                                  |
+| `DELETE /api/config/container-volumes/{name}`  | Removes a declared Quadlet volume.                                              |
+| `GET /api/jobs/{job_id}`                       | Returns current provisioning job status, events, result, and rollback state.    |
 
 Mutating apply jobs are single-flight. Clients poll the returned job URL for
 progress and final status. `POST /api/validate` always requires SSH-signature
 authentication; provisioned-device re-apply through `POST /api/config` requires
 the same nonce and signature headers, while first-boot programmatic config
 submission remains unauthenticated.
+
+Partial config endpoints always require SSH-signature authentication, including before initial
+provisioning. Mutating partial endpoints load the current `/data/config/config.toml`, merge the typed
+request into a full desired-state document, render canonical generated TOML, and submit that full
+candidate through the same asynchronous validate/render/promote/activate/rollback job path as
+`POST /api/config`. They do not mutate derived JSON, Quadlet, firewall, network, or user state
+directly. The generated `config.toml` remains the exported backup artifact; comments and original TOML
+ordering are not preserved after a successful partial update.
 
 ## USB Recovery Mode
 

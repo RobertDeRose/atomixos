@@ -16,7 +16,20 @@ from atomixos_provision.deps import (
     provide_settings,
 )
 from atomixos_provision.domain.auth.controller import nonce
-from atomixos_provision.domain.config.controller import submit_config, validate_config
+from atomixos_provision.domain.config.controller import (
+    delete_container,
+    delete_container_network,
+    delete_container_volume,
+    delete_partial_user,
+    export_config,
+    patch_partial_network,
+    put_container,
+    put_container_network,
+    put_container_volume,
+    put_partial_user,
+    submit_config,
+    validate_config,
+)
 from atomixos_provision.domain.jobs.controller import get_job
 from atomixos_provision.domain.system.controller import health
 from atomixos_provision.jobs import JobManager
@@ -56,6 +69,16 @@ def create_app(
             health,
             nonce,
             submit_config,
+            export_config,
+            put_partial_user,
+            delete_partial_user,
+            patch_partial_network,
+            put_container,
+            delete_container,
+            put_container_network,
+            delete_container_network,
+            put_container_volume,
+            delete_container_volume,
             get_job,
             validate_config,
             *ui_routes(),

@@ -1,11 +1,13 @@
 """Tests for atomixos_provision.provision module."""
 
 import json
+import tarfile
 
 import pytest
 
 from atomixos_provision.config import ProvisionError
 from atomixos_provision.provision import (
+    apply_config_transform,
     import_config_from_path,
     provisioning_lock,
     write_imported_state,
@@ -343,6 +345,60 @@ Image = "docker.io/library/alpine:latest"
     assert "busybox:latest" in (config_root / "config.toml").read_text()
     assert "alpine:latest" in (tmp_path / "config-rollback" / "config.toml").read_text()
     assert (config_root / "managed-users.json").read_text() == '["admin"]\n'
+
+
+async def test_apply_config_transform_preserves_bundle_files(tmp_path, monkeypatch):
+    monkeypatch.setenv("ATOMIXOS_ALLOW_UNSAFE_CONFIG_ROOT", "1")
+    monkeypatch.setattr(
+        "atomixos_provision.config.load_config_schema",
+        lambda: {"type": "object", "additionalProperties": True},
+    )
+    monkeypatch.setattr(
+        "atomixos_provision.provision.complete_reapply",
+        lambda _root, _progress=None: (True, [], False),
+    )
+    monkeypatch.setattr("atomixos_provision.bundle.APP_RUNTIME_USER", "nobody")
+    monkeypatch.setattr("atomixos_provision.bundle.os.chown", lambda *_args: None)
+
+    config_root = tmp_path / "config"
+    bundle_root = tmp_path / "bundle-src"
+    files_dir = bundle_root / "files" / "app"
+    files_dir.mkdir(parents=True)
+    (files_dir / "settings.json").write_text("{}\n")
+    (bundle_root / "config.toml").write_text(
+        f"""\
+version = 1
+
+[users.admin]
+isAdmin = true
+ssh_key = "{VALID_ED25519_KEY} admin@example"
+
+[activation]
+required = ["app"]
+
+[containers.container.app]
+privileged = false
+
+[containers.container.app.Container]
+Image = "docker.io/library/alpine:latest"
+Volume = "${{FILES_DIR}}/app/settings.json:/settings.json:ro"
+"""
+    )
+    bundle_path = tmp_path / "bundle.tar.gz"
+    with tarfile.open(bundle_path, "w:gz") as archive:
+        archive.add(bundle_root / "config.toml", arcname="config.toml")
+        archive.add(bundle_root / "files", arcname="files")
+
+    import_config_from_path(bundle_path, config_root)
+
+    await apply_config_transform(
+        lambda config: {**config, "network": {"dns_servers": ["9.9.9.9"]}},
+        config_root,
+    )
+
+    assert (config_root / "files" / "app" / "settings.json").read_text() == "{}\n"
+    unit_text = (config_root / "quadlet" / "app.container").read_text()
+    assert f"Volume={config_root}/files/app/settings.json:/settings.json:ro" in unit_text
 
 
 def test_reapply_renders_network_settings_and_rolls_back_on_activation_failure(

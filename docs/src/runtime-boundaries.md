@@ -20,6 +20,12 @@ rollback path as the web console. Programmatic
 clients receive `202 Accepted` with `job_id`, initial `state`, `job_url`, and a `Location: /api/jobs/{job_id}` header, then
 poll the job resource for final success, failure, rollback status, and service deployment events.
 
+Authenticated partial config endpoints are only another input to that same boundary. They load the
+current desired `config.toml`, produce a complete candidate config, preserve existing bundle
+`files/` payloads, and run the normal candidate promotion and activation path. They never edit
+derived `/data/config/*.json`, Quadlet units, systemd drop-ins, firewall state, or users directly.
+Successful partial updates rewrite `/data/config/config.toml` in generated canonical TOML form.
+
 The API routes retain operation IDs and domain tags in code, and the production
 bootstrap service exposes live OpenAPI schema routes for online clients. Response
 bodies are typed in the provisioning package schemas while preserving the current
