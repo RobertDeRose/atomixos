@@ -166,6 +166,48 @@ async def test_config_export_requires_auth(tmp_path):
     assert response.status_code == 401
 
 
+async def test_partial_config_rejects_unknown_top_level_keys(tmp_path, monkeypatch):
+    async def fake_apply_config_transform(transform, config_root, progress=None):
+        transform({"version": 1})
+
+    class AcceptingNonceStore:
+        async def consume(self, nonce):
+            return nonce == "test"
+
+    (tmp_path / "admin-signers").write_text("ssh-ed25519 AAAA test\n")
+    monkeypatch.setattr(
+        "atomixos_provision.provision.apply_config_transform",
+        fake_apply_config_transform,
+    )
+    monkeypatch.setattr(
+        "atomixos_provision.auth.verify_ssh_signature",
+        lambda message, signature_blob, allowed_keys_path: True,
+    )
+
+    app = create_app(config_root=tmp_path)
+    app.state.nonce_store = AcceptingNonceStore()
+    async with AsyncTestClient(app=app) as client:
+        response = await client.put(
+            "/api/config/container-networks/podnet",
+            json={"Network": {}, "Container": {}},
+            headers={
+                "x-atomixos-nonce": "test",
+                "x-atomixos-signature": "dGVzdA==",
+            },
+        )
+
+    assert response.status_code == 202
+    job = response.json()
+
+    async with AsyncTestClient(app=app) as client:
+        result = await client.get(job["job_url"])
+
+    assert result.status_code == 200
+    body = result.json()
+    assert body["state"] == "failed"
+    assert body["error"] == "unsupported partial request keys: Container"
+
+
 async def test_boot_ui_serves_configuration_forms(tmp_path):
     async with AsyncTestClient(app=create_app(config_root=tmp_path)) as client:
         response = await client.get("/")
@@ -318,31 +360,26 @@ async def test_openapi_documents_public_api_contract(tmp_path):
         assert {"x-atomixos-nonce", "x-atomixos-signature"} <= set(headers)
         assert headers["x-atomixos-nonce"]["required"] is True
         assert headers["x-atomixos-signature"]["required"] is True
-    assert put_user["requestBody"]["content"]["application/json"]["schema"]["$ref"].endswith(
-        "/PartialUserRequestBody"
-    )
-    assert patch_network["requestBody"]["content"]["application/json"]["schema"]["$ref"].endswith(
-        "/PartialNetworkRequestBody"
-    )
-    assert put_container["requestBody"]["content"]["application/json"]["schema"]["$ref"].endswith(
-        "/PartialContainerRequestBody"
-    )
-    assert put_container_network["requestBody"]["content"]["application/json"]["schema"][
-        "$ref"
-    ].endswith("/PartialContainerNetworkRequestBody")
-    assert put_container_volume["requestBody"]["content"]["application/json"]["schema"][
-        "$ref"
-    ].endswith("/PartialContainerVolumeRequestBody")
-    assert set(schema["components"]["schemas"]["PartialContainerRequestBody"]["required"]) == {
+    put_user_schema = put_user["requestBody"]["content"]["application/json"]["schema"]
+    patch_network_schema = patch_network["requestBody"]["content"]["application/json"]["schema"]
+    put_container_schema = put_container["requestBody"]["content"]["application/json"]["schema"]
+    put_container_network_schema = put_container_network["requestBody"]["content"][
+        "application/json"
+    ]["schema"]
+    put_container_volume_schema = put_container_volume["requestBody"]["content"][
+        "application/json"
+    ]["schema"]
+    assert put_user_schema["additionalProperties"] is False
+    assert patch_network_schema["additionalProperties"] is False
+    assert put_container_schema["additionalProperties"] is False
+    assert put_container_network_schema["additionalProperties"] is False
+    assert put_container_volume_schema["additionalProperties"] is False
+    assert set(put_container_schema["required"]) == {
         "privileged",
         "Container",
     }
-    assert schema["components"]["schemas"]["PartialContainerNetworkRequestBody"]["required"] == [
-        "Network"
-    ]
-    assert schema["components"]["schemas"]["PartialContainerVolumeRequestBody"]["required"] == [
-        "Volume"
-    ]
+    assert put_container_network_schema["required"] == ["Network"]
+    assert put_container_volume_schema["required"] == ["Volume"]
 
     assert nonce["responses"]["200"]["content"]["application/json"]["schema"]["$ref"].endswith(
         "/NonceResponseBody"

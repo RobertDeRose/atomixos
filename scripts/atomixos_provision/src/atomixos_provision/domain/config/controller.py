@@ -70,32 +70,74 @@ _BINARY_CONFIG_BODY = RequestBody(
 )
 
 
-def _json_body(schema_ref: str, description: str) -> RequestBody:
+def _object_schema(
+    properties: dict[str, Schema], required: list[str] | None = None
+) -> Schema:
+    return Schema(
+        type=OpenAPIType.OBJECT,
+        properties=properties,
+        required=required,
+        additional_properties=False,
+    )
+
+
+def _json_body(schema: Schema | Reference, description: str) -> RequestBody:
     return RequestBody(
         required=True,
         description=description,
         content={
-            "application/json": OpenAPIMediaType(
-                schema=Reference(ref=f"#/components/schemas/{schema_ref}")
-            )
+            "application/json": OpenAPIMediaType(schema=schema)
         },
     )
 
 
-_USER_BODY = _json_body("PartialUserRequestBody", "User declaration to merge into config.toml.")
+_BOOL_SCHEMA = Schema(type=OpenAPIType.BOOLEAN)
+_ARRAY_SCHEMA = Schema(type=OpenAPIType.ARRAY, items=_STRING_SCHEMA)
+_OBJECT_MAP_SCHEMA = Schema(type=OpenAPIType.OBJECT, additional_properties=True)
+_NULLABLE_STRING_SCHEMA = Schema(type=[OpenAPIType.STRING, OpenAPIType.NULL])
+_USER_BODY = _json_body(
+    _object_schema(
+        {
+            "isAdmin": _BOOL_SCHEMA,
+            "ssh_key": _STRING_SCHEMA,
+            "shell": _STRING_SCHEMA,
+        },
+        ["isAdmin", "ssh_key"],
+    ),
+    "User declaration to merge into config.toml.",
+)
 _NETWORK_BODY = _json_body(
-    "PartialNetworkRequestBody", "Network fields to merge into config.toml."
+    _object_schema(
+        {
+            "dns_servers": _ARRAY_SCHEMA,
+            "dns_search_domains": _ARRAY_SCHEMA,
+            "default_gateway": _NULLABLE_STRING_SCHEMA,
+            "interfaces": _OBJECT_MAP_SCHEMA,
+            "dnsmasq": _OBJECT_MAP_SCHEMA,
+            "ntp": _OBJECT_MAP_SCHEMA,
+            "firewall": _OBJECT_MAP_SCHEMA,
+        }
+    ),
+    "Network fields to merge into config.toml.",
 )
 _CONTAINER_BODY = _json_body(
-    "PartialContainerRequestBody",
+    _object_schema(
+        {
+            "privileged": _BOOL_SCHEMA,
+            "Unit": _OBJECT_MAP_SCHEMA,
+            "Container": _OBJECT_MAP_SCHEMA,
+            "Install": _OBJECT_MAP_SCHEMA,
+        },
+        ["privileged", "Container"],
+    ),
     "Quadlet container declaration to merge into config.toml.",
 )
 _CONTAINER_NETWORK_BODY = _json_body(
-    "PartialContainerNetworkRequestBody",
+    _object_schema({"Network": _OBJECT_MAP_SCHEMA}, ["Network"]),
     "Quadlet network declaration to merge into config.toml.",
 )
 _CONTAINER_VOLUME_BODY = _json_body(
-    "PartialContainerVolumeRequestBody",
+    _object_schema({"Volume": _OBJECT_MAP_SCHEMA}, ["Volume"]),
     "Quadlet volume declaration to merge into config.toml.",
 )
 _CONFIG_FILENAME_HEADER = Parameter(
@@ -304,7 +346,7 @@ async def export_config(config_service: ConfigService) -> Response[bytes]:
 )
 async def put_partial_user(
     name: str,
-    data: PartialUserRequestBody,
+    data: dict[str, Any],
     config_service: ConfigService,
     job_manager: JobManager,
 ) -> Response[SubmitConfigResponseBody]:
@@ -344,7 +386,7 @@ async def delete_partial_user(
     tags=["config"],
 )
 async def patch_partial_network(
-    data: PartialNetworkRequestBody,
+    data: dict[str, Any],
     config_service: ConfigService,
     job_manager: JobManager,
 ) -> Response[SubmitConfigResponseBody]:
@@ -365,7 +407,7 @@ async def patch_partial_network(
 )
 async def put_container(
     name: str,
-    data: PartialContainerRequestBody,
+    data: dict[str, Any],
     config_service: ConfigService,
     job_manager: JobManager,
 ) -> Response[SubmitConfigResponseBody]:
@@ -404,7 +446,7 @@ async def delete_container(
 )
 async def put_container_network(
     name: str,
-    data: PartialContainerNetworkRequestBody,
+    data: dict[str, Any],
     config_service: ConfigService,
     job_manager: JobManager,
 ) -> Response[SubmitConfigResponseBody]:
@@ -443,7 +485,7 @@ async def delete_container_network(
 )
 async def put_container_volume(
     name: str,
-    data: PartialContainerVolumeRequestBody,
+    data: dict[str, Any],
     config_service: ConfigService,
     job_manager: JobManager,
 ) -> Response[SubmitConfigResponseBody]:
