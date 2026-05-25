@@ -29,11 +29,6 @@ from atomixos_provision.jobs import JobManager
 from atomixos_provision.schemas import (
     ApiErrorResponseBody,
     FrameworkErrorResponseBody,
-    PartialContainerNetworkRequestBody,
-    PartialContainerRequestBody,
-    PartialContainerVolumeRequestBody,
-    PartialNetworkRequestBody,
-    PartialUserRequestBody,
     SubmitConfigResponse,
     SubmitConfigResponseBody,
     ValidationResponse,
