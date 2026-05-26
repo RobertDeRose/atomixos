@@ -26,6 +26,7 @@ let
     postInstall = ''
       mkdir -p "$out/share/atomixos"
       install -m0644 ${../../docs/src/atomixos.png} "$out/share/atomixos/atomixos.png"
+      install -m0644 ${../../docs/src/config_dropzone.png} "$out/share/atomixos/config_dropzone.png"
       install -m0644 ${../../schemas/config.schema.json} "$out/share/atomixos/config.schema.json"
     '';
   };
@@ -314,8 +315,10 @@ nixos-lib.runTest {
         gateway.succeed("ATOMIXOS_ALLOW_UNSAFE_CONFIG_ROOT=1 first-boot-provision serve /tmp/bootstrap-root --host 127.0.0.1 --port 18080 >/tmp/bootstrap.log 2>&1 & echo $! >/tmp/bootstrap.pid")
         gateway.succeed("for i in $(seq 1 30); do ss -tln | grep ':18080' && exit 0; sleep 1; done; cat /tmp/bootstrap.log >&2; false")
         gateway.succeed("curl -fsS http://127.0.0.1:18080/assets/atomixos.png >/tmp/bootstrap-logo.png")
+        gateway.succeed("curl -fsS http://127.0.0.1:18080/assets/config_dropzone.png >/tmp/bootstrap-dropzone.png")
         gateway.succeed("curl -fsS http://127.0.0.1:18080/ >/tmp/bootstrap-index.html")
         gateway.succeed("test -s /tmp/bootstrap-logo.png")
+        gateway.succeed("test -s /tmp/bootstrap-dropzone.png")
         gateway.fail("grep 'accept=' /tmp/bootstrap-index.html")
         gateway.succeed("python3 - <<'PY'\nimport html.parser\nfrom pathlib import Path\n\nclass TokenParser(html.parser.HTMLParser):\n    def __init__(self):\n        super().__init__()\n        self.token = None\n    def handle_starttag(self, tag, attrs):\n        values = dict(attrs)\n        if tag == 'input' and values.get('name') == 'bootstrap_token':\n            self.token = values.get('value')\n\nparser = TokenParser()\nparser.feed(Path('/tmp/bootstrap-index.html').read_text())\nassert parser.token, 'missing bootstrap token'\nPath('/tmp/bootstrap-apply-token.txt').write_text(parser.token)\nPY")
         gateway.succeed("test \"$(curl -sS -o /tmp/bootstrap-missing-token.html -w '%{http_code}' -F config_file=@/tmp/config.toml http://127.0.0.1:18080/apply)\" = 403")

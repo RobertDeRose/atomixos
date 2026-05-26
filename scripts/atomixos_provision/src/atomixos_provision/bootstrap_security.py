@@ -34,18 +34,24 @@ def _allowed_host(hostname: str) -> bool:
 
 
 def _host_origin(host_header: str) -> RequestOrigin | None:
-    parsed = urlparse(f"//{host_header}")
-    if not parsed.hostname:
+    try:
+        parsed = urlparse(f"//{host_header}")
+        if not parsed.hostname:
+            return None
+        return RequestOrigin("http", parsed.hostname.lower(), parsed.port or 80)
+    except ValueError:
         return None
-    return RequestOrigin("http", parsed.hostname.lower(), parsed.port or 80)
 
 
 def _header_origin(value: str) -> RequestOrigin | None:
-    parsed = urlparse(value)
-    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+    try:
+        parsed = urlparse(value)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            return None
+        default_port = 443 if parsed.scheme == "https" else 80
+        return RequestOrigin(parsed.scheme, parsed.hostname.lower(), parsed.port or default_port)
+    except ValueError:
         return None
-    default_port = 443 if parsed.scheme == "https" else 80
-    return RequestOrigin(parsed.scheme, parsed.hostname.lower(), parsed.port or default_port)
 
 
 def enforce_bootstrap_browser_origin(request: Request) -> None:

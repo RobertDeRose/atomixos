@@ -38,18 +38,18 @@ def serve(config_root: Path | None, host: str | None, port: int | None) -> None:
         max_source_bytes=env_settings.max_source_bytes,
     )
 
-    # Resolve logo path: from installed location
+    # Resolve asset paths: from installed location
     # __file__ = <prefix>/lib/python3.X/site-packages/atomixos_provision/server.py
-    # 5 parents up reaches <prefix>/, where share/atomixos/atomixos.png lives
-    logo_path = (
-        Path(__file__).resolve().parent.parent.parent.parent.parent
-        / "share"
-        / "atomixos"
-        / "atomixos.png"
-    )
+    # 5 parents up reaches <prefix>/, where share/atomixos assets live
+    asset_dir = Path(__file__).resolve().parent.parent.parent.parent.parent / "share" / "atomixos"
+    logo_path = asset_dir / "atomixos.png"
+    config_dropzone_path = asset_dir / "config_dropzone.png"
 
     app = create_app(settings=settings)
     app.state["logo_path"] = logo_path if logo_path.exists() else None
+    app.state["config_dropzone_path"] = (
+        config_dropzone_path if config_dropzone_path.exists() else None
+    )
 
     sd_socket = _get_systemd_socket()
 

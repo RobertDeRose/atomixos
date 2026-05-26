@@ -157,16 +157,16 @@ OAuth, Vite, and email plugins are not part of this foundation.
 
 ### HTTP Endpoints
 
-| Method | Path                   | Auth                                      | Response | Description                            |
-|--------|------------------------|-------------------------------------------|----------|----------------------------------------|
-| GET    | `/`                    | none                                      | HTML     | Boot UI page                           |
-| GET    | `/api/nonce`           | none                                      | JSON     | Issue single-use nonce for auth        |
-| GET    | `/api/health`          | none                                      | JSON     | Liveness check                         |
-| GET    | `/api/jobs/{job_id}`   | job UUID                                  | JSON     | Poll async job status                  |
-| GET    | `/assets/atomixos.png` | none                                      | image    | Static logo                            |
-| POST   | `/api/config`          | SSH sig (provisioned) / none (first-boot) | JSON     | Submit config, returns job ID (async)  |
-| POST   | `/api/validate`        | SSH sig                                   | JSON     | Validate config without applying       |
-| POST   | `/apply`               | bootstrap token (first-boot only)         | HTML     | Form upload → sync apply → result page |
+| Method | Path                   | Auth                                      | Response | Description                           |
+|--------|------------------------|-------------------------------------------|----------|---------------------------------------|
+| GET    | `/`                    | none                                      | HTML     | Boot UI page                          |
+| GET    | `/api/nonce`           | none                                      | JSON     | Issue single-use nonce for auth       |
+| GET    | `/api/health`          | none                                      | JSON     | Liveness check                        |
+| GET    | `/api/jobs/{job_id}`   | job UUID                                  | JSON     | Poll async job status                 |
+| GET    | `/assets/atomixos.png` | none                                      | image    | Static logo                           |
+| POST   | `/api/config`          | SSH sig (provisioned) / none (first-boot) | JSON     | Submit config, returns job ID (async) |
+| POST   | `/api/validate`        | SSH sig                                   | JSON     | Validate config without applying      |
+| POST   | `/apply`               | bootstrap token (first-boot only)         | HTML     | Form upload → async job progress page |
 
 Future dynamic API endpoints should be typed resource operations that reuse the
 same config service and job pipeline, for example:
@@ -185,11 +185,13 @@ All endpoints share a common core:
 
 ```text
 /api/config  ─→  parse raw body    ─→  jobs.submit(provision.apply)  ─→  JSON {job_id}
-/apply       ─→  parse multipart   ─→  provision.apply(sync)         ─→  HTML result
+/apply       ─→  parse multipart   ─→  jobs.submit(provision.apply)  ─→  HTML progress
 ```
 
 - `/api/config` uses the async job manager; returns immediately with job ID.
-- `/apply` calls the provision core synchronously for first-boot upload/paste only.
+- `/apply` uses the same async job manager for first-boot browser upload/paste and
+  renders first-boot-only job progress fragments. Older synchronous `/apply`
+  behavior was superseded by `boot-ui-htmx`.
 
 `POST /api/config` returns `202 Accepted` with `job_id`, initial `state`,
 `job_url`, and a `Location` header pointing at `/api/jobs/{job_id}`. Clients must

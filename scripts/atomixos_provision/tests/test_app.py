@@ -8,6 +8,20 @@ from atomixos_provision.app import create_app
 from atomixos_provision.config import ProvisionError
 
 
+VALID_ED25519_KEY = (
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw"
+)
+
+
+def _job_fragment_url(response_text: str) -> str:
+    job_id = response_text.split('startJobStream("')[1].split('"')[0]
+    return f"/ui/jobs/{job_id}"
+
+
+def _job_events_url(response_text: str) -> str:
+    return _job_fragment_url(response_text) + "/events"
+
+
 async def test_nonce_response_returns_nonce(tmp_path):
     async with AsyncTestClient(app=create_app(config_root=tmp_path)) as client:
         response = await client.get("/api/nonce")
@@ -136,6 +150,17 @@ async def test_first_boot_config_submit_rejects_invalid_host(tmp_path):
     assert response.status_code == 401
 
 
+async def test_first_boot_config_submit_rejects_invalid_host_port(tmp_path):
+    async with AsyncTestClient(app=create_app(config_root=tmp_path)) as client:
+        response = await client.post(
+            "/api/config",
+            content=b"version = 1\n",
+            headers={"host": "172.20.30.1:notaport"},
+        )
+
+    assert response.status_code == 401
+
+
 async def test_first_boot_config_submit_rejects_mismatched_origin(tmp_path):
     app = create_app(config_root=tmp_path)
     async with AsyncTestClient(app=app) as client:
@@ -175,6 +200,36 @@ async def test_first_boot_config_submit_rejects_malformed_origin(tmp_path):
             headers={
                 "host": "172.20.30.1:8080",
                 "origin": "null",
+            },
+        )
+
+    assert response.status_code == 401
+
+
+async def test_first_boot_config_submit_rejects_invalid_origin_port(tmp_path):
+    app = create_app(config_root=tmp_path)
+    async with AsyncTestClient(app=app) as client:
+        response = await client.post(
+            "/api/config",
+            content=b"version = 1\n",
+            headers={
+                "host": "172.20.30.1:8080",
+                "origin": "http://172.20.30.1:notaport",
+            },
+        )
+
+    assert response.status_code == 401
+
+
+async def test_first_boot_config_submit_rejects_malformed_referer(tmp_path):
+    app = create_app(config_root=tmp_path)
+    async with AsyncTestClient(app=app) as client:
+        response = await client.post(
+            "/api/config",
+            content=b"version = 1\n",
+            headers={
+                "host": "172.20.30.1:8080",
+                "referer": "http://[::1",
             },
         )
 
@@ -254,7 +309,33 @@ async def test_boot_ui_serves_configuration_forms(tmp_path):
 
     assert response.status_code == 200
     body = response.text
-    assert "Apply Existing Configuration" in body
+    assert "Load Configuration" in body
+    assert "Apply Existing Configuration" not in body
+    assert "Import an existing" not in body
+    assert "config.tar.zst" in body
+    assert "config.tar.gz" in body
+    assert "htmx.org" in body
+    assert 'hx-post="/apply"' in body
+    assert 'hx-target="#job-status"' in body
+    assert "htmx:beforeRequest" in body
+    assert "nextTarget.outerHTML = event.data" in body
+    assert "updatedTarget.dataset.streamJobId = jobId" in body
+    assert "target.outerHTML = event.data" not in body
+    assert "function resetApplyButton()" in body
+    assert "function completeApplyButton()" in body
+    assert "status.classList.contains('status-failed')" in body
+    assert "else completeApplyButton();" in body
+    assert "source.onerror = () => { source.close(); resetApplyButton(); };" in body
+    assert "Applying..." in body
+    assert "submitting" in body
+    assert "Choose file" in body
+    assert '<span class="file-separator">or</span>' in body
+    assert "No file selected" in body
+    assert "Drop a config.toml" in body
+    assert "Drop one here" in body
+    assert 'src="/assets/config_dropzone.png"' in body
+    assert "config.toml</label><textarea" not in body
+    assert "disabled>Apply configuration" in body
     assert 'name="config_file"' in body
     assert "Generate New Configuration" not in body
     assert "Download signing challenge" not in body
@@ -291,15 +372,13 @@ async def test_apply_form_returns_async_job_fragment(tmp_path, monkeypatch):
 
         assert response.status_code == 202
         assert "Applying configuration" in response.text
-        assert "/ui/jobs/" in response.text
+        assert "startJobStream(" in response.text
         await asyncio.wait_for(started.wait(), timeout=1)
         finish.set()
 
         async def poll_until_done():
             for _ in range(20):
-                fragment = await client.get(
-                    response.text.split('refreshJobStatus("')[1].split('"')[0]
-                )
+                fragment = await client.get(_job_fragment_url(response.text))
                 if "Configuration applied" in fragment.text:
                     return fragment
                 await asyncio.sleep(0.05)
@@ -331,7 +410,7 @@ async def test_apply_form_uses_pasted_config_when_no_file_selected(tmp_path, mon
             "/apply",
             data={"bootstrap_token": app.state.bootstrap_token, "config": "version = 1\n"},
         )
-        fragment_url = response.text.split('refreshJobStatus("')[1].split('"')[0]
+        fragment_url = _job_fragment_url(response.text)
 
         async def poll_until_done():
             for _ in range(20):
@@ -366,7 +445,7 @@ async def test_apply_form_renders_failure_and_rollback(tmp_path, monkeypatch):
             "/apply",
             data={"bootstrap_token": app.state.bootstrap_token, "config": "version = 1\n"},
         )
-        fragment_url = response.text.split('refreshJobStatus("')[1].split('"')[0]
+        fragment_url = _job_fragment_url(response.text)
 
         async def poll_until_failed():
             for _ in range(20):
@@ -411,7 +490,7 @@ async def test_apply_form_can_render_terminal_fragment_after_provisioning(
         )
         await asyncio.wait_for(started.wait(), timeout=1)
         finish.set()
-        fragment_url = response.text.split('refreshJobStatus("')[1].split('"')[0]
+        fragment_url = _job_fragment_url(response.text)
 
         async def poll_until_done():
             for _ in range(20):
@@ -427,6 +506,137 @@ async def test_apply_form_can_render_terminal_fragment_after_provisioning(
     assert terminal.status_code == 200
     assert "http://172.20.30.1:8080" in terminal.text
     assert second_terminal.status_code == 404
+
+
+async def test_boot_ui_job_fragment_recovers_after_service_restart(tmp_path):
+    (tmp_path / "config.toml").write_text("version = 1\n")
+
+    async with AsyncTestClient(app=create_app(config_root=tmp_path)) as client:
+        response = await client.get("/ui/jobs/restarted-job")
+
+    assert response.status_code == 200
+    assert "Configuration applied" in response.text
+    assert "reconnected after provisioning completed" in response.text
+
+
+async def test_apply_form_keeps_polling_after_config_appears(tmp_path, monkeypatch):
+    started = asyncio.Event()
+    finish = asyncio.Event()
+
+    async def fake_apply_config_bytes(
+        body, filename, config_root, progress=None, allow_reapply=True
+    ):
+        (tmp_path / "config.toml").write_text("version = 1\n")
+        started.set()
+        await finish.wait()
+        return {"warnings": [], "forwarding_url": "http://172.20.30.1:8080"}
+
+    monkeypatch.setattr(
+        "atomixos_provision.provision.apply_config_bytes",
+        fake_apply_config_bytes,
+    )
+
+    app = create_app(config_root=tmp_path)
+    async with AsyncTestClient(app=app) as client:
+        response = await client.post(
+            "/apply",
+            data={"bootstrap_token": app.state.bootstrap_token, "config": "version = 1\n"},
+        )
+        await asyncio.wait_for(started.wait(), timeout=1)
+        fragment_url = _job_fragment_url(response.text)
+        running_fragment = await client.get(fragment_url)
+        finish.set()
+
+    assert response.status_code == 202
+    assert running_fragment.status_code == 200
+    assert "Applying configuration" in running_fragment.text
+
+
+async def test_job_events_streams_status_fragments(tmp_path, monkeypatch):
+    started = asyncio.Event()
+    finish = asyncio.Event()
+
+    async def fake_apply_config_bytes(
+        body, filename, config_root, progress=None, allow_reapply=True
+    ):
+        started.set()
+        progress.set_stage("activate", "starting services")
+        await finish.wait()
+        return {"warnings": [], "forwarding_url": "http://172.20.30.1:8080"}
+
+    monkeypatch.setattr(
+        "atomixos_provision.provision.apply_config_bytes",
+        fake_apply_config_bytes,
+    )
+
+    app = create_app(config_root=tmp_path)
+    async with AsyncTestClient(app=app) as client:
+        response = await client.post(
+            "/apply",
+            data={"bootstrap_token": app.state.bootstrap_token, "config": "version = 1\n"},
+        )
+        await asyncio.wait_for(started.wait(), timeout=1)
+        finish.set()
+        stream = await client.get(_job_events_url(response.text))
+
+    assert response.status_code == 202
+    assert stream.status_code == 200
+    assert stream.headers["content-type"].startswith("text/event-stream")
+    assert "data: <section id=\"job-status\"" in stream.text
+    assert "data: data:" not in stream.text
+    assert "Configuration applied" in stream.text
+    assert "event: done" in stream.text
+
+
+async def test_boot_ui_job_events_include_render_steps(tmp_path, monkeypatch):
+    config = f"""
+version = 1
+[users.admin]
+isAdmin = true
+ssh_key = "{VALID_ED25519_KEY} admin@test"
+
+[network.interfaces.eth1]
+mode = "static"
+address = "172.20.30.1/24"
+
+[activation]
+required = ["web"]
+
+[containers.container.web]
+privileged = false
+
+[containers.container.web.Container]
+Image = "ghcr.io/example/web:latest"
+""".strip()
+
+    monkeypatch.setenv("ATOMIXOS_ALLOW_UNSAFE_CONFIG_ROOT", "1")
+    app = create_app(config_root=tmp_path)
+    async with AsyncTestClient(app=app) as client:
+        response = await client.post(
+            "/apply",
+            data={"bootstrap_token": app.state.bootstrap_token, "config": config},
+        )
+        stream = await client.get(_job_events_url(response.text))
+
+    assert response.status_code == 202
+    assert stream.status_code == 200
+    assert "<code>prepare</code>: unpacking config.toml" in stream.text
+    assert "<code>write-users</code>: rendering user accounts" in stream.text
+    assert "<code>write-network</code>: rendering host network settings" in stream.text
+    assert "<code>render-containers</code>: rendering containers" in stream.text
+    assert "<code>write-quadlets</code>: writing container unit files" in stream.text
+
+
+async def test_job_events_recovers_after_service_restart(tmp_path):
+    (tmp_path / "config.toml").write_text("version = 1\n")
+
+    async with AsyncTestClient(app=create_app(config_root=tmp_path)) as client:
+        stream = await client.get("/ui/jobs/restarted-job/events")
+
+    assert stream.status_code == 200
+    assert stream.headers["content-type"].startswith("text/event-stream")
+    assert "Configuration applied" in stream.text
+    assert "event: done" in stream.text
 
 
 async def test_apply_form_reports_conflict_while_job_running(tmp_path, monkeypatch):
@@ -485,6 +695,21 @@ async def test_apply_form_rejects_mismatched_origin(tmp_path):
     assert response.status_code == 401
 
 
+async def test_apply_form_rejects_malformed_origin(tmp_path):
+    app = create_app(config_root=tmp_path)
+    async with AsyncTestClient(app=app) as client:
+        response = await client.post(
+            "/apply",
+            data={"bootstrap_token": app.state.bootstrap_token, "config": "version = 1\n"},
+            headers={
+                "host": "172.20.30.1:8080",
+                "origin": "http://[::1",
+            },
+        )
+
+    assert response.status_code == 401
+
+
 async def test_ui_job_fragment_returns_404_on_provisioned_device(tmp_path):
     (tmp_path / "admin-signers").write_text("ssh-ed25519 AAAA test\n")
     async with AsyncTestClient(app=create_app(config_root=tmp_path)) as client:
@@ -497,6 +722,14 @@ async def test_logo_returns_404_on_provisioned_device(tmp_path):
     (tmp_path / "admin-signers").write_text("ssh-ed25519 AAAA test\n")
     async with AsyncTestClient(app=create_app(config_root=tmp_path)) as client:
         response = await client.get("/assets/atomixos.png")
+
+    assert response.status_code == 404
+
+
+async def test_config_dropzone_image_returns_404_on_provisioned_device(tmp_path):
+    (tmp_path / "admin-signers").write_text("ssh-ed25519 AAAA test\n")
+    async with AsyncTestClient(app=create_app(config_root=tmp_path)) as client:
+        response = await client.get("/assets/config_dropzone.png")
 
     assert response.status_code == 404
 
@@ -700,3 +933,4 @@ async def test_openapi_documents_public_api_contract(tmp_path):
     assert "/apply" not in schema["paths"]
     assert "/ui/jobs/{job_id}" not in schema["paths"]
     assert "/assets/atomixos.png" not in schema["paths"]
+    assert "/assets/config_dropzone.png" not in schema["paths"]

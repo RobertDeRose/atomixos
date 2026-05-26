@@ -114,7 +114,9 @@ Apply a bundle from the host:
 
 ```sh
 tar --zstd -cvf config.tar.zst -C example/caddy-oidc .
-curl -F config_file=@config.tar.zst http://127.0.0.1:8080/apply
+curl -H 'x-config-filename: config.tar.zst' \
+  --data-binary @config.tar.zst \
+  http://127.0.0.1:8080/api/config
 ```
 
 For domain-based Caddy examples, map the example domain to localhost while

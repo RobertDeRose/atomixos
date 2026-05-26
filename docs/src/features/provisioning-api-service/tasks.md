@@ -75,7 +75,8 @@
 - [x] Create `ui.py` with HTML form endpoints
 - [x] GET `/` — serve Boot UI HTML
 - [x] GET `/assets/atomixos.png` — serve static logo
-- [x] POST `/apply` — multipart form to sync provision to HTML result
+- [x] POST `/apply` — multipart form to async provision job progress (updated by
+  `boot-ui-htmx`)
 - [x] Do not expose `/generate`; first-boot UI only uploads or pastes a prepared config
 - [x] Escape user-controlled HTML output
 

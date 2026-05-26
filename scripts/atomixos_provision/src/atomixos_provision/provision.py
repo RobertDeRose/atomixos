@@ -102,6 +102,7 @@ def write_imported_state(
     files_path: Path | None,
     config_root: Path,
     runtime_config_root: Path | None = None,
+    progress: ProgressReporter | None = None,
 ) -> list[str]:
     """Write all parsed config state to the config root directory.
 
@@ -111,21 +112,25 @@ def write_imported_state(
     render_root = runtime_config_root or config_root
     (config_root / "ssh-authorized-keys").mkdir(parents=True, exist_ok=True)
 
-    # Copy config.toml
+    if progress:
+        progress.set_stage("write-config", "writing config.toml")
     shutil.copyfile(config_path, config_root / "config.toml")
     (config_root / "config.toml").chmod(0o600)
 
-    # Copy bundle files
+    if progress and files_path is not None:
+        progress.set_stage("copy-files", "copying bundled files")
     copy_bundle_files(files_path, config_root)
 
-    # Write admin SSH keys for auth
+    if progress:
+        progress.set_stage("write-admin-signers", "writing admin signer keys")
     ssh_keys = parsed.get("ssh_keys", [])
     if ssh_keys:
         admin_signers = config_root / "admin-signers"
         admin_signers.write_text("\n".join(ssh_keys) + "\n")
         admin_signers.chmod(0o600)
 
-    # Write user state consumed by atomixos-apply-users.service
+    if progress:
+        progress.set_stage("write-users", "rendering user accounts")
     users = parsed.get("users", {})
     users_path = config_root / "users.json"
     users_path.write_text(json.dumps(users, indent=2) + "\n")
@@ -146,25 +151,29 @@ def write_imported_state(
         else:
             user_ssh_path.unlink(missing_ok=True)
 
-    # Write firewall inbound rules
+    if progress:
+        progress.set_stage("write-firewall", "rendering firewall rules")
     firewall = parsed.get("firewall_inbound", {})
     firewall_path = config_root / FIREWALL_INBOUND_FILENAME
     firewall_path.write_text(json.dumps(firewall, indent=2) + "\n")
     firewall_path.chmod(0o600)
 
-    # Write LAN settings
+    if progress:
+        progress.set_stage("write-lan", "rendering LAN settings")
     lan_settings = parsed.get("lan_settings", {})
     lan_path = config_root / LAN_SETTINGS_FILENAME
     lan_path.write_text(json.dumps(lan_settings, indent=2) + "\n")
     lan_path.chmod(0o600)
 
-    # Write host network settings consumed by lan-gateway-apply.service
+    if progress:
+        progress.set_stage("write-network", "rendering host network settings")
     host_network = parsed.get("host_network", {})
     host_network_path = config_root / HOST_NETWORK_FILENAME
     host_network_path.write_text(json.dumps(host_network, indent=2) + "\n")
     host_network_path.chmod(0o600)
 
-    # Write OS upgrade settings
+    if progress:
+        progress.set_stage("write-os-upgrade", "rendering OS upgrade settings")
     os_upgrade = parsed.get("os_upgrade")
     os_path = config_root / OS_UPGRADE_FILENAME
     if os_upgrade:
@@ -173,7 +182,8 @@ def write_imported_state(
     elif os_path.exists():
         os_path.unlink()
 
-    # Write health-required.json
+    if progress:
+        progress.set_stage("write-health", "rendering health checks")
     required_units = parsed.get("required_units", [])
     health_path = config_root / HEALTH_REQUIRED_FILENAME
     health_path.write_text(json.dumps(required_units, indent=2) + "\n")
@@ -185,7 +195,8 @@ def write_imported_state(
     activation_path.write_text(json.dumps(activation_policy, indent=2) + "\n")
     activation_path.chmod(0o600)
 
-    # Render and write Quadlet units
+    if progress:
+        progress.set_stage("render-containers", "rendering container units")
     containers = parsed.get("containers", {})
     rendered_units: dict[str, str] = {}
     runtime_units: list[dict[str, str]] = []
@@ -193,6 +204,8 @@ def write_imported_state(
 
     container_table = containers.get("container", {})
     if container_table:
+        if progress:
+            progress.set_stage("render-containers", "rendering containers")
         r, ru, w = render_containers(container_table, render_root)
         rendered_units.update(r)
         runtime_units.extend(ru)
@@ -200,12 +213,16 @@ def write_imported_state(
 
     network_table = containers.get("network")
     if network_table:
+        if progress:
+            progress.set_stage("render-container-networks", "rendering container networks")
         r, ru = render_networks(network_table, render_root)
         rendered_units.update(r)
         runtime_units.extend(ru)
 
     volume_table = containers.get("volume")
     if volume_table:
+        if progress:
+            progress.set_stage("render-container-volumes", "rendering container volumes")
         r, ru = render_volumes(
             volume_table, render_root, infer_volume_modes(container_table, volume_table)
         )
@@ -214,6 +231,8 @@ def write_imported_state(
 
     build_table = containers.get("build")
     if build_table:
+        if progress:
+            progress.set_stage("render-container-builds", "rendering container builds")
         r, ru = render_builds(
             build_table, render_root, infer_build_modes(container_table, build_table)
         )
@@ -222,7 +241,8 @@ def write_imported_state(
 
     validate_unique_runtime_services(runtime_units)
 
-    # Write Quadlet unit files
+    if progress:
+        progress.set_stage("write-quadlets", "writing container unit files")
     quadlet_dir = config_root / "quadlet"
     quadlet_dir.mkdir(parents=True, exist_ok=True)
     for existing in quadlet_dir.iterdir():
@@ -233,7 +253,8 @@ def write_imported_state(
         unit_path.write_text(content)
         unit_path.chmod(0o644)
 
-    # Write runtime metadata
+    if progress:
+        progress.set_stage("write-runtime-metadata", "writing container runtime metadata")
     runtime_metadata = {
         "app_user": APP_RUNTIME_USER,
         "rootless_network": ROOTLESS_NETWORK_NAME,
@@ -410,7 +431,7 @@ def _provision_prepared_sync(
             if progress:
                 progress.set_stage("write-candidate", "rendering provisioned state")
             warnings = write_imported_state(
-                parsed, config_path, files_path, candidate_root, config_root
+                parsed, config_path, files_path, candidate_root, config_root, progress
             )
         except Exception:
             shutil.rmtree(candidate_root, ignore_errors=True)
@@ -454,7 +475,7 @@ def _provision_prepared_sync(
         if progress:
             progress.set_stage("write-candidate", "rendering provisioned state")
         warnings = write_imported_state(
-            parsed, config_path, files_path, candidate_root, config_root
+            parsed, config_path, files_path, candidate_root, config_root, progress
         )
         carry_forward_managed_state(config_root, candidate_root)
     except Exception:
