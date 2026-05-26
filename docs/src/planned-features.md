@@ -428,7 +428,7 @@ Quadlet containers on a persistent `/data` partition.
 
 ### `config-reapply-improvements`
 
-- Status: planned
+- Status: completed
 - Overview: Harden the existing config re-apply path (`POST /api/config` on the
   always-running bootstrap server) with authentication, atomic replacement, and
   rollback-on-failure. The basic re-apply mechanism already works: any POST overwrites
@@ -458,4 +458,8 @@ Quadlet containers on a persistent `/data` partition.
 - Dependencies: None (existing mechanism works; this is hardening)
 - Suggested validation: NixOS VM test with sequential config imports, crash simulation,
   and rollback verification
-- Suggested first workflow command: `/start-feature config-reapply-improvements`
+- Delivered by adding the canonical versioned `config.toml` schema, managed-user
+  materialization, SSH-signature authentication for provisioned-device re-apply,
+  crash-safe candidate promotion, activation health checks, rollback on failure,
+  and docs/tests for the updated re-apply contract. A managed-user reboot VM test
+  remains deferred pending persistent VM disk support.

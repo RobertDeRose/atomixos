@@ -76,7 +76,8 @@ upload a config bundle or paste `config.toml`. Browser submissions post to
 `/apply` with the bootstrap CSRF token, receive an asynchronous job progress
 view, and poll first-boot-only HTML fragments until the apply job succeeds or
 fails. These UI routes are hidden from the live OpenAPI schema and are unavailable
-after provisioning completes.
+after provisioning completes, except for the one-time terminal status fragment for
+the job just submitted by the Boot UI.
 
 Partial config endpoints always require SSH-signature authentication, including before initial
 provisioning. Mutating partial endpoints load the current `/data/config/config.toml`, merge the typed

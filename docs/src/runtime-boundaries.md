@@ -25,7 +25,9 @@ submits upload or pasted config sources through `/apply`, uses the bootstrap CSR
 token plus browser origin checks, and renders first-boot-only HTML job fragments
 from the in-memory job state. It is not a post-provision management UI and does
 not add a durable polling token or unauthenticated mutation path after
-provisioning.
+provisioning. After successful initial provisioning, only a one-time terminal
+fragment for the submitted Boot UI job remains readable so the browser can show
+success, warnings, or failure state.
 
 Authenticated partial config endpoints are only another input to that same boundary. They load the
 current desired `config.toml`, produce a complete candidate config, preserve existing bundle

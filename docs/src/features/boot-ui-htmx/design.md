@@ -108,6 +108,9 @@ must not expose more job information than the existing Boot UI needs to display.
 - HTMX fragment routes must not become unauthenticated mutation surfaces.
 - First-boot HTMX job fragments must be inaccessible after provisioning and should
   not create a durable bearer token, cookie, or post-provision polling capability.
+  The only exception is a one-time terminal fragment for a job submitted through
+  the first-boot UI, so the browser can render success or failure after successful
+  initial provisioning creates `/data/config/config.toml`.
 - UI rendering must escape operator-provided config text, job errors, warnings,
   service names, and URLs.
 - The UI must not expose secret material beyond what the existing first-boot form
