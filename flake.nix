@@ -3,10 +3,11 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
+    nixstasis.url = "github:RobertDeRose/nixstasis/87ba02cef40cad33932e29f340988a3c1dccb4fb";
   };
 
   outputs =
-    { self, nixpkgs, ... }:
+    { self, nixpkgs, nixstasis, ... }:
     let
       system = "aarch64-linux";
 
@@ -133,7 +134,7 @@
           ./modules/hardware-rock64.nix
         ];
         specialArgs = {
-          inherit self developmentMode;
+          inherit self developmentMode nixstasis;
         };
       };
 
@@ -145,7 +146,7 @@
           ./modules/hardware-qemu.nix
         ];
         specialArgs = {
-          inherit self developmentMode;
+          inherit self developmentMode nixstasis;
         };
       };
 
@@ -182,7 +183,7 @@
           )
         ];
         specialArgs = {
-          inherit self developmentMode;
+          inherit self developmentMode nixstasis;
         };
       };
 
