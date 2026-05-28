@@ -303,6 +303,7 @@
             };
             first-boot-provision = import ./nix/tests/first-boot-provision.nix netTestArgs;
             first-boot-source-discovery = import ./nix/tests/first-boot-source-discovery.nix netTestArgs;
+            nixstasis-module = import ./nix/tests/nixstasis-module.nix netTestArgs;
             forensics-podman-log-path = import ./nix/tests/forensics-podman-log-path.nix netTestArgs;
             forensics-rsyslog-path = import ./nix/tests/forensics-rsyslog-path.nix netTestArgs;
             forensics-rsyslog-buffering = import ./nix/tests/forensics-rsyslog-buffering.nix netTestArgs;
@@ -313,10 +314,13 @@
           };
 
           allTests = raucTests // netTests;
+          evalChecks = {
+            nixstasis-module = import ./nix/tests/nixstasis-module.nix netTestArgs;
+          };
 
           # Linux checks — run under TCG (software emulation), no KVM needed.
           # Use: nix build .#checks.aarch64-linux.rauc-slots
-          linuxChecks = builtins.mapAttrs (_: dropKvm) allTests;
+          linuxChecks = (builtins.mapAttrs (_: dropKvm) allTests) // evalChecks;
 
           # Darwin checks — test driver runs natively on macOS using
           # Apple Virtualization Framework (apple-virt). The linux-builder
@@ -344,6 +348,7 @@
             };
             first-boot-provision = import ./nix/tests/first-boot-provision.nix darwinNetTestArgs;
             first-boot-source-discovery = import ./nix/tests/first-boot-source-discovery.nix darwinNetTestArgs;
+            nixstasis-module = import ./nix/tests/nixstasis-module.nix darwinNetTestArgs;
             forensics-podman-log-path = import ./nix/tests/forensics-podman-log-path.nix darwinNetTestArgs;
             forensics-rsyslog-path = import ./nix/tests/forensics-rsyslog-path.nix darwinNetTestArgs;
             forensics-rsyslog-buffering = import ./nix/tests/forensics-rsyslog-buffering.nix darwinNetTestArgs;
