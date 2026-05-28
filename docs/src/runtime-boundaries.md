@@ -5,12 +5,17 @@ AtomixOS separates immutable platform code from operator-provisioned runtime beh
 ## Immutable Platform
 
 The image owns boot, kernel, initrd, RAUC, firewall defaults, SSH policy, local provisioning, LAN gateway services,
-OpenVPN recovery plumbing, and update confirmation logic. These live in the active squashfs slot and are replaced only by
-RAUC updates.
+OpenVPN recovery plumbing, optional Nixstasis client integration, and update confirmation logic. These live in the active
+squashfs slot and are replaced only by RAUC updates.
 
 ## Persistent Operator State
 
 `/data/config/` owns runtime configuration imported during provisioning. RAUC slot writes do not modify `/data`.
+
+When enabled, the Nixstasis client is platform code from the squashfs closure, not an operator-provisioned container.
+Its mutable identity, remote-access keys, and launch scratch state live under `/data/nixstasis/` so remote access can
+survive RAUC slot switches without mixing Nixstasis state into `/data/config`. The Nixstasis runtime command allowlist is
+rendered from image-time NixOS options and defaults to empty.
 
 Before initial provisioning, the bootstrap API is reachable on WAN and LAN and exposes `POST /api/config` for complete
 `config.toml` files or supported config bundles. First-boot Boot UI submissions use a CSRF bootstrap token, not operator

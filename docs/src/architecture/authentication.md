@@ -11,8 +11,8 @@ Persisted device-local state lives on `/data`:
 |----------------------------|-------------------------------------------|---------------------------------------------------|
 | Admin signer keys          | `/data/config/admin-signers`              | Admin SSH keys trusted for config re-apply        |
 | User SSH public keys       | `/data/config/ssh-authorized-keys/<user>` | Per-user LAN/VPN SSH access                       |
-| Nixstasis registration key | `/data/config/nixstasis/registration-key` | Planned persistent device enrollment credential   |
-| Nixstasis agent state      | `/data/config/nixstasis/`                 | Planned client state, tunnel config, and metadata |
+| Nixstasis identity         | `/data/nixstasis/id`                      | Device UUID and runtime token issued by Nixstasis |
+| Nixstasis SSH public keys  | `/data/nixstasis/.ssh/authorized_keys`    | Remote-access keys managed by Nixstasis commands  |
 
 ## Authentication Flows
 
@@ -35,12 +35,12 @@ The target remote-management model is Nixstasis-managed enrollment and access:
 
 1. The device identifies itself to Nixstasis using the `eth0` MAC address.
 2. Nixstasis checks that MAC against an approved inventory list.
-3. Approved devices receive a registration key and persist it on `/data`.
-4. Future device requests authenticate with that registration key.
+3. Approved devices receive a device UUID and runtime token, persisted as `/data/nixstasis/id`.
+4. Future device requests authenticate with that runtime identity.
 5. Nixstasis issues short-lived SSH credentials and establishes remote sessions over the reverse tunnel managed by the
-   Nixstasis client.
+    Nixstasis client.
 
-The MAC address is an eligibility identifier, not a secret. The registration key is the first durable credential in the
+The MAC address is an eligibility identifier, not a secret. The runtime token is the first durable credential in the
 management flow.
 
 ### Remote Management
@@ -67,3 +67,5 @@ services.openssh = {
 
 User authorized keys are read from `/data/config/ssh-authorized-keys/<user>`, which is populated during provisioning.
 Admin re-apply signer keys are stored separately in `/data/config/admin-signers`.
+When Nixstasis is enabled, OpenSSH also reads `/data/nixstasis/.ssh/authorized_keys` as a separate remote-access key
+source. Nixstasis-managed keys do not replace provisioned operator keys and are not copied into `/data/config`.
