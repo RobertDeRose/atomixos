@@ -8,7 +8,6 @@ is provisioned (admin signers exist), all UI routes return 404.
 
 import asyncio
 import html
-import json
 import secrets
 import threading
 from pathlib import Path

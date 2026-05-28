@@ -25,7 +25,7 @@ let
     };
     runtime = {
       mqtt_broker = cfg.runtime.mqttBroker;
-      authorized_keys_path = cfg.runtime.authorizedKeysPath;
+      authorized_keys_path = authorizedKeysPath;
       exec_work_dir = cfg.runtime.execWorkDir;
       exec_env = cfg.runtime.execEnv;
       exec_commands = cfg.runtime.execCommands;
@@ -38,7 +38,8 @@ let
     };
   };
   configFile = (pkgs.formats.yaml { }).generate "nixstasis-config.yaml" settings;
-  pathComponents = lib.splitString "/" cfg.runtime.authorizedKeysPath;
+  authorizedKeysPath = "${toString cfg.stateDir}/.ssh/authorized_keys";
+  pathComponents = lib.splitString "/" authorizedKeysPath;
   commonEnvironment = {
     NIXSTASIS_CONFIG_FILE = "/etc/nixstasis/config.yaml";
     NIXSTASIS_IDENTITY_PATH = "${toString cfg.stateDir}/id";
@@ -153,12 +154,6 @@ in
     };
 
     runtime = {
-      authorizedKeysPath = lib.mkOption {
-        type = lib.types.str;
-        default = "/data/nixstasis/.ssh/authorized_keys";
-        description = "Authorized keys file managed by Nixstasis remote-access commands.";
-      };
-
       execWorkDir = lib.mkOption {
         type = lib.types.str;
         default = "/";
@@ -175,6 +170,12 @@ in
         type = lib.types.attrsOf lib.types.str;
         default = { };
         description = "Deny-by-default command allowlist for Nixstasis runtime scripts.";
+      };
+
+      sshUser = lib.mkOption {
+        type = lib.types.str;
+        default = "admin";
+        description = "Local SSH user allowed to use Nixstasis-managed remote-access keys.";
       };
 
       mqttBroker = lib.mkOption {
@@ -231,16 +232,19 @@ in
       }
       {
         assertion =
-          lib.hasPrefix "${toString cfg.stateDir}/" cfg.runtime.authorizedKeysPath
+          lib.hasPrefix "${toString cfg.stateDir}/" authorizedKeysPath
           && !(builtins.elem ".." pathComponents);
-        message = "atomixos.nixstasis.runtime.authorizedKeysPath must live under atomixos.nixstasis.stateDir";
+        message = "Nixstasis authorized-keys path must live under atomixos.nixstasis.stateDir";
       }
     ];
 
     environment.systemPackages = [ clientPackage ];
     environment.etc."nixstasis/config.yaml".source = configFile;
 
-    services.openssh.authorizedKeysFiles = lib.mkAfter [ cfg.runtime.authorizedKeysPath ];
+    services.openssh.extraConfig = lib.mkAfter ''
+      Match User ${cfg.runtime.sshUser}
+        AuthorizedKeysFile ${authorizedKeysPath}
+    '';
 
     systemd.tmpfiles.rules = [
       "d ${toString cfg.stateDir} 0700 root root - -"

@@ -112,7 +112,7 @@ similar to:
 - `atomixos.nixstasis.frp.serverPort`
 - `atomixos.nixstasis.frp.httpLocalAddr`
 - `atomixos.nixstasis.frp.sshLocalPort`
-- `atomixos.nixstasis.runtime.authorizedKeysPath`
+- `atomixos.nixstasis.runtime.sshUser`
 - `atomixos.nixstasis.runtime.execCommands`
 
 The first implementation should keep these as image-build-time options. A later
@@ -161,11 +161,15 @@ that path meaningful to OpenSSH without weakening existing admin key behavior.
 The first implementation should prefer adding the Nixstasis authorized-keys file
 as an additional `services.openssh.authorizedKeysFiles` entry rather than merging
 Nixstasis keys into `/data/config/ssh-authorized-keys/%u`. This keeps Nixstasis
-remote access state separate from provisioned operator admin state.
+remote access state separate from provisioned operator admin state. The first
+implementation exposes that file only inside an OpenSSH `Match User admin` block
+by default so Nixstasis-managed keys do not authenticate every local account.
 
 Any command execution exposed through Nixstasis scripts remains deny-by-default
 through `runtime.exec_commands`; only explicitly configured commands should be
-available in the rendered client config.
+  available in the rendered client config. Identity repair for a corrupt
+  `/data/nixstasis/id` file is manual in this iteration; delete the file and
+  restart registration to re-enroll.
 
 ### FRP Remote Access
 

@@ -73,8 +73,9 @@ Quadlet containers on a persistent `/data` partition.
   This means the base image must include it, which crosses the "no on-device web
   management" non-goal boundary. Alternative: treat cockpit-podman as an optional NixOS
   module that operators can enable.
-- **Nixstasis client**: Enrollment, tunnel lifecycle, and credential rotation are
-  documented but not implemented.
+- **Nixstasis credential rotation**: Enrollment and the FRP launch boundary are
+  implemented in the base-system client integration. Runtime token rotation and
+  full real-server tunnel validation remain future Nixstasis integration work.
 - **USB WiFi**: Kernel WiFi/Bluetooth stacks are disabled. Hardware selection needed
   before enablement.
 - **Active watchdog enforcement**: Deferred pending Rock64 boot-reliability validation.
@@ -189,16 +190,19 @@ Quadlet containers on a persistent `/data` partition.
 
 ### `nixstasis-client`
 
-- Status: planned
-- Overview: Implement the Nixstasis enrollment client that registers the device with the
-  Nixstasis management server, establishes reverse tunnels, and manages short-lived SSH
-  credentials.
+- Status: completed
+- Overview: AtomixOS can include the Nixstasis enrollment client from the
+  Nixstasis flake as immutable base-system code. The module renders client
+  configuration, persists identity and remote-access SSH keys under
+  `/data/nixstasis`, and runs registration/polling services that tolerate WAN or
+  server outages without blocking local recovery.
 - Requirements:
   - Device identifies itself via eth0 MAC address
   - Server checks MAC against approved inventory
-  - Approved devices receive and persist a registration key on `/data`
-  - Client establishes reverse tunnel for remote SSH sessions
-  - Credential rotation for the registration key
+  - Approved devices receive and persist a device UUID and runtime token at
+    `/data/nixstasis/id`
+  - Client launches FRP remote-access sessions from heartbeat responses
+  - Nixstasis-managed SSH keys remain separate from provisioned operator keys
 - Constraints:
   - Must survive container-layer failures (lives in rootfs, not a container)
   - Must work with key-only SSH authentication model
@@ -209,8 +213,8 @@ Quadlet containers on a persistent `/data` partition.
 - Success criteria:
   - Device enrolls with Nixstasis server using MAC-based eligibility
   - Registration key persists across reboots and updates
-  - Reverse tunnel enables remote SSH access
-  - NixOS VM test covers enrollment and tunnel lifecycle
+  - FRP launch boundary is validated when the mock API requests remote access
+  - NixOS VM test covers enrollment, identity reuse, polling, and outage behavior
 - Risks and tradeoffs:
   - Depends on Nixstasis server API being stable and documented
   - Tunnel reliability on unstable WAN connections
@@ -218,7 +222,8 @@ Quadlet containers on a persistent `/data` partition.
 - Suggested validation:
   - NixOS VM test with mock Nixstasis server
   - Integration test with real Nixstasis instance
-- Suggested first workflow command: `/start-feature nixstasis-client`
+- Delivered in: `modules/nixstasis.nix`, `nix/tests/nixstasis-client.nix`, and
+  `docs/src/features/nixstasis-client/`
 
 ### `rauc-production-keyring-policy`
 

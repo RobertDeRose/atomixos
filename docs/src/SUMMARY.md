@@ -57,6 +57,8 @@
     - [Tasks](./features/provisioning-api-service/tasks.md)
   - [Caddy AuthCrunch Cockpit Tutorial](./features/caddy-authcrunch-cockpit-tutorial/design.md)
     - [Tasks](./features/caddy-authcrunch-cockpit-tutorial/tasks.md)
+  - [Nixstasis Client](./features/nixstasis-client/design.md)
+    - [Tasks](./features/nixstasis-client/tasks.md)
 
 # Reference
 

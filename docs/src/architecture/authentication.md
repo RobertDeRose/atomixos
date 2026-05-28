@@ -7,12 +7,12 @@ provisioned at factory time -- there are no default passwords or shared secrets.
 
 Persisted device-local state lives on `/data`:
 
-| Item                       | Storage Path                              | Notes                                             |
-|----------------------------|-------------------------------------------|---------------------------------------------------|
-| Admin signer keys          | `/data/config/admin-signers`              | Admin SSH keys trusted for config re-apply        |
-| User SSH public keys       | `/data/config/ssh-authorized-keys/<user>` | Per-user LAN/VPN SSH access                       |
-| Nixstasis identity         | `/data/nixstasis/id`                      | Device UUID and runtime token issued by Nixstasis |
-| Nixstasis SSH public keys  | `/data/nixstasis/.ssh/authorized_keys`    | Remote-access keys managed by Nixstasis commands  |
+| Item                      | Storage Path                              | Notes                                             |
+|---------------------------|-------------------------------------------|---------------------------------------------------|
+| Admin signer keys         | `/data/config/admin-signers`              | Admin SSH keys trusted for config re-apply        |
+| User SSH public keys      | `/data/config/ssh-authorized-keys/<user>` | Per-user LAN/VPN SSH access                       |
+| Nixstasis identity        | `/data/nixstasis/id`                      | Device UUID and runtime token issued by Nixstasis |
+| Nixstasis SSH public keys | `/data/nixstasis/.ssh/authorized_keys`    | Remote-access keys managed by Nixstasis commands  |
 
 ## Authentication Flows
 
@@ -38,7 +38,7 @@ The target remote-management model is Nixstasis-managed enrollment and access:
 3. Approved devices receive a device UUID and runtime token, persisted as `/data/nixstasis/id`.
 4. Future device requests authenticate with that runtime identity.
 5. Nixstasis issues short-lived SSH credentials and establishes remote sessions over the reverse tunnel managed by the
-    Nixstasis client.
+   Nixstasis client.
 
 The MAC address is an eligibility identifier, not a secret. The runtime token is the first durable credential in the
 management flow.
@@ -67,5 +67,6 @@ services.openssh = {
 
 User authorized keys are read from `/data/config/ssh-authorized-keys/<user>`, which is populated during provisioning.
 Admin re-apply signer keys are stored separately in `/data/config/admin-signers`.
-When Nixstasis is enabled, OpenSSH also reads `/data/nixstasis/.ssh/authorized_keys` as a separate remote-access key
-source. Nixstasis-managed keys do not replace provisioned operator keys and are not copied into `/data/config`.
+When Nixstasis is enabled, OpenSSH also reads `/data/nixstasis/.ssh/authorized_keys` inside a `Match User admin` block as
+a separate remote-access key source. Nixstasis-managed keys do not replace provisioned operator keys and are not copied
+into `/data/config`.

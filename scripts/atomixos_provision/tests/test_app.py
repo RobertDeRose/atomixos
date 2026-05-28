@@ -7,7 +7,6 @@ from litestar.testing import AsyncTestClient
 from atomixos_provision.app import create_app
 from atomixos_provision.config import ProvisionError
 
-
 VALID_ED25519_KEY = (
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw"
 )

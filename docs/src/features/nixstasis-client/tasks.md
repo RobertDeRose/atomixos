@@ -14,7 +14,8 @@
 - [x] T012 Ensure the Nixstasis package includes `nixstasis`, `frpc`, `frpc.toml`, and required runtime assets
 - [x] T013 Add upstream package checks for the client binary and installed runtime assets
 - [x] T014 Add the Nixstasis repository as an AtomixOS flake input
-- [x] T015 Add a closure-size check or build output note for the added client and FRP assets (aarch64-linux client output: 9.3M; closure: 77.0M)
+- [x] T015 Add a closure-size check or build output note for the added client and FRP assets
+  (aarch64-linux client output: 9.3M; closure: 77.0M)
 
 ## AtomixOS Module And Configuration
 
@@ -53,9 +54,9 @@
 
 ## Documentation And Closeout
 
-- [ ] T900 Update Nixstasis enrollment architecture docs with implemented behavior
-- [ ] T901 Update runtime-boundary docs for base-system Nixstasis client responsibility
-- [ ] T902 Update testing docs with mock-server validation
-- [ ] T903 Add this feature spec to `docs/src/SUMMARY.md` if feature specs are listed there
-- [ ] T904 Update `docs/src/planned-features.md` after implementation completes
-- [ ] T999 Run targeted tests, VM validation, docs reconciliation, and close out the feature spec
+- [x] T900 Update Nixstasis enrollment architecture docs with implemented behavior
+- [x] T901 Update runtime-boundary docs for base-system Nixstasis client responsibility
+- [x] T902 Update testing docs with mock-server validation
+- [x] T903 Add this feature spec to `docs/src/SUMMARY.md` if feature specs are listed there
+- [x] T904 Update `docs/src/planned-features.md` after implementation completes
+- [x] T999 Run targeted tests, VM validation, docs reconciliation, and close out the feature spec

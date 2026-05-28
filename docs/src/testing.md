@@ -74,9 +74,9 @@ that stopping the mock API does not stop local recovery targets.
 
 Additional flake-only checks:
 
-| Test                | Nodes | What it validates                                                                                         |
-|---------------------|-------|-----------------------------------------------------------------------------------------------------------|
-| `nixstasis-client`  | 1     | Nixstasis registration, identity reuse, polling, FRP launch-boundary, and post-enrollment API outage path |
+| Test               | Nodes | What it validates                                                                                         |
+|--------------------|-------|-----------------------------------------------------------------------------------------------------------|
+| `nixstasis-client` | 1     | Nixstasis registration, identity reuse, polling, FRP launch-boundary, and post-enrollment API outage path |
 
 ## Platform Performance
 
