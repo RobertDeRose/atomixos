@@ -304,6 +304,7 @@
             first-boot-provision = import ./nix/tests/first-boot-provision.nix netTestArgs;
             first-boot-source-discovery = import ./nix/tests/first-boot-source-discovery.nix netTestArgs;
             nixstasis-module = import ./nix/tests/nixstasis-module.nix netTestArgs;
+            nixstasis-client = import ./nix/tests/nixstasis-client.nix netTestArgs;
             forensics-podman-log-path = import ./nix/tests/forensics-podman-log-path.nix netTestArgs;
             forensics-rsyslog-path = import ./nix/tests/forensics-rsyslog-path.nix netTestArgs;
             forensics-rsyslog-buffering = import ./nix/tests/forensics-rsyslog-buffering.nix netTestArgs;
@@ -349,6 +350,7 @@
             first-boot-provision = import ./nix/tests/first-boot-provision.nix darwinNetTestArgs;
             first-boot-source-discovery = import ./nix/tests/first-boot-source-discovery.nix darwinNetTestArgs;
             nixstasis-module = import ./nix/tests/nixstasis-module.nix darwinNetTestArgs;
+            nixstasis-client = import ./nix/tests/nixstasis-client.nix darwinNetTestArgs;
             forensics-podman-log-path = import ./nix/tests/forensics-podman-log-path.nix darwinNetTestArgs;
             forensics-rsyslog-path = import ./nix/tests/forensics-rsyslog-path.nix darwinNetTestArgs;
             forensics-rsyslog-buffering = import ./nix/tests/forensics-rsyslog-buffering.nix darwinNetTestArgs;

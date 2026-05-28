@@ -60,8 +60,6 @@ let
     ProtectKernelTunables = true;
     ProtectSystem = "strict";
     ReadWritePaths = [ (toString cfg.stateDir) ];
-    Restart = "always";
-    RestartSec = "120s";
     RestrictAddressFamilies = [
       "AF_INET"
       "AF_INET6"
@@ -260,8 +258,11 @@ in
       path = [ pkgs.systemd ];
       environment = commonEnvironment;
       serviceConfig = commonServiceConfig // {
-        Type = "simple";
+        Type = "oneshot";
         ExecStart = "${clientPackage}/bin/nixstasis register";
+        ExecStartPost = "${pkgs.systemd}/bin/systemctl start --no-block nixstasis-poll.service";
+        Restart = "on-failure";
+        RestartSec = "120s";
       };
     };
 
@@ -287,6 +288,8 @@ in
         Type = "simple";
         ExecStart = "${clientPackage}/bin/nixstasis poll";
         Environment = "TMPDIR=${pollStateDir}/tmp";
+        Restart = "always";
+        RestartSec = "120s";
         ReadWritePaths = [
           (toString cfg.stateDir)
           pollStateDir

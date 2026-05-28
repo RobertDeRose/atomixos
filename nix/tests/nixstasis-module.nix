@@ -75,8 +75,12 @@ pkgs.runCommand "nixstasis-module-check" { } ''
   test ${builtins.toJSON (cfg.systemd.services.nixstasis-poll.environment.NIXSTASIS_CONFIG_FILE == "/etc/nixstasis/config.yaml")} = true
   test ${builtins.toJSON (cfg.systemd.services.nixstasis-poll.environment.NIXSTASIS_FRPC_BINARY_PATH == "${cfg.atomixos.nixstasis.package}/libexec/nixstasis/frpc")} = true
   test ${builtins.toJSON (cfg.systemd.services.nixstasis-poll.environment.NIXSTASIS_FRPC_CONFIG_PATH == "${cfg.atomixos.nixstasis.package}/share/nixstasis/frpc.toml")} = true
+  test ${builtins.toJSON (cfg.systemd.services.nixstasis-registration.serviceConfig.Type == "oneshot")} = true
   test ${builtins.toJSON (cfg.systemd.services.nixstasis-registration.serviceConfig.ExecStart == "${cfg.atomixos.nixstasis.package}/bin/nixstasis register")} = true
+  test ${builtins.toJSON (cfg.systemd.services.nixstasis-registration.serviceConfig.ExecStartPost == "${pkgs.systemd}/bin/systemctl start --no-block nixstasis-poll.service")} = true
+  test ${builtins.toJSON (cfg.systemd.services.nixstasis-registration.serviceConfig.Restart == "on-failure")} = true
   test ${builtins.toJSON (cfg.systemd.services.nixstasis-poll.serviceConfig.ExecStart == "${cfg.atomixos.nixstasis.package}/bin/nixstasis poll")} = true
+  test ${builtins.toJSON (cfg.systemd.services.nixstasis-poll.serviceConfig.Restart == "always")} = true
   test ${builtins.toJSON (cfg.systemd.services.nixstasis-registration.serviceConfig.NoNewPrivileges == true)} = true
   test ${builtins.toJSON (cfg.systemd.services.nixstasis-registration.serviceConfig.ProtectSystem == "strict")} = true
   test ${builtins.toJSON (builtins.elem "/data/nixstasis" cfg.systemd.services.nixstasis-poll.serviceConfig.ReadWritePaths)} = true

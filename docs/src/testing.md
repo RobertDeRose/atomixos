@@ -1,8 +1,9 @@
 # Testing
 
 The core `mise run e2e` task runs 9 NixOS VM integration tests that validate the RAUC update lifecycle, network
-security, and rollback behavior. Additional provisioning and forensics checks are also available directly under the
-flake `checks.*` outputs. Tests run on both Linux (TCG software emulation) and macOS (Apple Virtualization Framework).
+security, and rollback behavior. Additional provisioning, management-client, and forensics checks are also available
+directly under the flake `checks.*` outputs. Tests run on both Linux (TCG software emulation) and macOS (Apple
+Virtualization Framework).
 
 ## Running Tests
 
@@ -45,6 +46,18 @@ mise run e2e:ssh-wan-toggle      # Flag file enables/disables SSH on WAN via nft
 mise run e2e:rauc-slots --lima
 ```
 
+### Additional flake checks
+
+```sh
+nix build .#checks.aarch64-darwin.nixstasis-client --no-link
+nix build .#checks.aarch64-linux.nixstasis-client --no-link
+```
+
+The `nixstasis-client` VM check boots AtomixOS with a mock Nixstasis API. It
+validates registration, `/data/nixstasis` identity reuse across a registration
+service restart, heartbeat polling, the FRP transient-unit launch boundary, and
+that stopping the mock API does not stop local recovery targets.
+
 ## Test Descriptions
 
 | Test                | Nodes | What it validates                                                                                         |
@@ -58,6 +71,12 @@ mise run e2e:rauc-slots --lima
 | `firewall`          | 2     | WAN node can reach HTTPS (443) and VPN (1194); LAN node can reach SSH, DHCP, NTP; all other ports blocked |
 | `network-isolation` | 2     | LAN node gets DHCP lease and NTP, cannot reach WAN addresses                                              |
 | `ssh-wan-toggle`    | 1     | SSH on WAN blocked by default; enabled when flag file created; disabled when removed                      |
+
+Additional flake-only checks:
+
+| Test                | Nodes | What it validates                                                                                         |
+|---------------------|-------|-----------------------------------------------------------------------------------------------------------|
+| `nixstasis-client`  | 1     | Nixstasis registration, identity reuse, polling, FRP launch-boundary, and post-enrollment API outage path |
 
 ## Platform Performance
 
