@@ -45,4 +45,4 @@
 - [x] T902 Update watchdog specs/module docs if applicable
 - [x] T903 Update `docs/src/planned-features.md` after implementation completes
 - [x] T904 Add this feature spec to `docs/src/SUMMARY.md` if feature specs are listed there
-- [ ] T999 Run targeted tests, docs reconciliation, hardware-validation gap review, and close out the feature spec
+- [x] T999 Run targeted tests, docs reconciliation, hardware-validation gap review, and close out the feature spec

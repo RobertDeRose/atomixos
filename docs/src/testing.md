@@ -37,7 +37,7 @@ mise run e2e:rauc-update         # Bundle install writes to inactive slot pair, 
 mise run e2e:rauc-rollback       # Install to B, mark bad, verify rollback to A
 mise run e2e:rauc-confirm        # os-verification health checks pass, slot marked good (~3 min)
 mise run e2e:rauc-power-loss     # Crash VM mid-install, verify slot A intact after reboot
-mise run e2e:rauc-watchdog       # Freeze systemd to trigger watchdog, verify boot-count rollback
+mise run e2e:rauc-watchdog       # Simulate watchdog resets, verify boot-count rollback
 mise run e2e:firewall            # 2-node test: WAN allows HTTPS/VPN, LAN allows SSH/DHCP/NTP
 mise run e2e:network-isolation   # 2-node test: LAN gets DHCP/NTP, cannot reach WAN
 mise run e2e:ssh-wan-toggle      # Flag file enables/disables SSH on WAN via nftables reload
@@ -73,7 +73,7 @@ explicitly enabled.
 | `rauc-rollback`     | 1     | Install to slot B, mark bad, verify automatic rollback to slot A                                          |
 | `rauc-confirm`      | 1     | Health checks pass within timeout, slot committed as good                                                 |
 | `rauc-power-loss`   | 1     | Crash VM mid-install, verify slot A is intact after reboot                                                |
-| `rauc-watchdog`     | 1     | Freeze systemd to trigger watchdog reboot, verify boot-count rollback                                     |
+| `rauc-watchdog`     | 1     | Simulate watchdog-triggered resets and verify boot-count rollback                                         |
 | `firewall`          | 2     | WAN node can reach HTTPS (443) and VPN (1194); LAN node can reach SSH, DHCP, NTP; all other ports blocked |
 | `network-isolation` | 2     | LAN node gets DHCP lease and NTP, cannot reach WAN addresses                                              |
 | `ssh-wan-toggle`    | 1     | SSH on WAN blocked by default; enabled when flag file created; disabled when removed                      |

@@ -55,8 +55,9 @@ reboot:
 2. If the counter reaches 0, the slot is skipped
 3. The previous working slot boots instead
 
-This means a systemd hang on a newly updated slot will trigger automatic rollback within 3 watchdog cycles
-(approximately 90 seconds total).
+The intended hardware behavior is that a systemd hang on a newly updated slot triggers automatic rollback after 3
+watchdog-triggered failed boots. The rollback timing includes watchdog expiry plus the time needed for each reboot and
+slot-selection attempt.
 
 The QEMU `rauc-watchdog` check uses a custom RAUC backend and a two-attempt boot-count file to keep the simulation fast.
 Physical Rock64 validation uses the U-Boot `BOOT_*_LEFT` environment counter documented above.
