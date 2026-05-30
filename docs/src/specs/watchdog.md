@@ -4,39 +4,41 @@
 
 ## Requirements
 
-Current status: implementation hooks are present, but the Rock64 runtime watchdog is intentionally disabled during
-development. The scenarios below define the current release behavior and the deferred target settings.
+Current status: implementation hooks are present, but Rock64 runtime watchdog enforcement is opt-in and intentionally
+disabled by default until physical boot-reliability validation approves active enforcement. The scenarios below define the
+current default behavior and the opt-in target settings.
 
 ### ADDED: Hardware watchdog target is deferred
 
-The RK3328 hardware watchdog (`dw_wdt`) target is documented, but systemd manager watchdog settings are not enabled in
-the current release.
+The RK3328 hardware watchdog (`dw_wdt`) target is documented, but systemd manager watchdog settings are enabled only when
+`atomixos.watchdog.enableHardware = true`.
 
 #### Scenario: Watchdog triggers on hang
 
 - Given the current Rock64 image boots
 - Then AtomixOS leaves `RuntimeWatchdogSec` unset
-- And the deferred target remains `RuntimeWatchdogSec=30s`
+- And the opt-in target remains `RuntimeWatchdogSec=30s`
 
 ### ADDED: Reboot watchdog
 
-A separate reboot watchdog (`RebootWatchdogSec`) remains deferred until Rock64 boot reliability validation approves active
-watchdog enforcement.
+A separate reboot watchdog (`RebootWatchdogSec`) remains disabled by default until Rock64 boot reliability validation
+approves active watchdog enforcement.
 
 #### Scenario: Reboot hang recovery
 
 - Given the current Rock64 image boots
 - Then AtomixOS leaves `RebootWatchdogSec` unset
-- And the deferred target remains `RebootWatchdogSec=10min`
+- And the opt-in target remains `RebootWatchdogSec=10min`
 
 ### ADDED: Configurable timeouts
 
-The watchdog timeouts are set in `modules/watchdog.nix`:
+The watchdog timeouts are configured in `modules/watchdog.nix` through `atomixos.watchdog.*` options:
 
 ```nix
-systemd.settings.Manager = {
-  # RuntimeWatchdogSec = "30s";
-  # RebootWatchdogSec = "10min";
+atomixos.watchdog = {
+  enableHardware = true;
+  runtimeWatchdogSec = "30s";
+  rebootWatchdogSec = "10min";
 };
 ```
 
@@ -55,6 +57,9 @@ reboot:
 
 This means a systemd hang on a newly updated slot will trigger automatic rollback within 3 watchdog cycles
 (approximately 90 seconds total).
+
+The QEMU `rauc-watchdog` check uses a custom RAUC backend and a two-attempt boot-count file to keep the simulation fast.
+Physical Rock64 validation uses the U-Boot `BOOT_*_LEFT` environment counter documented above.
 
 #### Scenario: Watchdog-triggered rollback
 

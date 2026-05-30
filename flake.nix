@@ -310,6 +310,7 @@
             first-boot-source-discovery = import ./nix/tests/first-boot-source-discovery.nix netTestArgs;
             nixstasis-module = import ./nix/tests/nixstasis-module.nix netTestArgs;
             nixstasis-client = import ./nix/tests/nixstasis-client.nix netTestArgs;
+            watchdog-module = import ./nix/tests/watchdog-module.nix netTestArgs;
             forensics-podman-log-path = import ./nix/tests/forensics-podman-log-path.nix netTestArgs;
             forensics-rsyslog-path = import ./nix/tests/forensics-rsyslog-path.nix netTestArgs;
             forensics-rsyslog-buffering = import ./nix/tests/forensics-rsyslog-buffering.nix netTestArgs;
@@ -322,6 +323,7 @@
           allTests = raucTests // netTests;
           evalChecks = {
             nixstasis-module = import ./nix/tests/nixstasis-module.nix netTestArgs;
+            watchdog-module = import ./nix/tests/watchdog-module.nix netTestArgs;
           };
 
           # Linux checks — run under TCG (software emulation), no KVM needed.
@@ -356,6 +358,7 @@
             first-boot-source-discovery = import ./nix/tests/first-boot-source-discovery.nix darwinNetTestArgs;
             nixstasis-module = import ./nix/tests/nixstasis-module.nix darwinNetTestArgs;
             nixstasis-client = import ./nix/tests/nixstasis-client.nix darwinNetTestArgs;
+            watchdog-module = import ./nix/tests/watchdog-module.nix darwinNetTestArgs;
             forensics-podman-log-path = import ./nix/tests/forensics-podman-log-path.nix darwinNetTestArgs;
             forensics-rsyslog-path = import ./nix/tests/forensics-rsyslog-path.nix darwinNetTestArgs;
             forensics-rsyslog-buffering = import ./nix/tests/forensics-rsyslog-buffering.nix darwinNetTestArgs;
