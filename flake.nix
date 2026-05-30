@@ -2,7 +2,7 @@
   description = "Rock64 A/B image - NixOS-based OTA-updatable edge gateway";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
     nixstasis.url = "github:RobertDeRose/nixstasis/87ba02cef40cad33932e29f340988a3c1dccb4fb";
   };
 
