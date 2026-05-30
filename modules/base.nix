@@ -9,6 +9,12 @@
   ...
 }:
 
+let
+  atomixosCodeName = "Helium";
+  atomixosCodeNameLower = lib.toLower atomixosCodeName;
+  nixosCodeName = config.system.nixos.codeName;
+  nixosCodeNameLower = lib.toLower nixosCodeName;
+in
 {
   options.atomixos.serialRootDebug.enable = lib.mkOption {
     type = lib.types.bool;
@@ -50,22 +56,22 @@
       IMAGE_ID=atomixos
       LOGO=nix-snowflake
       NAME=AtomixOS
-      PRETTY_NAME="AtomixOS ${config.system.nixos.release} (Helium)"
+      PRETTY_NAME="AtomixOS ${config.system.nixos.release} (${atomixosCodeName})"
       SUPPORT_URL="https://nixos.org/community.html"
-      VERSION="${config.system.nixos.release} (Helium)"
-      VERSION_CODENAME=helium
+      VERSION="${config.system.nixos.release} (${atomixosCodeName})"
+      VERSION_CODENAME=${atomixosCodeNameLower}
       VERSION_ID="${config.system.nixos.release}"
       VERSION_ID_LIKE="${config.system.nixos.release}"
-      VERSION_CODENAME_LIKE=xantusia
-      PRETTY_NAME_LIKE="NixOS ${config.system.nixos.release} (Xantusia)"
+      VERSION_CODENAME_LIKE=${nixosCodeNameLower}
+      PRETTY_NAME_LIKE="NixOS ${config.system.nixos.release} (${nixosCodeName})"
     '';
     environment.etc."lsb-release".text = lib.mkForce ''
-      DISTRIB_CODENAME=helium
-      DISTRIB_DESCRIPTION="AtomixOS ${config.system.nixos.release} (Helium)"
+      DISTRIB_CODENAME=${atomixosCodeNameLower}
+      DISTRIB_DESCRIPTION="AtomixOS ${config.system.nixos.release} (${atomixosCodeName})"
       DISTRIB_ID=AtomixOS
       DISTRIB_RELEASE="${config.system.nixos.release}"
       DISTRIB_ID_LIKE=NixOS
-      DISTRIB_CODENAME_LIKE=xantusia
+      DISTRIB_CODENAME_LIKE=${nixosCodeNameLower}
     '';
 
     # Login banner — shows build identity on serial console so we always know
@@ -76,11 +82,11 @@
       in
       ''
 
-        AtomixOS (Helium) — build ${rev}
+        AtomixOS (${atomixosCodeName}) — build ${rev}
 
       '';
     environment.etc.motd.text = ''
-      Welcome to AtomixOS (Helium)!
+      Welcome to AtomixOS (${atomixosCodeName})!
     '';
 
     time.timeZone = "UTC";
