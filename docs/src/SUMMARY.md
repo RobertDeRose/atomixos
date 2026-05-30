@@ -59,6 +59,8 @@
     - [Tasks](./features/caddy-authcrunch-cockpit-tutorial/tasks.md)
   - [Nixstasis Client](./features/nixstasis-client/design.md)
     - [Tasks](./features/nixstasis-client/tasks.md)
+  - [Watchdog Enforcement](./features/watchdog-enforcement/design.md)
+    - [Tasks](./features/watchdog-enforcement/tasks.md)
 
 # Reference
 

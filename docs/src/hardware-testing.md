@@ -325,21 +325,66 @@ ls /dev/watchdog*
 
 ### Test 8.2: Watchdog-triggered reboot
 
-> Deferred: active watchdog enforcement is disabled in the current release. Run this only after enabling the deferred
-> `RuntimeWatchdogSec=30s` target on a test device.
+> Active watchdog enforcement is disabled by default. Run this only on a test device built with
+> `atomixos.watchdog.enableHardware = true`; do not enable it in release or deployment profiles until this phase passes.
 
 ```sh
-# Freeze PID 1 (systemd) to stop watchdog kicks
-kill -STOP 1
+# Confirm the opt-in manager settings rendered on the test image
+systemctl show --property RuntimeWatchdogUSec --property RebootWatchdogUSec
+# Expected with default opt-in settings:
+# RuntimeWatchdogUSec=30s
+# RebootWatchdogUSec=10min
 
-# Wait 30+ seconds -- the hardware watchdog should force a reboot when enabled
+# Confirm U-Boot is tracking the current RAUC slot before inducing the hang
+fw_printenv BOOT_ORDER BOOT_A_LEFT BOOT_B_LEFT
+```
+
+Use a lab-validated systemd hang simulation that stops watchdog kicks without corrupting persistent state. Do not treat
+`kill -STOP 1` as sufficient proof; PID 1 signal handling is special and may not reliably simulate a systemd deadlock.
+
+**Pass criteria**:
+
+- With the opt-in target enabled, device reboots within ~30 seconds of stopped watchdog kicks
+- Serial console shows watchdog reset
+- U-Boot boot-count is decremented for the current slot
+
+### Test 8.3: Watchdog-triggered rollback
+
+> Run only after Test 8.2 passes. Keep serial console attached and have recovery media available.
+
+```sh
+# Install an update bundle to the inactive slot and reboot into it
+rauc install /data/rock64.raucb
+reboot
+
+# On each boot into the updated slot, induce the lab-validated systemd hang before os-verification can mark it good
+fw_printenv BOOT_ORDER BOOT_A_LEFT BOOT_B_LEFT
+
+# Repeat until the updated slot's BOOT_*_LEFT counter reaches 0 and U-Boot selects the previous slot.
 ```
 
 **Pass criteria**:
 
-- With the deferred target enabled, device reboots within ~30 seconds of the SIGSTOP
-- Serial console shows watchdog reset
-- U-Boot boot-count is decremented for the current slot
+- The updated slot receives three watchdog-triggered boot attempts
+- Each failed attempt decrements the updated slot's `BOOT_*_LEFT` counter
+- After the counter reaches 0, U-Boot boots the previous slot
+- The previous slot reaches `multi-user.target` and remains marked good
+
+### Test 8.4: Watchdog soak
+
+```sh
+# Leave the opt-in watchdog image running under normal workload for 72 hours.
+systemctl show --property RuntimeWatchdogUSec --property RebootWatchdogUSec
+journalctl -b -p warning..alert
+last -x reboot | head
+```
+
+**Pass criteria**:
+
+- No unexpected watchdog resets occur during the 72-hour soak
+- No recurring warning or error pattern indicates missed watchdog kicks
+- Normal update confirmation and local recovery services continue to operate
+- Reboot history covers the soak window and contains only operator-initiated reboots
 
 ## Task Checklist
 
@@ -363,3 +408,5 @@ kill -STOP 1
 | 7.3 | Boot-count rollback   |        |
 | 8.1 | Watchdog presence     |        |
 | 8.2 | Watchdog reboot       |        |
+| 8.3 | Watchdog rollback     |        |
+| 8.4 | Watchdog soak         |        |

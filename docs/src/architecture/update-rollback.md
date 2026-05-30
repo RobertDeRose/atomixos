@@ -66,14 +66,16 @@ On initial device provisioning, `first-boot.service` writes the sentinel file
 (`/data/.completed_first_boot`) after successful provisioning import/validation and marks the slot good only when RAUC
 is enabled. After this, all subsequent boots use the full health-check path.
 
-## Watchdog Integration (currently disabled on Rock64 during development)
+## Watchdog Integration
 
-The RK3328 hardware watchdog (`dw_wdt`) integration is implemented with these target settings:
+The RK3328 hardware watchdog (`dw_wdt`) integration is opt-in through `atomixos.watchdog.enableHardware`. When enabled,
+systemd uses these default manager settings:
 
 - **Runtime watchdog**: 30 seconds -- if systemd hangs, the device reboots
 - **Reboot watchdog**: 10 minutes -- if a reboot hangs, the watchdog forces a hard reset
 
-These target settings are not enabled in the current release. When enabled later, both scenarios feed into the boot-count
+These settings remain disabled by default on Rock64, VM, and development images until physical Rock64 boot-reliability
+validation approves active enforcement. The intended hardware behavior is that both scenarios feed into the boot-count
 rollback path: repeated unsuccessful boots decrement the selected slot counter until U-Boot returns to the previous slot.
 
 ## Update Polling

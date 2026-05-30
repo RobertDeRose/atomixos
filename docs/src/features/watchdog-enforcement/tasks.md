@@ -26,23 +26,23 @@
 
 - [x] T030 Review watchdog boot-count recording path
 - [ ] T031 Verify watchdog-triggered boots count toward rollback threshold
-- [ ] T032 Preserve existing custom-backend `rauc-watchdog` VM rollback behavior
+- [x] T032 Preserve existing custom-backend `rauc-watchdog` VM rollback behavior
 - [x] T033 Document U-Boot `BOOT_*_LEFT` hardware assumptions and custom VM simulation differences
 
 ## Tests And Validation
 
 - [x] T040 Add Nix evaluation or module tests for watchdog option defaults
 - [x] T041 Add or update VM assertions for rendered systemd manager settings where applicable
-- [ ] T042 Keep existing `rauc-watchdog` VM check passing
-- [ ] T043 Add hardware test instructions for systemd hang and watchdog reboot timing
-- [ ] T044 Add hardware test instructions for three-failure rollback validation
-- [ ] T045 Add 72-hour soak validation checklist
+- [x] T042 Keep existing `rauc-watchdog` VM check passing
+- [x] T043 Add hardware test instructions for systemd hang and watchdog reboot timing
+- [x] T044 Add hardware test instructions for three-failure rollback validation
+- [x] T045 Add 72-hour soak validation checklist
 
 ## Documentation And Closeout
 
-- [ ] T900 Update `docs/src/architecture/update-rollback.md` with watchdog-triggered rollback behavior
-- [ ] T901 Update `docs/src/hardware-testing.md` with physical watchdog validation steps
-- [ ] T902 Update watchdog specs/module docs if applicable
-- [ ] T903 Update `docs/src/planned-features.md` after implementation completes
-- [ ] T904 Add this feature spec to `docs/src/SUMMARY.md` if feature specs are listed there
+- [x] T900 Update `docs/src/architecture/update-rollback.md` with watchdog-triggered rollback behavior
+- [x] T901 Update `docs/src/hardware-testing.md` with physical watchdog validation steps
+- [x] T902 Update watchdog specs/module docs if applicable
+- [x] T903 Update `docs/src/planned-features.md` after implementation completes
+- [x] T904 Add this feature spec to `docs/src/SUMMARY.md` if feature specs are listed there
 - [ ] T999 Run targeted tests, docs reconciliation, hardware-validation gap review, and close out the feature spec

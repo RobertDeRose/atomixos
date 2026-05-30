@@ -38,7 +38,8 @@ Quadlet containers on a persistent `/data` partition.
 - `config.toml` is the single operator input; schema changes must not break existing
   configs
 - RAUC bundles are signed; only CA-signed updates are accepted
-- Hardware watchdog enforcement is deferred until boot-reliability validation completes
+- Hardware watchdog enforcement is implemented as an opt-in module setting and remains
+  disabled in release/deployment profiles until boot-reliability validation completes
 
 ## Cross-Cutting Decisions
 
@@ -78,7 +79,8 @@ Quadlet containers on a persistent `/data` partition.
   full real-server tunnel validation remain future Nixstasis integration work.
 - **USB WiFi**: Kernel WiFi/Bluetooth stacks are disabled. Hardware selection needed
   before enablement.
-- **Active watchdog enforcement**: Deferred pending Rock64 boot-reliability validation.
+- **Active watchdog enforcement in release profiles**: Deferred pending Rock64
+  boot-reliability validation.
 
 ## Resolved Questions
 
@@ -387,13 +389,14 @@ Quadlet containers on a persistent `/data` partition.
 
 ### `watchdog-enforcement`
 
-- Status: deferred
-- Overview: Enable hardware watchdog enforcement with `RuntimeWatchdogSec=30s` and
-  `RebootWatchdogSec=10min` on Rock64.
+- Status: partially completed
+- Overview: Add opt-in hardware watchdog enforcement with `RuntimeWatchdogSec=30s` and
+  `RebootWatchdogSec=10min`, while keeping Rock64 release profiles disabled until physical validation passes.
 - Requirements:
-  - Complete Rock64 boot-reliability validation
-  - Enable systemd manager watchdog settings
-  - Verify watchdog-triggered reboots feed into boot-count rollback
+  - Add opt-in systemd manager watchdog settings
+  - Keep active enforcement disabled by default
+  - Complete Rock64 boot-reliability validation before release-profile enablement
+  - Verify watchdog-triggered reboots feed into boot-count rollback on hardware
 - Constraints:
   - Must not cause false-positive reboot loops during normal operation
   - Must be validated on physical hardware before enabling
@@ -406,8 +409,9 @@ Quadlet containers on a persistent `/data` partition.
   - Aggressive timeout may cause false triggers on slow boots
   - Cannot be fully validated in QEMU
 - Dependencies: Physical hardware availability for soak testing
-- Suggested validation: 72-hour soak test on physical Rock64
-- Suggested first workflow command: `/start-feature watchdog-enforcement`
+- Suggested validation: module evaluation checks, `rauc-watchdog` VM check, and 72-hour soak test on physical Rock64
+- Delivered so far: `atomixos.watchdog.*` options, opt-in rendered manager settings, default-disabled evaluation checks,
+  and hardware validation instructions.
 
 ### `usb-wifi`
 
