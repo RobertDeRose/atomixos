@@ -26,7 +26,9 @@
         crun = prev.crun.overrideAttrs (old: {
           buildInputs = builtins.filter (p: p.pname or "" != "criu") (old.buildInputs or [ ]);
           configureFlags = (old.configureFlags or [ ]) ++ [ "--disable-criu" ];
-          NIX_LDFLAGS = builtins.replaceStrings [ "-lcriu" ] [ "" ] (old.NIX_LDFLAGS or "");
+          env = (old.env or { }) // {
+            NIX_LDFLAGS = builtins.replaceStrings [ "-lcriu" ] [ "" ] (old.env.NIX_LDFLAGS or "");
+          };
         });
       };
 
