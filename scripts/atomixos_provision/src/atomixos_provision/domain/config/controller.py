@@ -182,7 +182,7 @@ _API_ERROR_RESPONSES = {
 }
 _PARTIAL_RESPONSES = {
     **_API_ERROR_RESPONSES,
-    409: ResponseSpec(ApiErrorResponseBody, description="The provision queue is full"),
+    409: ResponseSpec(ApiErrorResponseBody, description="The provision queue is busy"),
 }
 _REQUIRED_AUTH_OPERATION_IDS = {
     "configExport",
@@ -558,7 +558,7 @@ async def _submit_partial_operation(
         job = await job_manager.submit(apply_work)
     if job is None:
         message = (
-            "the provision queue is full"
+            "the provision queue is busy"
             if isinstance(job_manager, StagedJobManager)
             else "a provision job is already running"
         )

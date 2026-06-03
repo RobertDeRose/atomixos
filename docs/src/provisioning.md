@@ -98,7 +98,9 @@ Partial config endpoints always require SSH-signature authentication, including 
 provisioning. Mutating partial endpoints load the current `/data/config/config.toml`, merge the typed
 request into a full desired-state document, render canonical generated TOML, and submit that full
 candidate through the same asynchronous validate/render/promote/activate/rollback job path as
-`POST /api/config`. They do not mutate derived JSON, Quadlet, firewall, network, or user state
+`POST /api/config`. On staged production systems, partial endpoints require the staged queue to be
+otherwise empty and return `409 Conflict` when another staged job is queued or active. They do not
+mutate derived JSON, Quadlet, firewall, network, or user state
 directly. The generated `config.toml` remains the exported backup artifact; comments and original TOML
 ordering are not preserved after a successful partial update.
 
