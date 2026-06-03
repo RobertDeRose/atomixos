@@ -145,6 +145,37 @@ class TestJobManager:
         await mgr._task
         assert mgr.is_busy is False
 
+    @pytest.mark.asyncio
+    async def test_cancelled_job_is_terminal(self):
+        mgr = JobManager()
+        started = asyncio.Event()
+
+        async def work(job):
+            started.set()
+            raise asyncio.CancelledError()
+
+        job = await mgr.submit(work)
+        assert job is not None
+        await started.wait()
+        with suppress(asyncio.CancelledError):
+            await mgr._task
+
+        assert job.state == JobState.FAILED
+        assert job.error == "job was cancelled"
+        assert job.completed_at is not None
+
+    @pytest.mark.asyncio
+    async def test_cancelled_sync_job_is_terminal(self):
+        mgr = JobManager()
+
+        async def work(job):
+            raise asyncio.CancelledError()
+
+        with pytest.raises(asyncio.CancelledError):
+            await mgr.run_sync(work)
+
+        assert mgr.is_busy is False
+
 
 class TestStagedJobManager:
     @pytest.mark.asyncio

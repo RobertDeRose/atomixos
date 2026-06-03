@@ -142,6 +142,11 @@ class JobManager:
             with job._lock:
                 job.result = result
             return result
+        except asyncio.CancelledError:
+            with job._lock:
+                job.state = JobState.FAILED
+                job.error = "job was cancelled"
+            raise
         except Exception as exc:
             with job._lock:
                 job.state = JobState.FAILED
@@ -195,6 +200,11 @@ class JobManager:
             job.set_stage("completed")
             with job._lock:
                 job.result = result
+        except asyncio.CancelledError:
+            with job._lock:
+                job.state = JobState.FAILED
+                job.error = "job was cancelled"
+            raise
         except Exception as exc:
             with job._lock:
                 job.state = JobState.FAILED
