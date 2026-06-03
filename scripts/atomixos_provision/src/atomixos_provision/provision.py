@@ -1253,6 +1253,7 @@ def apply_staged_job(config_root: Path, runtime_root: Path | None = None) -> dic
         try:
             with tempfile.TemporaryDirectory(prefix="atomixos-staged-") as snapshot_dir:
                 snapshot = Path(snapshot_dir) / claimed.job_id
+                verify_staged_job(claimed, paths)
                 _copy_staged_job_snapshot(claimed.path, snapshot, claimed.job_id)
                 snapshot_job = ClaimedJob(claimed.job_id, snapshot)
                 manifest = verify_staged_job(snapshot_job, paths, require_active=False)

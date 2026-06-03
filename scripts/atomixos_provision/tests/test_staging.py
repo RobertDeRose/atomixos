@@ -464,6 +464,36 @@ def test_apply_staged_job_promotes_candidate_and_writes_result(tmp_path, monkeyp
     assert result_file["status"] == "succeeded"
 
 
+def test_apply_staged_job_verifies_active_source_before_snapshot_copy(tmp_path, monkeypatch):
+    runtime_root = tmp_path / "run"
+    config_root = tmp_path / "config"
+    _force_staging(monkeypatch)
+    monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(runtime_root))
+    monkeypatch.setattr(
+        "atomixos_provision.provision.validate_config_root", lambda root, **_: root
+    )
+    monkeypatch.setattr("atomixos_provision.provision.os.chown", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        "atomixos_provision.config.load_config_schema",
+        lambda: {"type": "object", "additionalProperties": True},
+    )
+
+    from atomixos_provision import provision
+
+    original_verify = provision.verify_staged_job
+
+    def reject_active_source(job, _paths, **kwargs):
+        if kwargs.get("require_active", True):
+            raise ProvisionError("source verification failed")
+        return original_verify(job, _paths, **kwargs)
+
+    monkeypatch.setattr(provision, "verify_staged_job", reject_active_source)
+    stage_config_bytes("job-1", _valid_config(), "config.toml", config_root)
+
+    with pytest.raises(ProvisionError, match="source verification failed"):
+        apply_staged_job(config_root, runtime_root)
+
+
 def test_apply_staged_job_rerenders_derived_state_from_config(tmp_path, monkeypatch):
     runtime_root = tmp_path / "run"
     config_root = tmp_path / "config"
@@ -627,9 +657,10 @@ def test_apply_staged_job_promotes_verified_snapshot_not_mutated_active_tree(
     original_verify = provision.verify_staged_job
 
     def tamper_active_tree_after_snapshot(job, paths, **kwargs):
-        active_config = paths.active / job.job_id / "candidate" / "config.toml"
-        if active_config.exists():
-            active_config.write_text("version = 1\n", encoding="utf-8")
+        if kwargs.get("require_active") is False:
+            active_config = paths.active / job.job_id / "candidate" / "config.toml"
+            if active_config.exists():
+                active_config.write_text("version = 1\n", encoding="utf-8")
         return original_verify(job, paths, **kwargs)
 
     monkeypatch.setattr(provision, "verify_staged_job", tamper_active_tree_after_snapshot)
@@ -793,7 +824,7 @@ def test_apply_staged_job_rejects_unexpected_top_level_before_snapshot(
     assert not config_root.exists()
 
 
-def test_apply_staged_job_rejects_size_race_before_snapshot_copy(
+def test_apply_staged_job_rejects_size_race_without_snapshot_copy(
     tmp_path, monkeypatch
 ):
     runtime_root = tmp_path / "run"
@@ -824,10 +855,8 @@ def test_apply_staged_job_rejects_size_race_before_snapshot_copy(
     stage_config_bytes("job-1", _valid_config(), "config.toml", config_root)
     config_path = runtime_root / "queue" / "job-1" / "candidate" / "config.toml"
     config_path.write_text(config_path.read_text() + "# size race\n", encoding="utf-8")
-    raced_size = config_path.stat().st_size
-
     with pytest.raises(ProvisionError, match="staged file size changed"):
         apply_staged_job(config_root, runtime_root)
 
-    assert copied_bytes == [raced_size]
+    assert copied_bytes == []
     assert not config_root.exists()
