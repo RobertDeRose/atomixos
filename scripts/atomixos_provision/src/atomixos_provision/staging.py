@@ -28,7 +28,7 @@ STAGED_RESERVATION_TTL_SECONDS = 300
 RUNTIME_ROOT_MODE = 0o755
 QUEUE_DIR_MODE = 0o2770
 RESULTS_DIR_MODE = 0o2750
-ACTIVE_DIR_MODE = 0o700
+ACTIVE_DIR_MODE = 0o2750
 
 
 @dataclass(frozen=True)
@@ -596,7 +596,10 @@ def try_abandon_queued_job(paths: RuntimePaths, job_id: str) -> bool:
 
 
 def _job_presence_locked(paths: RuntimePaths, job_id: str) -> str:
-    if (paths.active / job_id).exists():
+    try:
+        if (paths.active / job_id).exists():
+            return "active"
+    except OSError:
         return "active"
     if (paths.queue / job_id).exists() or (paths.queue / f"{job_id}.ready").exists():
         return "queued"

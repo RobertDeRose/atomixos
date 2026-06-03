@@ -389,6 +389,24 @@ def test_runtime_layout_keeps_results_read_only_for_service_group(tmp_path):
 
     assert paths.queue.stat().st_mode & 0o7777 == 0o2770
     assert paths.results.stat().st_mode & 0o7777 == 0o2750
+    assert paths.active.stat().st_mode & 0o7777 == 0o2750
+
+
+def test_staged_job_presence_treats_unreadable_active_dir_as_active(
+    tmp_path, monkeypatch
+):
+    paths = runtime_paths(tmp_path / "run")
+    ensure_runtime_layout(paths, for_worker=True)
+    original_exists = type(paths.active).exists
+
+    def deny_active_exists(path):
+        if path == paths.active / "job-1":
+            raise PermissionError("permission denied")
+        return original_exists(path)
+
+    monkeypatch.setattr(type(paths.active), "exists", deny_active_exists)
+
+    assert staged_job_presence(paths, "job-1") == "active"
 
 
 def test_read_result_rejects_group_writable_results_directory(tmp_path):

@@ -90,7 +90,7 @@ in
     "d /run/atomixos-provision/queue 2770 root atomixos-provision -"
     "d /run/atomixos-provision/results 2750 root atomixos-provision -"
     "d /run/atomixos-provision/boot-ui-jobs 0700 atomixos-provision atomixos-provision -"
-    "d /run/atomixos-provision/active 0700 root root -"
+    "d /run/atomixos-provision/active 2750 root atomixos-provision -"
     "f /run/atomixos-provision/config.lock 0660 root atomixos-provision -"
     "f /run/atomixos-provision/queue.lock 0660 root atomixos-provision -"
   ];
