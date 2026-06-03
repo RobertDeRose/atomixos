@@ -52,7 +52,6 @@ from atomixos_provision.staging import (
     finalize_abandoned_active_jobs,
     has_staged_jobs,
     publish_ready_marker,
-    read_json,
     read_result,
     runtime_paths,
     sha256_file,
@@ -967,10 +966,12 @@ def _copy_candidate_to_durable(candidate_root: Path, durable_candidate: Path) ->
             )
 
 
-def _copy_staged_job_snapshot(source: Path, destination: Path, job_id: str) -> None:
+def _copy_staged_job_snapshot(
+    source: Path, destination: Path, job_id: str, manifest: dict[str, Any]
+) -> None:
     if destination.exists():
         shutil.rmtree(destination)
-    manifest = _read_staged_snapshot_manifest(source, job_id)
+    _validate_staged_snapshot_manifest(source, job_id, manifest)
     destination.mkdir(parents=True, exist_ok=True)
     destination.chmod(0o700)
     write_json_atomic(destination / "manifest.json", manifest)
@@ -980,8 +981,9 @@ def _copy_staged_job_snapshot(source: Path, destination: Path, job_id: str) -> N
         _copy_staged_manifest_tree(source, destination, "bundle-files", bundle_entries)
 
 
-def _read_staged_snapshot_manifest(source: Path, job_id: str) -> dict[str, Any]:
-    manifest = read_json(source / "manifest.json")
+def _validate_staged_snapshot_manifest(
+    source: Path, job_id: str, manifest: dict[str, Any]
+) -> None:
     if manifest.get("version") != MANIFEST_VERSION:
         raise ProvisionError("unsupported staged manifest version")
     if manifest.get("job_id") != job_id:
@@ -998,7 +1000,6 @@ def _read_staged_snapshot_manifest(source: Path, job_id: str) -> dict[str, Any]:
         )
     if not (source / "candidate").is_dir():
         raise ProvisionError("staged job missing candidate directory")
-    return manifest
 
 
 def _manifest_nonnegative_int(manifest: dict[str, Any], key: str) -> int:
@@ -1258,8 +1259,10 @@ def apply_staged_job(config_root: Path, runtime_root: Path | None = None) -> dic
         try:
             with tempfile.TemporaryDirectory(prefix="atomixos-staged-") as snapshot_dir:
                 snapshot = Path(snapshot_dir) / claimed.job_id
-                verify_staged_job(claimed, paths)
-                _copy_staged_job_snapshot(claimed.path, snapshot, claimed.job_id)
+                source_manifest = verify_staged_job(claimed, paths)
+                _copy_staged_job_snapshot(
+                    claimed.path, snapshot, claimed.job_id, source_manifest
+                )
                 snapshot_job = ClaimedJob(claimed.job_id, snapshot)
                 manifest = verify_staged_job(snapshot_job, paths, require_active=False)
                 with provisioning_lock(config_root):
