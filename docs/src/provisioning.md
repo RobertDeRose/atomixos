@@ -16,10 +16,10 @@ On first boot:
 5. `first-boot.service` looks for `/boot/config.toml` only on a fresh flash, then USB `config.toml`, then starts the
    bootstrap web console on WAN and LAN port `8080`; after provisioning it narrows to the LAN gateway endpoint
    and waits indefinitely for operator input when no seed is present
-6. The imported config is validated, persisted under `/data/config/`, rendered into canonical Quadlet files, and synced
-   into the active rootful and rootless Quadlet paths
-7. `first-boot.service` applies Quadlets, LAN settings, and provisioned firewall rules, then marks the RAUC slot as good
-   only if those runtime apply steps succeed
+6. The imported config is validated, persisted under `/data/config/`, rendered into managed user inputs and canonical
+   Quadlet files, and synced into the active rootful and rootless Quadlet paths
+7. `first-boot.service` applies managed users, Quadlets, LAN settings, and provisioned firewall rules, then marks the
+   RAUC slot as good only if those runtime apply steps succeed
 8. Network interfaces come up (eth0 via DHCP, eth1 static); `systemd-networkd-wait-online` uses 30s timeout with `anyInterface=true`
 9. Services start: dnsmasq, chrony, sshd, and the RAUC update timer when RAUC is enabled
 
@@ -44,8 +44,9 @@ files, admin SSH authorized keys, and other provisioning-derived runtime inputs.
 
 ## Provisioning Service API
 
-The bootstrap console is backed by a long-lived Litestar service. API routes are
-grouped by domain but still wired explicitly by the app factory:
+The bootstrap console is backed by a long-lived Litestar service running as the
+unprivileged `atomixos-provision` user. API routes are grouped by domain but
+still wired explicitly by the app factory:
 
 | Route                                          | Behavior                                                                        |
 |------------------------------------------------|---------------------------------------------------------------------------------|
@@ -65,14 +66,28 @@ grouped by domain but still wired explicitly by the app factory:
 | `DELETE /api/config/container-volumes/{name}`  | Removes a declared Quadlet volume.                                              |
 | `GET /api/jobs/{job_id}`                       | Returns current provisioning job status, events, result, and rollback state.    |
 
-Mutating apply jobs are single-flight. Clients poll the returned job URL for
-progress and final status. `POST /api/validate` always requires SSH-signature
-authentication; provisioned-device re-apply through `POST /api/config` requires
-the same nonce and signature headers, while first-boot programmatic config
-submission remains unauthenticated.
+On production staged systems, mutating apply jobs are accepted into a bounded
+FIFO queue and applied one at a time. Clients receive `409 Conflict` when the
+queue is full, and otherwise poll the returned job URL for progress and final
+status. Non-staged development/test config roots keep the direct single-flight
+job guard. `POST /api/validate` always requires SSH-signature authentication;
+provisioned-device re-apply through `POST /api/config` requires the same nonce
+and signature headers, while first-boot programmatic config submission remains
+unauthenticated.
+
+On production systems, mutating jobs are staged by the unprivileged API under
+`/run/atomixos-provision` after validation and candidate rendering. A root-owned
+`atomixos-provision-apply.path` unit watches ready markers and starts the
+`atomixos-provision-apply.service` oneshot worker. The worker verifies the staged
+manifest and tree before copying verified state into `/data/config-candidate`,
+then performs promotion, activation, rollback, and recovery. This keeps network
+parsing and upload handling unprivileged while preserving the same
+operator-visible API responses and rollback behavior. Result handoff files are
+root-writable/group-readable, and queue claim/abandon operations share a runtime
+lock so timed-out queued jobs cannot race with the root worker claiming them.
 
 Before initial provisioning, browser operators can use the Boot UI at `/` to
-upload a config bundle or paste `config.toml`. Browser submissions post to
+upload or drop a config bundle or `config.toml`. Browser submissions post to
 `/apply` with the bootstrap CSRF token, receive an asynchronous job progress
 view, and poll first-boot-only HTML fragments until the apply job succeeds or
 fails. These UI routes are hidden from the live OpenAPI schema and are unavailable

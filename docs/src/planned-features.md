@@ -258,17 +258,17 @@ Quadlet containers on a persistent `/data` partition.
 
 ### `provisioning-api-privilege-separation`
 
-- Status: planned
+- Status: completed
 - Overview: Split the network-facing provisioning API process from privileged host
-  mutation helpers. The web process should run unprivileged and call a narrow,
-  auditable helper for config promotion, service activation, firewall changes, and
-  socket rebinding.
+  mutation work. The web process should run unprivileged, stage validated
+  candidates in tmpfs, and hand them to a root systemd path-triggered worker for
+  config promotion, service activation, firewall changes, and socket rebinding.
 - Requirements:
   - Run the Litestar/uvicorn service as an unprivileged user
-  - Define a minimal privileged helper interface for apply/recover/activate actions
+  - Define a minimal staged manifest contract for apply/recover/activate actions
   - Preserve single-flight apply semantics and job progress reporting
   - Preserve first-boot bootstrap behavior and SSH-signed reapply behavior
-  - Ensure helper inputs are validated and scoped to `/data/config`
+  - Ensure staged inputs are verified and scoped to `/data/config`
 - Constraints:
   - Must work with read-only rootfs and mutable `/data`
   - Must avoid adding DB, Redis, or heavyweight IPC dependencies
@@ -282,11 +282,15 @@ Quadlet containers on a persistent `/data` partition.
 - Apply/recover/rollback paths still pass existing Python and Nix VM tests
 - Systemd hardening is documented and enforced in the service unit
 - Risks and tradeoffs:
-  - Helper boundary adds implementation and test complexity
-  - Progress reporting may need a simple IPC contract
+  - Staging boundary adds implementation and test complexity
+  - Progress reporting needs a simple result handoff contract
 - Dependencies: Provisioning API foundation
-- Suggested validation: VM test proving unprivileged service can provision via helper
+- Suggested validation: VM test proving unprivileged service can provision via the root worker
 - Suggested first workflow command: `/start-feature provisioning-api-privilege-separation`
+- Delivered by running the bootstrap API as `atomixos-provision`, staging
+  validated candidate jobs under `/run/atomixos-provision`, applying them through
+  a root `systemd.path`/oneshot worker, and documenting the result/queue lock
+  handoff in the runtime boundary docs.
 
 ### `provisioning-api-live-schema-contract`
 

@@ -22,6 +22,7 @@ Persisted outputs are:
 | Output                   | Path                                      |
 |--------------------------|-------------------------------------------|
 | Imported source config   | `/data/config/config.toml`                |
+| First config marker      | `/data/config/.first-config`              |
 | Managed users            | `/data/config/users.json`                 |
 | User SSH keys            | `/data/config/ssh-authorized-keys/<user>` |
 | WAN inbound policy       | `/data/config/firewall-inbound.json`      |
@@ -46,28 +47,37 @@ SHA-256 digest of the submitted config payload (`ssh-keygen -Y sign -n atomixos-
 nonce and base64 signature in the `X-AtomixOS-Nonce` and `X-AtomixOS-Signature` headers. Nonces are single-use and
 expire after 5 minutes (configurable via `ATOMIXOS_NONCE_TTL`).
 
-Re-apply uses atomic candidate promotion:
+In production, re-apply is staged by the unprivileged API under
+`/run/atomixos-provision` before root touches `/data`. The API validates the
+submitted source, renders a complete candidate in tmpfs, writes a manifest with
+relative paths, ownership expectations, modes, sizes, and SHA-256 hashes, then
+publishes a ready marker. A root `atomixos-provision-apply.service` worker claims
+ready jobs, verifies the staged tree, re-renders the verified staged
+`config.toml` into `/data/config-candidate/`, and then uses the existing atomic
+promotion flow:
 
-1. Validate and render candidate config in `/data/config-candidate/`.
-2. Rename active `/data/config` to `/data/config-rollback`.
-3. Rename candidate to `/data/config`.
-4. Run activation services synchronously (user apply, Quadlet sync, LAN/host network apply, firewall), then apply
+1. Rename active `/data/config` to `/data/config-rollback`.
+2. Rename candidate to `/data/config`.
+3. Run activation services synchronously (user apply, Quadlet sync, LAN/host network apply, firewall), then apply
    `/data/config/activation-policy.json` timing, restart, and health-check policy.
-5. On success, clean up `/data/config-rollback`.
-6. On failure, restore `/data/config-rollback` to `/data/config` and re-activate with the restored activation policy.
+4. On success, clean up `/data/config-rollback`.
+5. On failure, restore `/data/config-rollback` to `/data/config` and re-activate with the restored activation policy.
 
 `POST /api/config` is asynchronous for programmatic clients. It returns a typed response with `job_id`, `state`, and
 `job_url`; the `Location` header points to the same job resource. The job records provisioning steps, service
 deployment/status events, activation failures, final result, and rollback status.
 
-Typed partial endpoints use the same job and promotion flow. The service takes the provisioning lock,
-loads the active `/data/config/config.toml`, applies the typed request to an in-memory full config,
-writes generated TOML for the candidate, carries forward active bundle `files/` payloads, and then
-runs the same validation, rendering, atomic promotion, activation, and rollback steps. If validation
-or activation fails, the previous active `/data/config` tree remains active or is restored by the same
-rollback path used by full re-apply.
+Typed partial endpoints use the same job and promotion flow. The unprivileged service loads the active
+`/data/config/config.toml`, applies the typed request to an in-memory full config, writes generated TOML
+for the staged candidate, carries forward active bundle `files/` payloads, and then queues the same root
+worker path. Partial updates are accepted only when the staged queue is otherwise empty so independently
+rendered partial candidates cannot overwrite each other. If validation or activation fails, the previous
+active `/data/config` tree remains active or is restored by the same rollback path used by full re-apply.
 
-First provisioning (no existing `config.toml`) remains unauthenticated and writes directly.
+First provisioning (no root-written `.first-config` marker) remains unauthenticated, but external writes
+to `/data/config` still stage through the root worker. Direct `/data/config` mutation is limited to the
+privileged worker and bootstrap maintenance commands that explicitly run with
+`ATOMIXOS_PROVISION_WORKER_ACTIVE=1`.
 
 ## Managed Users Flow
 
