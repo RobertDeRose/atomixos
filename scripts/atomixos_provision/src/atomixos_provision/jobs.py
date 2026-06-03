@@ -1,4 +1,4 @@
-"""Async job manager with single-flight execution and status tracking."""
+"""Async job managers with status tracking."""
 
 import asyncio
 import threading
@@ -9,10 +9,13 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
-__all__ = ["Job", "JobManager", "JobState"]
+from atomixos_provision.config import ProvisionError
+
+__all__ = ["Job", "JobManager", "JobState", "StagedJobManager"]
 
 # Maximum number of completed jobs to retain in memory.
 _MAX_RETAINED_JOBS = 64
+_DEFAULT_MAX_STAGED_JOBS = 4
 
 
 class JobState(StrEnum):
@@ -203,3 +206,234 @@ class JobManager:
             async with self._lock:
                 if self._current_job is job:
                     self._current_job = None
+
+
+class StagedJobManager(JobManager):
+    """Bounded FIFO manager backed by staged result files for restart recovery."""
+
+    def __init__(
+        self,
+        *,
+        result_timeout_seconds: float | None = None,
+        max_pending: int = _DEFAULT_MAX_STAGED_JOBS,
+    ) -> None:
+        super().__init__()
+        if result_timeout_seconds is None:
+            from atomixos_provision.provision import STAGED_RESULT_TIMEOUT_SECONDS
+
+            result_timeout_seconds = STAGED_RESULT_TIMEOUT_SECONDS
+        self._result_timeout_seconds = result_timeout_seconds
+        self._max_pending = max_pending
+
+    @property
+    def is_busy(self) -> bool:
+        """True if a staged job is currently being submitted or monitored."""
+        return super().is_busy
+
+    async def submit_staged(
+        self,
+        work: Callable[[Job], Coroutine[Any, Any, None]],
+    ) -> Job | None:
+        job = Job(id=str(uuid.uuid4()))
+        async with self._lock:
+            self._evict_old_jobs()
+            from atomixos_provision.provision import _runtime_paths
+            from atomixos_provision.staging import reserve_staged_job_slot
+
+            try:
+                if not reserve_staged_job_slot(_runtime_paths(), job.id, self._max_pending):
+                    return None
+            except Exception as exc:
+                with job._lock:
+                    job.state = JobState.FAILED
+                    job.error = str(exc)
+                    job.completed_at = time.monotonic()
+                self._jobs[job.id] = job
+                return job
+            self._jobs[job.id] = job
+        try:
+            return await self._stage_and_monitor(job, work)
+        except Exception as exc:
+            from atomixos_provision.provision import StagedQueueBusyError
+
+            if isinstance(exc, StagedQueueBusyError):
+                return None
+            return job
+
+    def get(self, job_id: str) -> Job | None:
+        try:
+            job = super().get(job_id)
+            if job is not None:
+                self._refresh_from_result(job)
+                return job
+            recovered = self._job_from_result(job_id)
+            if recovered is not None:
+                self._jobs[job_id] = recovered
+            return recovered
+        except ProvisionError:
+            return None
+
+    async def _stage_and_monitor(
+        self,
+        job: Job,
+        work: Callable[[Job], Coroutine[Any, Any, None]],
+    ) -> Job:
+        with job._lock:
+            job.state = JobState.RUNNING
+            job.started_at = time.monotonic()
+        job.set_stage("running")
+        try:
+            self._refresh_reservation(job)
+            await work(job)
+            self._refresh_reservation(job)
+            job.set_stage("queued", "waiting for privileged apply worker")
+        except asyncio.CancelledError:
+            self._release_reservation(job)
+            with job._lock:
+                job.state = JobState.FAILED
+                job.error = "staged job manager task was cancelled"
+                job.completed_at = time.monotonic()
+            raise
+        except Exception as exc:
+            self._release_reservation(job)
+            from atomixos_provision.provision import StagedQueueBusyError
+
+            if isinstance(exc, StagedQueueBusyError):
+                raise
+            with job._lock:
+                job.state = JobState.FAILED
+                job.error = str(exc)
+                if hasattr(exc, "rollback_status"):
+                    job.rollback_status = exc.rollback_status
+                job.completed_at = time.monotonic()
+            return job
+        self._task = asyncio.create_task(self._monitor_staged(job))
+        return job
+
+    async def _monitor_staged(self, job: Job) -> None:
+        try:
+            deadline = time.monotonic() + self._result_timeout_seconds
+            while job.state in (JobState.SUBMITTED, JobState.RUNNING):
+                if self._refresh_from_result(job):
+                    break
+                if time.monotonic() >= deadline:
+                    timeout_state = self._handle_staged_timeout(job)
+                    if self._refresh_from_result(job):
+                        break
+                    if timeout_state == "active":
+                        deadline = time.monotonic() + self._result_timeout_seconds
+                        job.set_stage("running", "privileged apply worker is still running")
+                        continue
+                    if timeout_state == "missing":
+                        raise ProvisionError(
+                            "privileged apply worker did not publish a result"
+                        )
+                    raise ProvisionError("timed out waiting for privileged apply worker")
+                await asyncio.sleep(0.2)
+        except asyncio.CancelledError:
+            with job._lock:
+                job.state = JobState.FAILED
+                job.error = "staged job manager task was cancelled"
+                job.completed_at = time.monotonic()
+            raise
+        except Exception as exc:
+            with job._lock:
+                job.state = JobState.FAILED
+                job.error = str(exc)
+                if hasattr(exc, "rollback_status"):
+                    job.rollback_status = exc.rollback_status
+                job.completed_at = time.monotonic()
+
+    def _refresh_from_result(self, job: Job) -> bool:
+        try:
+            from atomixos_provision.provision import _runtime_paths
+            from atomixos_provision.staging import read_result
+
+            result = read_result(_runtime_paths(), job.id)
+        except ProvisionError:
+            raise
+        except Exception:
+            return False
+        if result is None:
+            return False
+        with job._lock:
+            status = result.get("status")
+            job.completed_at = job.completed_at or time.monotonic()
+            if status == "succeeded":
+                payload = result.get("result")
+                job.state = JobState.SUCCEEDED
+                job.result = payload if isinstance(payload, dict) else {}
+                job.error = None
+                job.stage = "completed"
+            else:
+                job.state = JobState.FAILED
+                error = result.get("error")
+                job.error = error if isinstance(error, str) else "failed"
+                rollback_status = result.get("rollback_status")
+                if isinstance(rollback_status, str):
+                    job.rollback_status = rollback_status
+                job.stage = "failed"
+        return True
+
+    def _release_reservation(self, job: Job) -> None:
+        try:
+            from atomixos_provision.provision import _runtime_paths
+            from atomixos_provision.staging import release_staged_job_slot
+
+            release_staged_job_slot(_runtime_paths(), job.id)
+        except Exception:
+            pass
+
+    def _refresh_reservation(self, job: Job) -> None:
+        try:
+            from atomixos_provision.provision import _runtime_paths
+            from atomixos_provision.staging import refresh_staged_job_slot
+
+            refresh_staged_job_slot(_runtime_paths(), job.id)
+        except Exception:
+            pass
+
+    def _job_from_result(self, job_id: str) -> Job | None:
+        job = Job(id=job_id)
+        if self._refresh_from_result(job):
+            return job
+        try:
+            from atomixos_provision.provision import _runtime_paths
+            from atomixos_provision.staging import staged_job_presence
+
+            presence = staged_job_presence(_runtime_paths(), job_id)
+        except Exception:
+            return None
+        if presence == "queued":
+            job.set_stage("queued", "waiting for privileged apply worker")
+            self._start_monitor_if_possible(job)
+            return job
+        if presence == "active":
+            with job._lock:
+                job.state = JobState.RUNNING
+                job.started_at = time.monotonic()
+            job.set_stage("running", "privileged apply worker is running")
+            self._start_monitor_if_possible(job)
+            return job
+        return None
+
+    def _start_monitor_if_possible(self, job: Job) -> None:
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        self._task = asyncio.create_task(self._monitor_staged(job))
+
+    def _handle_staged_timeout(self, job: Job) -> str:
+        try:
+            from atomixos_provision.provision import _runtime_paths
+            from atomixos_provision.staging import staged_job_presence, try_abandon_queued_job
+
+            paths = _runtime_paths()
+            if try_abandon_queued_job(paths, job.id):
+                return "abandoned"
+            return staged_job_presence(paths, job.id)
+        except ProvisionError:
+            raise
+        except Exception as exc:
+            raise ProvisionError("cannot determine staged job timeout state") from exc

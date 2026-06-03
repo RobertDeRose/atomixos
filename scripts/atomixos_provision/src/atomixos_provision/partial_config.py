@@ -10,6 +10,7 @@ from typing import Any
 from atomixos_provision.config import provision_error, validate_name, validate_username
 
 __all__ = [
+    "apply_operation",
     "delete_resource",
     "delete_user",
     "export_config_bytes",
@@ -42,8 +43,9 @@ def export_config_bytes(config_root: Path) -> bytes:
 def put_user(config: dict[str, Any], name: str, payload: dict[str, Any]) -> dict[str, Any]:
     validate_username(name)
     user = _require_payload(payload, {"isAdmin", "ssh_key", "shell"})
-    if "isAdmin" not in user:
-        raise provision_error("user payload missing required key: isAdmin")
+    for key in ("isAdmin", "ssh_key"):
+        if key not in user:
+            raise provision_error(f"user payload missing required key: {key}")
     updated = deepcopy(config)
     users = updated.setdefault("users", {})
     users[name] = user
@@ -112,6 +114,26 @@ def delete_resource(config: dict[str, Any], table: str, name: str) -> dict[str, 
     return updated
 
 
+def apply_operation(config: dict[str, Any], operation: dict[str, Any]) -> dict[str, Any]:
+    op = _operation_type(operation)
+    if op == "put_user":
+        return put_user(config, _operation_name(operation), _operation_payload(operation))
+    if op == "delete_user":
+        return delete_user(config, _operation_name(operation))
+    if op == "patch_network":
+        return patch_network(config, _operation_payload(operation))
+    if op == "put_resource":
+        return put_resource(
+            config,
+            _operation_table(operation),
+            _operation_name(operation),
+            _operation_payload(operation),
+        )
+    if op == "delete_resource":
+        return delete_resource(config, _operation_table(operation), _operation_name(operation))
+    raise provision_error(f"unsupported partial operation: {op!r}")
+
+
 def canonical_config_bytes(config: dict[str, Any]) -> bytes:
     return (_dumps_toml(config).strip() + "\n").encode()
 
@@ -126,6 +148,45 @@ def _require_payload(
         if extra:
             raise provision_error("unsupported partial request keys: " + ", ".join(sorted(extra)))
     return payload
+
+
+def _operation_type(operation: dict[str, Any]) -> str:
+    _require_payload(operation, None)
+    op = operation.get("op")
+    if not isinstance(op, str):
+        raise provision_error("partial operation missing string op")
+    allowed = {"op"}
+    if op in {"put_user", "put_resource", "patch_network"}:
+        allowed.add("payload")
+    if op in {"put_user", "delete_user", "put_resource", "delete_resource"}:
+        allowed.add("name")
+    if op in {"put_resource", "delete_resource"}:
+        allowed.add("table")
+    extra = set(operation) - allowed
+    if extra:
+        raise provision_error("unsupported partial operation keys: " + ", ".join(sorted(extra)))
+    return op
+
+
+def _operation_name(operation: dict[str, Any]) -> str:
+    name = operation.get("name")
+    if not isinstance(name, str):
+        raise provision_error("partial operation missing string name")
+    return name
+
+
+def _operation_payload(operation: dict[str, Any]) -> dict[str, Any]:
+    payload = operation.get("payload")
+    if not isinstance(payload, dict):
+        raise provision_error("partial operation missing object payload")
+    return payload
+
+
+def _operation_table(operation: dict[str, Any]) -> str:
+    table = operation.get("table")
+    if table not in {"container", "network", "volume"}:
+        raise provision_error(f"unsupported partial resource table: {table!r}")
+    return str(table)
 
 
 def _deep_merge(target: dict[str, Any], patch: dict[str, Any]) -> None:

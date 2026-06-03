@@ -26,6 +26,7 @@ MANAGED_STATE = Path(os.environ.get("ATOMIXOS_MANAGED_STATE", "/data/config/mana
 SSH_KEYS_DIR = Path(os.environ.get("ATOMIXOS_SSH_KEYS_DIR", "/data/config/ssh-authorized-keys"))
 ADMIN_SHELL = os.environ["ATOMIXOS_ADMIN_SHELL"]
 SYSTEM_SHELL = os.environ["ATOMIXOS_SYSTEM_SHELL"]
+WORKER_ACTIVE = "ATOMIXOS_PROVISION_WORKER_ACTIVE"
 SHELLS = {
     "bash": "/run/current-system/sw/bin/bash",
     "sh": "/run/current-system/sw/bin/sh",
@@ -180,7 +181,17 @@ def save_managed_state(names: set[str]) -> None:
         raise
 
 
+def require_worker_for_data_config_mutation() -> None:
+    data_config = Path("/data/config")
+    paths = [MANAGED_STATE.resolve(strict=False), SSH_KEYS_DIR.resolve(strict=False)]
+    touches_data_config = any(path == data_config or data_config in path.parents for path in paths)
+    if touches_data_config and not os.environ.get(WORKER_ACTIVE):
+        log("refusing to update /data/config outside worker context")
+        raise SystemExit(1)
+
+
 def main() -> None:
+    require_worker_for_data_config_mutation()
     if not USERS_JSON.exists():
         log(f"no users state at {USERS_JSON}; skipping")
         return

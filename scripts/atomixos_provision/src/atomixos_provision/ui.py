@@ -8,7 +8,10 @@ is provisioned (admin signers exist), all UI routes return 404.
 
 import asyncio
 import html
+import json
+import os
 import secrets
+import stat
 import threading
 from pathlib import Path
 from typing import Any
@@ -40,12 +43,33 @@ WantedBy = ["default.target"]
 
 _BOOT_UI_JOB_IDS = "boot_ui_job_ids"
 _BOOT_UI_JOB_LOCK = "boot_ui_job_lock"
+_BOOT_UI_JOBS_DIR = "boot-ui-jobs"
 
 
 def render_bootstrap_page(
     config_text: str = "", message_html: str = "", bootstrap_token: str = ""
 ) -> str:
     message_block = f'<section id="job-status" class="message">{message_html}</section>' if message_html else '<section id="job-status"></section>'
+    config_text_json = json.dumps(config_text).replace("</", "<\\/")
+    applied_config_block = (
+        "<section class=\"panel\">"
+        "<h2>Applied Configuration</h2>"
+        "<button type=\"button\" onclick=\"downloadAppliedConfig()\">Download applied config.toml</button>"
+        f"<textarea class=\"medium\" readonly>{html.escape(config_text)}</textarea>"
+        "<script>"
+        "function downloadAppliedConfig() {"
+        f"const blob = new Blob([{config_text_json}], {{type: 'text/plain'}});"
+        "const link = document.createElement('a');"
+        "link.href = URL.createObjectURL(blob);"
+        "link.download = 'config.toml';"
+        "link.click();"
+        "URL.revokeObjectURL(link.href);"
+        "}"
+        "</script>"
+        "</section>"
+        if config_text
+        else ""
+    )
     return f"""<!doctype html>
 <html>
   <head>
@@ -202,6 +226,7 @@ def render_bootstrap_page(
         </form>
       </section>
       {message_block}
+      {applied_config_block}
     </main>
   </body>
 </html>"""
@@ -222,16 +247,32 @@ def _html_page_fragment(content: str, status_class: str = "") -> str:
 def render_job_fragment(job: Job) -> str:
     snapshot = job.snapshot()
     state = str(snapshot["state"])
-    stage = html.escape(str(snapshot["stage"]))
+
+    if state in {"submitted", "running"}:
+        fragment = _html_page_fragment(_render_job_message_html(snapshot))
+        return fragment + f'<script>startJobStream("{html.escape(job.id)}");</script>'
+
+    if state == "succeeded":
+        return _html_page_fragment(
+            _render_job_message_html(snapshot), "status-succeeded"
+        ) + "<script>completeApplyButton();</script>"
+
+    return _html_page_fragment(
+        _render_job_message_html(snapshot), "status-failed"
+    ) + "<script>resetApplyButton();</script>"
+
+
+def _render_job_message_html(snapshot: dict[str, Any]) -> str:
+    state = str(snapshot["state"])
     event_html = _render_job_events(snapshot["events"])
 
     if state in {"submitted", "running"}:
-        fragment = _html_page_fragment(
-            f"<p><strong>Applying configuration...</strong></p>"
+        stage = html.escape(str(snapshot["stage"]))
+        return (
+            "<p><strong>Applying configuration...</strong></p>"
             f"<p>Current stage: <code>{stage}</code></p>"
             f"{event_html}"
         )
-        return fragment + f'<script>startJobStream("{html.escape(job.id)}");</script>'
 
     if state == "succeeded":
         result = snapshot["result"]
@@ -243,24 +284,22 @@ def render_job_fragment(job: Job) -> str:
             if forwarding_url
             else ""
         )
-        return _html_page_fragment(
+        return (
             "<p><strong>Configuration applied.</strong></p>"
             f"{forwarding_html}"
             f"{event_html}"
-            f"{'<h2>Warnings</h2><ul>' + warning_html + '</ul>' if warnings else ''}",
-            "status-succeeded",
+            f"{'<h2>Warnings</h2><ul>' + warning_html + '</ul>' if warnings else ''}"
         )
 
     rollback = snapshot.get("rollback_status")
     rollback_html = (
         f"<p><strong>Rollback status:</strong> {html.escape(str(rollback))}</p>" if rollback else ""
     )
-    return _html_page_fragment(
+    return (
         f"<p><strong>Configuration failed.</strong></p>"
         f"<p>{html.escape(str(snapshot.get('error') or 'unknown error'))}</p>"
         f"{rollback_html}"
-        f"{event_html}",
-        "status-failed",
+        f"{event_html}"
     )
 
 
@@ -274,6 +313,10 @@ def _render_job_events(events: list[dict[str, Any]]) -> str:
         for event in recent_events
     )
     return f'<div class="event-log"><ol class="events">{event_items}</ol></div>' if event_items else ""
+
+
+def _is_htmx_request(request: Request) -> bool:
+    return request.headers.get("hx-request", "").lower() == "true"
 
 
 async def _require_unprovisioned(connection, _: Any) -> None:
@@ -291,6 +334,11 @@ async def _require_unprovisioned_or_boot_ui_terminal_job(connection, _: Any) -> 
     job_id = str(connection.path_params.get("job_id", ""))
     if not job_id:
         raise NotFoundException()
+
+    boot_ui_jobs, boot_ui_jobs_lock = _boot_ui_job_state(connection.app.state)
+    with boot_ui_jobs_lock:
+        if job_id not in boot_ui_jobs and not _has_boot_ui_job_marker(job_id):
+            raise NotFoundException()
 
     job_manager: JobManager = connection.app.state.job_manager
     if job_manager.get(job_id) is not None:
@@ -318,6 +366,50 @@ def _boot_ui_job_state(state: State) -> tuple[set[str], threading.Lock]:
     job_ids = state.setdefault(_BOOT_UI_JOB_IDS, set())
     lock = state.setdefault(_BOOT_UI_JOB_LOCK, threading.Lock())
     return job_ids, lock
+
+
+def _boot_ui_jobs_dir() -> Path:
+    from atomixos_provision.provision import _runtime_paths
+
+    return _runtime_paths().root / _BOOT_UI_JOBS_DIR
+
+
+def _boot_ui_marker_path(job_id: str) -> Path:
+    from atomixos_provision.staging import validate_job_id
+
+    return _boot_ui_jobs_dir() / validate_job_id(job_id)
+
+
+def _remember_boot_ui_job(job_id: str) -> None:
+    marker_dir = _boot_ui_jobs_dir()
+    try:
+        marker_dir.mkdir(parents=True, exist_ok=True)
+        marker_dir.chmod(0o700)
+        marker_path = _boot_ui_marker_path(job_id)
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_CLOEXEC", 0)
+        fd = os.open(marker_path, flags, 0o600)
+    except (FileExistsError, OSError):
+        return
+    try:
+        os.write(fd, b"pending\n")
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _has_boot_ui_job_marker(job_id: str) -> bool:
+    marker_path = _boot_ui_marker_path(job_id)
+    try:
+        marker_stat = marker_path.lstat()
+    except FileNotFoundError:
+        return False
+    if stat.S_ISLNK(marker_stat.st_mode) or not stat.S_ISREG(marker_stat.st_mode):
+        return False
+    return not marker_stat.st_mode & (stat.S_IWGRP | stat.S_IWOTH)
+
+
+def _forget_boot_ui_job(job_id: str) -> None:
+    _boot_ui_marker_path(job_id).unlink(missing_ok=True)
 
 
 @get("/", guards=[_require_unprovisioned], include_in_schema=False)
@@ -367,6 +459,7 @@ async def apply_form(request: Request, state: State) -> Response[str]:
     job_manager: JobManager = state.job_manager
     enforce_bootstrap_browser_origin(request)
     form = await request.form()
+    is_htmx_request = _is_htmx_request(request)
     bootstrap_token = str(form.get("bootstrap_token", ""))
     if not secrets.compare_digest(bootstrap_token, state.bootstrap_token):
         return Response(
@@ -392,13 +485,35 @@ async def apply_form(request: Request, state: State) -> Response[str]:
         filename = upload_filename or "config.toml"
         config_text = uploaded_config_text(payload, filename)
 
-    async def provision_work(job):
-        return await apply_config_bytes(payload, filename, config_root, job, allow_reapply=False)
+    is_staged_manager = hasattr(job_manager, "submit_staged")
+    if is_staged_manager:
+        from atomixos_provision.provision import stage_config_bytes
 
-    job = await job_manager.submit(provision_work)
+        async def stage_work(job):
+            return await asyncio.to_thread(
+                stage_config_bytes,
+                job.id,
+                payload,
+                filename,
+                config_root,
+                allow_reapply=False,
+                progress=job,
+            )
+
+        job = await job_manager.submit_staged(stage_work)
+    else:
+        async def provision_work(job):
+            return await apply_config_bytes(payload, filename, config_root, job, allow_reapply=False)
+
+        job = await job_manager.submit(provision_work)
     if job is None:
+        message = (
+            "The provision queue is full."
+            if is_staged_manager
+            else "A provision job is already running."
+        )
         return Response(
-            _html_page_fragment("<p>A provision job is already running.</p>", "status-failed"),
+            _html_page_fragment(f"<p>{message}</p>", "status-failed"),
             status_code=409,
             media_type="text/html",
         )
@@ -406,6 +521,31 @@ async def apply_form(request: Request, state: State) -> Response[str]:
     boot_ui_jobs, boot_ui_jobs_lock = _boot_ui_job_state(state)
     with boot_ui_jobs_lock:
         boot_ui_jobs.add(job.id)
+        _remember_boot_ui_job(job.id)
+
+    should_wait_for_terminal_page = (
+        hasattr(job_manager, "submit_staged")
+        or config_file is not None
+    )
+    if should_wait_for_terminal_page:
+        for _ in range(40):
+            if str(job.snapshot()["state"]) not in {"submitted", "running"}:
+                break
+            await asyncio.sleep(0.05)
+        final_state = str(job.snapshot()["state"])
+        if final_state not in {"submitted", "running"}:
+            if is_htmx_request:
+                return Response(render_job_fragment(job), status_code=200, media_type="text/html")
+            status_code = 400 if final_state == "failed" else 200 if final_state == "succeeded" else 202
+            return Response(
+                render_bootstrap_page(
+                    config_text=config_text if isinstance(config_text, str) else "",
+                    message_html=_render_job_message_html(job.snapshot()),
+                    bootstrap_token=state.bootstrap_token,
+                ),
+                status_code=status_code,
+                media_type="text/html",
+            )
 
     return Response(render_job_fragment(job), status_code=202, media_type="text/html")
 
@@ -417,9 +557,13 @@ async def apply_form(request: Request, state: State) -> Response[str]:
 )
 async def job_fragment(job_id: str, job_manager: JobManager, state: State) -> Response[str]:
     """GET /ui/jobs/{id} — render first-boot HTML job status."""
+    boot_ui_jobs, boot_ui_jobs_lock = _boot_ui_job_state(state)
     job = job_manager.get(job_id)
     if job is None:
         if (state.config_root / "config.toml").exists():
+            with boot_ui_jobs_lock:
+                boot_ui_jobs.discard(job_id)
+                _forget_boot_ui_job(job_id)
             return Response(_render_recovered_success_fragment(), media_type="text/html")
         return Response(
             _html_page_fragment("<p>Provisioning job not found.</p>", "status-failed"),
@@ -428,7 +572,6 @@ async def job_fragment(job_id: str, job_manager: JobManager, state: State) -> Re
         )
     body = render_job_fragment(job)
     if str(job.snapshot()["state"]) in {"succeeded", "failed"}:
-        boot_ui_jobs, boot_ui_jobs_lock = _boot_ui_job_state(state)
         with boot_ui_jobs_lock:
             if (state.config_root / "config.toml").exists() or (
                 state.config_root / "admin-signers"
@@ -436,6 +579,7 @@ async def job_fragment(job_id: str, job_manager: JobManager, state: State) -> Re
                 if job_id not in boot_ui_jobs:
                     raise NotFoundException()
                 boot_ui_jobs.remove(job_id)
+                _forget_boot_ui_job(job_id)
     return Response(body, media_type="text/html")
 
 
@@ -446,12 +590,16 @@ async def job_fragment(job_id: str, job_manager: JobManager, state: State) -> Re
 )
 async def job_events(job_id: str, job_manager: JobManager, state: State) -> Response[str]:
     """GET /ui/jobs/{id}/events — stream first-boot HTML job status."""
+    boot_ui_jobs, boot_ui_jobs_lock = _boot_ui_job_state(state)
     job = job_manager.get(job_id)
     if job is None:
         if (state.config_root / "config.toml").exists():
             async def recovered_stream():
                 yield {"data": _render_recovered_success_fragment()}
                 yield {"event": "done", "data": ""}
+                with boot_ui_jobs_lock:
+                    boot_ui_jobs.discard(job_id)
+                    _forget_boot_ui_job(job_id)
 
             return ServerSentEvent(recovered_stream())
 
@@ -470,12 +618,12 @@ async def job_events(job_id: str, job_manager: JobManager, state: State) -> Resp
                 last_body = body
             if str(job.snapshot()["state"]) in {"succeeded", "failed"}:
                 yield {"event": "done", "data": ""}
-                boot_ui_jobs, boot_ui_jobs_lock = _boot_ui_job_state(state)
                 with boot_ui_jobs_lock:
                     if (state.config_root / "config.toml").exists() or (
                         state.config_root / "admin-signers"
                     ).exists():
                         boot_ui_jobs.discard(job_id)
+                        _forget_boot_ui_job(job_id)
                 break
             await asyncio.sleep(0.2)
 

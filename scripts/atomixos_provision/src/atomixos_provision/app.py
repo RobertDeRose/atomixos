@@ -32,7 +32,8 @@ from atomixos_provision.domain.config.controller import (
 )
 from atomixos_provision.domain.jobs.controller import get_job
 from atomixos_provision.domain.system.controller import health
-from atomixos_provision.jobs import JobManager
+from atomixos_provision.jobs import JobManager, StagedJobManager
+from atomixos_provision.provision import staging_enabled
 from atomixos_provision.settings import AppSettings
 from atomixos_provision.ui import ui_routes
 
@@ -61,7 +62,11 @@ def create_app(
     if nonce_store is None:
         nonce_store = NonceStore()
     if job_manager is None:
-        job_manager = JobManager()
+        job_manager = (
+            StagedJobManager()
+            if staging_enabled() and config_root.resolve(strict=False) == DEFAULT_CONFIG_ROOT
+            else JobManager()
+        )
     signer_state = SignerState((config_root / "admin-signers").exists())
 
     app = Litestar(
