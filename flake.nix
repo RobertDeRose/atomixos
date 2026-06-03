@@ -129,6 +129,50 @@
       # NixOS + Podman + systemd baseline is ~450-500 MB compressed.
       # 1 GB provides headroom for future additions.
       maxSquashfsSize = 1024 * 1024 * 1024;
+
+      bundleTestVmModule =
+        { lib, pkgs, ... }:
+        let
+          bundleTestSerialGetty = pkgs.writeShellScript "bundle-test-serial-getty" ''
+            set -eu
+            tty="$1"
+            term="''${2:-vt220}"
+            autologin_user=admin
+            if grep -qw 'atomixos.bundle-test.root-debug=1' /proc/cmdline; then
+              autologin_user=root
+            fi
+            exec ${lib.getExe' pkgs.util-linux "agetty"} \
+              --login-program ${pkgs.shadow}/bin/login \
+              --issue-file /etc/issue:/etc/issue.d:/run/issue:/run/issue.d \
+              --autologin "$autologin_user" \
+              "$tty" --keep-baud "$term"
+          '';
+        in
+        {
+          virtualisation = {
+            memorySize = 4096;
+            diskSize = 8192;
+            writableStore = true;
+            qemu.options = [
+              "-smp 4"
+              "-nographic"
+              "-netdev user,id=lan.0,net=172.20.30.0/24,dhcpstart=172.20.30.10,hostfwd=tcp:127.0.0.1:8080-172.20.30.1:8080"
+              "-device virtio-net-pci,netdev=lan.0,mac=52:54:00:12:30:01"
+            ];
+          };
+
+          networking.hostName = lib.mkForce "gateway";
+          services.getty.autologinUser = lib.mkForce "admin";
+          systemd.services."serial-getty@".serviceConfig.ExecStart = lib.mkForce [
+            ""
+            "${bundleTestSerialGetty} %I $TERM"
+          ];
+          atonic.firewall.extraInputRules = ''
+            tcp dport { 22, 80, 443 } accept comment "bundle-test forwarded WAN services"
+          '';
+
+          environment.systemPackages = [ pkgs.curl ];
+        };
     in
     {
       # ── NixOS system configurations ────────────────────────────────────────
@@ -164,30 +208,7 @@
           overlayModule
           ./modules/base.nix
           ./modules/hardware-qemu.nix
-          (
-            { lib, pkgs, ... }:
-            {
-              virtualisation = {
-                memorySize = 4096;
-                diskSize = 8192;
-                writableStore = true;
-                qemu.options = [
-                  "-smp 4"
-                  "-nographic"
-                  "-netdev user,id=lan.0,net=172.20.30.0/24,dhcpstart=172.20.30.10,hostfwd=tcp:127.0.0.1:8080-172.20.30.1:8080"
-                  "-device virtio-net-pci,netdev=lan.0,mac=52:54:00:12:30:01"
-                ];
-              };
-
-              networking.hostName = lib.mkForce "gateway";
-              services.getty.autologinUser = lib.mkForce "admin";
-              atonic.firewall.extraInputRules = ''
-                tcp dport { 22, 80, 443 } accept comment "bundle-test forwarded WAN services"
-              '';
-
-              environment.systemPackages = [ pkgs.curl ];
-            }
-          )
+          bundleTestVmModule
         ];
         specialArgs = {
           inherit self developmentMode nixstasis;
