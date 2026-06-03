@@ -1084,6 +1084,17 @@ async def test_boot_ui_rejects_unknown_terminal_job_after_provisioning(tmp_path)
     assert stream.status_code == 404
 
 
+async def test_boot_ui_rejects_malformed_terminal_job_after_provisioning(tmp_path):
+    (tmp_path / "config.toml").write_text("version = 1\n")
+
+    async with AsyncTestClient(app=create_app(config_root=tmp_path)) as client:
+        fragment = await client.get("/ui/jobs/../bad")
+        stream = await client.get("/ui/jobs/../bad/events")
+
+    assert fragment.status_code == 404
+    assert stream.status_code == 404
+
+
 async def test_openapi_documents_public_api_contract(tmp_path):
     async with AsyncTestClient(app=create_app(config_root=tmp_path)) as client:
         response = await client.get("/schema/openapi.json")

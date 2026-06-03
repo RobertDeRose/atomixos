@@ -22,6 +22,7 @@ from litestar.exceptions import NotFoundException
 from litestar.response import Response, ServerSentEvent
 
 from atomixos_provision.bootstrap_security import enforce_bootstrap_browser_origin
+from atomixos_provision.config import ProvisionError
 from atomixos_provision.jobs import Job, JobManager
 
 __all__ = ["ui_routes"]
@@ -398,10 +399,10 @@ def _remember_boot_ui_job(job_id: str) -> None:
 
 
 def _has_boot_ui_job_marker(job_id: str) -> bool:
-    marker_path = _boot_ui_marker_path(job_id)
     try:
+        marker_path = _boot_ui_marker_path(job_id)
         marker_stat = marker_path.lstat()
-    except FileNotFoundError:
+    except (FileNotFoundError, ProvisionError):
         return False
     if stat.S_ISLNK(marker_stat.st_mode) or not stat.S_ISREG(marker_stat.st_mode):
         return False
