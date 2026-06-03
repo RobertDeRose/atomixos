@@ -105,6 +105,7 @@ fi
 description = "Run a QEMU VM for testing config.toml bundles"
 usage = """
 flag "--build-only" help="Only build the VM runner"
+flag "--root-debug" help="Boot a debug VM with root autologin on the serial console"
 """
 run = """
 #!/usr/bin/env bash
@@ -138,7 +139,20 @@ if [ "$(uname -s)" = "Darwin" ]; then
   perl -0pi -e 's{accel=kvm:tcg}{accel=hvf:tcg}g' "$host_runner"
 fi
 
-cat <<'EOF'
+if [ "${usage_root_debug:-false}" = "true" ]; then
+  export QEMU_KERNEL_PARAMS="${QEMU_KERNEL_PARAMS:-} atomixos.bundle-test.root-debug=1"
+  cat <<'EOF'
+Bundle test VM ports:
+  Bootstrap: http://127.0.0.1:8080
+  HTTP:      http://127.0.0.1:8081
+  HTTPS:     https://127.0.0.1:8443
+
+Root debug mode enabled:
+  Serial console autologins as root.
+  Normal appliance authentication assumptions do not apply.
+EOF
+else
+  cat <<'EOF'
 Bundle test VM ports:
   SSH:       ssh -p 10022 admin@127.0.0.1
   Bootstrap: http://127.0.0.1:8080
@@ -148,6 +162,7 @@ Bundle test VM ports:
 Apply an example bundle with:
   curl -F config_file=@config.tar.zst http://127.0.0.1:8080/apply
 EOF
+fi
 
 if [ "${usage_build_only:-false}" = "true" ]; then
   exit 0
