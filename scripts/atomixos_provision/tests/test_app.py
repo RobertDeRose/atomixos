@@ -7,7 +7,7 @@ from litestar.testing import AsyncTestClient
 
 from atomixos_provision.app import create_app
 from atomixos_provision.config import ProvisionError
-from atomixos_provision.jobs import JobManager, StagedJobManager
+from atomixos_provision.jobs import Job, JobManager, JobState, StagedJobManager
 from atomixos_provision.staging import reserve_staged_job_slot, runtime_paths
 
 VALID_ED25519_KEY = (
@@ -824,6 +824,31 @@ async def test_boot_ui_job_fragment_recovers_after_service_restart(tmp_path, mon
     assert response.status_code == 200
     assert "Configuration applied" in response.text
     assert "reconnected after provisioning completed" in response.text
+    assert second.status_code == 404
+
+
+async def test_boot_ui_terminal_fragment_accepts_persisted_marker_after_restart(
+    tmp_path, monkeypatch
+):
+    from atomixos_provision.ui import _remember_boot_ui_job
+
+    runtime_root = tmp_path / "run"
+    monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(runtime_root))
+    (tmp_path / "config.toml").write_text("version = 1\n")
+    _remember_boot_ui_job("terminal-job")
+    app = create_app(config_root=tmp_path)
+    app.state.job_manager._jobs["terminal-job"] = Job(
+        id="terminal-job",
+        state=JobState.SUCCEEDED,
+        result={"forwarding_url": "http://172.20.30.1:8080"},
+    )
+
+    async with AsyncTestClient(app=app) as client:
+        response = await client.get("/ui/jobs/terminal-job")
+        second = await client.get("/ui/jobs/terminal-job")
+
+    assert response.status_code == 200
+    assert "Configuration applied" in response.text
     assert second.status_code == 404
 
 

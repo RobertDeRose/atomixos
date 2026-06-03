@@ -577,9 +577,9 @@ async def job_fragment(job_id: str, job_manager: JobManager, state: State) -> Re
             if (state.config_root / "config.toml").exists() or (
                 state.config_root / "admin-signers"
             ).exists():
-                if job_id not in boot_ui_jobs:
+                if job_id not in boot_ui_jobs and not _has_boot_ui_job_marker(job_id):
                     raise NotFoundException()
-                boot_ui_jobs.remove(job_id)
+                boot_ui_jobs.discard(job_id)
                 _forget_boot_ui_job(job_id)
     return Response(body, media_type="text/html")
 
