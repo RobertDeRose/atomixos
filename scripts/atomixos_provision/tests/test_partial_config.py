@@ -6,6 +6,7 @@ import pytest
 
 from atomixos_provision.config import ProvisionError
 from atomixos_provision.partial_config import (
+    apply_operation,
     canonical_config_bytes,
     delete_resource,
     delete_user,
@@ -93,6 +94,14 @@ def test_put_user_rejects_extra_keys():
         put_user(BASE_CONFIG, "alice", {"isAdmin": False, "ssh_key": "k", "groups": ["wheel"]})
 
 
+def test_put_user_requires_schema_required_keys():
+    with pytest.raises(ProvisionError, match="missing required key: isAdmin"):
+        put_user(BASE_CONFIG, "alice", {"ssh_key": "k"})
+
+    with pytest.raises(ProvisionError, match="missing required key: ssh_key"):
+        put_user(BASE_CONFIG, "alice", {"isAdmin": False})
+
+
 def test_delete_user_is_idempotent():
     updated = delete_user(BASE_CONFIG, "missing")
 
@@ -136,3 +145,25 @@ def test_put_resource_rejects_wrong_resource_shape():
 
     with pytest.raises(ProvisionError, match="container payload missing required key: privileged"):
         put_resource(BASE_CONFIG, "container", "sidecar", {"Container": {"Image": "alpine"}})
+
+
+def test_apply_operation_dispatches_serialized_partial_request():
+    updated = apply_operation(
+        BASE_CONFIG,
+        {
+            "op": "put_resource",
+            "table": "volume",
+            "name": "cache",
+            "payload": {"Volume": {"Label": "cache"}},
+        },
+    )
+
+    assert updated["containers"]["volume"]["cache"] == {"Volume": {"Label": "cache"}}
+
+
+def test_apply_operation_rejects_extra_operation_keys():
+    with pytest.raises(ProvisionError, match="unsupported partial operation keys: extra"):
+        apply_operation(
+            BASE_CONFIG,
+            {"op": "delete_user", "name": "admin", "extra": "ignored"},
+        )

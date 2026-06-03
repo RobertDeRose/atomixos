@@ -113,7 +113,7 @@ nixos-lib.runTest {
         gateway.succeed("cat > /tmp/sign-reapply <<'PY'\n#!/usr/bin/env python3\nimport base64\nimport hashlib\nimport subprocess\nimport sys\nfrom pathlib import Path\nnonce_path, path, payload_path, key_path, sig_b64_path = sys.argv[1:]\nnonce = Path(nonce_path).read_text().strip()\npayload = Path(payload_path).read_bytes()\nmessage = f'atomixos-reapply-v1\\nnonce:{nonce}\\npath:{path}\\nsha256:{hashlib.sha256(payload).hexdigest()}\\n'.encode()\nproc = subprocess.run(['ssh-keygen', '-Y', 'sign', '-f', key_path, '-n', 'atomixos-reapply'], input=message, stdout=subprocess.PIPE, check=True)\nPath(sig_b64_path).write_text(base64.b64encode(proc.stdout).decode())\nPY\nchmod +x /tmp/sign-reapply")
         gateway.succeed("first-boot-provision validate /tmp/config.toml")
         gateway.fail("first-boot-provision validate /tmp/invalid-ntp-config.toml")
-        gateway.succeed("first-boot-provision import /tmp/config.toml /data/config")
+        gateway.succeed("ATOMIXOS_PROVISION_WORKER_ACTIVE=1 first-boot-provision import /tmp/config.toml /data/config")
         gateway.succeed("cp /tmp/local.env /data/config/local.env")
         gateway.succeed("mkdir -p /var/lib/appsvc/.config/containers/systemd")
         gateway.succeed("first-boot-provision sync-quadlet /data/config /etc/containers/systemd /var/lib/appsvc/.config/containers/systemd")
@@ -162,7 +162,7 @@ nixos-lib.runTest {
         gateway.succeed("rm -rf /tmp/operator-admin-root && mkdir -p /tmp/operator-admin-root")
         gateway.succeed("first-boot-provision import /tmp/config.toml /tmp/operator-admin-root")
         gateway.succeed("test -f /tmp/operator-admin-root/ssh-authorized-keys/admin")
-        gateway.succeed("rm /tmp/operator-admin-root/config.toml")
+        gateway.succeed("rm /tmp/operator-admin-root/config.toml /tmp/operator-admin-root/.first-config")
         gateway.succeed("first-boot-provision import /tmp/operator-admin-config.toml /tmp/operator-admin-root")
         gateway.fail("test -f /tmp/operator-admin-root/ssh-authorized-keys/admin")
         gateway.succeed("grep 'AAAAC3NzaC1lZDI1NTE5AAAAIFGTDzwiQNe3nwhmg/G81QDhQBbpgOyvrKXeYnQHYOUd' /tmp/operator-admin-root/admin-signers")
@@ -289,26 +289,35 @@ nixos-lib.runTest {
 
         # ── apply-users: lock removed users ──
         gateway.succeed("cat > /tmp/apply-users-test/users.json <<'EOF'\n{\"admin\": {\"isAdmin\": true, \"ssh_key\": \"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAle55IgGqvF1AHaqsn09rJ013fHiGrgjLOX/B40qPsp admin@test\"}, \"viewer\": {\"isAdmin\": false, \"ssh_key\": \"\"}}\nEOF")
-        gateway.succeed("ATOMIXOS_ADMIN_SHELL=/run/current-system/sw/bin/zsh ATOMIXOS_SYSTEM_SHELL=/run/current-system/sw/bin/bash ATOMIXOS_USERS_JSON=/tmp/apply-users-test/users.json ATOMIXOS_MANAGED_STATE=/tmp/apply-users-test/managed-users.json python3 ${../../scripts/apply-users.py}")
+        gateway.succeed("ATOMIXOS_ADMIN_SHELL=/run/current-system/sw/bin/zsh ATOMIXOS_SYSTEM_SHELL=/run/current-system/sw/bin/bash ATOMIXOS_USERS_JSON=/tmp/apply-users-test/users.json ATOMIXOS_MANAGED_STATE=/tmp/apply-users-test/managed-users.json ATOMIXOS_SSH_KEYS_DIR=/tmp/apply-users-test/ssh-authorized-keys python3 ${../../scripts/apply-users.py}")
         gateway.succeed("getent shadow operator | grep -F '!'")
         gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nmanaged = json.loads(Path('/tmp/apply-users-test/managed-users.json').read_text())\nassert sorted(managed) == ['admin', 'viewer'], managed\nPY")
 
+        # ── apply-users: default /data/config mutation requires worker context ──
+        gateway.succeed("cp /data/config/users.json /data/config/users.json.apply-users-test && cp /data/config/managed-users.json /data/config/managed-users.json.apply-users-test 2>/dev/null || true")
+        gateway.succeed("cp /tmp/apply-users-test/users.json /data/config/users.json && cp /tmp/apply-users-test/managed-users.json /data/config/managed-users.json")
+        gateway.fail("ATOMIXOS_ADMIN_SHELL=/run/current-system/sw/bin/zsh ATOMIXOS_SYSTEM_SHELL=/run/current-system/sw/bin/bash python3 ${../../scripts/apply-users.py} >/tmp/apply-users-data.out 2>/tmp/apply-users-data.err")
+        gateway.succeed("grep 'refusing to update /data/config outside worker context' /tmp/apply-users-data.err")
+        gateway.succeed("ATOMIXOS_PROVISION_WORKER_ACTIVE=1 ATOMIXOS_ADMIN_SHELL=/run/current-system/sw/bin/zsh ATOMIXOS_SYSTEM_SHELL=/run/current-system/sw/bin/bash python3 ${../../scripts/apply-users.py}")
+        gateway.succeed("test -f /data/config/managed-users.json")
+        gateway.succeed("mv /data/config/users.json.apply-users-test /data/config/users.json && if [ -f /data/config/managed-users.json.apply-users-test ]; then mv /data/config/managed-users.json.apply-users-test /data/config/managed-users.json; else rm -f /data/config/managed-users.json; fi")
+
         # ── apply-users: idempotent re-run does not fail ──
-        gateway.succeed("ATOMIXOS_ADMIN_SHELL=/run/current-system/sw/bin/zsh ATOMIXOS_SYSTEM_SHELL=/run/current-system/sw/bin/bash ATOMIXOS_USERS_JSON=/tmp/apply-users-test/users.json ATOMIXOS_MANAGED_STATE=/tmp/apply-users-test/managed-users.json python3 ${../../scripts/apply-users.py}")
+        gateway.succeed("ATOMIXOS_ADMIN_SHELL=/run/current-system/sw/bin/zsh ATOMIXOS_SYSTEM_SHELL=/run/current-system/sw/bin/bash ATOMIXOS_USERS_JSON=/tmp/apply-users-test/users.json ATOMIXOS_MANAGED_STATE=/tmp/apply-users-test/managed-users.json ATOMIXOS_SSH_KEYS_DIR=/tmp/apply-users-test/ssh-authorized-keys python3 ${../../scripts/apply-users.py}")
         gateway.succeed("getent shadow admin | cut -d: -f2 | grep '^!$'")
 
         # ── apply-users: refuses to mutate unmanaged existing system users ──
         gateway.succeed("cat > /tmp/apply-users-test/users-collision.json <<'EOF'\n{\"nobody\": {\"isAdmin\": true, \"ssh_key\": \"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAle55IgGqvF1AHaqsn09rJ013fHiGrgjLOX/B40qPsp nobody@test\"}}\nEOF")
-        gateway.fail("ATOMIXOS_ADMIN_SHELL=/run/current-system/sw/bin/zsh ATOMIXOS_SYSTEM_SHELL=/run/current-system/sw/bin/bash ATOMIXOS_USERS_JSON=/tmp/apply-users-test/users-collision.json ATOMIXOS_MANAGED_STATE=/tmp/apply-users-test/managed-users-collision.json python3 ${../../scripts/apply-users.py} >/tmp/apply-users-collision.out 2>/tmp/apply-users-collision.err")
+        gateway.fail("ATOMIXOS_ADMIN_SHELL=/run/current-system/sw/bin/zsh ATOMIXOS_SYSTEM_SHELL=/run/current-system/sw/bin/bash ATOMIXOS_USERS_JSON=/tmp/apply-users-test/users-collision.json ATOMIXOS_MANAGED_STATE=/tmp/apply-users-test/managed-users-collision.json ATOMIXOS_SSH_KEYS_DIR=/tmp/apply-users-test/ssh-authorized-keys python3 ${../../scripts/apply-users.py} >/tmp/apply-users-collision.out 2>/tmp/apply-users-collision.err")
         gateway.succeed("grep 'refusing to modify unmanaged existing user: nobody' /tmp/apply-users-collision.err")
 
         # ── apply-users: skips gracefully when no users.json ──
-        gateway.succeed("ATOMIXOS_ADMIN_SHELL=/run/current-system/sw/bin/zsh ATOMIXOS_SYSTEM_SHELL=/run/current-system/sw/bin/bash ATOMIXOS_USERS_JSON=/tmp/apply-users-test/nonexistent.json ATOMIXOS_MANAGED_STATE=/tmp/apply-users-test/managed-users.json python3 ${../../scripts/apply-users.py}")
+        gateway.succeed("ATOMIXOS_ADMIN_SHELL=/run/current-system/sw/bin/zsh ATOMIXOS_SYSTEM_SHELL=/run/current-system/sw/bin/bash ATOMIXOS_USERS_JSON=/tmp/apply-users-test/nonexistent.json ATOMIXOS_MANAGED_STATE=/tmp/apply-users-test/managed-users.json ATOMIXOS_SSH_KEYS_DIR=/tmp/apply-users-test/ssh-authorized-keys python3 ${../../scripts/apply-users.py}")
 
         # ── apply-users: refuses to touch protected users ──
         gateway.succeed("cat > /tmp/apply-users-test/users-root.json <<'EOF'\n{\"admin\": {\"isAdmin\": true, \"ssh_key\": \"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAle55IgGqvF1AHaqsn09rJ013fHiGrgjLOX/B40qPsp admin@test\"}, \"root\": {\"isAdmin\": true, \"ssh_key\": \"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAle55IgGqvF1AHaqsn09rJ013fHiGrgjLOX/B40qPsp root@test\"}}\nEOF")
         gateway.succeed("cp /tmp/apply-users-test/managed-users.json /tmp/apply-users-test/managed-users-root.json")
-        gateway.succeed("ATOMIXOS_ADMIN_SHELL=/run/current-system/sw/bin/zsh ATOMIXOS_SYSTEM_SHELL=/run/current-system/sw/bin/bash ATOMIXOS_USERS_JSON=/tmp/apply-users-test/users-root.json ATOMIXOS_MANAGED_STATE=/tmp/apply-users-test/managed-users-root.json python3 ${../../scripts/apply-users.py}")
+        gateway.succeed("ATOMIXOS_ADMIN_SHELL=/run/current-system/sw/bin/zsh ATOMIXOS_SYSTEM_SHELL=/run/current-system/sw/bin/bash ATOMIXOS_USERS_JSON=/tmp/apply-users-test/users-root.json ATOMIXOS_MANAGED_STATE=/tmp/apply-users-test/managed-users-root.json ATOMIXOS_SSH_KEYS_DIR=/tmp/apply-users-test/ssh-authorized-keys python3 ${../../scripts/apply-users.py}")
         gateway.fail("grep '^root:.*:/bin/sh$' /etc/passwd")
         gateway.succeed("rm -rf /tmp/bootstrap-root")
         gateway.succeed("mkdir -p /tmp/bootstrap-root")

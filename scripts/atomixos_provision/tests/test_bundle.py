@@ -89,6 +89,10 @@ class TestExtractBundleArchive:
         extract_bundle_archive(bundle, "test.tar.gz", tmp_path)
         assert (tmp_path / "config.toml").read_text() == "version = 1"
 
+    def test_malformed_tar_gz_reports_provision_error(self, tmp_path):
+        with pytest.raises(ProvisionError, match="failed to read bundle archive"):
+            extract_bundle_archive(gzip.compress(b"not a tar archive"), "test.tar.gz", tmp_path)
+
     def test_unsupported_format(self, tmp_path):
         with pytest.raises(ProvisionError, match="supported bundle formats"):
             extract_bundle_archive(b"plain text", "unknown.bin", tmp_path)
@@ -120,7 +124,7 @@ class TestCopyBundleFiles:
         )
         monkeypatch.setattr(
             "atomixos_provision.bundle.os.chown",
-            lambda path, uid, gid: chowns.append((str(path), uid, gid)),
+            lambda path, uid, gid, **_kwargs: chowns.append((str(path), uid, gid)),
         )
         return chowns
 
@@ -141,8 +145,41 @@ class TestCopyBundleFiles:
         assert (config_root / "files" / "subdir" / "key.pem").read_text() == "KEY"
         assert (config_root / "files" / "cert.pem").stat().st_mode & 0o777 == 0o600
         assert (config_root / "files" / "subdir" / "key.pem").stat().st_mode & 0o777 == 0o600
-        assert (str(config_root / "files" / "cert.pem"), 1000, 1000) in chowns
-        assert (str(config_root / "files" / "subdir" / "key.pem"), 1000, 1000) in chowns
+        assert any(
+            path.endswith("/files/cert.pem")
+            for path, uid, gid in chowns
+            if (uid, gid) == (1000, 1000)
+        )
+        assert any(
+            path.endswith("/files/subdir/key.pem")
+            for path, uid, gid in chowns
+            if (uid, gid) == (1000, 1000)
+        )
+
+    def test_rejects_symlink_source_entries(self, tmp_path, monkeypatch):
+        self._mock_appsvc(monkeypatch)
+        source = tmp_path / "source_files"
+        source.mkdir()
+        (tmp_path / "secret.txt").write_text("SECRET")
+        (source / "linked-secret.txt").symlink_to(tmp_path / "secret.txt")
+        config_root = tmp_path / "config"
+        config_root.mkdir()
+
+        with pytest.raises(ProvisionError, match="must not be a symlink"):
+            copy_bundle_files(source, config_root)
+
+    def test_rejects_symlink_source_directories(self, tmp_path, monkeypatch):
+        self._mock_appsvc(monkeypatch)
+        source = tmp_path / "source_files"
+        real_dir = tmp_path / "real-dir"
+        source.mkdir()
+        real_dir.mkdir()
+        (source / "linked-dir").symlink_to(real_dir, target_is_directory=True)
+        config_root = tmp_path / "config"
+        config_root.mkdir()
+
+        with pytest.raises(ProvisionError, match="must not be a symlink"):
+            copy_bundle_files(source, config_root)
 
     def test_creates_empty_files_dir(self, tmp_path, monkeypatch):
         self._mock_appsvc(monkeypatch)

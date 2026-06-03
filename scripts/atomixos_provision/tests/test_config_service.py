@@ -24,29 +24,18 @@ Image = "alpine"
     )
 
 
-async def test_put_user_applies_config_transform(tmp_path, monkeypatch):
+async def test_put_user_applies_config_operation(tmp_path, monkeypatch):
     _write_current_config(tmp_path)
     captured = {}
 
-    async def fake_apply_config_transform(transform, config_root, progress=None):
-        captured["updated"] = transform(
-            {
-                "version": 1,
-                "users": {"admin": {"isAdmin": True, "ssh_key": "ssh-ed25519 AAAA admin"}},
-                "activation": {"required": ["app"]},
-                "containers": {
-                    "container": {
-                        "app": {"privileged": False, "Container": {"Image": "alpine"}}
-                    }
-                },
-            }
-        )
+    async def fake_apply_config_operation(operation, config_root, progress=None):
+        captured["operation"] = operation
         captured["config_root"] = config_root
         return {"warnings": []}
 
     monkeypatch.setattr(
-        "atomixos_provision.provision.apply_config_transform",
-        fake_apply_config_transform,
+        "atomixos_provision.provision.apply_config_operation",
+        fake_apply_config_operation,
     )
 
     result = await ConfigService(tmp_path).put_user(
@@ -55,10 +44,10 @@ async def test_put_user_applies_config_transform(tmp_path, monkeypatch):
 
     assert result == {"warnings": []}
     assert captured["config_root"] == tmp_path
-    assert captured["updated"]["users"]["admin"]["isAdmin"] is True
-    assert captured["updated"]["users"]["alice"] == {
-        "isAdmin": False,
-        "ssh_key": "ssh-ed25519 AAAA alice",
+    assert captured["operation"] == {
+        "op": "put_user",
+        "name": "alice",
+        "payload": {"isAdmin": False, "ssh_key": "ssh-ed25519 AAAA alice"},
     }
 
 

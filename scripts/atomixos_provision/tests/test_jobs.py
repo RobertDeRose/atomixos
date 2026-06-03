@@ -5,7 +5,8 @@ from contextlib import suppress
 
 import pytest
 
-from atomixos_provision.jobs import Job, JobManager, JobState
+from atomixos_provision.jobs import Job, JobManager, JobState, StagedJobManager
+from atomixos_provision.staging import ensure_runtime_layout, runtime_paths
 
 
 class TestJobState:
@@ -142,3 +143,345 @@ class TestJobManager:
         finish.set()
         await mgr._task
         assert mgr.is_busy is False
+
+
+class TestStagedJobManager:
+    @pytest.mark.asyncio
+    async def test_staged_job_times_out_waiting_for_worker_result(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
+        mgr = StagedJobManager(result_timeout_seconds=0.01)
+        monkeypatch.setattr(mgr, "_refresh_from_result", lambda _job: False)
+        monkeypatch.setattr(mgr, "_handle_staged_timeout", lambda _job: "abandoned")
+
+        async def work(job):
+            return None
+
+        job = await mgr.submit_staged(work)
+        assert job is not None
+        await mgr._task
+
+        assert job.state == JobState.FAILED
+        assert "timed out waiting for privileged apply worker" in job.error
+        assert mgr.is_busy is False
+
+    @pytest.mark.asyncio
+    async def test_staged_job_keeps_slot_when_worker_has_claimed_job(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
+        mgr = StagedJobManager(result_timeout_seconds=0.01, max_pending=2)
+        monkeypatch.setattr(mgr, "_refresh_from_result", lambda _job: False)
+        monkeypatch.setattr(mgr, "_handle_staged_timeout", lambda _job: "active")
+
+        async def work(job):
+            return None
+
+        job = await mgr.submit_staged(work)
+        task = mgr._task
+        assert task is not None
+        assert job is not None
+        await asyncio.sleep(0.05)
+
+        assert job.state == JobState.RUNNING
+        queued = await mgr.submit_staged(work)
+        queued_task = mgr._task
+        assert queued is not None
+        assert queued.state == JobState.RUNNING
+        assert queued_task is not None
+
+        task.cancel()
+        queued_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+        with suppress(asyncio.CancelledError):
+            await queued_task
+
+        assert job.state == JobState.FAILED
+        assert job.completed_at is not None
+
+    @pytest.mark.asyncio
+    async def test_staged_timeout_state_errors_fail_job(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
+        mgr = StagedJobManager(result_timeout_seconds=0.01)
+        monkeypatch.setattr(mgr, "_refresh_from_result", lambda _job: False)
+
+        def timeout_state(_job):
+            raise RuntimeError("permission denied")
+
+        monkeypatch.setattr(mgr, "_handle_staged_timeout", timeout_state)
+
+        async def work(job):
+            return None
+
+        job = await mgr.submit_staged(work)
+        assert job is not None
+        await mgr._task
+
+        assert job.state == JobState.FAILED
+        assert "permission denied" in job.error
+        assert mgr.is_busy is False
+
+    @pytest.mark.asyncio
+    async def test_staged_runner_waits_for_work_before_cancelling_job(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
+        mgr = StagedJobManager(result_timeout_seconds=0.01)
+        finish = asyncio.Event()
+        monkeypatch.setattr(mgr, "_refresh_from_result", lambda _job: False)
+        monkeypatch.setattr(mgr, "_handle_staged_timeout", lambda _job: "missing")
+
+        async def work(job):
+            await finish.wait()
+
+        submit_task = asyncio.create_task(mgr.submit_staged(work))
+        await asyncio.sleep(0)
+
+        task = mgr._task
+        assert task is None
+        assert not submit_task.done()
+        submit_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await submit_task
+        assert mgr.is_busy is False
+
+    @pytest.mark.asyncio
+    async def test_staged_submit_returns_after_staging_before_result(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
+        mgr = StagedJobManager(result_timeout_seconds=0.01)
+        monkeypatch.setattr(mgr, "_refresh_from_result", lambda _job: False)
+        monkeypatch.setattr(mgr, "_handle_staged_timeout", lambda _job: "missing")
+
+        async def work(job):
+            return None
+
+        job = await mgr.submit_staged(work)
+        task = mgr._task
+        assert job is not None
+        assert task is not None
+        await asyncio.sleep(0)
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+
+        assert job.state == JobState.FAILED
+        assert job.completed_at is not None
+
+    @pytest.mark.asyncio
+    async def test_staged_submit_returns_failed_job_when_staging_fails(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
+        mgr = StagedJobManager(result_timeout_seconds=0.01)
+
+        async def work(job):
+            raise RuntimeError("bad bundle")
+
+        job = await mgr.submit_staged(work)
+
+        assert job is not None
+        assert job.state == JobState.FAILED
+        assert job.error == "bad bundle"
+        assert job.completed_at is not None
+
+    @pytest.mark.asyncio
+    async def test_staged_submit_returns_failed_job_when_reservation_fails(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
+        mgr = StagedJobManager(result_timeout_seconds=0.01)
+
+        def fail_reserve(*_args, **_kwargs):
+            raise PermissionError("permission denied")
+
+        monkeypatch.setattr("atomixos_provision.staging.reserve_staged_job_slot", fail_reserve)
+
+        async def work(job):
+            raise AssertionError("work should not run")
+
+        job = await mgr.submit_staged(work)
+
+        assert job is not None
+        assert job.state == JobState.FAILED
+        assert job.error == "permission denied"
+        assert job.completed_at is not None
+
+    @pytest.mark.asyncio
+    async def test_staged_submit_refreshes_reservation_around_staging(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
+        mgr = StagedJobManager(result_timeout_seconds=0.01)
+        refreshes = []
+
+        def refresh(job):
+            refreshes.append(job.id)
+
+        monkeypatch.setattr(mgr, "_refresh_reservation", refresh)
+        monkeypatch.setattr(mgr, "_refresh_from_result", lambda job: True)
+
+        async def work(job):
+            refreshes.append("work")
+
+        job = await mgr.submit_staged(work)
+
+        assert job is not None
+        assert refreshes == [job.id, "work", job.id]
+        assert mgr._task is not None
+        await mgr._task
+
+    @pytest.mark.asyncio
+    async def test_staged_get_recovers_queued_job_state(self, monkeypatch, tmp_path):
+        runtime_root = tmp_path / "run"
+        monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(runtime_root))
+        mgr = StagedJobManager(result_timeout_seconds=0.01)
+        monkeypatch.setattr(mgr, "_refresh_from_result", lambda _job: False)
+        monkeypatch.setattr(mgr, "_handle_staged_timeout", lambda _job: "missing")
+        paths = runtime_paths(runtime_root)
+        ensure_runtime_layout(paths)
+        (paths.queue / "job-1").mkdir()
+        (paths.queue / "job-1.ready").write_text(
+            '{"job_id":"job-1","sequence":1}\n', encoding="utf-8"
+        )
+
+        job = mgr.get("job-1")
+
+        assert job is not None
+        assert job.state == JobState.SUBMITTED
+        assert job.stage == "queued"
+        assert mgr._task is not None
+        await mgr._task
+        assert job.state == JobState.FAILED
+
+    @pytest.mark.asyncio
+    async def test_staged_jobs_monitor_results_independently(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
+        mgr = StagedJobManager(result_timeout_seconds=0.01)
+        order = []
+
+        def refresh(job):
+            job.state = JobState.SUCCEEDED
+            job.result = {"job": job.id}
+            return True
+
+        monkeypatch.setattr(mgr, "_refresh_from_result", refresh)
+
+        async def work(job):
+            order.append(job.id)
+
+        first = await mgr.submit_staged(work)
+        first_task = mgr._task
+        second = await mgr.submit_staged(work)
+        second_task = mgr._task
+        assert first is not None
+        assert second is not None
+        assert first_task is not None
+        assert second_task is not None
+        await asyncio.gather(first_task, second_task)
+
+        assert order == [first.id, second.id]
+        assert first.state == JobState.SUCCEEDED
+        assert second.state == JobState.SUCCEEDED
+        assert mgr.is_busy is False
+
+    @pytest.mark.asyncio
+    async def test_staged_submit_rejects_when_pending_queue_is_full(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
+        mgr = StagedJobManager(max_pending=2, result_timeout_seconds=0.01)
+        finish = asyncio.Event()
+
+        def refresh(job):
+            job.state = JobState.SUCCEEDED
+            return True
+
+        monkeypatch.setattr(mgr, "_refresh_from_result", refresh)
+
+        async def work(job):
+            await finish.wait()
+
+        first_submit = asyncio.create_task(mgr.submit_staged(work))
+        await asyncio.sleep(0)
+        second_submit = asyncio.create_task(mgr.submit_staged(work))
+        await asyncio.sleep(0)
+        third = await mgr.submit_staged(work)
+
+        assert not first_submit.done()
+        assert not second_submit.done()
+        finish.set()
+        first = await first_submit
+        first_task = mgr._task
+        second = await second_submit
+        second_task = mgr._task
+        assert first is not None
+        assert second is not None
+        assert third is None
+
+        await asyncio.sleep(0)
+        assert first_task is not None
+        assert second_task is not None
+        await asyncio.gather(first_task, second_task)
+
+    @pytest.mark.asyncio
+    async def test_staged_submit_starts_job_monitor(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
+        mgr = StagedJobManager(result_timeout_seconds=0.01)
+        ran = []
+
+        def refresh(job):
+            job.state = JobState.SUCCEEDED
+            return True
+
+        monkeypatch.setattr(mgr, "_refresh_from_result", refresh)
+
+        async def work(job):
+            ran.append(job.id)
+
+        job = await mgr.submit_staged(work)
+
+        assert job is not None
+        await mgr._task
+        assert ran == [job.id]
+        assert job.state == JobState.SUCCEEDED
+
+    @pytest.mark.asyncio
+    async def test_staged_job_fails_if_worker_removes_job_without_result(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
+        mgr = StagedJobManager(result_timeout_seconds=0.01)
+        monkeypatch.setattr(mgr, "_refresh_from_result", lambda _job: False)
+        monkeypatch.setattr(mgr, "_handle_staged_timeout", lambda _job: "missing")
+
+        async def work(job):
+            return None
+
+        job = await mgr.submit_staged(work)
+        assert job is not None
+        await mgr._task
+
+        assert job.state == JobState.FAILED
+        assert "did not publish a result" in job.error
+        assert mgr.is_busy is False
+
+    @pytest.mark.asyncio
+    async def test_staged_job_refreshes_result_before_timeout_failure(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
+        mgr = StagedJobManager(result_timeout_seconds=0.01)
+        refreshes = {"count": 0}
+
+        def refresh(job):
+            refreshes["count"] += 1
+            if refreshes["count"] < 2:
+                return False
+            job.state = JobState.SUCCEEDED
+            job.result = {"warnings": []}
+            return True
+
+        monkeypatch.setattr(mgr, "_refresh_from_result", refresh)
+        monkeypatch.setattr(mgr, "_handle_staged_timeout", lambda _job: "missing")
+
+        async def work(job):
+            return None
+
+        job = await mgr.submit_staged(work)
+        assert job is not None
+        await mgr._task
+
+        assert job.state == JobState.SUCCEEDED
+        assert job.result == {"warnings": []}
