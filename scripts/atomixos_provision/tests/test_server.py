@@ -29,3 +29,153 @@ def test_serve_reads_environment_when_command_runs(monkeypatch, tmp_path):
     assert captured["port"] == 18080
     assert captured["log_level"] == "info"
     assert captured["app"].state["config_root"] == tmp_path
+
+
+def test_apply_staged_command_returns_json(monkeypatch, tmp_path):
+    captured = {}
+
+    def fake_apply(config_root, runtime_root):
+        captured["config_root"] = config_root
+        captured["runtime_root"] = runtime_root
+        return {"warnings": [], "reapply": False}
+
+    monkeypatch.setattr("atomixos_provision.provision.apply_staged_job", fake_apply)
+
+    result = CliRunner().invoke(
+        server.cli,
+        [
+            "apply-staged",
+            str(tmp_path / "config"),
+            "--runtime-root",
+            str(tmp_path / "run"),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert '"ok": true' in result.output
+    assert captured == {
+        "config_root": tmp_path / "config",
+        "runtime_root": tmp_path / "run",
+    }
+
+
+def test_apply_staged_command_drains_queue(monkeypatch, tmp_path):
+    calls = []
+    results = [
+        {"warnings": ["first"], "reapply": False},
+        {"warnings": ["second"], "reapply": True},
+        None,
+    ]
+
+    def fake_apply(config_root, runtime_root):
+        calls.append((config_root, runtime_root))
+        return results.pop(0)
+
+    monkeypatch.setattr("atomixos_provision.provision.apply_staged_job", fake_apply)
+
+    result = CliRunner().invoke(
+        server.cli,
+        [
+            "apply-staged",
+            str(tmp_path / "config"),
+            "--runtime-root",
+            str(tmp_path / "run"),
+            "--drain",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert len(calls) == 3
+    assert '"warnings": ["first"]' in result.output
+    assert '"warnings": ["second"]' in result.output
+
+
+def test_apply_staged_command_drains_after_error(monkeypatch, tmp_path):
+    calls = []
+    outcomes = [RuntimeError("bad job"), {"warnings": ["second"]}, None]
+
+    def fake_apply(config_root, runtime_root):
+        calls.append((config_root, runtime_root))
+        outcome = outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    monkeypatch.setattr("atomixos_provision.provision.apply_staged_job", fake_apply)
+
+    result = CliRunner().invoke(
+        server.cli,
+        [
+            "apply-staged",
+            str(tmp_path / "config"),
+            "--runtime-root",
+            str(tmp_path / "run"),
+            "--drain",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert len(calls) == 3
+    assert "bad job" in result.output
+    assert '"warnings": ["second"]' in result.output
+
+
+def test_apply_staged_command_returns_json_error(monkeypatch, tmp_path):
+    def fake_apply(config_root, runtime_root):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr("atomixos_provision.provision.apply_staged_job", fake_apply)
+
+    result = CliRunner().invoke(
+        server.cli,
+        ["apply-staged", str(tmp_path / "config")],
+    )
+
+    assert result.exit_code == 1
+    assert '"ok": false' in result.output
+    assert "boom" in result.output
+
+
+def test_finalize_staged_command_returns_json(monkeypatch, tmp_path):
+    captured = {}
+
+    def fake_finalize(runtime_root, reason):
+        captured["runtime_root"] = runtime_root
+        captured["reason"] = reason
+        return 2
+
+    monkeypatch.setattr("atomixos_provision.provision.finalize_staged_jobs", fake_finalize)
+
+    result = CliRunner().invoke(
+        server.cli,
+        [
+            "finalize-staged",
+            "--runtime-root",
+            str(tmp_path / "run"),
+            "--reason",
+            "worker stopped",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert '"ok": true' in result.output
+    assert '"finalized": 2' in result.output
+    assert captured == {"runtime_root": tmp_path / "run", "reason": "worker stopped"}
+
+
+def test_recover_data_config_requires_worker_context(monkeypatch):
+    monkeypatch.delenv("ATOMIXOS_PROVISION_WORKER_ACTIVE", raising=False)
+
+    result = CliRunner().invoke(server.cli, ["recover", "/data/config"])
+
+    assert result.exit_code != 0
+    assert "requires privileged worker context" in str(result.exception)
+
+
+def test_complete_initial_data_config_requires_worker_context(monkeypatch):
+    monkeypatch.delenv("ATOMIXOS_PROVISION_WORKER_ACTIVE", raising=False)
+
+    result = CliRunner().invoke(server.cli, ["complete-initial", "/data/config"])
+
+    assert result.exit_code != 0
+    assert "requires privileged worker context" in str(result.exception)
