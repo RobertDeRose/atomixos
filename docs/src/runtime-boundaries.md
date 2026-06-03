@@ -20,13 +20,29 @@ rendered from image-time NixOS options and defaults to empty.
 Before initial provisioning, the bootstrap API is reachable on WAN and LAN and exposes `POST /api/config` for complete
 `config.toml` files or supported config bundles. First-boot Boot UI submissions use a CSRF bootstrap token, not operator
 authentication; first-boot programmatic `/api/config` submissions do not require that UI token. After provisioning, the
-bootstrap API narrows to the LAN gateway endpoint. It uses the same validation, candidate promotion, activation, and
-rollback path as the web console. Programmatic
-clients receive `202 Accepted` with `job_id`, initial `state`, `job_url`, and a `Location: /api/jobs/{job_id}` header, then
-poll the job resource for final success, failure, rollback status, and service deployment events.
+bootstrap API narrows to the LAN gateway endpoint. The network-facing API process runs as the dedicated
+`atomixos-provision` service user. It validates requests, authenticates re-apply operations, renders candidates in tmpfs,
+and reads approved provisioning state. Host mutation is delegated to root-owned systemd path and oneshot units watching
+`/run/atomixos-provision/queue/*.ready`. Production staged mutating submissions enter a bounded FIFO queue; each device
+applies one staged job at a time and returns `409 Conflict` only when that queue is full. Programmatic clients receive
+`202 Accepted` with `job_id`, initial `state`, `job_url`, and a `Location: /api/jobs/{job_id}` header, then poll the job
+resource for final success, failure, rollback status, and service deployment events.
+
+The staging boundary uses `/run/atomixos-provision`. The API writes a complete candidate tree, validated bundle files,
+and a manifest with relative paths, modes, sizes, and SHA-256 hashes, then publishes a ready marker. The root
+`atomixos-provision-apply.service` claims queued jobs, verifies manifest paths, owners, modes, symlinks, hashes, and
+expected entries, re-renders the verified staged `config.toml` into `/data/config-candidate`, and runs the existing
+promotion, activation, rollback, and recovery protocol. Root-written `/data/config` state is group-readable by
+`atomixos-provision` so the unprivileged API can export config and authenticate future requests; bundle `files/` payloads
+remain owned by the application runtime user and are preserved through a no-symlink snapshot path. Initial promotion also
+writes `/data/config/.first-config`; re-apply checks that root-written marker rather than trusting `config.toml` alone.
+
+Runtime result files under `/run/atomixos-provision/results` are root-writable and group-readable only. Claim and queued-job
+abandonment share `/run/atomixos-provision/queue.lock`, and the root worker finalizer records failed results for claimed
+jobs left behind by an interrupted worker.
 
 The first-boot Boot UI is a browser-only wrapper around that same boundary. It
-submits upload or pasted config sources through `/apply`, uses the bootstrap CSRF
+submits uploaded or dropped config sources through `/apply`, uses the bootstrap CSRF
 token plus browser origin checks, and renders first-boot-only HTML job fragments
 from the in-memory job state. It is not a post-provision management UI and does
 not add a durable polling token or unauthenticated mutation path after
@@ -34,11 +50,11 @@ provisioning. After successful initial provisioning, only a one-time terminal
 fragment for the submitted Boot UI job remains readable so the browser can show
 success, warnings, or failure state.
 
-Authenticated partial config endpoints are only another input to that same boundary. They load the
-current desired `config.toml`, produce a complete candidate config, preserve existing bundle
-`files/` payloads, and run the normal candidate promotion and activation path. They never edit
-derived `/data/config/*.json`, Quadlet units, systemd drop-ins, firewall state, or users directly.
-Successful partial updates rewrite `/data/config/config.toml` in generated canonical TOML form.
+Authenticated partial config endpoints are only another input to that same boundary. The unprivileged side loads the
+current desired `config.toml`, renders a complete candidate config, preserves existing bundle `files/` payloads, and queues
+the staged job for the same root worker only when the staged queue is otherwise empty. They never edit derived
+`/data/config/*.json`, Quadlet units, systemd drop-ins, firewall state, or users directly. Successful partial updates
+rewrite `/data/config/config.toml` in generated canonical TOML form.
 
 The API routes retain operation IDs and domain tags in code, and the production
 bootstrap service exposes live OpenAPI schema routes for online clients. Response

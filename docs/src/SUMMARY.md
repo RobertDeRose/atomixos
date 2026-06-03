@@ -55,6 +55,8 @@
     - [Tasks](./features/config-reapply-improvements/tasks.md)
   - [Provisioning API Service](./features/provisioning-api-service/design.md)
     - [Tasks](./features/provisioning-api-service/tasks.md)
+  - [Provisioning API Privilege Separation](./features/provisioning-api-privilege-separation/design.md)
+    - [Tasks](./features/provisioning-api-privilege-separation/tasks.md)
   - [Caddy AuthCrunch Cockpit Tutorial](./features/caddy-authcrunch-cockpit-tutorial/design.md)
     - [Tasks](./features/caddy-authcrunch-cockpit-tutorial/tasks.md)
   - [Nixstasis Client](./features/nixstasis-client/design.md)
