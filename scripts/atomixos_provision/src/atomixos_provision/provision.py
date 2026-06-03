@@ -1277,6 +1277,7 @@ def apply_staged_job(config_root: Path, runtime_root: Path | None = None) -> dic
             if isinstance(rollback_status, str):
                 payload["rollback_status"] = rollback_status
             write_result(paths, claimed.job_id, payload)
+            exc.staged_job_claimed = True  # type: ignore[attr-defined]
             raise
         finally:
             cleanup_claimed_job(claimed)
