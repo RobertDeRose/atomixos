@@ -64,7 +64,19 @@ let
   };
   configRecoveryScript = pkgs.writeShellScript "atomixos-config-recover" ''
     set -euo pipefail
+    export ATOMIXOS_PROVISION_WORKER_ACTIVE=1
     exec ${provisionCli}/bin/atomixos-provision recover /data/config
+  '';
+  provisionApplyScript = pkgs.writeShellScript "atomixos-provision-apply" ''
+    set -euo pipefail
+    export ATOMIXOS_BOOTSTRAP_ACTIVATION=${bootstrapActivationScript}
+    export ATOMIXOS_PROVISION_WORKER_ACTIVE=1
+    export ATOMIXOS_PROVISION_RESULT_TIMEOUT_SECONDS=1200
+    exec ${provisionCli}/bin/atomixos-provision apply-staged /data/config --runtime-root /run/atomixos-provision --drain
+  '';
+  provisionApplyFinalizeScript = pkgs.writeShellScript "atomixos-provision-apply-finalize" ''
+    set -euo pipefail
+    exec ${provisionCli}/bin/atomixos-provision finalize-staged --runtime-root /run/atomixos-provision
   '';
   ubootEnvTools = self.packages.${pkgs.stdenv.hostPlatform.system}.uboot-env-tools;
   firstBootEnv = {
@@ -73,6 +85,24 @@ let
   };
 in
 {
+  systemd.tmpfiles.rules = [
+    "d /run/atomixos-provision 0755 root root -"
+    "d /run/atomixos-provision/queue 2770 root atomixos-provision -"
+    "d /run/atomixos-provision/results 2750 root atomixos-provision -"
+    "d /run/atomixos-provision/boot-ui-jobs 0700 atomixos-provision atomixos-provision -"
+    "d /run/atomixos-provision/active 0700 root root -"
+    "f /run/atomixos-provision/config.lock 0660 root atomixos-provision -"
+    "f /run/atomixos-provision/queue.lock 0660 root atomixos-provision -"
+  ];
+
+  users.users.atomixos-provision = {
+    description = "AtomixOS provisioning API service user";
+    group = "atomixos-provision";
+    isSystemUser = true;
+  };
+
+  users.groups.atomixos-provision = { };
+
   systemd.services.atomixos-config-recover = {
     description = "Recover interrupted AtomixOS config promotion";
     after = [ "data.mount" ];
@@ -104,13 +134,62 @@ in
     };
   };
 
+  systemd.paths.atomixos-provision-apply = {
+    description = "Watch for staged AtomixOS provisioning jobs";
+    wantedBy = [ "multi-user.target" ];
+    pathConfig = {
+      PathExistsGlob = "/run/atomixos-provision/queue/*.ready";
+      Unit = "atomixos-provision-apply.service";
+    };
+  };
+
+  systemd.services.atomixos-provision-apply = {
+    description = "Apply staged AtomixOS provisioning job";
+    after = [
+      "atomixos-config-recover.service"
+      "data.mount"
+    ];
+    requires = [ "atomixos-config-recover.service" ];
+    wants = [ "data.mount" ];
+
+    unitConfig.RequiresMountsFor = [ "/data" ];
+
+    path = [
+      pkgs.coreutils
+      pkgs.gzip
+      pkgs.jq
+      pkgs.procps
+      pkgs.python3Minimal
+      pkgs.systemd
+      pkgs.util-linux
+      pkgs.zstd
+      provisionCli
+    ];
+
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = provisionApplyScript;
+      ExecStopPost = provisionApplyFinalizeScript;
+      TimeoutStartSec = 7500;
+      PrivateTmp = true;
+      ProtectSystem = "strict";
+      ProtectHome = true;
+      ReadWritePaths = [
+        "/data"
+        "/run/atomixos-provision"
+      ];
+    };
+  };
+
   systemd.services.quadlet-sync = {
     description = "Sync provisioned Quadlet units";
     after = [
+      "atomixos-config-recover.service"
       "data.mount"
       "network-online.target"
       "chronyd.service"
     ];
+    requires = [ "atomixos-config-recover.service" ];
     wants = [
       "data.mount"
       "network-online.target"
@@ -145,10 +224,14 @@ in
   systemd.services.first-boot = {
     description = "First-boot initialization (provision, confirm slot if enabled)";
     after = [
+      "atomixos-config-recover.service"
       "data.mount"
       "multi-user.target"
     ];
-    wants = [ "data.mount" ];
+    requires = [ "atomixos-config-recover.service" ];
+    wants = [
+      "data.mount"
+    ];
     wantedBy = [ "multi-user.target" ];
 
     # Only run if the sentinel does NOT exist (first boot only)
@@ -185,9 +268,11 @@ in
   systemd.services.atomixos-apply-users = {
     description = "Materialize managed users from provisioned config";
     after = [
+      "atomixos-config-recover.service"
       "data.mount"
       "nss-user-lookup.target"
     ];
+    requires = [ "atomixos-config-recover.service" ];
     wants = [
       "data.mount"
       "nss-user-lookup.target"
@@ -208,6 +293,7 @@ in
 
     serviceConfig = {
       Type = "oneshot";
+      Environment = "ATOMIXOS_PROVISION_WORKER_ACTIVE=1";
       ExecStart = applyUsersScript;
       RemainAfterExit = true;
     };
@@ -228,7 +314,8 @@ in
     unitConfig.RequiresMountsFor = [ "/data" ];
 
     socketConfig = {
-      ListenStream = "0.0.0.0:8080";
+      ListenStream = "172.20.30.1:8080";
+      FreeBind = true;
       Accept = false;
     };
   };
@@ -236,14 +323,15 @@ in
   systemd.services.atomixos-bootstrap = {
     description = "AtomixOS bootstrap web console";
     after = [
+      "atomixos-config-recover.service"
       "data.mount"
       "network-online.target"
     ];
+    requires = [ "atomixos-config-recover.service" ];
     wants = [
       "data.mount"
       "network-online.target"
     ];
-
     unitConfig.RequiresMountsFor = [ "/data" ];
 
     path = [
@@ -263,9 +351,21 @@ in
       Restart = "always";
       RestartSec = 2;
       Environment = [
-        "ATOMIXOS_BOOTSTRAP_ACTIVATION=${bootstrapActivationScript}"
+        "ATOMIXOS_PROVISION_RESULT_TIMEOUT_SECONDS=1200"
       ];
       ExecStart = "${provisionCli}/bin/atomixos-provision serve /data/config --host 172.20.30.1 --port 8080";
+      User = "atomixos-provision";
+      Group = "atomixos-provision";
+      NoNewPrivileges = true;
+      PrivateTmp = true;
+      ProtectHome = true;
+      ProtectSystem = "strict";
+      ReadOnlyPaths = [
+        "/data/config"
+      ];
+      ReadWritePaths = [
+        "/run/atomixos-provision"
+      ];
     };
   };
 }

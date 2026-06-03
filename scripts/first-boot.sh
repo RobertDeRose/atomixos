@@ -173,7 +173,8 @@ apply_managed_users() {
 	fi
 
 	log "WARNING: systemctl unavailable; applying managed users directly"
-	ATOMIXOS_USERS_JSON="$CONFIG_ROOT/users.json" \
+	ATOMIXOS_PROVISION_WORKER_ACTIVE=1 \
+		ATOMIXOS_USERS_JSON="$CONFIG_ROOT/users.json" \
 		ATOMIXOS_MANAGED_STATE="$CONFIG_ROOT/managed-users.json" \
 		ATOMIXOS_SSH_KEYS_DIR="$CONFIG_ROOT/ssh-authorized-keys" \
 		"$APPLY_USERS_SCRIPT"
@@ -183,7 +184,7 @@ import_seed_config() {
 	local source_path="$1"
 	local status=0
 	log "Importing provisioning config from $source_path"
-	if ATOMIXOS_KEEP_INITIAL_PROMOTION_PENDING=1 first-boot-provision import "$source_path" "$CONFIG_ROOT"; then
+	if ATOMIXOS_PROVISION_WORKER_ACTIVE=1 ATOMIXOS_KEEP_INITIAL_PROMOTION_PENDING=1 first-boot-provision import "$source_path" "$CONFIG_ROOT"; then
 		status=0
 	else
 		status=$?
@@ -195,7 +196,7 @@ import_seed_config() {
 	apply_managed_users
 	sync_quadlet_units
 	check_required_health
-	first-boot-provision complete-initial "$CONFIG_ROOT"
+	ATOMIXOS_PROVISION_WORKER_ACTIVE=1 first-boot-provision complete-initial "$CONFIG_ROOT"
 }
 
 has_valid_provisioning() {

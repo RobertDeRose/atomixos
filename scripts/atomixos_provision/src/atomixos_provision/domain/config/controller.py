@@ -1,7 +1,6 @@
 """Config API routes."""
 
 import re
-from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -25,7 +24,7 @@ from atomixos_provision.auth import ssh_auth_guard, ssh_auth_required_guard
 from atomixos_provision.bootstrap_security import enforce_bootstrap_browser_origin
 from atomixos_provision.domain.config.service import ConfigService
 from atomixos_provision.exceptions import ConflictError, ValidationApiError, api_error_response
-from atomixos_provision.jobs import JobManager
+from atomixos_provision.jobs import JobManager, StagedJobManager
 from atomixos_provision.schemas import (
     ApiErrorResponseBody,
     FrameworkErrorResponseBody,
@@ -183,7 +182,7 @@ _API_ERROR_RESPONSES = {
 }
 _PARTIAL_RESPONSES = {
     **_API_ERROR_RESPONSES,
-    409: ResponseSpec(ApiErrorResponseBody, description="A provision job is already running"),
+    409: ResponseSpec(ApiErrorResponseBody, description="The provision queue is full"),
 }
 _REQUIRED_AUTH_OPERATION_IDS = {
     "configExport",
@@ -271,10 +270,11 @@ def _sanitize_filename(raw: str) -> str:
         )
     },
     responses={
+        400: ResponseSpec(ApiErrorResponseBody, description="Invalid request or config payload"),
         401: _API_ERROR_RESPONSES[401],
         409: ResponseSpec(
             ApiErrorResponseBody,
-            description="A provision job is already running",
+            description="The provision queue is full or a non-staged apply job is already running",
         ),
     },
     tags=["config"],
@@ -290,6 +290,26 @@ async def submit_config(
         enforce_bootstrap_browser_origin(request)
     body = await request.body()
     filename = _sanitize_filename(request.headers.get("x-config-filename", "config.toml"))
+
+    if isinstance(job_manager, StagedJobManager):
+        async def stage_work(job):
+            return await config_service.stage_bytes(body, filename, job, allow_reapply)
+
+        job = await job_manager.submit_staged(stage_work)
+        if job is None:
+            return api_error_response(ConflictError("the provision queue is full"))
+        job_url = f"/api/jobs/{job.id}"
+        return Response(
+            schema_dict(
+                SubmitConfigResponse(
+                    job_id=job.id,
+                    state=job.state.value,
+                    job_url=job_url,
+                )
+            ),
+            headers={"Location": job_url},
+            status_code=202,
+        )
 
     async def provision_work(job):
         return await config_service.apply_bytes(body, filename, job, allow_reapply)
@@ -345,8 +365,10 @@ async def put_partial_user(
     config_service: ConfigService,
     job_manager: JobManager,
 ) -> Response[SubmitConfigResponseBody]:
-    return await _submit_partial_job(
-        job_manager, lambda job: config_service.put_user(name, dict(data), job)
+    return await _submit_partial_operation(
+        job_manager,
+        config_service,
+        {"op": "put_user", "name": name, "payload": dict(data)},
     )
 
 
@@ -365,8 +387,8 @@ async def delete_partial_user(
     config_service: ConfigService,
     job_manager: JobManager,
 ) -> Response[SubmitConfigResponseBody]:
-    return await _submit_partial_job(
-        job_manager, lambda job: config_service.delete_user(name, job)
+    return await _submit_partial_operation(
+        job_manager, config_service, {"op": "delete_user", "name": name}
     )
 
 
@@ -385,8 +407,8 @@ async def patch_partial_network(
     config_service: ConfigService,
     job_manager: JobManager,
 ) -> Response[SubmitConfigResponseBody]:
-    return await _submit_partial_job(
-        job_manager, lambda job: config_service.patch_network(dict(data), job)
+    return await _submit_partial_operation(
+        job_manager, config_service, {"op": "patch_network", "payload": dict(data)}
     )
 
 
@@ -406,8 +428,10 @@ async def put_container(
     config_service: ConfigService,
     job_manager: JobManager,
 ) -> Response[SubmitConfigResponseBody]:
-    return await _submit_partial_job(
-        job_manager, lambda job: config_service.put_resource("container", name, dict(data), job)
+    return await _submit_partial_operation(
+        job_manager,
+        config_service,
+        {"op": "put_resource", "table": "container", "name": name, "payload": dict(data)},
     )
 
 
@@ -424,8 +448,10 @@ async def put_container(
 async def delete_container(
     name: str, config_service: ConfigService, job_manager: JobManager
 ) -> Response[SubmitConfigResponseBody]:
-    return await _submit_partial_job(
-        job_manager, lambda job: config_service.delete_resource("container", name, job)
+    return await _submit_partial_operation(
+        job_manager,
+        config_service,
+        {"op": "delete_resource", "table": "container", "name": name},
     )
 
 
@@ -445,8 +471,10 @@ async def put_container_network(
     config_service: ConfigService,
     job_manager: JobManager,
 ) -> Response[SubmitConfigResponseBody]:
-    return await _submit_partial_job(
-        job_manager, lambda job: config_service.put_resource("network", name, dict(data), job)
+    return await _submit_partial_operation(
+        job_manager,
+        config_service,
+        {"op": "put_resource", "table": "network", "name": name, "payload": dict(data)},
     )
 
 
@@ -463,8 +491,10 @@ async def put_container_network(
 async def delete_container_network(
     name: str, config_service: ConfigService, job_manager: JobManager
 ) -> Response[SubmitConfigResponseBody]:
-    return await _submit_partial_job(
-        job_manager, lambda job: config_service.delete_resource("network", name, job)
+    return await _submit_partial_operation(
+        job_manager,
+        config_service,
+        {"op": "delete_resource", "table": "network", "name": name},
     )
 
 
@@ -484,8 +514,10 @@ async def put_container_volume(
     config_service: ConfigService,
     job_manager: JobManager,
 ) -> Response[SubmitConfigResponseBody]:
-    return await _submit_partial_job(
-        job_manager, lambda job: config_service.put_resource("volume", name, dict(data), job)
+    return await _submit_partial_operation(
+        job_manager,
+        config_service,
+        {"op": "put_resource", "table": "volume", "name": name, "payload": dict(data)},
     )
 
 
@@ -502,17 +534,35 @@ async def put_container_volume(
 async def delete_container_volume(
     name: str, config_service: ConfigService, job_manager: JobManager
 ) -> Response[SubmitConfigResponseBody]:
-    return await _submit_partial_job(
-        job_manager, lambda job: config_service.delete_resource("volume", name, job)
+    return await _submit_partial_operation(
+        job_manager,
+        config_service,
+        {"op": "delete_resource", "table": "volume", "name": name},
     )
 
 
-async def _submit_partial_job(
-    job_manager: JobManager, work: Callable[[Any], Any]
+async def _submit_partial_operation(
+    job_manager: JobManager,
+    config_service: ConfigService,
+    operation: dict[str, Any],
 ) -> Response[SubmitConfigResponseBody]:
-    job = await job_manager.submit(work)
+    if isinstance(job_manager, StagedJobManager):
+        async def stage_work(job):
+            return await config_service.stage_partial(operation, job)
+
+        job = await job_manager.submit_staged(stage_work)
+    else:
+        async def apply_work(job):
+            return await config_service.apply_partial(operation, job)
+
+        job = await job_manager.submit(apply_work)
     if job is None:
-        return api_error_response(ConflictError("a provision job is already running"))
+        message = (
+            "the provision queue is full"
+            if isinstance(job_manager, StagedJobManager)
+            else "a provision job is already running"
+        )
+        return api_error_response(ConflictError(message))
     job_url = f"/api/jobs/{job.id}"
     return Response(
         schema_dict(SubmitConfigResponse(job_id=job.id, state=job.state.value, job_url=job_url)),

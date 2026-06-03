@@ -1,17 +1,10 @@
 """Config service facade."""
 
-from collections.abc import Callable
+import asyncio
 from pathlib import Path
 from typing import Any
 
 from atomixos_provision.jobs import Job
-from atomixos_provision.partial_config import (
-    delete_resource,
-    delete_user,
-    patch_network,
-    put_resource,
-    put_user,
-)
 
 __all__ = ["ConfigService"]
 
@@ -33,6 +26,25 @@ class ConfigService:
 
         return await apply_config_bytes(body, filename, self.config_root, progress, allow_reapply)
 
+    async def stage_bytes(
+        self,
+        body: bytes,
+        filename: str,
+        progress: Job,
+        allow_reapply: bool = True,
+    ) -> None:
+        from atomixos_provision.provision import stage_config_bytes
+
+        await asyncio.to_thread(
+            stage_config_bytes,
+            progress.id,
+            body,
+            filename,
+            self.config_root,
+            allow_reapply=allow_reapply,
+            progress=progress,
+        )
+
     async def validate_bytes(self, body: bytes, filename: str) -> dict[str, Any]:
         from atomixos_provision.provision import validate_config_bytes
 
@@ -45,30 +57,42 @@ class ConfigService:
 
     async def apply_partial(
         self,
-        transform: Callable[[dict[str, Any]], dict[str, Any]],
+        operation: dict[str, Any],
         progress: Job | None = None,
     ) -> dict[str, Any]:
-        from atomixos_provision.provision import apply_config_transform
+        from atomixos_provision.provision import apply_config_operation
 
-        return await apply_config_transform(transform, self.config_root, progress)
+        return await apply_config_operation(operation, self.config_root, progress)
+
+    async def stage_partial(
+        self,
+        operation: dict[str, Any],
+        progress: Job,
+    ) -> None:
+        from atomixos_provision.provision import stage_config_operation
+
+        await stage_config_operation(progress.id, operation, self.config_root, progress)
 
     async def put_user(self, name: str, payload: dict[str, Any], progress: Job | None = None):
-        return await self.apply_partial(lambda config: put_user(config, name, payload), progress)
+        return await self.apply_partial(
+            {"op": "put_user", "name": name, "payload": payload}, progress
+        )
 
     async def delete_user(self, name: str, progress: Job | None = None):
-        return await self.apply_partial(lambda config: delete_user(config, name), progress)
+        return await self.apply_partial({"op": "delete_user", "name": name}, progress)
 
     async def patch_network(self, payload: dict[str, Any], progress: Job | None = None):
-        return await self.apply_partial(lambda config: patch_network(config, payload), progress)
+        return await self.apply_partial({"op": "patch_network", "payload": payload}, progress)
 
     async def put_resource(
         self, table: str, name: str, payload: dict[str, Any], progress: Job | None = None
     ):
         return await self.apply_partial(
-            lambda config: put_resource(config, table, name, payload), progress
+            {"op": "put_resource", "table": table, "name": name, "payload": payload},
+            progress,
         )
 
     async def delete_resource(self, table: str, name: str, progress: Job | None = None):
         return await self.apply_partial(
-            lambda config: delete_resource(config, table, name), progress
+            {"op": "delete_resource", "table": table, "name": name}, progress
         )

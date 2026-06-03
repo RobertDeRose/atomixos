@@ -1,5 +1,6 @@
 """CLI entry point for atomixos-provision / first-boot-provision."""
 
+import json
 import sys
 from pathlib import Path
 
@@ -94,14 +95,98 @@ def import_bundle(source_path: Path, config_root: Path) -> None:
         sys.exit(1)
 
 
+@cli.command("apply-staged")
+@click.argument("config_root", type=click.Path(path_type=Path))
+@click.option(
+    "--runtime-root",
+    default=None,
+    type=click.Path(path_type=Path),
+    help="Runtime staging root to consume.",
+)
+@click.option(
+    "--drain",
+    is_flag=True,
+    help="Apply queued staged jobs until the queue is empty.",
+)
+def apply_staged(config_root: Path, runtime_root: Path | None, drain: bool) -> None:
+    """Apply one queued staged provisioning job as the privileged worker."""
+    from atomixos_provision.provision import apply_staged_job
+
+    try:
+        results = []
+        errors = []
+        while True:
+            try:
+                result = apply_staged_job(config_root, runtime_root)
+            except Exception as exc:
+                payload = {"error": str(exc)}
+                rollback_status = getattr(exc, "rollback_status", None)
+                if isinstance(rollback_status, str):
+                    payload["rollback_status"] = rollback_status
+                errors.append(payload)
+                if not drain:
+                    raise
+                continue
+            if result is None:
+                break
+            results.append(result)
+            if not drain:
+                break
+        payload = {"ok": True, "result": results[0] if results else None}
+        if drain:
+            payload["results"] = results
+            payload["errors"] = errors
+            if errors:
+                payload["ok"] = False
+                click.echo(json.dumps(payload))
+                sys.exit(1)
+        click.echo(json.dumps(payload))
+    except Exception as exc:
+        payload = {"ok": False, "error": str(exc)}
+        rollback_status = getattr(exc, "rollback_status", None)
+        if isinstance(rollback_status, str):
+            payload["rollback_status"] = rollback_status
+        click.echo(json.dumps(payload))
+        sys.exit(1)
+
+
+@cli.command("finalize-staged")
+@click.option(
+    "--runtime-root",
+    default=None,
+    type=click.Path(path_type=Path),
+    help="Runtime staging root to finalize.",
+)
+@click.option(
+    "--reason",
+    default="privileged apply worker stopped before writing a result",
+    help="Failure reason to record for abandoned active jobs.",
+)
+def finalize_staged(runtime_root: Path | None, reason: str) -> None:
+    """Finalize claimed staged jobs left behind by an interrupted worker."""
+    from atomixos_provision.provision import finalize_staged_jobs
+
+    try:
+        finalized = finalize_staged_jobs(runtime_root, reason)
+        click.echo(json.dumps({"ok": True, "finalized": finalized}))
+    except Exception as exc:
+        click.echo(json.dumps({"ok": False, "error": str(exc)}))
+        sys.exit(1)
+
+
 @cli.command()
 @click.argument("config_root", type=click.Path(path_type=Path))
 def recover(config_root: Path) -> None:
     """Recover an interrupted config promotion."""
     from atomixos_provision.activation import recover_config_root
-    from atomixos_provision.provision import provisioning_lock, validate_config_root
+    from atomixos_provision.provision import (
+        provisioning_lock,
+        require_worker_for_data_config,
+        validate_config_root,
+    )
 
     config_root = validate_config_root(config_root)
+    require_worker_for_data_config(config_root, "recover")
     with provisioning_lock(config_root):
         recover_config_root(config_root)
 
@@ -134,9 +219,11 @@ def check_health(config_root: Path) -> None:
 def complete_initial(config_root: Path) -> None:
     """Mark initial provisioning promotion complete after first-boot checks."""
     from atomixos_provision.activation import cleanup_rollback
-    from atomixos_provision.provision import validate_config_root
+    from atomixos_provision.provision import require_worker_for_data_config, validate_config_root
 
-    cleanup_rollback(validate_config_root(config_root))
+    config_root = validate_config_root(config_root)
+    require_worker_for_data_config(config_root, "complete initial provisioning")
+    cleanup_rollback(config_root)
 
 
 def _get_systemd_socket():
