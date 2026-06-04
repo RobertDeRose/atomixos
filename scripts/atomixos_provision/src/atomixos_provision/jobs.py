@@ -5,6 +5,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable, Coroutine
+from contextlib import suppress
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
@@ -16,6 +17,7 @@ __all__ = ["Job", "JobManager", "JobState", "StagedJobManager"]
 # Maximum number of completed jobs to retain in memory.
 _MAX_RETAINED_JOBS = 64
 _DEFAULT_MAX_STAGED_JOBS = 4
+_STAGED_RESERVATION_HEARTBEAT_SECONDS = 30
 
 
 class JobState(StrEnum):
@@ -284,9 +286,15 @@ class StagedJobManager(JobManager):
             job.state = JobState.RUNNING
             job.started_at = time.monotonic()
         job.set_stage("running")
+        heartbeat_task: asyncio.Task | None = None
         try:
             self._refresh_reservation(job)
+            heartbeat_task = asyncio.create_task(self._heartbeat_reservation(job))
             await work(job)
+            heartbeat_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await heartbeat_task
+            heartbeat_task = None
             self._refresh_reservation(job)
             job.set_stage("queued", "waiting for privileged apply worker")
         except asyncio.CancelledError:
@@ -313,8 +321,18 @@ class StagedJobManager(JobManager):
                     job.rollback_status = exc.rollback_status
                 job.completed_at = time.monotonic()
             return job
+        finally:
+            if heartbeat_task is not None:
+                heartbeat_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await heartbeat_task
         self._task = asyncio.create_task(self._monitor_staged(job))
         return job
+
+    async def _heartbeat_reservation(self, job: Job) -> None:
+        while True:
+            await asyncio.sleep(_STAGED_RESERVATION_HEARTBEAT_SECONDS)
+            self._refresh_reservation(job)
 
     async def _monitor_staged(self, job: Job) -> None:
         try:
