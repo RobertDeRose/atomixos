@@ -221,7 +221,9 @@ class TestStagedJobManager:
         assert mgr.is_busy is False
 
     @pytest.mark.asyncio
-    async def test_staged_runner_waits_for_work_before_cancelling_job(self, monkeypatch, tmp_path):
+    async def test_staged_runner_does_not_release_reservation_before_cancelled_work_finishes(
+        self, monkeypatch, tmp_path
+    ):
         monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
         mgr = StagedJobManager(result_timeout_seconds=0.01)
         finish = asyncio.Event()
@@ -238,9 +240,46 @@ class TestStagedJobManager:
         assert task is None
         assert not submit_task.done()
         submit_task.cancel()
-        with suppress(asyncio.CancelledError):
-            await submit_task
+        await asyncio.sleep(0.05)
+        assert not submit_task.done()
         assert mgr.is_busy is False
+        finish.set()
+        job = await submit_task
+        assert job is not None
+
+    @pytest.mark.asyncio
+    async def test_staged_submit_cancellation_waits_for_publish_and_monitors(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
+        mgr = StagedJobManager(result_timeout_seconds=0.01)
+        finish = asyncio.Event()
+        published = []
+
+        def refresh(job):
+            if published:
+                job.state = JobState.SUCCEEDED
+                return True
+            return False
+
+        monkeypatch.setattr(mgr, "_refresh_from_result", refresh)
+
+        async def work(job):
+            await finish.wait()
+            published.append(job.id)
+
+        submit_task = asyncio.create_task(mgr.submit_staged(work))
+        await asyncio.sleep(0)
+        submit_task.cancel()
+        await asyncio.sleep(0)
+        finish.set()
+        job = await submit_task
+
+        assert job is not None
+        assert published == [job.id]
+        assert mgr._task is not None
+        await mgr._task
+        assert job.state == JobState.SUCCEEDED
 
     @pytest.mark.asyncio
     async def test_staged_submit_returns_after_staging_before_result(self, monkeypatch, tmp_path):

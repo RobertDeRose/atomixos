@@ -287,10 +287,15 @@ class StagedJobManager(JobManager):
             job.started_at = time.monotonic()
         job.set_stage("running")
         heartbeat_task: asyncio.Task | None = None
+        work_task: asyncio.Task | None = None
         try:
             self._refresh_reservation(job)
             heartbeat_task = asyncio.create_task(self._heartbeat_reservation(job))
-            await work(job)
+            work_task = asyncio.create_task(work(job))
+            try:
+                await asyncio.shield(work_task)
+            except asyncio.CancelledError:
+                await work_task
             heartbeat_task.cancel()
             with suppress(asyncio.CancelledError):
                 await heartbeat_task
