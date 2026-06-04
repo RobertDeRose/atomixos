@@ -512,6 +512,46 @@ def test_apply_staged_job_verifies_active_source_before_snapshot_copy(tmp_path, 
         apply_staged_job(config_root, runtime_root)
 
 
+def test_apply_staged_job_uses_verified_manifest_for_snapshot_copy(tmp_path, monkeypatch):
+    runtime_root = tmp_path / "run"
+    config_root = tmp_path / "config"
+    _force_staging(monkeypatch)
+    monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(runtime_root))
+    monkeypatch.setattr(
+        "atomixos_provision.provision.validate_config_root", lambda root, **_: root
+    )
+    monkeypatch.setattr("atomixos_provision.provision.os.chown", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        "atomixos_provision.config.load_config_schema",
+        lambda: {"type": "object", "additionalProperties": True},
+    )
+
+    from atomixos_provision import provision
+
+    original_verify = provision.verify_staged_job
+
+    def mutate_source_manifest_after_verify(job, paths, **kwargs):
+        manifest = original_verify(job, paths, **kwargs)
+        if kwargs.get("require_active", True):
+            manifest_path = paths.active / job.job_id / "manifest.json"
+            mutated = json.loads(manifest_path.read_text())
+            config_path = paths.active / job.job_id / "candidate" / "config.toml"
+            config_path.write_text("version = 1\n", encoding="utf-8")
+            for entry in mutated["candidate"]:
+                if entry.get("path") == "config.toml":
+                    entry["size"] = config_path.stat().st_size
+                    entry["sha256"] = hashlib.sha256(config_path.read_bytes()).hexdigest()
+            mutated["job_id"] = "other-job"
+            manifest_path.write_text(json.dumps(mutated), encoding="utf-8")
+        return manifest
+
+    monkeypatch.setattr(provision, "verify_staged_job", mutate_source_manifest_after_verify)
+    stage_config_bytes("job-1", _valid_config(), "config.toml", config_root)
+
+    with pytest.raises(ProvisionError, match=r"staged file (hash|size) changed"):
+        apply_staged_job(config_root, runtime_root)
+
+
 def test_apply_staged_job_rerenders_derived_state_from_config(tmp_path, monkeypatch):
     runtime_root = tmp_path / "run"
     config_root = tmp_path / "config"
