@@ -23,8 +23,8 @@ authentication; first-boot programmatic `/api/config` submissions do not require
 bootstrap API narrows to the LAN gateway endpoint. The network-facing API process runs as the dedicated
 `atomixos-provision` service user. It validates requests, authenticates re-apply operations, renders candidates in tmpfs,
 and reads approved provisioning state. Host mutation is delegated to root-owned systemd path and oneshot units watching
-`/run/atomixos-provision/queue/*.ready`. Production staged mutating submissions enter a bounded FIFO queue; each device
-applies one staged job at a time and returns `409 Conflict` only when that queue is full. Programmatic clients receive
+`/run/atomixos-provision/queue/*.ready`. Production staged full-config submissions enter a bounded FIFO queue; each device
+applies one staged job at a time and returns `409 Conflict` when that queue is full. Programmatic clients receive
 `202 Accepted` with `job_id`, initial `state`, `job_url`, and a `Location: /api/jobs/{job_id}` header, then poll the job
 resource for final success, failure, rollback status, and service deployment events.
 

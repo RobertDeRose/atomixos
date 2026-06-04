@@ -469,7 +469,7 @@ async def test_partial_config_reports_full_staged_queue(tmp_path, monkeypatch):
 
     assert first.status_code == 202
     assert second.status_code == 409
-    assert second.json() == {"error": "the provision queue is full"}
+    assert second.json() == {"error": "the provision queue is busy"}
 
 
 async def test_partial_config_rejects_when_staged_queue_not_empty(tmp_path, monkeypatch):
@@ -514,7 +514,7 @@ Image = "docker.io/library/alpine:latest"
         )
 
     assert response.status_code == 409
-    assert response.json() == {"error": "the provision queue is full"}
+    assert response.json() == {"error": "the provision queue is busy"}
 
 
 async def test_boot_ui_serves_configuration_forms(tmp_path):
