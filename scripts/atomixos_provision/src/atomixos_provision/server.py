@@ -180,6 +180,7 @@ def recover(config_root: Path) -> None:
     """Recover an interrupted config promotion."""
     from atomixos_provision.activation import recover_config_root
     from atomixos_provision.provision import (
+        grant_service_read_access,
         provisioning_lock,
         require_worker_for_data_config,
         validate_config_root,
@@ -189,6 +190,8 @@ def recover(config_root: Path) -> None:
     require_worker_for_data_config(config_root, "recover")
     with provisioning_lock(config_root):
         recover_config_root(config_root)
+        if config_root.exists():
+            grant_service_read_access(config_root)
 
 
 @cli.command("sync-quadlet")

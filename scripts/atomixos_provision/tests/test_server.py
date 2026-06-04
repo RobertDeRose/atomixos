@@ -172,6 +172,21 @@ def test_recover_data_config_requires_worker_context(monkeypatch):
     assert "requires privileged worker context" in str(result.exception)
 
 
+def test_recover_grants_service_read_access(monkeypatch, tmp_path):
+    config_root = tmp_path / "config"
+    config_root.mkdir()
+    config_path = config_root / "config.toml"
+    config_path.write_text("version = 1\n", encoding="utf-8")
+    config_path.chmod(0o600)
+    monkeypatch.setattr("atomixos_provision.provision._service_identity", lambda: (123, 456))
+    monkeypatch.setattr("atomixos_provision.provision.os.chown", lambda *_args, **_kwargs: None)
+
+    result = CliRunner().invoke(server.cli, ["recover", str(config_root)])
+
+    assert result.exit_code == 0, result.output
+    assert config_path.stat().st_mode & 0o040
+
+
 def test_complete_initial_data_config_requires_worker_context(monkeypatch):
     monkeypatch.delenv("ATOMIXOS_PROVISION_WORKER_ACTIVE", raising=False)
 

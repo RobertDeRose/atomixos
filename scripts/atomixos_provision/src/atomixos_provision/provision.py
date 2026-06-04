@@ -195,6 +195,11 @@ def _grant_service_read_access(config_root: Path) -> None:
             continue
 
 
+def grant_service_read_access(config_root: Path) -> None:
+    """Migrate a config root so the unprivileged API can read control state."""
+    _grant_service_read_access(config_root)
+
+
 @contextlib.contextmanager
 def provisioning_lock(config_root: Path):
     """Serialize config-root mutations across API, CLI, and service processes."""
