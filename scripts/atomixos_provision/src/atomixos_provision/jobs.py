@@ -257,6 +257,8 @@ class StagedJobManager(JobManager):
             from atomixos_provision.provision import StagedQueueBusyError
 
             if isinstance(exc, StagedQueueBusyError):
+                async with self._lock:
+                    self._jobs.pop(job.id, None)
                 return None
             return job
 
@@ -299,6 +301,10 @@ class StagedJobManager(JobManager):
             from atomixos_provision.provision import StagedQueueBusyError
 
             if isinstance(exc, StagedQueueBusyError):
+                with job._lock:
+                    job.state = JobState.FAILED
+                    job.error = str(exc)
+                    job.completed_at = time.monotonic()
                 raise
             with job._lock:
                 job.state = JobState.FAILED

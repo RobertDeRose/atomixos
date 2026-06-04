@@ -5,6 +5,7 @@ from contextlib import suppress
 
 import pytest
 
+from atomixos_provision.config import ProvisionError
 from atomixos_provision.jobs import Job, JobManager, JobState, StagedJobManager
 from atomixos_provision.staging import ensure_runtime_layout, runtime_paths
 
@@ -279,6 +280,28 @@ class TestStagedJobManager:
         assert job.state == JobState.FAILED
         assert job.error == "bad bundle"
         assert job.completed_at is not None
+
+    @pytest.mark.asyncio
+    async def test_staged_submit_does_not_retain_rejected_busy_partial_job(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
+        mgr = StagedJobManager(result_timeout_seconds=0.01)
+
+        class StagedQueueBusyError(ProvisionError):
+            pass
+
+        monkeypatch.setattr(
+            "atomixos_provision.provision.StagedQueueBusyError", StagedQueueBusyError
+        )
+
+        async def work(job):
+            raise StagedQueueBusyError("staged queue has pending jobs")
+
+        rejected = await mgr.submit_staged(work)
+
+        assert rejected is None
+        assert mgr._jobs == {}
 
     @pytest.mark.asyncio
     async def test_staged_submit_returns_failed_job_when_reservation_fails(
