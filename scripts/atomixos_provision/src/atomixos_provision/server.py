@@ -126,6 +126,8 @@ def apply_staged(config_root: Path, runtime_root: Path | None, drain: bool) -> N
                 errors.append(payload)
                 if not drain:
                     raise
+                if getattr(exc, "staged_job_claimed", False) is not True:
+                    break
                 continue
             if result is None:
                 break

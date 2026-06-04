@@ -98,6 +98,7 @@ def test_apply_staged_command_drains_after_error(monkeypatch, tmp_path):
         calls.append((config_root, runtime_root))
         outcome = outcomes.pop(0)
         if isinstance(outcome, Exception):
+            outcome.staged_job_claimed = True
             raise outcome
         return outcome
 
@@ -118,6 +119,31 @@ def test_apply_staged_command_drains_after_error(monkeypatch, tmp_path):
     assert len(calls) == 3
     assert "bad job" in result.output
     assert '"warnings": ["second"]' in result.output
+
+
+def test_apply_staged_command_stops_drain_after_systemic_error(monkeypatch, tmp_path):
+    calls = []
+
+    def fake_apply(config_root, runtime_root):
+        calls.append((config_root, runtime_root))
+        raise RuntimeError("runtime layout unavailable")
+
+    monkeypatch.setattr("atomixos_provision.provision.apply_staged_job", fake_apply)
+
+    result = CliRunner().invoke(
+        server.cli,
+        [
+            "apply-staged",
+            str(tmp_path / "config"),
+            "--runtime-root",
+            str(tmp_path / "run"),
+            "--drain",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert len(calls) == 1
+    assert "runtime layout unavailable" in result.output
 
 
 def test_apply_staged_command_returns_json_error(monkeypatch, tmp_path):
