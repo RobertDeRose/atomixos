@@ -69,6 +69,18 @@ def test_staged_job_reservations_count_toward_queue_bound(tmp_path, monkeypatch)
     assert count_staged_jobs(paths) == 0
 
 
+def test_malformed_reservation_directory_is_removed(tmp_path, monkeypatch):
+    runtime_root = tmp_path / "run"
+    monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(runtime_root))
+    paths = runtime_paths(runtime_root)
+    ensure_runtime_layout(paths)
+    bad_reserve = paths.queue / "bad.reserve"
+    bad_reserve.mkdir()
+
+    assert count_staged_jobs(paths) == 0
+    assert not bad_reserve.exists()
+
+
 def test_staged_job_presence_can_exclude_current_reservation(tmp_path, monkeypatch):
     runtime_root = tmp_path / "run"
     monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(runtime_root))
@@ -296,6 +308,24 @@ def test_claim_next_job_skips_malformed_ready_marker(tmp_path):
 
     assert claimed is not None
     assert claimed.job_id == "good"
+
+
+def test_claim_next_job_removes_malformed_ready_directory(tmp_path):
+    paths = runtime_paths(tmp_path / "run")
+    ensure_runtime_layout(paths, for_worker=True)
+    bad_ready = paths.queue / "bad.ready"
+    bad_ready.mkdir()
+    (paths.queue / "good").mkdir()
+    (paths.queue / "good.ready").write_text(
+        json.dumps({"job_id": "good", "sequence": 1}) + "\n",
+        encoding="utf-8",
+    )
+
+    claimed = claim_next_job(paths)
+
+    assert claimed is not None
+    assert claimed.job_id == "good"
+    assert not bad_ready.exists()
     assert not (paths.queue / "bad.ready").exists()
 
 

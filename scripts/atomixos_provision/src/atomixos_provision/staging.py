@@ -375,11 +375,11 @@ def _cleanup_stale_reservations_locked(paths: RuntimePaths) -> None:
         except FileNotFoundError:
             continue
         if stat.S_ISLNK(reserve_stat.st_mode) or not stat.S_ISREG(reserve_stat.st_mode):
-            reserve_path.unlink(missing_ok=True)
+            _remove_staged_path(reserve_path)
             removed = True
             continue
         if reserve_stat.st_mtime < deadline:
-            reserve_path.unlink(missing_ok=True)
+            _remove_staged_path(reserve_path)
             removed = True
     if removed:
         fsync_directory(paths.queue)
@@ -401,7 +401,7 @@ def _claim_next_job_locked(paths: RuntimePaths) -> ClaimedJob | None:
         try:
             ready_markers.append((_ready_marker_sort_key(ready_path), ready_path))
         except ProvisionError:
-            ready_path.unlink(missing_ok=True)
+            _remove_staged_path(ready_path)
             fsync_directory(paths.queue)
     for _sort_key, ready_path in sorted(ready_markers):
         job_id = validate_job_id(ready_path.name.removesuffix(".ready"))
@@ -409,10 +409,10 @@ def _claim_next_job_locked(paths: RuntimePaths) -> ClaimedJob | None:
         try:
             queued_stat = queued_path.lstat()
         except FileNotFoundError:
-            ready_path.unlink(missing_ok=True)
+            _remove_staged_path(ready_path)
             continue
         if stat.S_ISLNK(queued_stat.st_mode) or not stat.S_ISDIR(queued_stat.st_mode):
-            ready_path.unlink(missing_ok=True)
+            _remove_staged_path(ready_path)
             continue
         active_path = paths.active / job_id
         try:
@@ -422,7 +422,7 @@ def _claim_next_job_locked(paths: RuntimePaths) -> ClaimedJob | None:
         active_stat = active_path.lstat()
         if stat.S_ISLNK(active_stat.st_mode) or not stat.S_ISDIR(active_stat.st_mode):
             raise ProvisionError(f"claimed staged job is not a directory: {active_path}")
-        ready_path.unlink(missing_ok=True)
+        _remove_staged_path(ready_path)
         fsync_directory(paths.queue)
         fsync_directory(paths.active)
         return ClaimedJob(job_id, active_path)
@@ -589,7 +589,7 @@ def try_abandon_queued_job(paths: RuntimePaths, job_id: str) -> bool:
             return False
         queued_path = paths.queue / job_id
         ready_path = paths.queue / f"{job_id}.ready"
-        ready_path.unlink(missing_ok=True)
+        _remove_staged_path(ready_path)
         shutil.rmtree(queued_path, ignore_errors=True)
         fsync_directory(paths.queue)
         return True
@@ -626,6 +626,17 @@ def _verify_results_directory(
 
 def cleanup_claimed_job(job: ClaimedJob) -> None:
     shutil.rmtree(job.path, ignore_errors=True)
+
+
+def _remove_staged_path(path: Path) -> None:
+    try:
+        path_stat = path.lstat()
+    except FileNotFoundError:
+        return
+    if stat.S_ISDIR(path_stat.st_mode) and not stat.S_ISLNK(path_stat.st_mode):
+        shutil.rmtree(path, ignore_errors=True)
+    else:
+        path.unlink(missing_ok=True)
 
 
 def fsync_directory(path: Path) -> None:
