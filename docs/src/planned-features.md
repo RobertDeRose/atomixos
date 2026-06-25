@@ -286,7 +286,6 @@ Quadlet containers on a persistent `/data` partition.
   - Progress reporting needs a simple result handoff contract
 - Dependencies: Provisioning API foundation
 - Suggested validation: VM test proving unprivileged service can provision via the root worker
-- Suggested first workflow command: `/start-feature provisioning-api-privilege-separation`
 - Delivered by running the bootstrap API as `atomixos-provision`, staging
   validated candidate jobs under `/run/atomixos-provision`, applying them through
   a root `systemd.path`/oneshot worker, and documenting the result/queue lock

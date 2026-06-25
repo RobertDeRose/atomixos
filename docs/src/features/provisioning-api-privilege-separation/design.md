@@ -163,7 +163,9 @@ passes.
 Before touching `/data`, the root worker verifies:
 
 - the job path is below `/run/atomixos-provision/active`
-- the job ID and manifest filename match the ready marker that triggered work
+- the worker selected and claimed a ready marker by scanning and locking the
+  queue, derived the job ID from that claimed marker, and matched it to the
+  manifest filename and staged directory
 - all paths in the manifest are relative, normalized, and do not contain `..`
 - no staged path is a symlink
 - every staged file is regular and every staged directory is a directory
@@ -183,18 +185,23 @@ mutating `/data`.
 Because `/run` and `/data` are different filesystems, root cannot atomically
 rename the tmpfs candidate directly into `/data/config`. The worker should:
 
-1. Copy verified staged state into `/data/config-candidate` with root-controlled
-   ownership and modes.
-2. Fsync files and directories needed for crash safety.
-3. Promote `/data/config-candidate` to `/data/config` using the existing
+1. Verify the staged source `config.toml` and allowed opaque bundle files from
+   the claimed job snapshot.
+2. Re-render canonical `/data/config-candidate` state as root from the verified
+   source config.
+3. Copy only verified opaque bundle files that are allowed to remain outside the
+   rendered config model.
+4. Fsync files and directories needed for crash safety.
+5. Promote `/data/config-candidate` to `/data/config` using the existing
    crash-safe promotion and rollback protocol within `/data`.
-4. Run activation and health checks.
-5. Roll back on activation failure.
-6. Write `/run/atomixos-provision/results/<job-id>.json` with terminal state,
+6. Run activation and health checks.
+7. Roll back on activation failure.
+8. Write `/run/atomixos-provision/results/<job-id>.json` with terminal state,
    warnings, rollback status, forwarding URL, and error details.
 
-This keeps validation and render churn in tmpfs while limiting persistent writes
-to the final candidate and rollback metadata.
+This keeps HTTP-side validation and staging in tmpfs while limiting persistent
+writes to root-rendered canonical state, approved opaque files, and rollback
+metadata.
 
 ### Systemd Units
 
