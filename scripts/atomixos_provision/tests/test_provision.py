@@ -154,6 +154,35 @@ async def test_stage_config_operation_queues_rendered_candidate(monkeypatch, tmp
     assert "[users.alice]" in config_path.read_text()
     assert json.loads(manifest_path.read_text())["operation"] == "partial-apply"
 
+async def test_stage_config_operation_does_not_recover_config_root(
+    monkeypatch, tmp_path
+):
+    from atomixos_provision import provision
+
+    runtime_root = tmp_path / "run"
+    config_root = tmp_path / "config"
+    config_root.mkdir()
+    (config_root / "config.toml").write_text(BASE_PARTIAL_CONFIG)
+    monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(runtime_root))
+    monkeypatch.setattr(
+        provision,
+        "recover_config_root",
+        lambda _root: (_ for _ in ()).throw(AssertionError("staging recovered root")),
+    )
+
+    await stage_config_operation(
+        "job-1",
+        {
+            "op": "put_user",
+            "name": "alice",
+            "payload": {"isAdmin": False, "ssh_key": f"{VALID_ED25519_KEY} alice"},
+        },
+        config_root,
+    )
+
+    assert (runtime_root / "queue" / "job-1.ready").exists()
+
+
 
 async def test_stage_config_operation_rejects_when_queue_not_empty(monkeypatch, tmp_path):
     runtime_root = tmp_path / "run"

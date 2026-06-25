@@ -7,7 +7,12 @@ import pytest
 
 from atomixos_provision.config import ProvisionError
 from atomixos_provision.jobs import Job, JobManager, JobState, StagedJobManager
-from atomixos_provision.staging import ensure_runtime_layout, runtime_paths
+from atomixos_provision.staging import (
+    ensure_runtime_layout,
+    publish_ready_marker,
+    reserve_staged_job_slot,
+    runtime_paths,
+)
 
 
 class TestJobState:
@@ -228,6 +233,25 @@ class TestStagedJobManager:
 
         assert job.state == JobState.FAILED
         assert job.completed_at is not None
+
+
+    def test_staged_timeout_keeps_queued_job_while_worker_is_active(
+        self, monkeypatch, tmp_path
+    ):
+        runtime_root = tmp_path / "run"
+        monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(runtime_root))
+        paths = runtime_paths(runtime_root)
+        ensure_runtime_layout(paths, for_worker=True)
+        (paths.active / "job-1").mkdir()
+        assert reserve_staged_job_slot(paths, "job-2", 2) is True
+        (paths.queue / "job-2").mkdir()
+        publish_ready_marker(paths, "job-2")
+        job = Job(id="job-2")
+        mgr = StagedJobManager(result_timeout_seconds=0.01, max_pending=2)
+
+        assert mgr._handle_staged_timeout(job) == "active"
+        assert (paths.queue / "job-2").exists()
+        assert (paths.queue / "job-2.ready").exists()
 
     @pytest.mark.asyncio
     async def test_staged_timeout_state_errors_fail_job(self, monkeypatch, tmp_path):

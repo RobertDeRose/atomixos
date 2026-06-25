@@ -499,7 +499,6 @@ def _stage_config_operation_sync(
     progress: ProgressReporter | None = None,
 ) -> None:
     config_root = validate_config_root(config_root)
-    recover_config_root(config_root)
     paths = _runtime_paths()
     if has_staged_jobs(paths, exclude_job_id=job_id):
         raise StagedQueueBusyError("partial config updates require an empty staged queue")
