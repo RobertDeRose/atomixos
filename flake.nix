@@ -263,7 +263,6 @@
           bootScript = self.packages.${system}.boot-script;
           signingCert = ./certs/dev.signing.cert.pem;
           signingKeyPath = ./certs/dev.signing.key.pem;
-          caCert = ./certs/dev.ca.cert.pem;
         };
 
         # U-Boot boot script compiled for Rock64

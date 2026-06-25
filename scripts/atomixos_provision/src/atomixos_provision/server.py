@@ -10,11 +10,6 @@ from atomixos_provision.settings import AppSettings
 
 __all__ = ["main"]
 
-DEFAULT_CONFIG_ROOT = Path("/data/config")
-DEFAULT_HOST = "172.20.30.1"
-DEFAULT_PORT = 8080
-
-
 @click.group()
 def cli() -> None:
     """AtomixOS provisioning CLI."""
