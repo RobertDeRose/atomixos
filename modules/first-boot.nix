@@ -314,7 +314,7 @@ in
     unitConfig.RequiresMountsFor = [ "/data" ];
 
     socketConfig = {
-      ListenStream = "172.20.30.1:8080";
+      ListenStream = "0.0.0.0:8080";
       FreeBind = true;
       Accept = false;
     };
@@ -361,7 +361,7 @@ in
       ProtectHome = true;
       ProtectSystem = "strict";
       ReadOnlyPaths = [
-        "/data/config"
+        "-/data/config"
       ];
       ReadWritePaths = [
         "/run/atomixos-provision"

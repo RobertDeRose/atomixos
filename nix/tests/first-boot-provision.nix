@@ -162,7 +162,7 @@ nixos-lib.runTest {
         gateway.succeed("rm -rf /tmp/operator-admin-root && mkdir -p /tmp/operator-admin-root")
         gateway.succeed("first-boot-provision import /tmp/config.toml /tmp/operator-admin-root")
         gateway.succeed("test -f /tmp/operator-admin-root/ssh-authorized-keys/admin")
-        gateway.succeed("rm /tmp/operator-admin-root/config.toml /tmp/operator-admin-root/.first-config")
+        gateway.succeed("rm /tmp/operator-admin-root/config.toml")
         gateway.succeed("first-boot-provision import /tmp/operator-admin-config.toml /tmp/operator-admin-root")
         gateway.fail("test -f /tmp/operator-admin-root/ssh-authorized-keys/admin")
         gateway.succeed("grep 'AAAAC3NzaC1lZDI1NTE5AAAAIFGTDzwiQNe3nwhmg/G81QDhQBbpgOyvrKXeYnQHYOUd' /tmp/operator-admin-root/admin-signers")
