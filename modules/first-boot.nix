@@ -353,7 +353,7 @@ in
       Environment = [
         "ATOMIXOS_PROVISION_RESULT_TIMEOUT_SECONDS=1200"
       ];
-      ExecStart = "${provisionCli}/bin/atomixos-provision serve /data/config --host 172.20.30.1 --port 8080";
+      ExecStart = "${provisionCli}/bin/atomixos-provision serve /data/config";
       User = "atomixos-provision";
       Group = "atomixos-provision";
       NoNewPrivileges = true;

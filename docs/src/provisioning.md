@@ -14,8 +14,8 @@ On first boot:
 4. Initrd persists a fresh-flash marker so switched-root provisioning can distinguish a new flash from a later
    reprovisioned `/data` wipe
 5. `first-boot.service` looks for `/boot/config.toml` only on a fresh flash, then USB `config.toml`, then starts the
-   bootstrap web console on WAN and LAN port `8080`; after provisioning it narrows to the LAN gateway endpoint
-   and waits indefinitely for operator input when no seed is present
+   socket-activated bootstrap web console on WAN and LAN port `8080`; after provisioning the socket is rebound to the
+   LAN gateway endpoint and first boot waits indefinitely for operator input when no seed is present
 6. The imported config is validated, persisted under `/data/config/`, rendered into managed user inputs and canonical
    Quadlet files, and synced into the active rootful and rootless Quadlet paths
 7. `first-boot.service` applies managed users, Quadlets, LAN settings, and provisioned firewall rules, then marks the
@@ -37,7 +37,7 @@ On the next boot:
 1. Initrd sees that `boot-b` already exists, so it does not mark the boot as a fresh flash
 2. `/boot/config.toml` is not replayed
 3. `first-boot.service` searches USB `config.toml` sources first
-4. If no USB seed is found, the bootstrap web console starts on WAN and LAN port `8080`
+4. If no USB seed is found, the socket-activated bootstrap web console starts on WAN and LAN port `8080`
 
 Imported operator state remains bounded to `/data/config/`, including the imported `config.toml`, rendered Quadlet
 files, admin SSH authorized keys, and other provisioning-derived runtime inputs.

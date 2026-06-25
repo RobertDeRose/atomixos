@@ -9,7 +9,7 @@ def test_default_settings_match_device_defaults():
     settings = AppSettings()
 
     assert settings.config_root == Path("/data/config")
-    assert settings.host == "172.20.30.1"
+    assert settings.host == "127.0.0.1"
     assert settings.port == 8080
     assert settings.max_source_bytes > 0
 

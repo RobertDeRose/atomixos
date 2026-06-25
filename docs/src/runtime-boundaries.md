@@ -18,11 +18,13 @@ survive RAUC slot switches without mixing Nixstasis state into `/data/config`. T
 rendered from image-time NixOS options and defaults to empty.
 
 Before initial provisioning, the bootstrap API is reachable on WAN and LAN and exposes `POST /api/config` for complete
-`config.toml` files or supported config bundles. First-boot Boot UI submissions use a CSRF bootstrap token, not operator
-authentication; first-boot programmatic `/api/config` submissions do not require that UI token. After provisioning, the
-bootstrap API narrows to the LAN gateway endpoint. The network-facing API process runs as the dedicated
-`atomixos-provision` service user. It validates requests, authenticates re-apply operations, renders candidates in tmpfs,
-and reads approved provisioning state. Host mutation is delegated to root-owned systemd path and oneshot units watching
+`config.toml` files or supported config bundles. The production service is socket-activated: `atomixos-bootstrap.socket`
+owns the listen address and rebinds after provisioning, while `atomixos-bootstrap.service` only consumes the inherited
+systemd socket file descriptor. First-boot Boot UI submissions use a CSRF bootstrap token, not operator authentication;
+first-boot programmatic `/api/config` submissions do not require that UI token. After provisioning, the bootstrap API
+narrows to the LAN gateway endpoint. The network-facing API process runs as the dedicated `atomixos-provision` service
+user. It validates requests, authenticates re-apply operations, renders candidates in tmpfs, and reads approved
+provisioning state. Host mutation is delegated to root-owned systemd path and oneshot units watching
 `/run/atomixos-provision/queue/*.ready`. Production staged full-config submissions enter a bounded FIFO queue; each device
 applies one staged job at a time and returns `409 Conflict` when that queue is full. Programmatic clients receive
 `202 Accepted` with `job_id`, initial `state`, `job_url`, and a `Location: /api/jobs/{job_id}` header, then poll the job

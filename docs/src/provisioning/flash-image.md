@@ -97,3 +97,16 @@ replaying an old `/boot/config.toml`.
 The image keeps `root` locked and does not ship a built-in operator account. On Rock64,
 `_RUT_OH_=1` enables a deterministic serial-only root recovery path on UART2
 (`ttyS2`, 1.5 Mbaud) for the next boot.
+
+## Production RAUC Signing
+
+Repository defaults build and trust the development RAUC signing material in `certs/`. Do not ship those defaults in a
+production OTA fleet.
+
+Production images must set `atomixos.rauc.keyringCert` to the production CA certificate and set
+`atomixos.rauc.allowDevelopmentKeyring = false`. Production RAUC bundles must be built by overriding the
+`rauc-bundle` derivation inputs `signingCert` and `signingKeyPath` with the matching production signing certificate and
+private key.
+
+Keep the RAUC private signing key outside the image closure and out of the repository. The image should contain only the
+public CA certificate used by RAUC to verify installed bundles.
