@@ -466,9 +466,15 @@ class StagedJobManager(JobManager):
     def _handle_staged_timeout(self, job: Job) -> str:
         try:
             from atomixos_provision.provision import _runtime_paths
-            from atomixos_provision.staging import staged_job_presence, try_abandon_queued_job
+            from atomixos_provision.staging import (
+                staged_job_presence,
+                staged_job_waiting_for_turn,
+                try_abandon_queued_job,
+            )
 
             paths = _runtime_paths()
+            if staged_job_waiting_for_turn(paths, job.id):
+                return "active"
             if try_abandon_queued_job(paths, job.id):
                 return "abandoned"
             return staged_job_presence(paths, job.id)

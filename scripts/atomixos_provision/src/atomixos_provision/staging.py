@@ -83,11 +83,16 @@ def _ensure_directory(path: Path, mode: int) -> None:
         return
 
 
+CONTROL_FILE_SUFFIXES = (".ready", ".reserve")
+
+
 def validate_job_id(job_id: str) -> str:
     if not isinstance(job_id, str) or not JOB_ID_RE.match(job_id):
         raise ProvisionError(f"invalid staged job id: {job_id!r}")
     if "/" in job_id or job_id in {".", ".."}:
         raise ProvisionError(f"invalid staged job id: {job_id!r}")
+    if job_id.endswith(CONTROL_FILE_SUFFIXES):
+        raise ProvisionError(f"staged job id uses reserved suffix: {job_id!r}")
     return job_id
 
 
@@ -175,7 +180,7 @@ def write_json_atomic(
 def read_json(path: Path) -> dict[str, Any]:
     try:
         payload = json.loads(read_control_file(path).decode("utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise ProvisionError(f"invalid staged JSON: {path}") from exc
     if not isinstance(payload, dict):
         raise ProvisionError(f"staged JSON must be an object: {path}")
@@ -325,7 +330,7 @@ def _count_staged_jobs_locked(
         count += 1
     queued_job_ids: set[str] = set()
     for queued_path in paths.queue.iterdir():
-        if queued_path.name.startswith(".") or queued_path.suffix in {".ready", ".reserve"}:
+        if queued_path.name.startswith(".") or queued_path.suffix in CONTROL_FILE_SUFFIXES:
             continue
         if queued_path.is_dir():
             try:
@@ -385,6 +390,49 @@ def _cleanup_stale_reservations_locked(paths: RuntimePaths) -> None:
         fsync_directory(paths.queue)
 
 
+def _ready_sequence_for_job_locked(paths: RuntimePaths, job_id: str) -> int | None:
+    for path in (paths.queue / f"{job_id}.ready", paths.queue / f"{job_id}.reserve"):
+        try:
+            return (
+                _ready_marker_sort_key(path)[0]
+                if path.suffix == ".ready"
+                else _reservation_sort_key(path)[0]
+            )
+        except FileNotFoundError:
+            continue
+        except ProvisionError:
+            continue
+    return None
+
+
+def _has_lower_sequence_reservation_locked(paths: RuntimePaths, sequence: int) -> bool:
+    for control_path in [*paths.queue.glob("*.reserve"), *paths.queue.glob("*.ready")]:
+        try:
+            control_sequence = (
+                _ready_marker_sort_key(control_path)[0]
+                if control_path.suffix == ".ready"
+                else _reservation_sort_key(control_path)[0]
+            )
+        except ProvisionError:
+            _remove_staged_path(control_path)
+            fsync_directory(paths.queue)
+            continue
+        if control_sequence < sequence:
+            return True
+    return False
+
+
+def staged_job_waiting_for_turn(paths: RuntimePaths, job_id: str) -> bool:
+    """Return true when a queued job is blocked behind active or lower-sequence work."""
+    validate_job_id(job_id)
+    ensure_runtime_layout(paths)
+    with queue_operation_lock(paths):
+        if paths.active.exists() and any(path.is_dir() for path in paths.active.iterdir()):
+            return True
+        sequence = _ready_sequence_for_job_locked(paths, job_id)
+        return sequence is not None and _has_lower_sequence_reservation_locked(paths, sequence)
+
+
 def claim_next_job(paths: RuntimePaths) -> ClaimedJob | None:
     ensure_runtime_layout(paths, for_worker=True)
     with queue_operation_lock(paths):
@@ -403,7 +451,10 @@ def _claim_next_job_locked(paths: RuntimePaths) -> ClaimedJob | None:
         except ProvisionError:
             _remove_staged_path(ready_path)
             fsync_directory(paths.queue)
-    for _sort_key, ready_path in sorted(ready_markers):
+    for sort_key, ready_path in sorted(ready_markers):
+        sequence, _name = sort_key
+        if _has_lower_sequence_reservation_locked(paths, sequence):
+            return None
         job_id = validate_job_id(ready_path.name.removesuffix(".ready"))
         queued_path = paths.queue / job_id
         try:
@@ -660,6 +711,11 @@ def _verify_job_top_level(job_path: Path, manifest: dict[str, Any]) -> None:
         raise ProvisionError(
             "staged job contains unexpected top-level entries: " + ", ".join(sorted(unexpected))
         )
+    _verify_path_metadata(
+        job_path / "candidate",
+        _require_int(manifest, "service_uid"),
+        _require_int(manifest, "service_gid"),
+    )
     if not (job_path / "candidate").is_dir():
         raise ProvisionError("staged job missing candidate directory")
 
@@ -670,6 +726,7 @@ def _verify_tree(
     if not isinstance(expected_entries, list):
         raise ProvisionError("staged manifest tree entries must be a list")
     expected = {_entry_key(entry): entry for entry in expected_entries}
+    _verify_path_metadata(root, expected_uid, expected_gid)
     actual_entries = tree_manifest(root)
     actual = {_entry_key(entry): entry for entry in actual_entries}
     if set(actual) != set(expected):
@@ -682,7 +739,6 @@ def _verify_tree(
             parts.append("unexpected: " + ", ".join(path for path, _type in unexpected))
         raise ProvisionError("staged tree does not match manifest (" + "; ".join(parts) + ")")
 
-    _verify_path_metadata(root, expected_uid, expected_gid)
     for key, expected_entry in expected.items():
         rel_path, entry_type = key
         actual_entry = actual[key]

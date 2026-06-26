@@ -21,13 +21,16 @@ from atomixos_provision.staging import (
     ensure_runtime_layout,
     finalize_abandoned_active_jobs,
     has_staged_jobs,
+    read_json,
     read_result,
     refresh_staged_job_slot,
     release_staged_job_slot,
     reserve_staged_job_slot,
     runtime_paths,
     staged_job_presence,
+    staged_job_waiting_for_turn,
     try_abandon_queued_job,
+    validate_job_id,
     verify_staged_job,
     write_json_atomic,
 )
@@ -67,6 +70,14 @@ def test_staged_job_reservations_count_toward_queue_bound(tmp_path, monkeypatch)
 
     release_staged_job_slot(paths, "job-1")
     assert count_staged_jobs(paths) == 0
+
+def test_reserved_control_suffixes_are_rejected_as_job_ids():
+    with pytest.raises(ProvisionError, match="reserved suffix"):
+        validate_job_id("job.ready")
+    with pytest.raises(ProvisionError, match="reserved suffix"):
+        validate_job_id("job.reserve")
+
+
 
 
 def test_malformed_reservation_directory_is_removed(tmp_path, monkeypatch):
@@ -163,6 +174,23 @@ def test_reserved_sequence_controls_fifo_ready_order(tmp_path, monkeypatch):
     assert first.job_id == "job-1"
 
 
+def test_claim_next_job_waits_for_lower_sequence_reservation(tmp_path):
+    paths = runtime_paths(tmp_path / "run")
+    ensure_runtime_layout(paths, for_worker=True)
+
+    assert reserve_staged_job_slot(paths, "job-1", 2) is True
+    assert reserve_staged_job_slot(paths, "job-2", 2) is True
+    (paths.queue / "job-2").mkdir()
+    (paths.queue / "job-2.ready").write_text(
+        json.dumps({"job_id": "job-2", "sequence": 2}) + "\n",
+        encoding="utf-8",
+    )
+
+    assert claim_next_job(paths) is None
+    assert staged_job_waiting_for_turn(paths, "job-2") is True
+
+
+
 def _force_staging(monkeypatch) -> None:
     monkeypatch.delenv("ATOMIXOS_PROVISION_WORKER_ACTIVE", raising=False)
 
@@ -223,6 +251,32 @@ def test_claim_next_job_uses_ready_marker_sequence_order(tmp_path):
 
     assert claimed is not None
     assert claimed.job_id == "a-job"
+
+def test_malformed_ready_marker_utf8_is_skipped_without_blocking_worker(tmp_path):
+    paths = runtime_paths(tmp_path / "run")
+    ensure_runtime_layout(paths, for_worker=True)
+    (paths.queue / "bad.ready").write_bytes(b"\xff")
+    (paths.queue / "job-1").mkdir()
+    (paths.queue / "job-1.ready").write_text(
+        json.dumps({"job_id": "job-1", "sequence": 1}) + "\n",
+        encoding="utf-8",
+    )
+
+    claimed = claim_next_job(paths)
+
+    assert claimed is not None
+    assert claimed.job_id == "job-1"
+    assert not (paths.queue / "bad.ready").exists()
+
+
+def test_invalid_utf8_control_json_reports_provision_error(tmp_path):
+    path = tmp_path / "bad.json"
+    path.write_bytes(b"\xff")
+
+    with pytest.raises(ProvisionError, match="invalid staged JSON"):
+        read_json(path)
+
+
 
 
 def test_claim_next_job_does_not_reclaim_active_job(tmp_path):
@@ -540,6 +594,33 @@ def test_apply_staged_job_verifies_active_source_before_snapshot_copy(tmp_path, 
 
     with pytest.raises(ProvisionError, match="source verification failed"):
         apply_staged_job(config_root, runtime_root)
+
+def test_apply_staged_job_rejects_candidate_root_symlink_before_tree_walk(
+    tmp_path, monkeypatch
+):
+    runtime_root = tmp_path / "run"
+    config_root = tmp_path / "config"
+    _force_staging(monkeypatch)
+    monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(runtime_root))
+    monkeypatch.setattr(
+        "atomixos_provision.provision.validate_config_root", lambda root, **_: root
+    )
+    monkeypatch.setattr(
+        "atomixos_provision.config.load_config_schema",
+        lambda: {"type": "object", "additionalProperties": True},
+    )
+
+    stage_config_bytes("job-1", _valid_config(), "config.toml", config_root)
+    candidate = runtime_root / "queue" / "job-1" / "candidate"
+    target = tmp_path / "outside"
+    target.mkdir()
+    candidate.rename(tmp_path / "candidate-original")
+    candidate.symlink_to(target, target_is_directory=True)
+
+    with pytest.raises(ProvisionError, match="must not be a symlink"):
+        apply_staged_job(config_root, runtime_root)
+
+
 
 
 def test_apply_staged_job_uses_verified_manifest_for_snapshot_copy(tmp_path, monkeypatch):
