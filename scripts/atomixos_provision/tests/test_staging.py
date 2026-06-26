@@ -189,6 +189,65 @@ def test_claim_next_job_waits_for_lower_sequence_reservation(tmp_path):
     assert claim_next_job(paths) is None
     assert staged_job_waiting_for_turn(paths, "job-2") is True
 
+def test_claim_next_job_expires_stale_lower_sequence_reservation(tmp_path, monkeypatch):
+    monkeypatch.setattr("atomixos_provision.staging.STAGED_RESERVATION_TTL_SECONDS", 60)
+    paths = runtime_paths(tmp_path / "run")
+    ensure_runtime_layout(paths, for_worker=True)
+
+    assert reserve_staged_job_slot(paths, "job-1", 2) is True
+    assert reserve_staged_job_slot(paths, "job-2", 2) is True
+    (paths.queue / "job-2").mkdir()
+    (paths.queue / "job-2.ready").write_text(
+        json.dumps({"job_id": "job-2", "sequence": 2}) + "\n",
+        encoding="utf-8",
+    )
+    os.utime(paths.queue / "job-1.reserve", (1, 1))
+
+    claimed = claim_next_job(paths)
+
+    assert claimed is not None
+    assert claimed.job_id == "job-2"
+    assert not (paths.queue / "job-1.reserve").exists()
+
+
+def test_waiting_for_turn_expires_stale_lower_sequence_reservation(tmp_path, monkeypatch):
+    monkeypatch.setattr("atomixos_provision.staging.STAGED_RESERVATION_TTL_SECONDS", 60)
+    paths = runtime_paths(tmp_path / "run")
+    ensure_runtime_layout(paths, for_worker=True)
+
+    assert reserve_staged_job_slot(paths, "job-1", 2) is True
+    assert reserve_staged_job_slot(paths, "job-2", 2) is True
+    (paths.queue / "job-2").mkdir()
+    (paths.queue / "job-2.ready").write_text(
+        json.dumps({"job_id": "job-2", "sequence": 2}) + "\n",
+        encoding="utf-8",
+    )
+    os.utime(paths.queue / "job-1.reserve", (1, 1))
+
+    assert staged_job_waiting_for_turn(paths, "job-2") is False
+    assert not (paths.queue / "job-1.reserve").exists()
+
+
+def test_claim_next_job_skips_malformed_ready_marker_name(tmp_path):
+    paths = runtime_paths(tmp_path / "run")
+    ensure_runtime_layout(paths, for_worker=True)
+
+    (paths.queue / "bad!.ready").write_text(
+        json.dumps({"job_id": "bad!", "sequence": 1}) + "\n",
+        encoding="utf-8",
+    )
+    (paths.queue / "job-2").mkdir()
+    (paths.queue / "job-2.ready").write_text(
+        json.dumps({"job_id": "job-2", "sequence": 2}) + "\n",
+        encoding="utf-8",
+    )
+
+    claimed = claim_next_job(paths)
+
+    assert claimed is not None
+    assert claimed.job_id == "job-2"
+    assert not (paths.queue / "bad!.ready").exists()
+
 
 
 def _force_staging(monkeypatch) -> None:

@@ -26,6 +26,7 @@ from atomixos_provision.activation import (
     cleanup_rollback,
     complete_reapply,
     discard_initial_config,
+    promotion_marker_path,
     recover_config_root,
 )
 from atomixos_provision.bundle import (
@@ -500,6 +501,8 @@ def _stage_config_operation_sync(
 ) -> None:
     config_root = validate_config_root(config_root)
     paths = _runtime_paths()
+    if promotion_marker_path(config_root).exists():
+        raise StagedQueueBusyError("partial config updates require promotion recovery")
     if has_staged_jobs(paths, exclude_job_id=job_id):
         raise StagedQueueBusyError("partial config updates require an empty staged queue")
     from atomixos_provision.partial_config import (
