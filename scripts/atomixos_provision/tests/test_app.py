@@ -569,7 +569,7 @@ async def test_boot_ui_escapes_applied_config_download_script(tmp_path, monkeypa
     )
 
     app = create_app(config_root=tmp_path)
-    payload = "version = 1\n# </script><script>alert(1)</script>\n"
+    payload = "version = 1\n# </SCRIPT><SCRIPT>alert(1)</SCRIPT>\n"
     upload = {"config_file": ("config.toml", payload, "text/plain")}
     async with AsyncTestClient(app=app) as client:
         response = await client.post(
@@ -579,9 +579,9 @@ async def test_boot_ui_escapes_applied_config_download_script(tmp_path, monkeypa
         )
 
     assert response.status_code == 200
-    assert "# &lt;/script&gt;&lt;script&gt;alert(1)&lt;/script&gt;" in response.text
-    assert "# <\\/script><script>alert(1)<\\/script>" in response.text
-    assert "# </script><script>alert(1)</script>" not in response.text
+    assert "# &lt;/SCRIPT&gt;&lt;SCRIPT&gt;alert(1)&lt;/SCRIPT&gt;" in response.text
+    assert r"# \u003c/SCRIPT>\u003cSCRIPT>alert(1)\u003c/SCRIPT>" in response.text
+    assert "# </SCRIPT><SCRIPT>alert(1)</SCRIPT>" not in response.text
 
 
 async def test_apply_form_htmx_upload_success_returns_fragment(tmp_path, monkeypatch):

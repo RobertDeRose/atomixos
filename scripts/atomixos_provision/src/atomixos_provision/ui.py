@@ -51,7 +51,7 @@ def render_bootstrap_page(
     config_text: str = "", message_html: str = "", bootstrap_token: str = ""
 ) -> str:
     message_block = f'<section id="job-status" class="message">{message_html}</section>' if message_html else '<section id="job-status"></section>'
-    config_text_json = json.dumps(config_text).replace("</", "<\\/")
+    config_text_json = json.dumps(config_text).replace("<", "\\u003c")
     applied_config_block = (
         "<section class=\"panel\">"
         "<h2>Applied Configuration</h2>"
