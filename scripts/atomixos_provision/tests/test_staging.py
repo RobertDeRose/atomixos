@@ -17,6 +17,7 @@ from atomixos_provision.staging import (
     abandon_queued_job,
     can_abandon_queued_job,
     claim_next_job,
+    cleanup_claimed_job,
     count_staged_jobs,
     ensure_runtime_layout,
     finalize_abandoned_active_jobs,
@@ -119,6 +120,29 @@ def test_staged_job_count_treats_unreadable_active_dir_as_busy(tmp_path, monkeyp
 
     assert count_staged_jobs(paths) == 1
     assert has_staged_jobs(paths) is True
+
+def test_active_symlink_does_not_block_claim_or_delete_target(tmp_path, monkeypatch):
+    runtime_root = tmp_path / "run"
+    config_root = tmp_path / "config"
+    monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(runtime_root))
+    paths = runtime_paths(runtime_root)
+    ensure_runtime_layout(paths, for_worker=True)
+    target = tmp_path / "outside-active"
+    target.mkdir()
+    (target / "keep").write_text("safe\n", encoding="utf-8")
+    (paths.active / "job-old").symlink_to(target, target_is_directory=True)
+    stage_config_bytes("job-1", _valid_config(), "config.toml", config_root)
+
+    claimed = claim_next_job(paths)
+    assert claimed is not None
+    assert claimed.job_id == "job-1"
+    cleanup_claimed_job(claimed)
+    finalized = finalize_abandoned_active_jobs(paths, "stale")
+
+    assert finalized == 0
+    assert (target / "keep").read_text(encoding="utf-8") == "safe\n"
+    assert not (paths.active / "job-old").is_symlink()
+
 
 
 def test_refresh_staged_job_reservation_prevents_stale_cleanup(tmp_path, monkeypatch):
@@ -540,14 +564,14 @@ def test_staged_job_presence_treats_unreadable_active_dir_as_active(
 ):
     paths = runtime_paths(tmp_path / "run")
     ensure_runtime_layout(paths, for_worker=True)
-    original_exists = type(paths.active).exists
+    original_lstat = type(paths.active).lstat
 
-    def deny_active_exists(path):
+    def deny_active_lstat(path):
         if path == paths.active / "job-1":
             raise PermissionError("permission denied")
-        return original_exists(path)
+        return original_lstat(path)
 
-    monkeypatch.setattr(type(paths.active), "exists", deny_active_exists)
+    monkeypatch.setattr(type(paths.active), "lstat", deny_active_lstat)
 
     assert staged_job_presence(paths, "job-1") == "active"
 
@@ -784,6 +808,8 @@ def test_staged_snapshot_preserves_nested_directory_modes(tmp_path, monkeypatch)
 
     assert result is not None
     assert (config_root / "quadlet").is_dir()
+    assert oct((config_root / "quadlet").stat().st_mode & 0o7777) == "0o755"
+
 
 
 def test_staged_snapshot_reapplies_directory_modes_after_file_copy(tmp_path, monkeypatch):
@@ -822,9 +848,9 @@ def test_staged_snapshot_reapplies_directory_modes_after_file_copy(tmp_path, mon
     result = apply_staged_job(config_root, runtime_root)
 
     assert result is not None
+    assert oct((config_root / "quadlet").stat().st_mode & 0o7777) == "0o755"
 
-
-def test_staged_snapshot_preserves_special_directory_mode_bits(tmp_path, monkeypatch):
+def test_staged_snapshot_normalizes_special_directory_mode_bits(tmp_path, monkeypatch):
     runtime_root = tmp_path / "run"
     config_root = tmp_path / "config"
     _force_staging(monkeypatch)
@@ -857,6 +883,8 @@ def test_staged_snapshot_preserves_special_directory_mode_bits(tmp_path, monkeyp
     result = apply_staged_job(config_root, runtime_root)
 
     assert result is not None
+    assert oct((config_root / "quadlet").stat().st_mode & 0o7777) == "0o755"
+
 
 
 def test_apply_staged_job_promotes_verified_snapshot_not_mutated_active_tree(

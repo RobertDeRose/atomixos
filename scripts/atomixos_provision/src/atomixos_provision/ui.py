@@ -561,11 +561,6 @@ async def job_fragment(job_id: str, job_manager: JobManager, state: State) -> Re
     boot_ui_jobs, boot_ui_jobs_lock = _boot_ui_job_state(state)
     job = job_manager.get(job_id)
     if job is None:
-        if (state.config_root / "config.toml").exists():
-            with boot_ui_jobs_lock:
-                boot_ui_jobs.discard(job_id)
-                _forget_boot_ui_job(job_id)
-            return Response(_render_recovered_success_fragment(), media_type="text/html")
         return Response(
             _html_page_fragment("<p>Provisioning job not found.</p>", "status-failed"),
             status_code=404,
@@ -594,16 +589,6 @@ async def job_events(job_id: str, job_manager: JobManager, state: State) -> Resp
     boot_ui_jobs, boot_ui_jobs_lock = _boot_ui_job_state(state)
     job = job_manager.get(job_id)
     if job is None:
-        if (state.config_root / "config.toml").exists():
-            async def recovered_stream():
-                yield {"data": _render_recovered_success_fragment()}
-                yield {"event": "done", "data": ""}
-                with boot_ui_jobs_lock:
-                    boot_ui_jobs.discard(job_id)
-                    _forget_boot_ui_job(job_id)
-
-            return ServerSentEvent(recovered_stream())
-
         return Response(
             _html_page_fragment("<p>Provisioning job not found.</p>", "status-failed"),
             status_code=404,

@@ -313,6 +313,13 @@ def _next_ready_sequence_locked(paths: RuntimePaths) -> int:
     return next_sequence
 
 
+def _is_plain_directory(path: Path) -> bool:
+    try:
+        return stat.S_ISDIR(path.lstat().st_mode)
+    except FileNotFoundError:
+        return False
+
+
 def _count_staged_jobs_locked(
     paths: RuntimePaths, *, exclude_job_id: str | None = None
 ) -> int:
@@ -323,7 +330,7 @@ def _count_staged_jobs_locked(
             active_job_ids = {
                 path.name
                 for path in paths.active.iterdir()
-                if path.is_dir() and path.name != exclude_job_id
+                if _is_plain_directory(path) and path.name != exclude_job_id
             }
             count += len(active_job_ids)
     except PermissionError:
@@ -332,7 +339,7 @@ def _count_staged_jobs_locked(
     for queued_path in paths.queue.iterdir():
         if queued_path.name.startswith(".") or queued_path.suffix in CONTROL_FILE_SUFFIXES:
             continue
-        if queued_path.is_dir():
+        if _is_plain_directory(queued_path):
             try:
                 job_id = validate_job_id(queued_path.name)
                 if job_id != exclude_job_id:
@@ -428,7 +435,9 @@ def staged_job_waiting_for_turn(paths: RuntimePaths, job_id: str) -> bool:
     ensure_runtime_layout(paths)
     with queue_operation_lock(paths):
         _cleanup_stale_reservations_locked(paths)
-        if paths.active.exists() and any(_is_plain_directory(path) for path in paths.active.iterdir()):
+        if paths.active.exists() and any(
+            _is_plain_directory(path) for path in paths.active.iterdir()
+        ):
             return True
         sequence = _ready_sequence_for_job_locked(paths, job_id)
         return sequence is not None and _has_lower_sequence_reservation_locked(paths, sequence)
@@ -442,7 +451,7 @@ def claim_next_job(paths: RuntimePaths) -> ClaimedJob | None:
 
 
 def _claim_next_job_locked(paths: RuntimePaths) -> ClaimedJob | None:
-    active_jobs = sorted(path for path in paths.active.iterdir() if path.is_dir())
+    active_jobs = sorted(path for path in paths.active.iterdir() if _is_plain_directory(path))
     if active_jobs:
         return None
 
@@ -578,7 +587,14 @@ def finalize_abandoned_active_jobs(paths: RuntimePaths, reason: str) -> int:
     ensure_runtime_layout(paths, for_worker=True)
     finalized = 0
     with queue_operation_lock(paths):
-        for active_path in sorted(path for path in paths.active.iterdir() if path.is_dir()):
+        for active_path in sorted(paths.active.iterdir()):
+            try:
+                active_stat = active_path.lstat()
+            except FileNotFoundError:
+                continue
+            if stat.S_ISLNK(active_stat.st_mode) or not stat.S_ISDIR(active_stat.st_mode):
+                _remove_staged_path(active_path)
+                continue
             job_id = validate_job_id(active_path.name)
             if read_result(paths, job_id) is None:
                 write_result(paths, job_id, {"status": "failed", "error": reason})
@@ -651,12 +667,18 @@ def try_abandon_queued_job(paths: RuntimePaths, job_id: str) -> bool:
 
 
 def _job_presence_locked(paths: RuntimePaths, job_id: str) -> str:
+    active_path = paths.active / job_id
     try:
-        if (paths.active / job_id).exists():
-            return "active"
+        active_stat = active_path.lstat()
+    except FileNotFoundError:
+        pass
     except OSError:
         return "active"
-    if (paths.queue / job_id).exists() or (paths.queue / f"{job_id}.ready").exists():
+    else:
+        if stat.S_ISDIR(active_stat.st_mode) and not stat.S_ISLNK(active_stat.st_mode):
+            return "active"
+    queued_path = paths.queue / job_id
+    if _is_plain_directory(queued_path) or (paths.queue / f"{job_id}.ready").exists():
         return "queued"
     return "missing"
 

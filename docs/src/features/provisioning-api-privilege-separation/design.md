@@ -126,9 +126,10 @@ Use tmpfs-backed runtime state for unprivileged staging:
 The API service writes `<job-id>/manifest.json` and the rendered candidate tree
 first. It creates `<job-id>.ready` only after staging is complete and fsynced as
 far as practical for tmpfs. The ready marker is the trigger contract for systemd.
-`queue/` is root-owned and group-writable by `atomixos-provision`; `results/` is
-root-writable and only group-readable so the unprivileged API can report terminal
-states without being able to forge them.
+`queue/` is `02770 root:atomixos-provision`; `results/` is
+`02750 root:atomixos-provision`; result files are `0640 root:atomixos-provision`.
+The API service can create staged queue entries and read terminal results, but
+cannot forge or rewrite worker-published results.
 
 The root worker claims a job by atomically renaming the staged directory from
 `queue/<job-id>` to `active/<job-id>` and removing or consuming the ready marker.
@@ -232,11 +233,14 @@ The design uses systemd as the privilege boundary:
 
 The API can poll result files and expose the same `/api/jobs/{id}` contract. If
 the API service restarts, it can reconstruct terminal job state from result JSON
-for recent jobs. The API accepts staged submissions into a bounded FIFO queue and
-keeps only one staged job active with the root worker at a time. Polling may
-abandon a job only if it is still queued under the shared queue lock; once the
-root worker claims a job, the API extends the active wait until the worker or
-worker finalizer writes a terminal result.
+for recent jobs. The API accepts staged submissions into a bounded FIFO queue
+(four pending/active staged jobs by default). When the queue is full, submission
+returns conflict/backpressure instead of evicting existing work. The root worker
+keeps only one staged job active at a time. Polling may abandon a job only if it
+is still queued under the shared queue lock; once the root worker claims a job,
+the API waits up to the configured result timeout for the worker or worker
+finalizer to write a terminal result, then reports a timeout instead of waiting
+indefinitely.
 
 ### Existing Behavior Preservation
 

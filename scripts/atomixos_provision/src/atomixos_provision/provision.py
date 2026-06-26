@@ -471,11 +471,12 @@ def _wait_for_staged_result(
         result = read_result(paths, job_id)
         if result is not None:
             return _staged_result_payload_or_raise(result)
-        if not (paths.active / job_id).exists() and try_abandon_queued_job(paths, job_id):
+        presence = staged_job_presence(paths, job_id)
+        if presence == "queued" and try_abandon_queued_job(paths, job_id):
             raise ProvisionError("timed out waiting for privileged apply worker")
-        if staged_job_presence(paths, job_id) == "missing":
+        if presence == "missing":
             raise ProvisionError("privileged apply worker did not publish a result")
-        deadline = time.monotonic() + STAGED_RESULT_TIMEOUT_SECONDS
+        raise ProvisionError("timed out waiting for privileged apply worker")
 
 
 def _staged_result_payload_or_raise(result: dict[str, Any]) -> dict[str, Any]:
@@ -959,7 +960,7 @@ def _copy_candidate_to_durable(candidate_root: Path, durable_candidate: Path) ->
             raise ProvisionError(f"durable candidate must not contain symlink: {current}")
         os.chown(current, 0, 0, follow_symlinks=False)
         if stat.S_ISDIR(current_stat.st_mode):
-            current.chmod(0o755)
+            current.chmod(stat.S_IMODE(current_stat.st_mode) & 0o7777)
         elif stat.S_ISREG(current_stat.st_mode):
             current.chmod(stat.S_IMODE(current_stat.st_mode) & 0o777)
         else:

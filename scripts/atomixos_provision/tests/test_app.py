@@ -821,9 +821,8 @@ async def test_boot_ui_job_fragment_recovers_after_service_restart(tmp_path, mon
         response = await client.get("/ui/jobs/restarted-job")
         second = await client.get("/ui/jobs/restarted-job")
 
-    assert response.status_code == 200
-    assert "Configuration applied" in response.text
-    assert "reconnected after provisioning completed" in response.text
+    assert response.status_code == 404
+    assert "Provisioning job not found" in response.text
     assert second.status_code == 404
 
 
@@ -972,10 +971,9 @@ async def test_job_events_recovers_after_service_restart(tmp_path, monkeypatch):
         stream = await client.get("/ui/jobs/restarted-job/events")
         second = await client.get("/ui/jobs/restarted-job/events")
 
-    assert stream.status_code == 200
+    assert stream.status_code == 404
     assert stream.headers["content-type"].startswith("text/event-stream")
-    assert "Configuration applied" in stream.text
-    assert "event: done" in stream.text
+    assert "Provisioning job not found" in stream.text
     assert second.status_code == 404
 
 
@@ -1113,8 +1111,8 @@ async def test_boot_ui_rejects_malformed_terminal_job_after_provisioning(tmp_pat
     (tmp_path / "config.toml").write_text("version = 1\n")
 
     async with AsyncTestClient(app=create_app(config_root=tmp_path)) as client:
-        fragment = await client.get("/ui/jobs/../bad")
-        stream = await client.get("/ui/jobs/../bad/events")
+        fragment = await client.get("/ui/jobs/bad!")
+        stream = await client.get("/ui/jobs/bad!/events")
 
     assert fragment.status_code == 404
     assert stream.status_code == 404

@@ -236,11 +236,17 @@ class StagedJobManager(JobManager):
             result_timeout_seconds = STAGED_RESULT_TIMEOUT_SECONDS
         self._result_timeout_seconds = result_timeout_seconds
         self._max_pending = max_pending
+        self._recovery_lock = threading.Lock()
+        self._monitored_job_ids: set[str] = set()
+
 
     @property
     def is_busy(self) -> bool:
-        """True if a staged job is currently being submitted or monitored."""
-        return super().is_busy
+        """True if any staged job is currently being prepared or monitored."""
+        return any(
+            job.state in (JobState.SUBMITTED, JobState.RUNNING)
+            for job in self._jobs.values()
+        )
 
     async def submit_staged(
         self,
@@ -276,14 +282,15 @@ class StagedJobManager(JobManager):
 
     def get(self, job_id: str) -> Job | None:
         try:
-            job = super().get(job_id)
-            if job is not None:
-                self._refresh_from_result(job)
-                return job
-            recovered = self._job_from_result(job_id)
-            if recovered is not None:
-                self._jobs[job_id] = recovered
-            return recovered
+            with self._recovery_lock:
+                job = super().get(job_id)
+                if job is not None:
+                    self._refresh_from_result(job)
+                    return job
+                recovered = self._job_from_result(job_id)
+                if recovered is not None:
+                    self._jobs[job_id] = recovered
+                return recovered
         except ProvisionError:
             return None
 
@@ -353,7 +360,7 @@ class StagedJobManager(JobManager):
                 heartbeat_task.cancel()
                 with suppress(asyncio.CancelledError):
                     await heartbeat_task
-        self._task = asyncio.create_task(self._monitor_staged(job))
+        self._start_monitor_if_possible(job)
         return job
 
     async def _heartbeat_reservation(self, job: Job) -> None:
@@ -372,9 +379,8 @@ class StagedJobManager(JobManager):
                     if self._refresh_from_result(job):
                         break
                     if timeout_state == "active":
-                        deadline = time.monotonic() + self._result_timeout_seconds
                         job.set_stage("running", "privileged apply worker is still running")
-                        continue
+                        raise ProvisionError("timed out waiting for privileged apply worker")
                     if timeout_state == "missing":
                         raise ProvisionError(
                             "privileged apply worker did not publish a result"
@@ -394,6 +400,8 @@ class StagedJobManager(JobManager):
                 if hasattr(exc, "rollback_status"):
                     job.rollback_status = exc.rollback_status
                 job.completed_at = time.monotonic()
+        finally:
+            self._monitored_job_ids.discard(job.id)
 
     def _refresh_from_result(self, job: Job) -> bool:
         try:
@@ -473,6 +481,9 @@ class StagedJobManager(JobManager):
             asyncio.get_running_loop()
         except RuntimeError:
             return
+        if job.id in self._monitored_job_ids:
+            return
+        self._monitored_job_ids.add(job.id)
         self._task = asyncio.create_task(self._monitor_staged(job))
 
     def _handle_staged_timeout(self, job: Job) -> str:

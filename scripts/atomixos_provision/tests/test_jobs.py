@@ -338,7 +338,7 @@ class TestStagedJobManager:
         submit_task.cancel()
         await asyncio.sleep(0.05)
         assert not submit_task.done()
-        assert mgr.is_busy is False
+        assert mgr.is_busy is True
         finish.set()
         job = await submit_task
         assert job is not None
@@ -350,6 +350,7 @@ class TestStagedJobManager:
         monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
         mgr = StagedJobManager(result_timeout_seconds=0.01)
         finish = asyncio.Event()
+        started = asyncio.Event()
         published = []
 
         def refresh(job):
@@ -361,11 +362,12 @@ class TestStagedJobManager:
         monkeypatch.setattr(mgr, "_refresh_from_result", refresh)
 
         async def work(job):
+            started.set()
             await finish.wait()
             published.append(job.id)
 
         submit_task = asyncio.create_task(mgr.submit_staged(work))
-        await asyncio.sleep(0)
+        await started.wait()
         submit_task.cancel()
         await asyncio.sleep(0)
         finish.set()

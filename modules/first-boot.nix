@@ -72,6 +72,7 @@ let
     export ATOMIXOS_BOOTSTRAP_ACTIVATION=${bootstrapActivationScript}
     export ATOMIXOS_PROVISION_WORKER_ACTIVE=1
     export ATOMIXOS_PROVISION_RESULT_TIMEOUT_SECONDS=1200
+    ${provisionCli}/bin/atomixos-provision finalize-staged --runtime-root /run/atomixos-provision
     exec ${provisionCli}/bin/atomixos-provision apply-staged /data/config --runtime-root /run/atomixos-provision --drain
   '';
   provisionApplyFinalizeScript = pkgs.writeShellScript "atomixos-provision-apply-finalize" ''

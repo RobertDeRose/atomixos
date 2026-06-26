@@ -14,12 +14,15 @@
 - [x] T010 Define `/run/atomixos-provision` directory layout, ownership, and tmpfiles rules
 - [x] T011 Define staged job manifest schema and versioning
 - [x] T012 Define ready marker and atomic job-claim protocol
-- [x] T013 Define result JSON schema for API/worker handoff
-- [x] T014 Define bounded FIFO queueing across API submissions and serialized root worker execution
-- [x] T015 Define retention and cleanup policy for queue, active, and result files
+- [x] T013 Define result JSON schema for API/worker handoff: version, job ID, completion time, terminal status,
+  success payload, error payload, and rollback status
+- [x] T014 Define bounded FIFO queueing across API submissions and serialized root worker execution: default
+  capacity 4, conflict on full queue, no eviction
+- [x] T015 Define retention and cleanup policy for queue, active, and result files, including timeout behavior
 - [x] T016 Define root-worker verification rules for paths, owners, modes, symlinks, hashes, and unexpected entries
 - [x] T017 Define which activation steps stay as existing systemd units and which are called by the root worker
-- [x] T018 Define failure, rollback, and reboot recovery behavior for queued, active, and partially promoted jobs
+- [x] T018 Define failure, rollback, and reboot recovery behavior for queued, active, timed-out, and partially
+  promoted jobs
 
 ## Unprivileged API Implementation
 

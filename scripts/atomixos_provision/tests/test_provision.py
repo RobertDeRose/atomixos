@@ -16,7 +16,11 @@ from atomixos_provision.provision import (
     stage_config_operation,
     write_imported_state,
 )
-from atomixos_provision.staging import reserve_staged_job_slot, runtime_paths
+from atomixos_provision.staging import (
+    ensure_runtime_layout,
+    reserve_staged_job_slot,
+    runtime_paths,
+)
 
 VALID_ED25519_KEY = (
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw"
@@ -267,32 +271,16 @@ async def test_apply_config_operation_staged_path_waits_after_queueing(
     assert calls == ["stage", "wait"]
 
 
-def test_wait_for_staged_result_extends_while_worker_active(monkeypatch, tmp_path):
+def test_wait_for_staged_result_times_out_while_worker_active(monkeypatch, tmp_path):
     from atomixos_provision import provision
 
     paths = runtime_paths(tmp_path / "run")
     (paths.active / "job-1").mkdir(parents=True)
-    calls = {"count": 0}
 
-    def fake_monotonic():
-        calls["count"] += 1
-        if calls["count"] == 1:
-            return 0
-        if calls["count"] == 2:
-            return 2
-        return 3
+    monkeypatch.setattr(provision, "STAGED_RESULT_TIMEOUT_SECONDS", 0.01)
 
-    def fake_read_result(_paths, _job_id):
-        if calls["count"] >= 3:
-            return {"status": "succeeded", "result": {"warnings": []}}
-        return None
-
-    monkeypatch.setattr(provision, "STAGED_RESULT_TIMEOUT_SECONDS", 1)
-    monkeypatch.setattr(provision.time, "monotonic", fake_monotonic)
-    monkeypatch.setattr(provision.time, "sleep", lambda _seconds: None)
-    monkeypatch.setattr(provision, "read_result", fake_read_result)
-
-    assert provision._wait_for_staged_result(paths, "job-1") == {"warnings": []}
+    with pytest.raises(ProvisionError, match="timed out waiting"):
+        provision._wait_for_staged_result(paths, "job-1")
 
 
 def test_wait_for_staged_result_rereads_before_timeout_failure(monkeypatch, tmp_path):
@@ -726,6 +714,32 @@ def test_import_config_from_path_stages_data_config_outside_worker(monkeypatch, 
     assert result == {"queued": True}
     assert calls
 
+def test_import_config_from_path_applies_data_config_in_worker(monkeypatch, tmp_path):
+    from atomixos_provision import provision
+
+    calls = []
+    config_path = tmp_path / "config.toml"
+    config_path.write_text("version = 1\n")
+    monkeypatch.setenv("ATOMIXOS_PROVISION_WORKER_ACTIVE", "1")
+    monkeypatch.setattr(provision, "validate_config_root", lambda _root: Path("/data/config"))
+    monkeypatch.setattr(provision, "PROVISION_LOCK_DIR", tmp_path / "locks")
+    monkeypatch.setattr(
+        provision,
+        "_stage_prepared_sync",
+        lambda *args, **kwargs: pytest.fail("worker path must not stage"),
+    )
+    monkeypatch.setattr(
+        provision,
+        "_provision_prepared_sync",
+        lambda *args, **kwargs: calls.append((args, kwargs)) or {"applied": True},
+    )
+
+    result = import_config_from_path(config_path, Path("/data/config"))
+
+    assert result == {"applied": True}
+    assert calls
+
+
 
 async def test_apply_config_transform_preserves_bundle_files(tmp_path, monkeypatch):
     monkeypatch.setenv("ATOMIXOS_ALLOW_UNSAFE_CONFIG_ROOT", "1")
@@ -788,6 +802,18 @@ async def test_apply_config_transform_rejects_data_config_outside_worker(monkeyp
 
     with pytest.raises(ProvisionError, match="must use staged operations"):
         await apply_config_transform(lambda config: config, Path("/data/config"))
+
+def test_wait_for_staged_result_times_out_active_job_without_result(monkeypatch, tmp_path):
+    from atomixos_provision import provision
+
+    paths = runtime_paths(tmp_path / "run")
+    ensure_runtime_layout(paths, for_worker=True)
+    (paths.active / "job-1").mkdir()
+    monkeypatch.setattr(provision, "STAGED_RESULT_TIMEOUT_SECONDS", 0.01)
+
+    with pytest.raises(ProvisionError, match="timed out waiting"):
+        provision._wait_for_staged_result(paths, "job-1")
+
 
 
 def test_reapply_renders_network_settings_and_rolls_back_on_activation_failure(
