@@ -46,7 +46,7 @@
 - [x] T043 Verify staged manifest, relative paths, ownership, modes, no symlinks, hashes, and allowed entries
 - [x] T044 Reject stale, malformed, or tampered staged jobs without mutating `/data`
 - [x] T045 Re-render verified staged source config into `/data/config-candidate` with root-controlled ownership and modes
-- [x] T046 Copy verified staged bundle files into the durable candidate with final app runtime ownership and modes
+- [x] T046 Re-render verified staged config into the durable candidate as root and copy only approved opaque bundle files
 - [x] T047 Promote `/data/config-candidate` to `/data/config` using existing crash-safe promotion semantics
 - [x] T048 Carry forward managed state needed for re-apply and rollback
 - [x] T049 Run activation, managed-user materialization, Quadlet sync, LAN/firewall application, and bootstrap rebinding
