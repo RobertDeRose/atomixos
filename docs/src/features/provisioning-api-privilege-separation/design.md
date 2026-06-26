@@ -199,9 +199,9 @@ rename the tmpfs candidate directly into `/data/config`. The worker should:
 7. Roll back on activation failure.
 8. Write `/run/atomixos-provision/results/<job-id>.json` as `0640 root:atomixos-provision`.
    Result JSON is versioned and includes `version`, `job_id`, `completed_at`,
-   `status` (`succeeded` or `failed`), plus either `result` with warnings,
-   rollback status, and forwarding URL data or `error` with optional
-   `rollback_status`.
+   and `status` (`succeeded` or `failed`). Successful results include a
+   `result` payload with warnings, `rolled_back`, and forwarding URL data.
+   Failed results include `error` and optional top-level `rollback_status`.
 
 This keeps HTTP-side validation and staging in tmpfs while limiting persistent
 writes to root-rendered canonical state, approved opaque files, and rollback

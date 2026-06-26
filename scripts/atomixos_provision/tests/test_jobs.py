@@ -8,6 +8,7 @@ import pytest
 from atomixos_provision.config import ProvisionError
 from atomixos_provision.jobs import Job, JobManager, JobState, StagedJobManager
 from atomixos_provision.staging import (
+    count_staged_jobs,
     ensure_runtime_layout,
     publish_ready_marker,
     reserve_staged_job_slot,
@@ -439,6 +440,7 @@ class TestStagedJobManager:
 
         assert rejected is None
         assert mgr._jobs == {}
+        assert count_staged_jobs(runtime_paths(tmp_path / "run")) == 0
 
     @pytest.mark.asyncio
     async def test_staged_submit_returns_failed_job_when_reservation_fails(
@@ -494,10 +496,13 @@ class TestStagedJobManager:
         monkeypatch.setattr("atomixos_provision.jobs._STAGED_RESERVATION_HEARTBEAT_SECONDS", 0.01)
         mgr = StagedJobManager(result_timeout_seconds=0.01)
         finish = asyncio.Event()
+        heartbeat_seen = asyncio.Event()
         refreshes = []
 
         def refresh(job):
             refreshes.append(job.id)
+            if len(refreshes) >= 2:
+                heartbeat_seen.set()
 
         monkeypatch.setattr(mgr, "_refresh_reservation", refresh)
         monkeypatch.setattr(mgr, "_refresh_from_result", lambda job: True)
@@ -506,7 +511,7 @@ class TestStagedJobManager:
             await finish.wait()
 
         submit_task = asyncio.create_task(mgr.submit_staged(work))
-        await asyncio.sleep(0.05)
+        await heartbeat_seen.wait()
         finish.set()
         job = await submit_task
 

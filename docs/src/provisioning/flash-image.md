@@ -9,7 +9,7 @@ Build a complete `.img` file that can be written to eMMC (or SD card) using `dd`
 mise run build
 
 # Copy the latest image to a specific output path
-mise run build -- -o atomixos-25.11.img
+mise run build -- -o atomixos-26.05.img
 
 # Build via Lima VM
 mise run build -- --lima
@@ -35,7 +35,7 @@ Flash using the mise task:
 mise run flash /dev/disk4
 
 # Specify image explicitly
-mise run flash -i atomixos-25.11.img /dev/disk4
+mise run flash -i atomixos-26.05.img /dev/disk4
 
 # Skip confirmation prompt
 mise run flash -y /dev/disk4
@@ -56,7 +56,7 @@ The flash task automatically:
 mise run flash -y /dev/mmcblk0
 
 # With dd directly
-sudo dd if=atomixos-25.11.img of=/dev/mmcblk0 bs=4M status=progress
+sudo dd if=atomixos-26.05.img of=/dev/mmcblk0 bs=4M status=progress
 sudo sync
 ```
 

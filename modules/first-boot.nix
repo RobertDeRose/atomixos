@@ -71,7 +71,7 @@ let
     set -euo pipefail
     export ATOMIXOS_BOOTSTRAP_ACTIVATION=${bootstrapActivationScript}
     export ATOMIXOS_PROVISION_WORKER_ACTIVE=1
-    export ATOMIXOS_PROVISION_RESULT_TIMEOUT_SECONDS=1200
+    export ATOMIXOS_PROVISION_RESULT_TIMEOUT_SECONDS=3900
     ${provisionCli}/bin/atomixos-provision finalize-staged --runtime-root /run/atomixos-provision
     exec ${provisionCli}/bin/atomixos-provision apply-staged /data/config --runtime-root /run/atomixos-provision --drain
   '';
@@ -352,7 +352,7 @@ in
       Restart = "always";
       RestartSec = 2;
       Environment = [
-        "ATOMIXOS_PROVISION_RESULT_TIMEOUT_SECONDS=1200"
+        "ATOMIXOS_PROVISION_RESULT_TIMEOUT_SECONDS=3900"
       ];
       ExecStart = "${provisionCli}/bin/atomixos-provision serve /data/config";
       User = "atomixos-provision";

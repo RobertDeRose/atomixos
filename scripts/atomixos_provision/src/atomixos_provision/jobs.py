@@ -379,8 +379,9 @@ class StagedJobManager(JobManager):
                     if self._refresh_from_result(job):
                         break
                     if timeout_state == "active":
-                        job.set_stage("running", "privileged apply worker is still running")
-                        raise ProvisionError("timed out waiting for privileged apply worker")
+                        deadline = time.monotonic() + self._result_timeout_seconds
+                        job.set_stage("queued", "waiting for privileged apply worker")
+                        continue
                     if timeout_state == "missing":
                         raise ProvisionError(
                             "privileged apply worker did not publish a result"

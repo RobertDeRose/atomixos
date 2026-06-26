@@ -794,6 +794,72 @@ Volume = "${{FILES_DIR}}/app/settings.json:/settings.json:ro"
     unit_text = (config_root / "quadlet" / "app.container").read_text()
     assert f"Volume={config_root}/files/app/settings.json:/settings.json:ro" in unit_text
 
+async def test_staged_partial_apply_preserves_bundle_files(tmp_path, monkeypatch):
+    from atomixos_provision import provision
+
+    monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
+    monkeypatch.setenv("ATOMIXOS_ALLOW_UNSAFE_CONFIG_ROOT", "1")
+    monkeypatch.setattr(
+        "atomixos_provision.config.load_config_schema",
+        lambda: {"type": "object", "additionalProperties": True},
+    )
+    monkeypatch.setattr(
+        "atomixos_provision.provision.complete_reapply",
+        lambda _root, _progress=None: (True, [], "skipped"),
+    )
+    monkeypatch.setattr("atomixos_provision.provision.reconcile_bootstrap_wan", lambda: None)
+    monkeypatch.setattr("atomixos_provision.bundle.APP_RUNTIME_USER", "nobody")
+    monkeypatch.setattr("atomixos_provision.bundle.os.chown", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("atomixos_provision.provision.os.chown", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        provision,
+        "validate_config_root",
+        lambda root, **_kwargs: root.resolve(strict=False),
+    )
+
+    config_root = tmp_path / "config"
+    bundle_root = tmp_path / "bundle-src"
+    files_dir = bundle_root / "files" / "app"
+    files_dir.mkdir(parents=True)
+    (files_dir / "settings.json").write_text("{}\n")
+    (bundle_root / "config.toml").write_text(
+        f"""\
+version = 1
+
+[users.admin]
+isAdmin = true
+ssh_key = "{VALID_ED25519_KEY} admin@example"
+
+[activation]
+required = ["app"]
+
+[containers.container.app]
+privileged = false
+
+[containers.container.app.Container]
+Image = "docker.io/library/alpine:latest"
+Volume = "${{FILES_DIR}}/app/settings.json:/settings.json:ro"
+"""
+    )
+    bundle_path = tmp_path / "bundle.tar.gz"
+    with tarfile.open(bundle_path, "w:gz") as archive:
+        archive.add(bundle_root / "config.toml", arcname="config.toml")
+        archive.add(bundle_root / "files", arcname="files")
+
+    import_config_from_path(bundle_path, config_root)
+    await stage_config_operation(
+        "job-1",
+        {"op": "patch_network", "payload": {"dns_servers": ["9.9.9.9"]}},
+        config_root,
+    )
+    result = provision.apply_staged_job(config_root, tmp_path / "run")
+
+    assert result is not None
+    assert (config_root / "files" / "app" / "settings.json").read_text() == "{}\n"
+    unit_text = (config_root / "quadlet" / "app.container").read_text()
+    assert f"Volume={config_root}/files/app/settings.json:/settings.json:ro" in unit_text
+
+
 
 async def test_apply_config_transform_rejects_data_config_outside_worker(monkeypatch):
     monkeypatch.setattr(

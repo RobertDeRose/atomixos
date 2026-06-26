@@ -22,6 +22,7 @@ from atomixos_provision.staging import (
     ensure_runtime_layout,
     finalize_abandoned_active_jobs,
     has_staged_jobs,
+    publish_ready_marker,
     read_json,
     read_result,
     refresh_staged_job_slot,
@@ -271,6 +272,21 @@ def test_claim_next_job_skips_malformed_ready_marker_name(tmp_path):
     assert claimed is not None
     assert claimed.job_id == "job-2"
     assert not (paths.queue / "bad!.ready").exists()
+
+
+def test_publish_ready_marker_does_not_follow_existing_symlink(tmp_path):
+    paths = runtime_paths(tmp_path / "run")
+    ensure_runtime_layout(paths)
+    assert reserve_staged_job_slot(paths, "job-1", 1) is True
+    target = tmp_path / "ready-target"
+    target.write_text("safe\n", encoding="utf-8")
+    (paths.queue / "job-1.ready").symlink_to(target)
+
+    publish_ready_marker(paths, "job-1")
+
+    assert target.read_text(encoding="utf-8") == "safe\n"
+    marker = json.loads((paths.queue / "job-1.ready").read_text(encoding="utf-8"))
+    assert marker["job_id"] == "job-1"
 
 
 

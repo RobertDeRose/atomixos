@@ -11,7 +11,7 @@ require a physical Rock64 board with eMMC, serial console, and network connectiv
 - USB-to-serial adapter connected to UART2 (1.5 Mbaud)
 - USB Ethernet adapter (for eth1/LAN interface)
 - Supported USB Ethernet adapter for eth1/LAN (`r8152`, `ax88179_178a`, or `cdc_ether`)
-- Built disk image (`atomixos-25.11.img`)
+- Built disk image (`atomixos-26.05.img`)
 - Built RAUC bundle (`rock64.raucb`)
 - Network with DHCP and internet access (for WAN/eth0)
 - A second device on the LAN subnet for client testing
@@ -24,7 +24,7 @@ require a physical Rock64 board with eMMC, serial console, and network connectiv
 # Flash the image
 mise run flash /dev/disk4    # macOS
 # or
-sudo dd if=atomixos-25.11.img of=/dev/mmcblk0 bs=4M status=progress
+sudo dd if=atomixos-26.05.img of=/dev/mmcblk0 bs=4M status=progress
 
 # Connect serial console
 screen /dev/tty.usbserial-DM02496T 1500000

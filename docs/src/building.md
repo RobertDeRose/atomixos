@@ -73,7 +73,7 @@ nix build .#squashfs -o result-squashfs
 
 The flashable image filename includes the pinned NixOS release series from `flake.nix`:
 
-- Current: `atomixos-25.11.img` (from `nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11"`)
+- Current: `atomixos-26.05.img` (from `nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05"`)
 - Pattern: `atomixos-<series>.img`
 
 When you move to a new NixOS series (e.g., `nixos-26.05`), update `flake.nix`/`flake.lock` and rebuild. The image name

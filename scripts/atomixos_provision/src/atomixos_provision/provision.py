@@ -379,8 +379,6 @@ def _stage_prepared_sync(
         warnings = write_imported_state(
             parsed, config_path, None, candidate_root, config_root, progress
         )
-        if is_reapply:
-            carry_forward_managed_state(config_root, candidate_root)
         preserve_bundle_files = False
         if files_path is not None:
             if progress:

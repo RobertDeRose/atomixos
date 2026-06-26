@@ -183,7 +183,11 @@ def save_managed_state(names: set[str]) -> None:
 
 def require_worker_for_data_config_mutation() -> None:
     data_config = Path("/data/config")
-    paths = [MANAGED_STATE.resolve(strict=False), SSH_KEYS_DIR.resolve(strict=False)]
+    paths = [
+        USERS_JSON.resolve(strict=False),
+        MANAGED_STATE.resolve(strict=False),
+        SSH_KEYS_DIR.resolve(strict=False),
+    ]
     touches_data_config = any(path == data_config or data_config in path.parents for path in paths)
     if touches_data_config and not os.environ.get(WORKER_ACTIVE):
         log("refusing to update /data/config outside worker context")

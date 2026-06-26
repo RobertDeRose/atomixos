@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import errno
 import fcntl
+import grp
 import hashlib
 import json
 import os
@@ -73,6 +74,13 @@ def ensure_runtime_layout(paths: RuntimePaths, *, for_worker: bool = False) -> N
         _ensure_directory(paths.results, RESULTS_DIR_MODE)
     if for_worker:
         _ensure_directory(paths.active, ACTIVE_DIR_MODE)
+
+
+def _service_group_id() -> int | None:
+    try:
+        return grp.getgrnam("atomixos-provision").gr_gid
+    except KeyError:
+        return None
 
 
 def _ensure_directory(path: Path, mode: int) -> None:
@@ -210,7 +218,6 @@ def read_control_file(path: Path, *, max_bytes: int = MAX_CONTROL_JSON_BYTES) ->
 def publish_ready_marker(paths: RuntimePaths, job_id: str) -> Path:
     validate_job_id(job_id)
     ready_path = paths.queue / f"{job_id}.ready"
-    tmp_path = paths.queue / f".{job_id}.ready.{os.getpid()}"
     with queue_operation_lock(paths):
         reserve_path = paths.queue / f"{job_id}.reserve"
         try:
@@ -218,15 +225,12 @@ def publish_ready_marker(paths: RuntimePaths, job_id: str) -> Path:
         except (FileNotFoundError, ProvisionError):
             sequence = _next_ready_sequence_locked(paths)
             created_at = time.time()
-        tmp_path.write_text(
-            json.dumps({"job_id": job_id, "sequence": sequence, "created_at": created_at})
-            + "\n",
-            encoding="utf-8",
+        write_json_atomic(
+            ready_path,
+            {"job_id": job_id, "sequence": sequence, "created_at": created_at},
+            mode=0o640,
         )
-        tmp_path.chmod(0o640)
-        os.replace(tmp_path, ready_path)
         reserve_path.unlink(missing_ok=True)
-        fsync_directory(paths.queue)
     return ready_path
 
 
@@ -574,6 +578,10 @@ def write_result(paths: RuntimePaths, job_id: str, payload: dict[str, Any]) -> P
     )
     if results_stat is None:
         ensure_runtime_layout(paths, for_worker=True)
+        if paths.root == DEFAULT_RUNTIME_ROOT and os.geteuid() == 0:
+            service_gid = _service_group_id()
+            if service_gid is not None:
+                os.chown(paths.results, 0, service_gid)
         results_stat = _verify_results_directory(
             paths.results, require_root_owner=paths.root == DEFAULT_RUNTIME_ROOT
         )

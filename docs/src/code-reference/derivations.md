@@ -163,7 +163,7 @@ mkimage -C none -A arm64 -T script -d boot.cmd boot.scr
 
 **Output:** `$out/atomixos-<series>.img`
 
-The image name is derived from the pinned NixOS release series (e.g., `atomixos-25.11.img`). The image leaves the
+The image name is derived from the pinned NixOS release series (e.g., `atomixos-26.05.img`). The image leaves the
 remaining eMMC space unallocated so initrd `systemd-repart` can create `boot-b`, `rootfs-b`, and `/data` on first
 boot.
 

@@ -161,6 +161,35 @@ def test_apply_operation_dispatches_serialized_partial_request():
     assert updated["containers"]["volume"]["cache"] == {"Volume": {"Label": "cache"}}
 
 
+@pytest.mark.parametrize(
+    ("operation", "assertion"),
+    [
+        (
+            {
+                "op": "put_user",
+                "name": "ops",
+                "payload": {"isAdmin": False, "ssh_key": "ssh-ed25519 AAAA ops"},
+            },
+            lambda updated: updated["users"]["ops"]["isAdmin"] is False,
+        ),
+        (
+            {"op": "delete_user", "name": "admin"},
+            lambda updated: "admin" not in updated["users"],
+        ),
+        (
+            {"op": "patch_network", "payload": {"dns_servers": ["9.9.9.9"]}},
+            lambda updated: updated["network"]["dns_servers"] == ["9.9.9.9"],
+        ),
+        (
+            {"op": "delete_resource", "table": "network", "name": "backend"},
+            lambda updated: "backend" not in updated["containers"]["network"],
+        ),
+    ],
+)
+def test_apply_operation_dispatches_all_serialized_operation_types(operation, assertion):
+    assert assertion(apply_operation(BASE_CONFIG, operation))
+
+
 def test_apply_operation_rejects_extra_operation_keys():
     with pytest.raises(ProvisionError, match="unsupported partial operation keys: extra"):
         apply_operation(

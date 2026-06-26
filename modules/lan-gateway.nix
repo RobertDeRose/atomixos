@@ -112,12 +112,14 @@ in
 
   systemd.services.atomixos-bootstrap-rebind = {
     description = "Rebind bootstrap API socket to provisioned LAN address";
-    after = [ "lan-gateway-apply.service" ];
-    before = [ "atomixos-bootstrap.socket" ];
-    wants = [ "lan-gateway-apply.service" ];
+    before = [
+      "atomixos-bootstrap.socket"
+      "sockets.target"
+    ];
     wantedBy = [ "sockets.target" ];
 
     unitConfig = {
+      DefaultDependencies = false;
       ConditionPathExists = [
         "/data/config/config.toml"
         "/data/config/lan-settings.json"

@@ -486,11 +486,19 @@ async def apply_form(request: Request, state: State) -> Response[str]:
         filename = upload_filename or "config.toml"
         config_text = uploaded_config_text(payload, filename)
 
+    boot_ui_jobs, boot_ui_jobs_lock = _boot_ui_job_state(state)
+
+    def remember_boot_ui_job(job_id: str) -> None:
+        with boot_ui_jobs_lock:
+            boot_ui_jobs.add(job_id)
+            _remember_boot_ui_job(job_id)
+
     is_staged_manager = hasattr(job_manager, "submit_staged")
     if is_staged_manager:
         from atomixos_provision.provision import stage_config_bytes
 
         async def stage_work(job):
+            remember_boot_ui_job(job.id)
             return await asyncio.to_thread(
                 stage_config_bytes,
                 job.id,
@@ -519,10 +527,7 @@ async def apply_form(request: Request, state: State) -> Response[str]:
             media_type="text/html",
         )
 
-    boot_ui_jobs, boot_ui_jobs_lock = _boot_ui_job_state(state)
-    with boot_ui_jobs_lock:
-        boot_ui_jobs.add(job.id)
-        _remember_boot_ui_job(job.id)
+    remember_boot_ui_job(job.id)
 
     should_wait_for_terminal_page = (
         hasattr(job_manager, "submit_staged")
@@ -561,6 +566,11 @@ async def job_fragment(job_id: str, job_manager: JobManager, state: State) -> Re
     boot_ui_jobs, boot_ui_jobs_lock = _boot_ui_job_state(state)
     job = job_manager.get(job_id)
     if job is None:
+        if (state.config_root / "config.toml").exists():
+            with boot_ui_jobs_lock:
+                boot_ui_jobs.discard(job_id)
+                _forget_boot_ui_job(job_id)
+            return Response(_render_recovered_success_fragment(), media_type="text/html")
         return Response(
             _html_page_fragment("<p>Provisioning job not found.</p>", "status-failed"),
             status_code=404,
@@ -589,6 +599,15 @@ async def job_events(job_id: str, job_manager: JobManager, state: State) -> Resp
     boot_ui_jobs, boot_ui_jobs_lock = _boot_ui_job_state(state)
     job = job_manager.get(job_id)
     if job is None:
+        if (state.config_root / "config.toml").exists():
+            async def recovered_stream():
+                yield {"data": _render_recovered_success_fragment()}
+                yield {"event": "done", "data": ""}
+                with boot_ui_jobs_lock:
+                    boot_ui_jobs.discard(job_id)
+                    _forget_boot_ui_job(job_id)
+
+            return ServerSentEvent(recovered_stream())
         return Response(
             _html_page_fragment("<p>Provisioning job not found.</p>", "status-failed"),
             status_code=404,
