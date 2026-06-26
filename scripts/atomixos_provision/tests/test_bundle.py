@@ -12,6 +12,7 @@ from atomixos_provision.bundle import (
     extract_bundle_archive,
     prepare_source_bytes,
     prepare_source_path,
+    stage_bundle_files,
     validate_bundle_layout,
     validate_bundle_member,
     validate_source_size,
@@ -198,6 +199,16 @@ class TestCopyBundleFiles:
         config_root.mkdir()
         copy_bundle_files(None, config_root)
         assert not (config_root / "files").exists()
+
+    def test_stage_bundle_files_accepts_missing_optional_source(self, tmp_path):
+        destination = tmp_path / "staged-files"
+        destination.mkdir()
+        (destination / "old.txt").write_text("old\n")
+
+        stage_bundle_files(tmp_path / "missing-files", destination)
+
+        assert not destination.exists()
+
 
     def test_cleans_existing(self, tmp_path):
         config_root = tmp_path / "config"

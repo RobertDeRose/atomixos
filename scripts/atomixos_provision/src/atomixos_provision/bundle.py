@@ -457,10 +457,12 @@ def copy_bundle_files(files_source: Path | None, config_root: Path) -> None:
         os.replace(staging_target, target)
 
 
-def stage_bundle_files(files_source: Path, destination: Path) -> None:
+def stage_bundle_files(files_source: Path | None, destination: Path) -> None:
     """Copy validated bundle files into an unprivileged staging tree."""
     if destination.exists():
         _remove_bundle_files_target(destination)
+    if files_source is None or not files_source.exists():
+        return
     _snapshot_files_source(files_source, destination)
 
 
