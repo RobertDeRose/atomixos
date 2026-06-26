@@ -427,6 +427,7 @@ def staged_job_waiting_for_turn(paths: RuntimePaths, job_id: str) -> bool:
     validate_job_id(job_id)
     ensure_runtime_layout(paths)
     with queue_operation_lock(paths):
+        _cleanup_stale_reservations_locked(paths)
         if paths.active.exists() and any(path.is_dir() for path in paths.active.iterdir()):
             return True
         sequence = _ready_sequence_for_job_locked(paths, job_id)
@@ -436,6 +437,7 @@ def staged_job_waiting_for_turn(paths: RuntimePaths, job_id: str) -> bool:
 def claim_next_job(paths: RuntimePaths) -> ClaimedJob | None:
     ensure_runtime_layout(paths, for_worker=True)
     with queue_operation_lock(paths):
+        _cleanup_stale_reservations_locked(paths)
         return _claim_next_job_locked(paths)
 
 
@@ -447,7 +449,9 @@ def _claim_next_job_locked(paths: RuntimePaths) -> ClaimedJob | None:
     ready_markers = []
     for ready_path in sorted(paths.queue.glob("*.ready")):
         try:
-            ready_markers.append((_ready_marker_sort_key(ready_path), ready_path))
+            sort_key = _ready_marker_sort_key(ready_path)
+            validate_job_id(ready_path.name.removesuffix(".ready"))
+            ready_markers.append((sort_key, ready_path))
         except ProvisionError:
             _remove_staged_path(ready_path)
             fsync_directory(paths.queue)

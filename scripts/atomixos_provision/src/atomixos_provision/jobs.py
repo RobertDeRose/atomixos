@@ -298,6 +298,7 @@ class StagedJobManager(JobManager):
         job.set_stage("running")
         heartbeat_task: asyncio.Task | None = None
         work_task: asyncio.Task | None = None
+        staged = False
         try:
             self._refresh_reservation(job)
             heartbeat_task = asyncio.create_task(self._heartbeat_reservation(job))
@@ -306,6 +307,7 @@ class StagedJobManager(JobManager):
                 await asyncio.shield(work_task)
             except asyncio.CancelledError:
                 await work_task
+            staged = True
             heartbeat_task.cancel()
             with suppress(asyncio.CancelledError):
                 await heartbeat_task
@@ -313,6 +315,16 @@ class StagedJobManager(JobManager):
             self._refresh_reservation(job)
             job.set_stage("queued", "waiting for privileged apply worker")
         except asyncio.CancelledError:
+            if staged:
+                if heartbeat_task is not None:
+                    heartbeat_task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await heartbeat_task
+                    heartbeat_task = None
+                self._refresh_reservation(job)
+                job.set_stage("queued", "waiting for privileged apply worker")
+                self._start_monitor_if_possible(job)
+                return job
             self._release_reservation(job)
             with job._lock:
                 job.state = JobState.FAILED

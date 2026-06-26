@@ -16,7 +16,7 @@ validation, sanitization, and candidate rendering into tmpfs under
 
 Root-owned systemd units then consume completed staged jobs. A `systemd.path`
 unit watches for ready markers and starts a root oneshot apply service. The root
-worker verifies the staged job, copies the verified candidate into a durable
+worker verifies the staged source, re-renders canonical state into a durable
 `/data/config-candidate`, promotes it within `/data`, runs activation, performs
 rollback on failure, and writes job results for the API to report.
 

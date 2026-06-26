@@ -30,6 +30,50 @@ def test_serve_reads_environment_when_command_runs(monkeypatch, tmp_path):
     assert captured["log_level"] == "info"
     assert captured["app"].state["config_root"] == tmp_path
 
+def test_serve_uses_inherited_systemd_socket(monkeypatch, tmp_path):
+    captured = {}
+
+    class FakeSocket:
+        def fileno(self):
+            return 3
+
+        def close(self):
+            captured["closed"] = True
+
+    class FakeConfig:
+        def __init__(self, app, fd, log_level):
+            captured["app"] = app
+            captured["fd"] = fd
+            captured["log_level"] = log_level
+
+    class FakeServer:
+        def __init__(self, config):
+            captured["config"] = config
+
+        async def serve(self):
+            captured["served"] = True
+
+    class FakeUvicorn:
+        Config = FakeConfig
+        Server = FakeServer
+
+        @staticmethod
+        def run(*_args, **_kwargs):
+            raise AssertionError("serve should use inherited socket")
+
+    monkeypatch.setenv("ATOMIXOS_CONFIG_ROOT", str(tmp_path))
+    monkeypatch.setitem(__import__("sys").modules, "uvicorn", FakeUvicorn)
+    monkeypatch.setattr(server, "_get_systemd_socket", lambda: FakeSocket())
+
+    result = CliRunner().invoke(server.cli, ["serve"])
+
+    assert result.exit_code == 0, result.output
+    assert captured["fd"] == 3
+    assert captured["log_level"] == "info"
+    assert captured["served"] is True
+    assert captured["closed"] is True
+    assert captured["app"].state["config_root"] == tmp_path
+
 
 def test_apply_staged_command_returns_json(monkeypatch, tmp_path):
     captured = {}

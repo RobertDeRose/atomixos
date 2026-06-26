@@ -12,6 +12,7 @@ from atomixos_provision.staging import (
     publish_ready_marker,
     reserve_staged_job_slot,
     runtime_paths,
+    staged_job_presence,
 )
 
 
@@ -233,6 +234,46 @@ class TestStagedJobManager:
 
         assert job.state == JobState.FAILED
         assert job.completed_at is not None
+
+
+    @pytest.mark.asyncio
+    async def test_staged_job_cancellation_after_queueing_keeps_monitoring(
+        self, monkeypatch, tmp_path
+    ):
+        runtime_root = tmp_path / "run"
+        monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(runtime_root))
+        paths = runtime_paths(runtime_root)
+        cleanup_started = asyncio.Event()
+        cleanup_release = asyncio.Event()
+        mgr = StagedJobManager(result_timeout_seconds=60, max_pending=1)
+
+        async def heartbeat(_job):
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cleanup_started.set()
+                await cleanup_release.wait()
+
+        async def work(job):
+            (paths.queue / job.id).mkdir()
+            publish_ready_marker(paths, job.id)
+
+        monkeypatch.setattr(mgr, "_heartbeat_reservation", heartbeat)
+        submit_task = asyncio.create_task(mgr.submit_staged(work))
+        await cleanup_started.wait()
+        submit_task.cancel()
+        cleanup_release.set()
+
+        job = await submit_task
+
+        assert job is not None
+        assert job.state == JobState.RUNNING
+        assert staged_job_presence(paths, job.id) == "queued"
+        assert job.error is None
+        assert mgr._task is not None
+        mgr._task.cancel()
+        with suppress(asyncio.CancelledError):
+            await mgr._task
 
 
     def test_staged_timeout_keeps_queued_job_while_worker_is_active(
