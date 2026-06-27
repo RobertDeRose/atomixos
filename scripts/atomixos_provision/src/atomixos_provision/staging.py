@@ -117,11 +117,20 @@ def validate_relative_path(raw_path: str) -> str:
 
 
 def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as source:
-        for chunk in iter(lambda: source.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+    fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0))
+    try:
+        path_stat = os.fstat(fd)
+        if not stat.S_ISREG(path_stat.st_mode):
+            raise ProvisionError(f"staged path must be a regular file: {path}")
+        digest = hashlib.sha256()
+        with os.fdopen(fd, "rb") as source:
+            fd = -1
+            for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+    finally:
+        if fd >= 0:
+            os.close(fd)
 
 
 def sha256_bytes(payload: bytes) -> str:

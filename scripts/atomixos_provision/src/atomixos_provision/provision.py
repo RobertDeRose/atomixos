@@ -165,6 +165,11 @@ def _first_config_marker_path(config_root: Path) -> Path:
 def _has_first_config_marker(config_root: Path) -> bool:
     return _first_config_marker_path(config_root).is_file()
 
+def _is_provisioned_config_root(config_root: Path) -> bool:
+    return _has_first_config_marker(config_root) or (config_root / "config.toml").is_file()
+
+
+
 
 def _write_first_config_marker(candidate_root: Path) -> None:
     marker = _first_config_marker_path(candidate_root)
@@ -355,7 +360,7 @@ def _stage_prepared_sync(
     config_root = validate_config_root(config_root)
     paths = _runtime_paths()
     ensure_runtime_layout(paths)
-    is_reapply = _has_first_config_marker(config_root)
+    is_reapply = _is_provisioned_config_root(config_root)
     if is_reapply and not allow_reapply:
         message = "config already provisioned; reapply requires authenticated API access"
         raise ProvisionError(message)
@@ -851,7 +856,7 @@ def _provision_prepared_sync(
     if progress:
         progress.set_stage("recover", "checking for interrupted promotion")
     recover_config_root(config_root)
-    is_reapply = _has_first_config_marker(config_root)
+    is_reapply = _is_provisioned_config_root(config_root)
     if is_reapply and not allow_reapply:
         message = "config already provisioned; reapply requires authenticated API access"
         raise ProvisionError(message)
@@ -921,6 +926,8 @@ def _provision_prepared_sync(
                 _first_config_marker_path(config_root),
                 _first_config_marker_path(candidate_root),
             )
+        else:
+            _write_first_config_marker(candidate_root)
     except Exception:
         shutil.rmtree(candidate_root, ignore_errors=True)
         raise
@@ -1028,7 +1035,7 @@ def _render_verified_staged_candidate_sync(
     warnings = write_imported_state(
         parsed, source_config, None, candidate_root, config_root, progress
     )
-    if _has_first_config_marker(config_root):
+    if _is_provisioned_config_root(config_root):
         carry_forward_managed_state(config_root, candidate_root)
     rendered_manifest = {
         **manifest,
@@ -1043,7 +1050,7 @@ def _render_verified_staged_candidate_sync(
             source_digest=sha256_file(source_config),
             allow_reapply=allow_reapply,
             operation=str(manifest.get("operation", "full-apply")),
-            is_reapply=_has_first_config_marker(config_root),
+            is_reapply=_is_provisioned_config_root(config_root),
             preserve_bundle_files=preserve_bundle_files,
         ),
     }
@@ -1174,7 +1181,7 @@ def _promote_pre_rendered_candidate_sync(
 ) -> dict[str, Any]:
     config_root = validate_config_root(config_root, allow_unsafe_env=False)
     recover_config_root(config_root)
-    is_reapply = _has_first_config_marker(config_root)
+    is_reapply = _is_provisioned_config_root(config_root)
     if is_reapply and not manifest.get("allow_reapply", True):
         message = "config already provisioned; reapply requires authenticated API access"
         raise ProvisionError(message)
@@ -1194,6 +1201,8 @@ def _promote_pre_rendered_candidate_sync(
                 _first_config_marker_path(config_root),
                 _first_config_marker_path(durable_candidate),
             )
+        else:
+            _write_first_config_marker(durable_candidate)
         _grant_service_read_access(durable_candidate)
         if progress:
             progress.set_stage("promote", "swapping active config root")

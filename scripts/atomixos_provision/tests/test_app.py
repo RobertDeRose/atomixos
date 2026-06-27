@@ -154,10 +154,10 @@ async def test_first_boot_config_submit_accepts_programmatic_upload_without_toke
 
 async def test_config_submit_accepts_zstd_magic_without_filename_header(tmp_path, monkeypatch):
     async def fake_stage_bytes(self, body, filename, progress, allow_reapply=True):
-        assert body.startswith(b"\x28\xb5\x2f\xfd")
-        assert filename == "config.toml"
-
+        calls.append((body, filename))
     manager = StagedJobManager()
+    calls = []
+
     monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
     monkeypatch.setattr(manager, "_refresh_from_result", lambda job: True)
     monkeypatch.setattr(
@@ -170,6 +170,7 @@ async def test_config_submit_accepts_zstd_magic_without_filename_header(tmp_path
         response = await client.post("/api/config", content=b"\x28\xb5\x2f\xfdpayload")
 
     assert response.status_code == 202
+    assert calls == [(b"\x28\xb5\x2f\xfdpayload", "config.toml")]
 
 
 async def test_config_submit_records_staging_provision_errors_as_failed_job(

@@ -511,7 +511,7 @@ class TestStagedJobManager:
             await finish.wait()
 
         submit_task = asyncio.create_task(mgr.submit_staged(work))
-        await heartbeat_seen.wait()
+        await asyncio.wait_for(heartbeat_seen.wait(), timeout=1)
         finish.set()
         job = await submit_task
 

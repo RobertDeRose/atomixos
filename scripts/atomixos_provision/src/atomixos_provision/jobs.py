@@ -280,6 +280,38 @@ class StagedJobManager(JobManager):
                 return None
             return job
 
+    async def submit_staged_exclusive(
+        self,
+        work: Callable[[Job], Coroutine[Any, Any, None]],
+    ) -> Job | None:
+        """Submit a staged job while holding admission closed until staging completes."""
+        job = Job(id=str(uuid.uuid4()))
+        async with self._lock:
+            self._evict_old_jobs()
+            from atomixos_provision.provision import _runtime_paths
+            from atomixos_provision.staging import reserve_staged_job_slot
+
+            try:
+                if not reserve_staged_job_slot(_runtime_paths(), job.id, self._max_pending):
+                    return None
+            except Exception as exc:
+                with job._lock:
+                    job.state = JobState.FAILED
+                    job.error = str(exc)
+                    job.completed_at = time.monotonic()
+                self._jobs[job.id] = job
+                return job
+            self._jobs[job.id] = job
+            try:
+                return await self._stage_and_monitor(job, work)
+            except Exception as exc:
+                from atomixos_provision.provision import StagedQueueBusyError
+
+                if isinstance(exc, StagedQueueBusyError):
+                    self._jobs.pop(job.id, None)
+                    return None
+                return job
+
     def get(self, job_id: str) -> Job | None:
         try:
             with self._recovery_lock:

@@ -114,6 +114,8 @@ Use tmpfs-backed runtime state for unprivileged staging:
       bundle-files/
         ... validated bundle files, if present ...
     <job-id>.ready
+    <job-id>.reserve
+    .sequence
   active/
     <job-id>/
       ... atomically claimed job ...
@@ -123,9 +125,13 @@ Use tmpfs-backed runtime state for unprivileged staging:
   queue.lock
 ```
 
-The API service writes `<job-id>/manifest.json` and the rendered candidate tree
-first. It creates `<job-id>.ready` only after staging is complete and fsynced as
-far as practical for tmpfs. The ready marker is the trigger contract for systemd.
+The API service writes `<job-id>.reserve` while staging to reserve FIFO capacity.
+`queue/.sequence` assigns monotonically increasing order to reservations and
+ready markers. The API writes `<job-id>/manifest.json` and the rendered
+candidate tree first. It creates `<job-id>.ready` only after staging is complete
+and fsynced as far as practical for tmpfs. The ready marker is the trigger
+contract for systemd. Stale reservations are discarded after the reservation TTL
+and never authorize a worker claim without a ready marker.
 `queue/` is `02770 root:atomixos-provision`; `results/` is
 `02750 root:atomixos-provision`; result files are `0640 root:atomixos-provision`.
 The API service can create staged queue entries and read terminal results, but
@@ -233,9 +239,12 @@ The design uses systemd as the privilege boundary:
 
 The API can poll result files and expose the same `/api/jobs/{id}` contract. If
 the API service restarts, it can reconstruct terminal job state from result JSON
-for recent jobs. The API accepts staged submissions into a bounded FIFO queue
-(four pending/active staged jobs by default). When the queue is full, submission
-returns conflict/backpressure instead of evicting existing work. The root worker
+for recent jobs. The API accepts full-config staged submissions into a bounded
+FIFO queue (four pending/active staged jobs by default). Typed partial updates
+use the same staging format, but require the staged queue to be empty at
+submission time and return conflict/backpressure instead of waiting behind
+existing work. When the queue is full, submission returns conflict/backpressure
+instead of evicting existing work. The root worker
 keeps only one staged job active at a time. Polling may abandon a job only if it
 is still queued under the shared queue lock; once the root worker claims a job,
 the API waits up to the configured result timeout for the worker or worker

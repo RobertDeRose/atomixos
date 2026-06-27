@@ -112,14 +112,14 @@ in
 
   systemd.services.atomixos-bootstrap-rebind = {
     description = "Rebind bootstrap API socket to provisioned LAN address";
-    before = [
-      "atomixos-bootstrap.socket"
-      "sockets.target"
+    after = [
+      "atomixos-config-recover.service"
+      "lan-gateway-apply.service"
     ];
-    wantedBy = [ "sockets.target" ];
+    wants = [ "lan-gateway-apply.service" ];
+    wantedBy = [ "multi-user.target" ];
 
     unitConfig = {
-      DefaultDependencies = false;
       ConditionPathExists = [
         "/data/config/config.toml"
         "/data/config/lan-settings.json"
@@ -143,6 +143,7 @@ in
         printf '[Socket]\nListenStream=\nListenStream=%s:8080\n' "$gateway_ip" \
           >/run/systemd/system/atomixos-bootstrap.socket.d/50-lan-bind.conf
         systemctl daemon-reload
+        systemctl try-restart atomixos-bootstrap.socket >/dev/null 2>&1 || true
       '';
     };
   };

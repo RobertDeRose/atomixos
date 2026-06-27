@@ -131,10 +131,25 @@ def ensure_user(name: str, user: dict, previous: set[str]) -> None:
 def ensure_authorized_keys_owner(name: str) -> None:
     """Make per-user authorized_keys readable after dynamic user creation."""
     key_path = SSH_KEYS_DIR / name
-    if not key_path.exists() or not user_exists(name):
+    try:
+        key_path.lstat()
+    except FileNotFoundError:
         return
+    if not user_exists(name):
+        return
+    if key_path.is_symlink():
+        log(f"  refusing symlinked authorized_keys path: {key_path}")
+        raise SystemExit(1)
+    resolved_key = key_path.resolve(strict=False)
+    data_config = Path("/data/config")
+    if (
+        (resolved_key == data_config or data_config in resolved_key.parents)
+        and not os.environ.get(WORKER_ACTIVE)
+    ):
+        log("refusing to update /data/config outside worker context")
+        raise SystemExit(1)
     user = pwd.getpwnam(name)
-    os.chown(key_path, user.pw_uid, user.pw_gid)
+    os.chown(key_path, user.pw_uid, user.pw_gid, follow_symlinks=False)
     key_path.chmod(0o600)
 
 

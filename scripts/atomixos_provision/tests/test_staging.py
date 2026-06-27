@@ -600,6 +600,28 @@ def test_read_result_rejects_group_writable_results_directory(tmp_path):
     with pytest.raises(ProvisionError, match="results directory must not be group/world writable"):
         read_result(paths, "job-1")
 
+def test_read_result_rejects_non_root_owned_default_results_directory(tmp_path, monkeypatch):
+    from atomixos_provision import staging
+
+    paths = runtime_paths(tmp_path / "run")
+    ensure_runtime_layout(paths, for_worker=True)
+    monkeypatch.setattr(staging, "DEFAULT_RUNTIME_ROOT", paths.root)
+    original_lstat = type(paths.results).lstat
+
+    def fake_lstat(path):
+        result = original_lstat(path)
+        if path == paths.results:
+            values = list(result)
+            values[4] = 123
+            return os.stat_result(values)
+        return result
+
+    monkeypatch.setattr(type(paths.results), "lstat", fake_lstat)
+
+    with pytest.raises(ProvisionError, match="results directory must be root-owned"):
+        read_result(paths, "job-1")
+
+
 
 def test_read_result_rejects_group_writable_result_file(tmp_path):
     paths = runtime_paths(tmp_path / "run")
@@ -1119,16 +1141,15 @@ def test_apply_staged_job_rejects_size_race_without_snapshot_copy(
 
     def recording_copy_stream(source_file, source, destination, expected_size):
         if source.name == "config.toml" and source.parent.name == "candidate":
-            copied_bytes.append(source.stat().st_size)
+            source.write_text(source.read_text() + "# size race\n", encoding="utf-8")
+            copied_bytes.append(expected_size)
         return original_copy_stream(source_file, source, destination, expected_size)
 
     monkeypatch.setattr(provision, "_copy_staged_file_stream", recording_copy_stream)
 
     stage_config_bytes("job-1", _valid_config(), "config.toml", config_root)
-    config_path = runtime_root / "queue" / "job-1" / "candidate" / "config.toml"
-    config_path.write_text(config_path.read_text() + "# size race\n", encoding="utf-8")
     with pytest.raises(ProvisionError, match="staged file size changed"):
         apply_staged_job(config_root, runtime_root)
 
-    assert copied_bytes == []
+    assert copied_bytes
     assert not config_root.exists()

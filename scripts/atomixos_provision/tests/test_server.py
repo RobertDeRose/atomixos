@@ -249,12 +249,17 @@ def test_recover_grants_service_read_access(monkeypatch, tmp_path):
     config_path.write_text("version = 1\n", encoding="utf-8")
     config_path.chmod(0o600)
     monkeypatch.setattr("atomixos_provision.provision._service_identity", lambda: (123, 456))
-    monkeypatch.setattr("atomixos_provision.provision.os.chown", lambda *_args, **_kwargs: None)
+    chowns = []
+    monkeypatch.setattr(
+        "atomixos_provision.provision.os.chown",
+        lambda *args, **_kwargs: chowns.append(args),
+    )
 
     result = CliRunner().invoke(server.cli, ["recover", str(config_root)])
 
     assert result.exit_code == 0, result.output
     assert config_path.stat().st_mode & 0o040
+    assert (config_path, -1, 456) in chowns
 
 
 def test_complete_initial_data_config_requires_worker_context(monkeypatch):

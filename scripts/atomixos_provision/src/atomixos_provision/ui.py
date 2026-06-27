@@ -543,9 +543,14 @@ async def apply_form(request: Request, state: State) -> Response[str]:
             if is_htmx_request:
                 return Response(render_job_fragment(job), status_code=200, media_type="text/html")
             status_code = 400 if final_state == "failed" else 200 if final_state == "succeeded" else 202
+            rendered_config_text = (
+                config_text
+                if final_state == "succeeded" and isinstance(config_text, str)
+                else ""
+            )
             return Response(
                 render_bootstrap_page(
-                    config_text=config_text if isinstance(config_text, str) else "",
+                    config_text=rendered_config_text,
                     message_html=_render_job_message_html(job.snapshot()),
                     bootstrap_token=state.bootstrap_token,
                 ),

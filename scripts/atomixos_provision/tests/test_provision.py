@@ -271,6 +271,34 @@ async def test_apply_config_operation_staged_path_waits_after_queueing(
     assert calls == ["stage", "wait"]
 
 
+async def test_apply_config_operation_direct_path_applies_candidate(monkeypatch, tmp_path):
+    from atomixos_provision import provision
+
+    config_root = tmp_path / "config"
+    config_root.mkdir()
+    (config_root / "config.toml").write_text(BASE_PARTIAL_CONFIG)
+    monkeypatch.setenv("ATOMIXOS_ALLOW_UNSAFE_CONFIG_ROOT", "1")
+    monkeypatch.setattr(
+        "atomixos_provision.config.load_config_schema",
+        lambda: {"type": "object", "additionalProperties": True},
+    )
+    monkeypatch.setattr(
+        provision,
+        "complete_reapply",
+        lambda _root, _progress=None: (True, [], "skipped"),
+    )
+    monkeypatch.setattr(provision, "reconcile_bootstrap_wan", lambda: None)
+
+    result = await apply_config_operation(
+        {"op": "patch_network", "payload": {"dns_servers": ["9.9.9.9"]}},
+        config_root,
+    )
+
+    assert result["reapply"] is True
+    assert "9.9.9.9" in (config_root / "config.toml").read_text()
+
+
+
 def test_wait_for_staged_result_times_out_while_worker_active(monkeypatch, tmp_path):
     from atomixos_provision import provision
 
@@ -324,7 +352,7 @@ def test_wait_for_staged_result_abandons_queued_job_on_timeout(monkeypatch, tmp_
     assert not (paths.queue / "job-1.ready").exists()
 
 
-def test_wait_for_staged_result_continues_if_worker_claims_timeout_job(
+def test_wait_for_staged_result_times_out_claimed_job_without_result(
     monkeypatch, tmp_path
 ):
     from atomixos_provision import provision
@@ -333,18 +361,17 @@ def test_wait_for_staged_result_continues_if_worker_claims_timeout_job(
     (paths.active / "job-1").mkdir(parents=True)
     calls = {"count": 0}
 
-    def fake_read_result(_paths, _job_id):
+    def fake_monotonic():
         calls["count"] += 1
-        if calls["count"] < 3:
-            return None
-        return {"status": "succeeded", "result": {"warnings": []}}
+        return 0 if calls["count"] == 1 else 2
 
     monkeypatch.setattr(provision, "STAGED_RESULT_TIMEOUT_SECONDS", 1)
-    monkeypatch.setattr(provision.time, "monotonic", lambda: 2)
+    monkeypatch.setattr(provision.time, "monotonic", fake_monotonic)
     monkeypatch.setattr(provision.time, "sleep", lambda _seconds: None)
-    monkeypatch.setattr(provision, "read_result", fake_read_result)
+    monkeypatch.setattr(provision, "read_result", lambda _paths, _job_id: None)
 
-    assert provision._wait_for_staged_result(paths, "job-1") == {"warnings": []}
+    with pytest.raises(ProvisionError, match="timed out waiting"):
+        provision._wait_for_staged_result(paths, "job-1")
 
 
 def test_wait_for_staged_result_fails_when_worker_removes_job_without_result(
@@ -675,7 +702,7 @@ Image = "docker.io/library/alpine:latest"
     assert (config_root / "managed-users.json").read_text() == '["admin"]\n'
 
 
-def test_import_config_reapply_requires_first_config_marker(tmp_path, monkeypatch):
+def test_import_config_migrates_existing_config_without_first_marker(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "atomixos_provision.config.load_config_schema",
         lambda: {"type": "object", "additionalProperties": True},
@@ -692,7 +719,7 @@ def test_import_config_reapply_requires_first_config_marker(tmp_path, monkeypatc
 
     result = import_config_from_path(source, config_root)
 
-    assert result["reapply"] is False
+    assert result["reapply"] is True
     assert (config_root / ".first-config").is_file()
 
 

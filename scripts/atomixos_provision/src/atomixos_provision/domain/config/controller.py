@@ -550,7 +550,7 @@ async def _submit_partial_operation(
         async def stage_work(job):
             return await config_service.stage_partial(operation, job)
 
-        job = await job_manager.submit_staged(stage_work)
+        job = await job_manager.submit_staged_exclusive(stage_work)
     else:
         async def apply_work(job):
             return await config_service.apply_partial(operation, job)
