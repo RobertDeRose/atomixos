@@ -344,6 +344,7 @@
 
           allTests = raucTests // netTests;
           evalChecks = {
+            build-configuration = import ./nix/tests/build-configuration.nix netTestArgs;
             nixstasis-module = import ./nix/tests/nixstasis-module.nix netTestArgs;
             watchdog-module = import ./nix/tests/watchdog-module.nix netTestArgs;
           };
@@ -364,6 +365,7 @@
             hostPkgs = darwinPkgs;
           };
           darwinTests = {
+            build-configuration = import ./nix/tests/build-configuration.nix darwinNetTestArgs;
             rauc-slots = import ./nix/tests/rauc-slots.nix darwinRaucTestArgs;
             rauc-update = import ./nix/tests/rauc-update.nix darwinRaucTestArgs;
             rauc-rollback = import ./nix/tests/rauc-rollback.nix darwinRaucTestArgs;

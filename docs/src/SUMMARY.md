@@ -85,6 +85,7 @@
 
 # Reference
 
+- [Build Configuration](./reference/build-configuration.md)
 - [Flake Outputs](./reference/flake-outputs.md)
 - [Project Structure](./reference/project-structure.md)
 - [Tooling](./reference/tooling.md)
