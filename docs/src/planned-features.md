@@ -40,8 +40,8 @@ this page remains the human-readable roadmap.
 - EN18031: no default credentials, no IP forwarding, key-only SSH
 - Provisioned containers must go through the Quadlet safety boundary (rootful=host
   network, rootless=pasta with loopback publish rewrites)
-- `config.toml` is the single operator input; schema changes must not break existing
-  configs
+- `config.toml` is the single runtime provisioning input; schema changes must not break existing configs
+- Immutable image policy belongs to the planned build-stage `build.toml`, not runtime provisioning
 - RAUC bundles are signed; only CA-signed updates are accepted
 - Hardware watchdog enforcement is implemented as an opt-in module setting and remains
   disabled in release/deployment profiles until boot-reliability validation completes
@@ -474,28 +474,30 @@ this page remains the human-readable roadmap.
 
 ### Watchdog Enforcement (`watchdog-enforcement`)
 
-- Status: partially completed
+- Status: partially completed; blocked by `build-configuration` and physical acceptance
 - Overview: Add opt-in hardware watchdog enforcement with `RuntimeWatchdogSec=30s` and
   `RebootWatchdogSec=10min`, while keeping Rock64 release profiles disabled until physical validation passes.
 - Requirements:
-  - Add opt-in systemd manager watchdog settings
+  - Reuse the existing opt-in systemd manager watchdog settings
   - Keep active enforcement disabled by default
+  - Continue booting with a warning if enabled watchdog hardware is unavailable
   - Complete Rock64 boot-reliability validation before release-profile enablement
-  - Verify watchdog-triggered reboots feed into boot-count rollback on hardware
+  - Verify that watchdog resets on a newly updated, unconfirmed slot consume U-Boot attempts and cause fallback
 - Constraints:
   - Must not cause false-positive reboot loops during normal operation
   - Must be validated on physical hardware before enabling
-- Non-goals: Software-only watchdog
+- Non-goals: Software-only watchdog or runtime `config.toml` control
 - Success criteria:
-  - Watchdog reboots device within 30s of systemd hang
-  - 3 consecutive watchdog reboots trigger automatic slot rollback
-  - No false triggers during normal 72-hour soak test
+  - With the default 30-second timeout, watchdog reset begins within 35 measured seconds of confirmed kick cessation
+  - Three consecutive watchdog resets before slot confirmation trigger automatic fallback
+  - No false triggers occur during a normal 72-hour soak test
 - Risks and tradeoffs:
   - Aggressive timeout may cause false triggers on slow boots
-  - Cannot be fully validated in QEMU
-- Dependencies: Build Configuration delivery for a reproducible watchdog-enabled image, plus physical hardware
-  availability for reboot, rollback, and soak testing
-- Suggested validation: module evaluation checks, `rauc-watchdog` VM check, and 72-hour soak test on physical Rock64
+  - Fail-open missing-device behavior preserves availability but requires observable warnings
+  - Physical behavior cannot be fully validated in QEMU
+- Dependencies: `build-configuration`, a sacrificial Rock64, serial recovery, and hardware soak availability
+- Suggested validation: module evaluation checks, `rauc-watchdog` VM check, and ordered physical reboot, rollback, and
+  72-hour soak evidence
 - Delivered so far: `atomixos.watchdog.*` options, opt-in rendered manager settings, default-disabled evaluation checks,
   and hardware validation instructions.
 
