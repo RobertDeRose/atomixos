@@ -1,0 +1,589 @@
+{
+  "capability_inventory": {
+    "ambiguities": [
+      ".: Python test files exist but pyproject.toml is missing"
+    ],
+    "ci": {
+      "commands": [
+        {
+          "command": "mdbook build docs",
+          "provenance": "ci-evidence-only",
+          "source": ".github/workflows/docs.yml:36",
+          "working_directory": "."
+        },
+        {
+          "command": "mise plugin install nix https://github.com/jbadeau/mise-nix.git\nmise install\nhk check -a",
+          "provenance": "ci-evidence-only",
+          "source": ".github/workflows/hk.yml:33",
+          "working_directory": "."
+        }
+      ],
+      "files": [
+        ".github/workflows/docs.yml",
+        ".github/workflows/hk.yml"
+      ]
+    },
+    "documentation": {
+      "commands": [
+        {
+          "argv": [
+            "mdbook",
+            "build",
+            "docs"
+          ],
+          "name": "root-book-build",
+          "provenance": "docs/book.toml",
+          "working_directory": "."
+        }
+      ],
+      "evidence": [
+        ".opencode/commands/close-feature.md",
+        ".opencode/commands/implement-feature.md",
+        ".opencode/commands/plan-features.md",
+        ".opencode/commands/project-alignment-execute.md",
+        ".opencode/commands/project-alignment-land.md",
+        ".opencode/commands/project-alignment-review.md",
+        ".opencode/commands/review-feature-spec.md",
+        ".opencode/commands/start-feature.md",
+        "AGENTS.md",
+        "HARDWARE-TEST-PLAN.md",
+        "README.md",
+        "certs/README.md",
+        "config_bundle.md",
+        "docs/book.toml",
+        "docs/src/SUMMARY.md",
+        "docs/src/architecture.md",
+        "docs/src/architecture/authentication.md",
+        "docs/src/architecture/network-topology.md",
+        "docs/src/architecture/overwatch-enrollment.md",
+        "docs/src/architecture/partition-layout.md",
+        "docs/src/architecture/update-rollback.md",
+        "docs/src/building.md",
+        "docs/src/code-reference.md",
+        "docs/src/code-reference/derivations.md",
+        "docs/src/code-reference/modules.md",
+        "docs/src/code-reference/scripts.md",
+        "docs/src/data-flow.md",
+        "docs/src/design-decisions.md",
+        "docs/src/features.md",
+        "docs/src/features/activation-options/design.md",
+        "docs/src/features/activation-options/tasks.md",
+        "docs/src/features/boot-ui-htmx/design.md",
+        "docs/src/features/boot-ui-htmx/tasks.md",
+        "docs/src/features/caddy-authcrunch-cockpit-tutorial/design.md",
+        "docs/src/features/caddy-authcrunch-cockpit-tutorial/tasks.md",
+        "docs/src/features/config-reapply-improvements/design.md",
+        "docs/src/features/config-reapply-improvements/tasks.md",
+        "docs/src/features/durable-journald-logs/design.md",
+        "docs/src/features/durable-journald-logs/tasks.md",
+        "docs/src/features/first-boot-local-provisioning/design.md",
+        "docs/src/features/first-boot-local-provisioning/tasks.md",
+        "docs/src/features/network-config-extensions/design.md",
+        "docs/src/features/network-config-extensions/tasks.md",
+        "docs/src/features/nixstasis-client/design.md",
+        "docs/src/features/nixstasis-client/tasks.md",
+        "docs/src/features/provisioning-api-live-schema-contract/design.md",
+        "docs/src/features/provisioning-api-live-schema-contract/tasks.md",
+        "docs/src/features/provisioning-api-privilege-separation/design.md",
+        "docs/src/features/provisioning-api-privilege-separation/tasks.md",
+        "docs/src/features/provisioning-api-service/design.md",
+        "docs/src/features/provisioning-api-service/tasks.md",
+        "docs/src/features/rock64-ab-image/design.md",
+        "docs/src/features/rock64-ab-image/tasks.md",
+        "docs/src/features/typed-partial-provisioning-api/design.md",
+        "docs/src/features/typed-partial-provisioning-api/tasks.md",
+        "docs/src/features/watchdog-enforcement/design.md",
+        "docs/src/features/watchdog-enforcement/tasks.md",
+        "docs/src/hardware-testing.md",
+        "docs/src/introduction.md",
+        "docs/src/operations/ntp-settings.md",
+        "docs/src/planned-features.md",
+        "docs/src/provisioning.md",
+        "docs/src/provisioning/flash-image.md",
+        "docs/src/provisioning/lan-range.md",
+        "docs/src/reference/flake-outputs.md",
+        "docs/src/reference/project-structure.md",
+        "docs/src/reference/tasks.md",
+        "docs/src/runtime-boundaries.md",
+        "docs/src/specs/boot-rollback.md",
+        "docs/src/specs/lan-gateway.md",
+        "docs/src/specs/nix-flake-config.md",
+        "docs/src/specs/partition-layout.md",
+        "docs/src/specs/rauc-integration.md",
+        "docs/src/specs/update-confirmation.md",
+        "docs/src/specs/watchdog.md",
+        "docs/src/testing.md",
+        "docs/src/tutorials/oidc-device-management.md",
+        "docs/src/unknowns.md",
+        "oop_all_logging.md"
+      ]
+    },
+    "layout": {
+      "config_roots": [
+        "."
+      ],
+      "kind": "single-package",
+      "source": null
+    },
+    "packages": [
+      {
+        "commands": [
+          {
+            "argv": [
+              "mise",
+              "run",
+              "check"
+            ],
+            "name": "root-mise-check",
+            "provenance": "mise.toml",
+            "working_directory": "."
+          }
+        ],
+        "manifests": [
+          "package.json"
+        ],
+        "mise_file": "mise.toml",
+        "path": ".",
+        "test_evidence": [
+          "scripts/atomixos_provision/tests/test_activation.py",
+          "scripts/atomixos_provision/tests/test_app.py",
+          "scripts/atomixos_provision/tests/test_auth.py",
+          "scripts/atomixos_provision/tests/test_bundle.py",
+          "scripts/atomixos_provision/tests/test_config.py",
+          "scripts/atomixos_provision/tests/test_config_builder.py",
+          "scripts/atomixos_provision/tests/test_config_service.py",
+          "scripts/atomixos_provision/tests/test_deps.py",
+          "scripts/atomixos_provision/tests/test_exceptions.py",
+          "scripts/atomixos_provision/tests/test_jobs.py",
+          "scripts/atomixos_provision/tests/test_partial_config.py",
+          "scripts/atomixos_provision/tests/test_provision.py",
+          "scripts/atomixos_provision/tests/test_quadlet.py",
+          "scripts/atomixos_provision/tests/test_quadlet_sync.py",
+          "scripts/atomixos_provision/tests/test_schemas.py",
+          "scripts/atomixos_provision/tests/test_server.py",
+          "scripts/atomixos_provision/tests/test_settings.py",
+          "scripts/atomixos_provision/tests/test_staging.py",
+          "tests/test_lan_gateway_apply.py"
+        ]
+      }
+    ],
+    "tests": {
+      "commands": [
+        {
+          "argv": [
+            "mise",
+            "run",
+            "check"
+          ],
+          "name": "root-mise-check",
+          "provenance": "mise.toml",
+          "working_directory": "."
+        }
+      ],
+      "evidence": [
+        "scripts/atomixos_provision/tests/test_activation.py",
+        "scripts/atomixos_provision/tests/test_app.py",
+        "scripts/atomixos_provision/tests/test_auth.py",
+        "scripts/atomixos_provision/tests/test_bundle.py",
+        "scripts/atomixos_provision/tests/test_config.py",
+        "scripts/atomixos_provision/tests/test_config_builder.py",
+        "scripts/atomixos_provision/tests/test_config_service.py",
+        "scripts/atomixos_provision/tests/test_deps.py",
+        "scripts/atomixos_provision/tests/test_exceptions.py",
+        "scripts/atomixos_provision/tests/test_jobs.py",
+        "scripts/atomixos_provision/tests/test_partial_config.py",
+        "scripts/atomixos_provision/tests/test_provision.py",
+        "scripts/atomixos_provision/tests/test_quadlet.py",
+        "scripts/atomixos_provision/tests/test_quadlet_sync.py",
+        "scripts/atomixos_provision/tests/test_schemas.py",
+        "scripts/atomixos_provision/tests/test_server.py",
+        "scripts/atomixos_provision/tests/test_settings.py",
+        "scripts/atomixos_provision/tests/test_staging.py",
+        "tests/test_lan_gateway_apply.py"
+      ]
+    }
+  },
+  "documentation": {
+    "command": "1 named partition(s)",
+    "note": "See validation_partitions for command ownership and evidence.",
+    "returncode": 0,
+    "status": "passed",
+    "stderr": "",
+    "stdout": ""
+  },
+  "generated_at": "2026-07-30T13:58:27+00:00",
+  "hk": {
+    "command": "pkl eval hk.pkl",
+    "hooks": {
+      "check": {
+        "actionlint": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":true,\"check\":\"actionlint {{ files }}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"glob\":[\".github/workflows/*.yml\",\".github/workflows/*.yaml\"],\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "53c59075a8c90450dc27b75a2711cf48c0f938fa858dd6b0b8c78e016ef9764f"
+        },
+        "check-added-large-files": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check\":\"hk util check-added-large-files {{files}}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"glob\":\"**/*\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "14e83df6357b19c4110b39048feeb432c9e9835e38dd4515fc83eb3a01313ab6"
+        },
+        "check-exec-shebangs": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check\":\"hk util check-executables-have-shebangs {{files}}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"glob\":\"**/*\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "2df07ee374ec04d99e2d6e83a30ce0773e72a3de43d084d2dc5ae2186c72e618"
+        },
+        "check-merge-conflict": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check\":\"hk util check-merge-conflict --assume-in-merge {{files}}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"glob\":\"**/*\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "31770c2b5c43145c2a32735a25b6e84edc0fb8eeaf7baccba1b074417a16ded5"
+        },
+        "check_byte_order_marker": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check_diff\":\"hk util check-byte-order-marker --diff {{files}}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"hk util fix-byte-order-marker {{files}}\",\"glob\":\"**/*\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "d257416f7caa293cd27ba2d9d7a44794af4c0d57f24bb5c7c588fd66d18de60b"
+        },
+        "check_case_conflict": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check\":\"hk util check-case-conflict {{files}}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"glob\":\"**/*\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "b1313f28b1be723c58c3bd0a13419bce9f1b613291214d2ba3780f382d8374ee"
+        },
+        "check_executables_have_shebangs": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check\":\"hk util check-executables-have-shebangs {{files}}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"glob\":\"**/*\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "2df07ee374ec04d99e2d6e83a30ce0773e72a3de43d084d2dc5ae2186c72e618"
+        },
+        "check_symlinks": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":true,\"batch\":false,\"check\":\"hk util check-symlinks {{files}}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"glob\":\"**/*\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "0e5393ba5e8e4b6ce7eaf8dd903b6b5430de8b7af98dfaaddb797b736e72cf49"
+        },
+        "deadnix": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check\":\"deadnix --fail {{ files }}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"deadnix --edit {{ files }}\",\"glob\":\"**/*.nix\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "9d15017543eb45307bc0916f8efd7acd849598df8e7a3495bc835c27d6d16731"
+        },
+        "detect-private-key": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check\":\"hk util detect-private-key {{files}}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[\"certs/dev.*.key.pem\"],\"exclusive\":false,\"glob\":\"**/*\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "9d5ae70806a71b44b1d1bc3f5784c2b487b13bf46b552ab1c7af6045d9211453"
+        },
+        "markdown-table-formatter": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check_diff\":\"markdown-table-formatter --check {{ files }}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"markdown-table-formatter {{ files }}\",\"glob\":[\"**/*.md\",\"**/*.markdown\"],\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "99a2b79c96b6545182311b39524b343936dfd0c602ffa2e9ed0114a3e69eef82"
+        },
+        "mdbook-lint": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check_diff\":\"mdbook-lint lint --config .mdbook-lint.toml {{ files }}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"mdbook-lint fix --config .mdbook-lint.toml {{ files }}\",\"glob\":[\"docs/src/**/*.md\"],\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "1862e77e077f870c8aa289f67fd8d3553ee94aace7f7e262b97db568013b3e60"
+        },
+        "mise": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":true,\"check\":\"mise fmt --check\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"mise fmt\",\"glob\":[\"mise.toml\",\"mise.*.toml\",\".mise.toml\",\".mise.*.toml\",\"mise/config.toml\",\"mise/config.*.toml\",\".mise/config.toml\",\".mise/config.*.toml\",\".config/mise.toml\",\".config/mise.*.toml\",\".config/mise/config.toml\",\".config/mise/config.*.toml\",\".config/mise/mise.toml\",\".config/mise/mise.*.toml\",\".config/mise/conf.d/*.toml\"],\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "47344620d48c32221901d724bf0e2dffea2fed4490adfd3f73694a5d6298bc61"
+        },
+        "mixed-line-ending": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check_diff\":\"hk util mixed-line-ending --diff {{files}}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"hk util mixed-line-ending --fix {{files}}\",\"glob\":\"**/*\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "79feecbc9c1dc1a214bb5787cbd097a0e36733b55d1f341e6584957ce0c5e20f"
+        },
+        "mktoc": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check_diff\":\"for file in {{ files }}; do mktoc \\\"$file\\\" >/dev/null; done\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"for file in {{ files }}; do mktoc \\\"$file\\\" >/dev/null; done\",\"glob\":[\"**/*.md\",\"**/*.markdown\"],\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "39bd0d52c35a340c17fe5648e4a4abec5b9e44f655ead43d2f5926b2327f7d5e"
+        },
+        "newlines": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check_diff\":\"hk util end-of-file-fixer --diff {{files}}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"hk util end-of-file-fixer --fix {{files}}\",\"glob\":\"**/*\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "0546a56ed3d7e2c0836094b4468ffa9eb6a07393208d128cfccc9dba1f705225"
+        },
+        "nixfmt": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check\":{\"other\":\"nixfmt --check {{ files }}\",\"windows\":\"\"},\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":{\"other\":\"nixfmt {{ files }}\",\"windows\":\"\"},\"glob\":\"**/*.nix\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "563497b46640b85a9f02a1d94ad70af3fdbf2a5df48e9e7432d4d2917a386fa3"
+        },
+        "pkl_format": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check_first\":true,\"check_list_files\":\"pkl format --diff-name-only {{ files }}\",\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"    pkl format --write {{ files }}\\n    code=$?\\n    if [ $code -eq 11 ]; then\\n        exit 0\\n    else\\n        exit $code\\n    fi\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"shell\":\"sh -c\",\"stomp\":false,\"types\":[\"pkl\"]}",
+          "fingerprint": "d7800e290787e9978bfa0000579cb4c9db3d9c6ca0184a6582750c0eccd61770"
+        },
+        "ruff": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check\":\"ruff check --force-exclude {{ files }}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"ruff check --force-exclude --fix {{ files }}\",\"glob\":[\"**/*.py\",\"**/*.pyi\"],\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "a60f6d1acf8aa6bf680450024d94174b4b162a878181e05b919f98b1ab91a110"
+        },
+        "rumdl": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check_diff\":\"rumdl check --config .config/rumdl.toml --diff {{ files }}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"rumdl check --config .config/rumdl.toml --fix {{ files }}\",\"glob\":[\"**/*.md\",\"**/*.markdown\"],\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "97d627f25529a3162336444e7536c21f7fc3914c8cf6bbff0d5a0fab519ec441"
+        },
+        "shellcheck": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":true,\"check\":\"shellcheck {{ files }}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"glob\":[\"**/*.sh\",\"**/*.bash\"],\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "ba46bb38ebd47475dbf3d48ac673a31719c283abd8bddf078d94486946a9c91c"
+        },
+        "shfmt": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":true,\"check_diff\":\"shfmt -d --apply-ignore {{ files }}\",\"check_first\":true,\"check_list_files\":\"files=$(shfmt -l --apply-ignore {{ files }})\\nif [ -n \\\"$files\\\" ]; then\\n  echo \\\"$files\\\"\\n  exit 1\\nfi\",\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"shfmt -w --apply-ignore {{ files }}\",\"glob\":[\"**/*.sh\",\"**/*.bash\",\"**/*.mksh\",\"**/*.bats\",\"**/*.zsh\"],\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "97259962ab24ef408a9c7fabf8f6605ef51bb8570c71d8bc9291887289087784"
+        },
+        "tombi": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check\":\"tombi lint --quiet {{ files }}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[\"**/mise.toml\"],\"exclusive\":false,\"glob\":\"**/*.toml\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "81d5ceb3cbfdb22a2b848e304682045e9965262344ac1b1d2704a3a2d2813cd1"
+        },
+        "tombi_format": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check_diff\":\"tombi format --check --diff {{ files }}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"tombi format {{ files }}\",\"glob\":\"**/*.toml\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "efe0246956ac4bda14082e10930db3dd264e5f6fbe8488908a59f4b3d0202047"
+        },
+        "trailing-whitespace": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check_diff\":\"hk util trailing-whitespace --diff {{files}}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"hk util trailing-whitespace --fix {{files}}\",\"glob\":\"**/*\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "55737f9d3d4293348ef696868fcf9171058a9e0b231f7185e962a9165bcdc6ec"
+        },
+        "typos": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check_diff\":\"output=$(typos --force-exclude --diff {{files}})\\n[ -z \\\"$output\\\" ] && exit 0\\nprintf \\\"%s\\\" \\\"$output\\\"\\nexit 1\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"typos --force-exclude --write-changes {{ files }}\",\"glob\":\"**/*\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "4581b25fb31e53097198bc813dc52eeac71b99d3e330f0b7d7b38c319e9d3db0"
+        }
+      },
+      "commit-msg": {
+        "commit_message_format": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check\":\"perl -0pi -e \\\"s/[ \\\\t]+\\\\$//mg; s/(?<=\\\\S) {2,}/ /g; s/\\\\A([^\\\\n]*\\\\n)\\\\n{2,}(?=.)/$1\\\\n\\\\n/s\\\" {{commit_msg_file}}\\nperl -0ne 'BEGIN { $/ = undef } exit 1 if /\\\\A[^\\\\n]*\\\\n\\\\n\\\\n/ || /\\\\A[^\\\\n]*\\\\n[^\\\\n]/' {{commit_msg_file}}\\ntypos {{commit_msg_file}}\\ncommitlint --edit {{commit_msg_file}}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "82202d76908b3f16ab4be9406d4663bd392f070b7ea92b68b30fbfa417970eb2"
+        }
+      },
+      "fix": {
+        "actionlint": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":true,\"check\":\"actionlint {{ files }}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"glob\":[\".github/workflows/*.yml\",\".github/workflows/*.yaml\"],\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "53c59075a8c90450dc27b75a2711cf48c0f938fa858dd6b0b8c78e016ef9764f"
+        },
+        "check-added-large-files": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check\":\"hk util check-added-large-files {{files}}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"glob\":\"**/*\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "14e83df6357b19c4110b39048feeb432c9e9835e38dd4515fc83eb3a01313ab6"
+        },
+        "check-exec-shebangs": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check\":\"hk util check-executables-have-shebangs {{files}}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"glob\":\"**/*\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "2df07ee374ec04d99e2d6e83a30ce0773e72a3de43d084d2dc5ae2186c72e618"
+        },
+        "check-merge-conflict": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check\":\"hk util check-merge-conflict --assume-in-merge {{files}}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"glob\":\"**/*\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "31770c2b5c43145c2a32735a25b6e84edc0fb8eeaf7baccba1b074417a16ded5"
+        },
+        "check_byte_order_marker": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check_diff\":\"hk util check-byte-order-marker --diff {{files}}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"hk util fix-byte-order-marker {{files}}\",\"glob\":\"**/*\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "d257416f7caa293cd27ba2d9d7a44794af4c0d57f24bb5c7c588fd66d18de60b"
+        },
+        "check_case_conflict": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check\":\"hk util check-case-conflict {{files}}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"glob\":\"**/*\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "b1313f28b1be723c58c3bd0a13419bce9f1b613291214d2ba3780f382d8374ee"
+        },
+        "check_executables_have_shebangs": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check\":\"hk util check-executables-have-shebangs {{files}}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"glob\":\"**/*\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "2df07ee374ec04d99e2d6e83a30ce0773e72a3de43d084d2dc5ae2186c72e618"
+        },
+        "check_symlinks": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":true,\"batch\":false,\"check\":\"hk util check-symlinks {{files}}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"glob\":\"**/*\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "0e5393ba5e8e4b6ce7eaf8dd903b6b5430de8b7af98dfaaddb797b736e72cf49"
+        },
+        "deadnix": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check\":\"deadnix --fail {{ files }}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"deadnix --edit {{ files }}\",\"glob\":\"**/*.nix\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "9d15017543eb45307bc0916f8efd7acd849598df8e7a3495bc835c27d6d16731"
+        },
+        "detect-private-key": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check\":\"hk util detect-private-key {{files}}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[\"certs/dev.*.key.pem\"],\"exclusive\":false,\"glob\":\"**/*\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "9d5ae70806a71b44b1d1bc3f5784c2b487b13bf46b552ab1c7af6045d9211453"
+        },
+        "markdown-table-formatter": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check_diff\":\"markdown-table-formatter --check {{ files }}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"markdown-table-formatter {{ files }}\",\"glob\":[\"**/*.md\",\"**/*.markdown\"],\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "99a2b79c96b6545182311b39524b343936dfd0c602ffa2e9ed0114a3e69eef82"
+        },
+        "mdbook-lint": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check_diff\":\"mdbook-lint lint --config .mdbook-lint.toml {{ files }}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"mdbook-lint fix --config .mdbook-lint.toml {{ files }}\",\"glob\":[\"docs/src/**/*.md\"],\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "1862e77e077f870c8aa289f67fd8d3553ee94aace7f7e262b97db568013b3e60"
+        },
+        "mise": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":true,\"check\":\"mise fmt --check\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"mise fmt\",\"glob\":[\"mise.toml\",\"mise.*.toml\",\".mise.toml\",\".mise.*.toml\",\"mise/config.toml\",\"mise/config.*.toml\",\".mise/config.toml\",\".mise/config.*.toml\",\".config/mise.toml\",\".config/mise.*.toml\",\".config/mise/config.toml\",\".config/mise/config.*.toml\",\".config/mise/mise.toml\",\".config/mise/mise.*.toml\",\".config/mise/conf.d/*.toml\"],\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "47344620d48c32221901d724bf0e2dffea2fed4490adfd3f73694a5d6298bc61"
+        },
+        "mixed-line-ending": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check_diff\":\"hk util mixed-line-ending --diff {{files}}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"hk util mixed-line-ending --fix {{files}}\",\"glob\":\"**/*\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "79feecbc9c1dc1a214bb5787cbd097a0e36733b55d1f341e6584957ce0c5e20f"
+        },
+        "mktoc": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check_diff\":\"for file in {{ files }}; do mktoc \\\"$file\\\" >/dev/null; done\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"for file in {{ files }}; do mktoc \\\"$file\\\" >/dev/null; done\",\"glob\":[\"**/*.md\",\"**/*.markdown\"],\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "39bd0d52c35a340c17fe5648e4a4abec5b9e44f655ead43d2f5926b2327f7d5e"
+        },
+        "newlines": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check_diff\":\"hk util end-of-file-fixer --diff {{files}}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"hk util end-of-file-fixer --fix {{files}}\",\"glob\":\"**/*\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "0546a56ed3d7e2c0836094b4468ffa9eb6a07393208d128cfccc9dba1f705225"
+        },
+        "nixfmt": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check\":{\"other\":\"nixfmt --check {{ files }}\",\"windows\":\"\"},\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":{\"other\":\"nixfmt {{ files }}\",\"windows\":\"\"},\"glob\":\"**/*.nix\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "563497b46640b85a9f02a1d94ad70af3fdbf2a5df48e9e7432d4d2917a386fa3"
+        },
+        "pkl_format": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check_first\":true,\"check_list_files\":\"pkl format --diff-name-only {{ files }}\",\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"    pkl format --write {{ files }}\\n    code=$?\\n    if [ $code -eq 11 ]; then\\n        exit 0\\n    else\\n        exit $code\\n    fi\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"shell\":\"sh -c\",\"stomp\":false,\"types\":[\"pkl\"]}",
+          "fingerprint": "d7800e290787e9978bfa0000579cb4c9db3d9c6ca0184a6582750c0eccd61770"
+        },
+        "ruff": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check\":\"ruff check --force-exclude {{ files }}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"ruff check --force-exclude --fix {{ files }}\",\"glob\":[\"**/*.py\",\"**/*.pyi\"],\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "a60f6d1acf8aa6bf680450024d94174b4b162a878181e05b919f98b1ab91a110"
+        },
+        "rumdl": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check_diff\":\"rumdl check --config .config/rumdl.toml --diff {{ files }}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"rumdl check --config .config/rumdl.toml --fix {{ files }}\",\"glob\":[\"**/*.md\",\"**/*.markdown\"],\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "97d627f25529a3162336444e7536c21f7fc3914c8cf6bbff0d5a0fab519ec441"
+        },
+        "shellcheck": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":true,\"check\":\"shellcheck {{ files }}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"glob\":[\"**/*.sh\",\"**/*.bash\"],\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "ba46bb38ebd47475dbf3d48ac673a31719c283abd8bddf078d94486946a9c91c"
+        },
+        "shfmt": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":true,\"check_diff\":\"shfmt -d --apply-ignore {{ files }}\",\"check_first\":true,\"check_list_files\":\"files=$(shfmt -l --apply-ignore {{ files }})\\nif [ -n \\\"$files\\\" ]; then\\n  echo \\\"$files\\\"\\n  exit 1\\nfi\",\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"shfmt -w --apply-ignore {{ files }}\",\"glob\":[\"**/*.sh\",\"**/*.bash\",\"**/*.mksh\",\"**/*.bats\",\"**/*.zsh\"],\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "97259962ab24ef408a9c7fabf8f6605ef51bb8570c71d8bc9291887289087784"
+        },
+        "tombi": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check\":\"tombi lint --quiet {{ files }}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[\"**/mise.toml\"],\"exclusive\":false,\"glob\":\"**/*.toml\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "81d5ceb3cbfdb22a2b848e304682045e9965262344ac1b1d2704a3a2d2813cd1"
+        },
+        "tombi_format": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check_diff\":\"tombi format --check --diff {{ files }}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"tombi format {{ files }}\",\"glob\":\"**/*.toml\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "efe0246956ac4bda14082e10930db3dd264e5f6fbe8488908a59f4b3d0202047"
+        },
+        "trailing-whitespace": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check_diff\":\"hk util trailing-whitespace --diff {{files}}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"hk util trailing-whitespace --fix {{files}}\",\"glob\":\"**/*\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "55737f9d3d4293348ef696868fcf9171058a9e0b231f7185e962a9165bcdc6ec"
+        },
+        "typos": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check_diff\":\"output=$(typos --force-exclude --diff {{files}})\\n[ -z \\\"$output\\\" ] && exit 0\\nprintf \\\"%s\\\" \\\"$output\\\"\\nexit 1\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"typos --force-exclude --write-changes {{ files }}\",\"glob\":\"**/*\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "4581b25fb31e53097198bc813dc52eeac71b99d3e330f0b7d7b38c319e9d3db0"
+        }
+      },
+      "pre-commit": {
+        "actionlint": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":true,\"check\":\"actionlint {{ files }}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"glob\":[\".github/workflows/*.yml\",\".github/workflows/*.yaml\"],\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "53c59075a8c90450dc27b75a2711cf48c0f938fa858dd6b0b8c78e016ef9764f"
+        },
+        "check-added-large-files": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check\":\"hk util check-added-large-files {{files}}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"glob\":\"**/*\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "14e83df6357b19c4110b39048feeb432c9e9835e38dd4515fc83eb3a01313ab6"
+        },
+        "check-exec-shebangs": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check\":\"hk util check-executables-have-shebangs {{files}}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"glob\":\"**/*\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "2df07ee374ec04d99e2d6e83a30ce0773e72a3de43d084d2dc5ae2186c72e618"
+        },
+        "check-merge-conflict": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check\":\"hk util check-merge-conflict --assume-in-merge {{files}}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"glob\":\"**/*\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "31770c2b5c43145c2a32735a25b6e84edc0fb8eeaf7baccba1b074417a16ded5"
+        },
+        "check_byte_order_marker": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check_diff\":\"hk util check-byte-order-marker --diff {{files}}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"hk util fix-byte-order-marker {{files}}\",\"glob\":\"**/*\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "d257416f7caa293cd27ba2d9d7a44794af4c0d57f24bb5c7c588fd66d18de60b"
+        },
+        "check_case_conflict": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check\":\"hk util check-case-conflict {{files}}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"glob\":\"**/*\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "b1313f28b1be723c58c3bd0a13419bce9f1b613291214d2ba3780f382d8374ee"
+        },
+        "check_executables_have_shebangs": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check\":\"hk util check-executables-have-shebangs {{files}}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"glob\":\"**/*\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "2df07ee374ec04d99e2d6e83a30ce0773e72a3de43d084d2dc5ae2186c72e618"
+        },
+        "check_symlinks": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":true,\"batch\":false,\"check\":\"hk util check-symlinks {{files}}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"glob\":\"**/*\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "0e5393ba5e8e4b6ce7eaf8dd903b6b5430de8b7af98dfaaddb797b736e72cf49"
+        },
+        "deadnix": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check\":\"deadnix --fail {{ files }}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"deadnix --edit {{ files }}\",\"glob\":\"**/*.nix\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "9d15017543eb45307bc0916f8efd7acd849598df8e7a3495bc835c27d6d16731"
+        },
+        "detect-private-key": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check\":\"hk util detect-private-key {{files}}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[\"certs/dev.*.key.pem\"],\"exclusive\":false,\"glob\":\"**/*\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "9d5ae70806a71b44b1d1bc3f5784c2b487b13bf46b552ab1c7af6045d9211453"
+        },
+        "markdown-table-formatter": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check_diff\":\"markdown-table-formatter --check {{ files }}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"markdown-table-formatter {{ files }}\",\"glob\":[\"**/*.md\",\"**/*.markdown\"],\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "99a2b79c96b6545182311b39524b343936dfd0c602ffa2e9ed0114a3e69eef82"
+        },
+        "mdbook-lint": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check_diff\":\"mdbook-lint lint --config .mdbook-lint.toml {{ files }}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"mdbook-lint fix --config .mdbook-lint.toml {{ files }}\",\"glob\":[\"docs/src/**/*.md\"],\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "1862e77e077f870c8aa289f67fd8d3553ee94aace7f7e262b97db568013b3e60"
+        },
+        "mise": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":true,\"check\":\"mise fmt --check\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"mise fmt\",\"glob\":[\"mise.toml\",\"mise.*.toml\",\".mise.toml\",\".mise.*.toml\",\"mise/config.toml\",\"mise/config.*.toml\",\".mise/config.toml\",\".mise/config.*.toml\",\".config/mise.toml\",\".config/mise.*.toml\",\".config/mise/config.toml\",\".config/mise/config.*.toml\",\".config/mise/mise.toml\",\".config/mise/mise.*.toml\",\".config/mise/conf.d/*.toml\"],\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "47344620d48c32221901d724bf0e2dffea2fed4490adfd3f73694a5d6298bc61"
+        },
+        "mixed-line-ending": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check_diff\":\"hk util mixed-line-ending --diff {{files}}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"hk util mixed-line-ending --fix {{files}}\",\"glob\":\"**/*\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "79feecbc9c1dc1a214bb5787cbd097a0e36733b55d1f341e6584957ce0c5e20f"
+        },
+        "mktoc": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check_diff\":\"for file in {{ files }}; do mktoc \\\"$file\\\" >/dev/null; done\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"for file in {{ files }}; do mktoc \\\"$file\\\" >/dev/null; done\",\"glob\":[\"**/*.md\",\"**/*.markdown\"],\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "39bd0d52c35a340c17fe5648e4a4abec5b9e44f655ead43d2f5926b2327f7d5e"
+        },
+        "newlines": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check_diff\":\"hk util end-of-file-fixer --diff {{files}}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"hk util end-of-file-fixer --fix {{files}}\",\"glob\":\"**/*\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "0546a56ed3d7e2c0836094b4468ffa9eb6a07393208d128cfccc9dba1f705225"
+        },
+        "nixfmt": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check\":{\"other\":\"nixfmt --check {{ files }}\",\"windows\":\"\"},\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":{\"other\":\"nixfmt {{ files }}\",\"windows\":\"\"},\"glob\":\"**/*.nix\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "563497b46640b85a9f02a1d94ad70af3fdbf2a5df48e9e7432d4d2917a386fa3"
+        },
+        "pkl_format": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check_first\":true,\"check_list_files\":\"pkl format --diff-name-only {{ files }}\",\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"    pkl format --write {{ files }}\\n    code=$?\\n    if [ $code -eq 11 ]; then\\n        exit 0\\n    else\\n        exit $code\\n    fi\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"shell\":\"sh -c\",\"stomp\":false,\"types\":[\"pkl\"]}",
+          "fingerprint": "d7800e290787e9978bfa0000579cb4c9db3d9c6ca0184a6582750c0eccd61770"
+        },
+        "ruff": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check\":\"ruff check --force-exclude {{ files }}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"ruff check --force-exclude --fix {{ files }}\",\"glob\":[\"**/*.py\",\"**/*.pyi\"],\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "a60f6d1acf8aa6bf680450024d94174b4b162a878181e05b919f98b1ab91a110"
+        },
+        "rumdl": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check_diff\":\"rumdl check --config .config/rumdl.toml --diff {{ files }}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"rumdl check --config .config/rumdl.toml --fix {{ files }}\",\"glob\":[\"**/*.md\",\"**/*.markdown\"],\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "97d627f25529a3162336444e7536c21f7fc3914c8cf6bbff0d5a0fab519ec441"
+        },
+        "shellcheck": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":true,\"check\":\"shellcheck {{ files }}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"glob\":[\"**/*.sh\",\"**/*.bash\"],\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "ba46bb38ebd47475dbf3d48ac673a31719c283abd8bddf078d94486946a9c91c"
+        },
+        "shfmt": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":true,\"check_diff\":\"shfmt -d --apply-ignore {{ files }}\",\"check_first\":true,\"check_list_files\":\"files=$(shfmt -l --apply-ignore {{ files }})\\nif [ -n \\\"$files\\\" ]; then\\n  echo \\\"$files\\\"\\n  exit 1\\nfi\",\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"shfmt -w --apply-ignore {{ files }}\",\"glob\":[\"**/*.sh\",\"**/*.bash\",\"**/*.mksh\",\"**/*.bats\",\"**/*.zsh\"],\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "97259962ab24ef408a9c7fabf8f6605ef51bb8570c71d8bc9291887289087784"
+        },
+        "tombi": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check\":\"tombi lint --quiet {{ files }}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[\"**/mise.toml\"],\"exclusive\":false,\"glob\":\"**/*.toml\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "81d5ceb3cbfdb22a2b848e304682045e9965262344ac1b1d2704a3a2d2813cd1"
+        },
+        "tombi_format": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check_diff\":\"tombi format --check --diff {{ files }}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"tombi format {{ files }}\",\"glob\":\"**/*.toml\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "efe0246956ac4bda14082e10930db3dd264e5f6fbe8488908a59f4b3d0202047"
+        },
+        "trailing-whitespace": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check_diff\":\"hk util trailing-whitespace --diff {{files}}\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"hk util trailing-whitespace --fix {{files}}\",\"glob\":\"**/*\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "55737f9d3d4293348ef696868fcf9171058a9e0b231f7185e962a9165bcdc6ec"
+        },
+        "typos": {
+          "definition": "{\"_type\":\"step\",\"allow_symlinks\":false,\"batch\":false,\"check_diff\":\"output=$(typos --force-exclude --diff {{files}})\\n[ -z \\\"$output\\\" ] && exit 0\\nprintf \\\"%s\\\" \\\"$output\\\"\\nexit 1\",\"check_first\":true,\"depends\":[],\"env\":{},\"exclude\":[],\"exclusive\":false,\"fix\":\"typos --force-exclude --write-changes {{ files }}\",\"glob\":\"**/*\",\"hide\":false,\"interactive\":false,\"output_summary\":\"stderr\",\"required\":[],\"stomp\":false}",
+          "fingerprint": "4581b25fb31e53097198bc813dc52eeac71b99d3e330f0b7d7b38c319e9d3db0"
+        }
+      }
+    },
+    "note": "Pkl evaluation passed.",
+    "status": "evaluable"
+  },
+  "resolution": {
+    "flags": {
+      "documentation": "supplied",
+      "tests": "supplied"
+    },
+    "residual_limitations": [
+      ".: Python test files exist but pyproject.toml is missing"
+    ],
+    "uncovered_candidates": {
+      "documentation": [],
+      "tests": []
+    },
+    "unresolved": [],
+    "write_eligible": true
+  },
+  "tests": {
+    "command": "nix flake check --max-jobs 1",
+    "note": "Explicit baseline test command.",
+    "output_truncated": true,
+    "returncode": 1,
+    "status": "failed",
+    "stderr": "fetching git input 'git+file:///Users/DeRoseR/workspace/personal/atomixos'\nevaluating flake...\nchecking flake output 'nixosConfigurations'...\nchecking NixOS configuration 'nixosConfigurations.rock64'...\nchecking NixOS configuration 'nixosConfigurations.rock64-qemu'...\nwarning: Scripted initrd is deprecated and scheduled for removal in 26.11. See the NixOS 26.05 release notes.\n\nchecking NixOS configuration 'nixosConfigurations.bundle-test-vm'...\nwarning: Scripted initrd is deprecated and scheduled for removal in 26.11. See the NixOS 26.05 release notes.\n\nchecking flake output 'packages'...\nchecking derivation packages.aarch64-darwin.uboot...\nderivation evaluated to /nix/store/h2byp8kdshj211jks84h39f6d9rd3wyx-uboot-rock64-rk3328_defconfig-2026.04.drv\nchecking derivation packages.aarch64-darwin.uboot-env-tools...\nderivation evaluated to /nix/store/274dx1wkn3ffsavrwr48lk0dgj4l9019-uboot-rock64-rk3328_defconfig-2026.04.drv\nchecking derivation packages.aarch64-darwin.squashfs...\nderivation evaluated to /nix/store/ai7gldq9sqxgb9fygnrxrvbws6aylm0a-rock64-squashfs.drv\nchecking derivation packages.aarch64-darwin.rauc-bundle...\nderivation evaluated to /nix/store/qm6gd18a3wgay4hxlw2df3r22r8nnshj-rock64-rauc-bundle.drv\nchecking derivation packages.aarch64-darwin.boot-script...\nderivation evaluated to /nix/store/ikpgbz97s358kwnwdm5fk5sk99aglcyn-rock64-boot-script.drv\nchecking derivation packages.aarch64-darwin.image...\nderivation evaluated to /nix/store/cb5mw03rv5jbp39mqlq748gnnnh6226d-rock64-image.drv\nchecking flake output 'checks'...\nchecking derivation checks.aarch64-darwin.firewall...\nwarning: Scripted initrd is deprecated and scheduled for removal in 26.11. See the NixOS 26.05 release notes.\n\nderivation evaluated to /nix/store/qh4n0qwcybiisman35q2af9gksi2gbpw-vm-test-run-firewall.drv\nchecking derivation checks.aarch64-darwin.rauc-slots...\nwarning: Scripted initrd is deprecated and scheduled for removal in 26.11. See the NixOS 26.05 release notes.\n\nderivation evaluated to /nix/store/m3a38y6z69zcwm94nllqrnbly9z9grzm-vm-test-run-rauc-slot-logic.drv\nchecking derivation checks.aarch64-darwin.rauc-update...\nwarning: Scripted initrd is deprecated and scheduled for removal in 26.11. See the NixOS 26.05 release notes.\n\nderivation evaluated to /nix/store/cx9mc6fwm40lqhrm7dp4ba16dn8fp01z-vm-test-run-rauc-update-install.drv\nchecking derivation checks.aarch64-darwin.rauc-rollback...\nwarning: Scripted initrd is deprecated and scheduled for removal in 26.11. See the NixOS 26.05 release notes.\n\nderivation evaluated to /nix/store/gkhq0rnmi4514xxf1zb46myjiazdywxs-vm-test-run-rauc-rollback.drv\nchecking derivation checks.aarch64-darwin.rauc-confirm...\nwarning: Scripted initrd is deprecated and scheduled for removal in 26.11. See the NixOS 26.05 release notes.\n\nderivation evaluated to /nix/store/6jf55ifr3lm6vw65d2hs4jgad4mmmkk2-vm-test-run-rauc-confirm.drv\nchecking derivation checks.aarch64-darwin.rauc-power-loss...\nwarning: Scripted initrd is deprecated and scheduled for removal in 26.11. See the NixOS 26.05 release notes.\n\nderivation evaluated to /nix/store/i6adcxjcpr5mbwwpalxh2vrxq7a3z7yf-vm-test-run-rauc-power-loss.drv\nchecking derivation checks.aarch64-darwin.rauc-watchdog...\nwarning: Scripted initrd is deprecated and scheduled for removal in 26.11. See the NixOS 26.05 release notes.\n\nderivation evaluated to /nix/store/kw1vg2znmg9l6pmdy5mkqfk59arg71a6-vm-test-run-rauc-watchdog-rollback.drv\nchecking derivation checks.aarch64-darwin.initrd-fresh-flash-marker...\nwarning: The user 'root' has multiple of the options\n`initialHashedPassword`, `hashedPassword`, `initialPassword`, `password`\n& `hashedPasswordFile` set to a non-null value.\n\nIf multiple of these password options are set at the same time then a\nspecific order of precedence is followed, which can lead to surprising\nresults. The order of precedence differs depending on whether the\n{option}`users.mutableUsers` option is set.\n\nIf the option {option}`users.mutableUsers` is\n`false`, then the order of precedence is as shown\nbelow, where values on the left are overridden by values on the right:\n{option}`initialHashedPassword` -> {option}`hashedPassword` -> {option}`initialPassword` -> {option}`password` -> {option}`hashedPasswordFile`\n\nThe values of these options are:\n* users.users.\"root\".hashedPassword: \"!\"\n* users.users.\"root\".hashedPasswordFile: \"/nix/store/hh3grnbc5akzbqd65mml5868k8v8427d-hashed-password.root\"\n* users.users.\"root\".password: null\n\nderivation evaluated to /nix/store/2vx9al8dl5br902ghz73fq0ig30fgf90-vm-test-run-initrd-fresh-flash-marker.drv\nchecking derivation checks.aarch64-darwin.first-boot-provision...\nwarning: Scripted initrd is deprecated and scheduled for removal in 26.11. See the NixOS 26.05 release notes.\n\nderivation evaluated to /nix/store/h45290r9hj398zbrk06kb1a5zqnb84q9-vm-test-run-first-boot-provision.drv\nchecking derivation checks.aarch64-darwin.first-boot-source-discovery...\nwarning: Scripted initrd is deprecated and scheduled for removal in 26.11. See the NixOS 26.05 release notes.\n\nderivation evaluated to /nix/store/haj023jlh4zlf0rg2zdf0kpwrqqargjf-vm-test-run-first-boot-source-discovery.drv\nchecking derivation checks.aarch64-darwin.nixstasis-module...\nderivation evaluated to /nix/store/2zn6g2dpsiwjia0wwkkkv83znikpsga9-nixstasis-module-check.drv\nchecking derivation checks.aarch64-darwin.nixstasis-client...\nwarning: Scripted initrd is deprecated and scheduled for removal in 26.11. See the NixOS 26.05 release notes.\n\nwarning: The user 'root' has multiple of the options\n`initialHashedPassword`, `hashedPassword`, `initialPassword`, `password`\n& `hashedPasswordFile` set to a non-null value.\n\nIf multiple of these password options are set at the same time then a\nspecific order of precedence is followed, which can lead to surprising\nresults. The order of precedence differs depending on whether the\n{option}`users.mutableUsers` option is set.\n\nIf the option {option}`users.mutableUsers` is\n`false`, then the order of precedence is as shown\nbelow, where values on the left are overridden by values on the right:\n{option}`initialHashedPassword` -> {option}`hashedPassword` -> {option}`initialPassword` -> {option}`password` -> {option}`hashedPasswordFile`\n\nThe values of these options are:\n* users.users.\"root\".hashedPassword: \"!\"\n* users.users.\"root\".hashedPasswordFile: \"/nix/store/hh3grnbc5akzbqd65mml5868k8v8427d-hashed-password.root\"\n* users.users.\"root\".password: null\n\nderivation evaluated to /nix/store/qwy2camnp20xl2gsl5pi4jc68a4ak6qz-vm-test-run-nixstasis-client.drv\nchecking derivation checks.aarch64-darwin.watchdog-module...\nderivation evaluated to /nix/store/79k7qkxvq73d3yrrssc52ij343jxj9n9-watchdog-module-check.drv\nchecking derivation checks.aarch64-darwin.forensics-podman-log-path...\nwarning: Scripted initrd is deprecated and scheduled for removal in 26.11. See the NixOS 26.05 release notes.\n\nderivation evaluated to /nix/store/702y19d2nykgb7fzxw8s3lxjjjb57rlx-vm-test-run-forensics-podman-log-path.drv\nchecking derivation checks.aarch64-darwin.forensics-rsyslog-path...\nwarning: Scripted initrd is deprecated and scheduled for removal in 26.11. See the NixOS 26.05 release notes.\n\nderivation evaluated to /nix/store/gwwjjn7bz1lcyjpbb09a05d2v4fxvp7k-vm-test-run-forensics-rsyslog-path.drv\nchecking derivation checks.aarch64-darwin.forensics-rsyslog-buffering...\nwarning: Scripted initrd is deprecated and scheduled for removal in 26.11. See the NixOS 26.05 release notes.\n\nderivation evaluated to /nix/store/pgdz8x9ha9n56dxynk5km2ic3mq0fk03-vm-test-run-forensics-rsyslog-buffering.drv\nchecking derivation checks.aarch64-darwin.forensics-shutdown-flush...\nwarning: Scripted initrd is deprecated and scheduled for removal in 26.11. See the NixOS 26.05 release notes.\n\nderivation evaluated to /nix/store/kl1khzjipwdn1sdfxwak8i278s9s3191-vm-test-run-forensics-shutdown-flush.drv\nchecking derivation checks.aarch64-darwin.chrony-wan-recovery...\nwarning: Scripted initrd is deprecated and scheduled for removal in 26.11. See the NixOS 26.05 release notes.\n\nwarning: The user 'root' has multiple of the options\n`initialHashedPassword`, `hashedPassword`, `initialPassword`, `password`\n& `hashedPasswordFile` set to a non-null value.\n\nIf multiple of these password options are set at the same time then a\nspecific order of precedence is followed, which can lead to surprising\nresults. The order of precedence differs depending on whether the\n{option}`users.mutableUsers` option is set.\n\nIf the option {option}`users.mutableUsers` is\n`false`, then the order of precedence is as shown\nbelow, where values on the left are overridden by values on the right:\n{option}`initialHashedPassword` -> {option}`hashedPassword` -> {option}`initialPassword` -> {option}`password` -> {option}`hashedPasswordFile`\n\nThe values of these options are:\n* users.users.\"root\".hashedPassword: \"!\"\n* users.users.\"root\".hashedPasswordFile: \"/nix/store/hh3grnbc5akzbqd65mml5868k8v8427d-hashed-password.root\"\n* users.users.\"root\".password: null\n\nderivation evaluated to /nix/store/91560pashfyw9crgp2680d3krcsaxklm-vm-test-run-chrony-wan-recovery.drv\nchecking derivation checks.aarch64-darwin.network-isolation...\nwarning: Scripted initrd is deprecated and scheduled for removal in 26.11. See the NixOS 26.05 release notes.\n\nderivation evaluated to /nix/store/16bjnjwb7xhrivzxgfm4r91pddawhkph-vm-test-run-network-isolation.drv\nchecking derivation checks.aarch64-darwin.ssh-wan-toggle...\nwarning: Scripted initrd is deprecated and scheduled for removal in 26.11. See the NixOS 26.05 release notes.\n\nderivation evaluated to /nix/store/v1jp4knwrxgp2knkcb8ydywcnvsbbl33-vm-test-run-ssh-wan-toggle.drv\nchecking flake output 'apps'...\nchecking flake output 'devShells'...\nchecking derivation devShells.aarch64-darwin.default...\nderivation evaluated to /nix/store/p098vv6a2nrgh0kpcg2rqwkg7b3w40mi-nix-shell.drv\nrunning 20 flake checks...\nbuilding '/nix/store/xkpyjlzmdrxbs25dlsiwrli90v8y31sq-closure-info.drv'...\nclosure-info> structuredAttrs is enabled\nbuilding '/nix/store/7v603p3fxjp5bammdia7f538qxmysx8s-run-nixos-vm.drv'...\nbuilding '/nix/store/vrf8zw15yfqnzq8qhr4i7c9r940cxid6-user-units.drv' on 'ssh-ng://builder@container-builder'...\nuser-units> Note: Changes will take effect after stopping and restarting 'nix-builder'.\ncopying 0 paths...\nbuilding '/nix/store/w19mqcd7fir5yphnkhm6sv7jz4pqw082-nixos-vm.drv'...\nbuilding '/nix/store/vrf8zw15yfqnzq8qhr4i7c9r940cxid6-user-units.drv'...\ncopying 1 paths...\ncopying path '/nix/store/5fad0wfz32cyfvx6r45prnqg3wwpsxl3-user-units' from 'ssh-ng://builder@container-builder'...\nbuilding '/nix/store/022i8cyc1r9aj4wimfkkp633zz2xkjwl-system-units.drv' on 'ssh-ng://builder@container-builder'...\nsystem-units> Note: Changes will take effect after stopping and restarting 'nix-builder'.\ncopying 0 paths...\nbuilding '/nix/store/a472njqdbbd420m5siwsjiivc0cc629a-driverConfiguration.json.drv'...\ndriverConfiguration.json> structuredAttrs is enabled\nbuilding '/nix/store/022i8cyc1r9aj4wimfkkp633zz2xkjwl-system-units.drv'...\nbuilding '/nix/store/4wxxlr2icpdw4fglg6s0wpm6ay7qas8s-nixos-test-driver-initrd-fresh-flash-marker.drv'...\nbuilding '/nix/store/slgsjplhmyh5ydsxf4n8w6knxv0b4nkd-check-sshd-config.drv' on 'ssh-ng://builder@container-builder'...\ncheck-sshd-config> Note: Changes will take effect after stopping and restarting 'nix-builder'.\ncopying 0 paths...\nbuilding '/nix/store/slgsjplhmyh5ydsxf4n8w6knxv0b4nkd-check-sshd-config.drv'...\ncopying 1 paths...\ncopying path '/nix/store/21inh6q12nr8zz2b0a79xyzz9n28scng-check-sshd-config' from 'ssh-ng://builder@container-builder'...\ncopying 1 paths...\ncopying path '/nix/store/9pwxw0hcyyby5nw4vhc6g3j7d5xk9592-system-units' from 'ssh-ng://builder@container-builder'...\nnixos-test-driver-initrd-fresh-flash-marker> Running type check (enable/disable: config.skipTypeCheck)\nnixos-test-driver-initrd-fresh-flash-marker> See https://nixos.org/manual/nixos/stable/#test-opt-skipTypeCheck\nnixos-test-driver-initrd-fresh-flash-marker> All checks passed!------------------------------------------------- 1/1 files\nnixos-test-driver-initrd-fresh-flash-marker> Linting test script (enable/disable: config.skipLint)\nnixos-test-driver-initrd-fresh-flash-marker> See https://nixos.org/manual/nixos/stable/#test-opt-skipLint\nbuilding '/nix/store/bjy22hha1avlxwhxz4a4i45ds0449vyd-system-units.drv' on 'ssh-ng://builder@container-builder'...\nsystem-units> Note: Changes will take effect after stopping and restarting 'nix-builder'.\ncopying 0 paths...\nnixos-test-driver-initrd-fresh-flash-marker> All checks passed!\nbuilding '/nix/store/bjy22hha1avlxwhxz4a4i45ds0449vyd-system-units.drv'...\nbuilding '/nix/store/3fn2k530z81sgw6v9v50rcn618s1dnzd-activate.drv' on 'ssh-ng://builder@container-builder'...\nactivate> Note: Changes will take effect after stopping and restarting 'nix-builder'.\ncopying 0 paths...\nbuilding '/nix/store/3fn2k530z81sgw6v9v50rcn618s1dnzd-activate.drv'...\ncopying 1 paths...\ncopying path '/nix/store/3wwng0q0knr9s51iqwl39kkx0cmxlsgn-activate' from 'ssh-ng://builder@container-builder'...\ncopying 1 paths...\ncopying path '/nix/store/237k5qyyxvnqcylphk9cx40gqvx2w013-system-units' from 'ssh-ng://builder@container-builder'...\nbuilding '/nix/store/gy21xv7ndymksmq46r36qmq86mz6g978-unit-systemd-modules-load.service.drv' on 'ssh-ng://builder@container-builder'...\nunit-systemd-modules-load.service> Note: Changes will take effect after stopping and restarting 'nix-builder'.\ncopying 0 paths...\nbuilding '/nix/store/gy21xv7ndymksmq46r36qmq86mz6g978-unit-systemd-modules-load.service.drv'...\ncopying 1 paths...\ncopying path '/nix/store/8m0wj30vi2dpghqinrz10lvl4xh2wf19-unit-systemd-modules-load.service' from 'ssh-ng://builder@container-builder'...\nbuilding '/nix/store/abhmkbsh2pyqazm5b87lh1sk4r5dcl68-unit-systemd-tmpfiles-resetup.service.drv' on 'ssh-ng://builder@container-builder'...\nunit-systemd-tmpfiles-resetup.service> Note: Changes will take effect after stopping and restarting 'nix-builder'.\ncopying 0 paths...\nbuilding '/nix/store/abhmkbsh2pyqazm5b87lh1sk4r5dcl68-unit-systemd-tmpfiles-resetup.service.drv'...\ncopying 1 paths...\ncopying path '/nix/store/vc7i9pbv3nbysfkagbljk7madzxsglq3-unit-systemd-tmpfiles-resetup.service' from 'ssh-ng://builder@container-builder'...\nbuilding '/nix/store/0ng0sdx4zm9z0np3vbgqvbnp2yp3ixbv-unit-systemd-journald.service.drv' on 'ssh-ng://builder@container-builder'...\nunit-systemd-journald.service> Note: Changes will take effect after stopping and restarting 'nix-builder'.\ncopying 0 paths...\nbuilding '/nix/store/0ng0sdx4zm9z0np3vbgqvbnp2yp3ixbv-unit-systemd-journald.service.drv'...\ncopying 1 paths...\ncopying path '/nix/store/bamd6krm4vjasbschy8nik5gyxxw8flb-unit-systemd-journald.service' from 'ssh-ng://builder@container-builder'...\nbuilding '/nix/store/wpkb429fwva30dgwri3gxyils7h8fi5p-unit-dbus-broker.service.drv' on 'ssh-ng://builder@container-builder'...\nunit-dbus-broker.service> Note: Changes will take effect after stopping and restarting 'nix-builder'.\ncopying 0 paths...\nbuilding '/nix/store/wpkb429fwva30dgwri3gxyils7h8fi5p-unit-dbus-broker.service.drv'...\ncopying 1 paths...\ncopying path '/nix/store/c72yf1kg69lzjvnsrgr4wvxll3k53syx-unit-dbus-broker.service' from 'ssh-ng://builder@container-builder'...\nbuilding '/nix/store/svdav7c3b8w2sqxmxff0z46nhfp5rcb3-system-path.drv' on 'ssh-ng://builder@container-builder'...\nsystem-path> Note: Changes will take effect after stopping and restarting 'nix-builder'.\ncopying 0 paths...\nbuilding '/nix/store/svdav7c3b8w2sqxmxff0z46nhfp5rcb3-system-path.drv'...\nsystem-path> structuredAttrs is enabled\nbuilding '/nix/store/vdwazx2icambzb75mkypid5ynx8pvyrd-dbus-1.drv' on 'ssh-ng://builder@container-builder'...\ndbus> Note: Changes will take effect after stopping and restarting 'nix-builder'.\ncopying 0 paths...\nbuilding '/nix/store/vdwazx2icambzb75mkypid5ynx8pvyrd-dbus-1.drv'...\ncopying 1 paths...\ncopying path '/nix/store/yd9rpq0fchw9zr126mw2p9xwl0s34nrh-dbus-1' from 'ssh-ng://builder@container-builder'...\nbuilding '/nix/store/dnmcfz5f36makmllhm491q51bsyn72zp-unit-dbus-broker.service.drv' on 'ssh-ng://builder@container-builder'...\nunit-dbus-broker.service> Note: Changes will take effect after stopping and restarting 'nix-builder'.\ncopying 0 paths...\nsystem-path> created 6846 symlinks in user environment\nsystem-path> install-info: warning: no info dir entry in `/nix/store/87ggsdxp70djfsgz0hf13zb61mfzaz9g-system-path/share/info/notes.info'\nbuilding '/nix/store/dnmcfz5f36makmllhm491q51bsyn72zp-unit-dbus-broker.service.drv'...\ncopying 1 paths...\ncopying path '/nix/store/kjd7zxc58bmlywr1p8pkcfwzaizyqhj0-unit-dbus-broker.service' from 'ssh-ng://builder@container-builder'...\nbuilding '/nix/store/ppx85065224rdmm4imhfpbj67hj06dv5-X-Restart-Triggers-dbus-broker.drv' on 'ssh-ng://builder@container-builder'...\nX-Restart-Triggers-dbus-broker> Note: Changes will take effect after stopping and restarting 'nix-builder'.\ncopying 0 paths...\ncopying 1 paths...\ncopying path '/nix/store/87ggsdxp70djfsgz0hf13zb61mfzaz9g-system-path' from 'ssh-ng://builder@container-builder'...\nbuilding '/nix/store/ppx85065224rdmm4imhfpbj67hj06dv5-X-Restart-Triggers-dbus-broker.drv'...\ncopying 1 paths...\ncopying path '/nix/store/pwhfr9q6gq1nhm09lcwl5ppsz77dg0yi-X-Restart-Triggers-dbus-broker' from 'ssh-ng://builder@container-builder'...\nbuilding '/nix/store/s60lxm1vp4h91xlq6qcm31rnrkc323x8-unit-systemd-tmpfiles-resetup.service.drv' on 'ssh-ng://builder@container-builder'...\nunit-systemd-tmpfiles-resetup.service> Note: Changes will take effect after stopping and restarting 'nix-builder'.\ncopying 0 paths...\nbuilding '/nix/store/s60lxm1vp4h91xlq6qcm31rnrkc323x8-unit-systemd-tmpfiles-resetup.service.drv'...\ncopying 1 paths...\ncopying path '/nix/store/wsrrvyzir1dv52wlv3y01slk2l363pw3-unit-systemd-tmpfiles-resetup.service' from 'ssh-ng://builder@container-builder'...\nbuilding '/nix/store/nlk513zz739hxv3yg13kjw25xvvw9ys5-unit-network-addresses-eth1.service.drv' on 'ssh-ng://builder@container-builder'...\nunit-network-addresses-eth1.service> Note: Changes will take effect after stopping and restarting 'nix-builder'.\ncopying 0 paths...\nbuilding '/nix/store/nlk513zz739hxv3yg13kjw25xvvw9ys5-unit-network-addresses-eth1.service.drv'...\ncopying 1 paths...\ncopying path '/nix/store/ainv9wagyhl72h66bz3d1dwm72c3dcig-unit-network-addresses-eth1.service' from 'ssh-ng://builder@container-builder'...\nbuilding '/nix/store/ic1zvgj2sks56szf9x89qm4y0z4663hl-unit-script-network-addresses-eth2-pre-stop.drv' on 'ssh-ng://builder@container-builder'...\nunit-script-network-addresses-eth2-pre-stop> Note: Changes will take effect after stopping and restarting 'nix-builder'.\ncopying 0 paths...\nbuilding '/nix/store/ic1zvgj2sks56szf9x89qm4y0z4663hl-unit-script-network-addresses-eth2-pre-stop.drv'...\ncopying 1 paths...\ncopying path '/nix/store/wyahrqyi4r16kp452hzj8fmqqncym7vn-unit-script-network-addresses-eth2-pre-stop' from 'ssh-ng://builder@container-builder'...\nbuilding '/nix/store/n4j0z1az09l5jsqx7bhcaz57gfn8cp46-nixstasis-client-0.0.0-go-modules.drv' on 'ssh-ng://builder@container-builder'...\nnixstasis-client> Note: Changes will take effect after stopping and restarting 'nix-builder'.\ncopying 0 paths...\nbuilding '/nix/store/sbyypczl60pjk207b2s11nv3w7rqba3k-X-Restart-Triggers-sshd.drv' on 'ssh-ng://builder@container-builder'...\nX-Restart-Triggers-sshd> Note: Changes will take effect after stopping and restarting 'nix-builder'.\ncopying 0 paths...\nbuilding '/nix/store/sbyypczl60pjk207b2s11nv3w7rqba3k-X-Restart-Triggers-sshd.drv'...\ncopying 1 paths...\ncopying path '/nix/store/9cn6a7m2i2di9faiigbzak1xb2gc94dq-X-Restart-Triggers-sshd' from 'ssh-ng://builder@container-builder'...\nbuilding '/nix/store/xkkibc6qh31lx8fwdnc8jai8bm4bsfam-X-Restart-Triggers-dbus-broker.drv' on 'ssh-ng://builder@container-builder'...\nX-Restart-Triggers-dbus-broker> Note: Changes will take effect after stopping and restarting 'nix-builder'.\ncopying 0 paths...\nbuilding '/nix/store/xkkibc6qh31lx8fwdnc8jai8bm4bsfam-X-Restart-Triggers-dbus-broker.drv'...\ncopying 1 paths...\ncopying path '/nix/store",
+    "stdout": ""
+  },
+  "validation_partitions": [
+    {
+      "argv": [
+        "mdbook",
+        "build",
+        "docs"
+      ],
+      "kind": "documentation",
+      "name": "root-book-build",
+      "output_truncated": false,
+      "provenance": "docs/book.toml",
+      "recovery": null,
+      "returncode": 0,
+      "status": "passed",
+      "stderr": " INFO Book building has started\nWarning: The mdbook-mermaid preprocessor was built against version 0.5.0 of mdbook, but we're being called from version 0.5.2\n INFO Running the html backend\n INFO HTML book written to `/Users/DeRoseR/workspace/personal/atomixos/docs/../book`\n",
+      "stdout": "",
+      "working_directory": "."
+    }
+  ]
+}
