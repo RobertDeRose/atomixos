@@ -11,7 +11,7 @@ Generated: `2026-07-30T16:39:45+00:00`
 - Parsed task files: 14
 - Unparsed task files: 0
 - Parsed legacy tasks: 456
-- Reconciliation findings: 1
+- Reconciliation findings: 0
 - `completed`: 10
 - `deferred`: 1
 - `in_progress`: 4
@@ -53,7 +53,7 @@ Generated: `2026-07-30T16:39:45+00:00`
   - Roadmap: completed
   - Design: —
   - Index: yes
-  - Findings: 1
+  - Findings: 0
 - **Feature:** `durable-journald-logs`
   - Target: `durable-journald-logs`
   - Classification: `in_progress`
@@ -157,7 +157,6 @@ Generated: `2026-07-30T16:39:45+00:00`
 
 ### First-Boot Local Provisioning (`first-boot-local-provisioning`)
 
-- `finding:8b0471486c13` — Roadmap says completed/implemented but completion evidence is missing: T999 closed
 - Classification override: `completed` — All 21 mapped implementation tasks are closed, and modules/first-boot.nix, scripts/first-boot.sh, provisioning docs, and first-boot VM checks corroborate delivered behavior; the legacy tracker did not use T999.
 
 ### Network Config Extensions (`network-config-extensions`)
