@@ -70,6 +70,9 @@ missing watchdog alone does not fail update verification or mutate RAUC slot sta
 
 ### ADDED: Watchdog interacts with boot-count rollback
 
+The `watchdog-boot-count` package and service exist only on RAUC-enabled profiles. RAUC-enabled U-Boot and custom-backend
+profiles retain the helper; non-RAUC profiles do not carry or run update rollback integration.
+
 A watchdog reboot is indistinguishable from any other abnormal reboot from U-Boot's perspective. Each watchdog-triggered
 reboot:
 

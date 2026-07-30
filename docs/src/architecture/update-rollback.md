@@ -79,9 +79,10 @@ validation approves active enforcement. If an enabled system has no usable watch
 `watchdog-device-check.service` warns and exits successfully: boot and update verification continue, and the condition
 does not itself mutate RAUC state.
 
-The intended hardware rollback behavior applies to a newly updated, still-unconfirmed slot. Repeated watchdog resets
-before `os-verification` can mark that slot good consume its U-Boot attempts until U-Boot returns to the previous slot.
-An already confirmed slot is outside this rollback claim.
+The boot-count helper package and service are present only when RAUC is enabled; non-RAUC profiles do not carry this
+update rollback integration. The intended hardware rollback behavior applies to a newly updated, still-unconfirmed slot.
+Repeated watchdog resets before `os-verification` can mark that slot good consume its U-Boot attempts until U-Boot
+returns to the previous slot. An already confirmed slot is outside this rollback claim.
 
 ## Update Polling
 
