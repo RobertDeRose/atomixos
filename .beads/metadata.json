@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "atomixos",
+  "project_id": "c57463a2-4540-4ae5-9b76-d6969a54dd70"
+}

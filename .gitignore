@@ -67,3 +67,9 @@ mise.local.toml
 # Local editor and OS files
 .DS_Store
 # END DSTACK WORKFLOW
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
+.beads/proxieddb/
