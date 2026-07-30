@@ -75,7 +75,7 @@ in
       RebootWatchdogSec = cfg.rebootWatchdogSec;
     };
 
-    environment.systemPackages = [
+    environment.systemPackages = lib.optionals config.atomixos.rauc.enable [
       watchdogBootCountCli
     ];
 
@@ -94,7 +94,7 @@ in
       };
     };
 
-    systemd.services.watchdog-boot-count = {
+    systemd.services.watchdog-boot-count = lib.mkIf config.atomixos.rauc.enable {
       description = "Record watchdog boot-count and rollback state";
       wantedBy = [ "multi-user.target" ];
       before = [ "rauc.service" ];
