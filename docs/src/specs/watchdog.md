@@ -54,6 +54,20 @@ Accepted policy is not proof that a physical watchdog implements the exact reque
 nearest timeout supported by the driver and device. Physical validation must record the programmed hardware timeout and
 confirm observed reset timing before release enablement.
 
+### ADDED: Missing hardware fails open with a warning
+
+When hardware enforcement is enabled but systemd does not hold a usable watchdog device,
+`watchdog-device-check.service` logs an actionable warning and exits successfully. The device continues booting; the
+missing watchdog alone does not fail update verification or mutate RAUC slot state.
+
+#### Scenario: Enabled policy has no watchdog device
+
+- Given `atomixos.watchdog.enableHardware = true`
+- And no watchdog character device exists
+- When the system reaches `multi-user.target`
+- Then `watchdog-device-check.service` reports that hardware enforcement is unavailable
+- And boot continues without changing RAUC slot state
+
 ### ADDED: Watchdog interacts with boot-count rollback
 
 A watchdog reboot is indistinguishable from any other abnormal reboot from U-Boot's perspective. Each watchdog-triggered

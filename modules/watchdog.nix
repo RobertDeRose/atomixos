@@ -14,6 +14,41 @@ let
   watchdogBootCountCli = pkgs.writeShellScriptBin "watchdog-boot-count" (
     builtins.readFile ../scripts/watchdog-boot-count.sh
   );
+  watchdogDeviceCheck = pkgs.writeShellScript "watchdog-device-check" ''
+    set -eu
+
+    device_present=false
+    for attempt in 1 2 3 4 5; do
+      device_present=false
+      for device in /dev/watchdog /dev/watchdog0; do
+        if [ -c "$device" ]; then
+          device_present=true
+          break
+        fi
+      done
+
+      if [ "$device_present" = true ]; then
+        for fd in /proc/1/fd/*; do
+          target="$(${pkgs.coreutils}/bin/readlink "$fd" 2>/dev/null || true)"
+          case "$target" in
+            /dev/watchdog*) exit 0 ;;
+          esac
+        done
+      fi
+
+      [ "$attempt" -eq 5 ] || ${pkgs.coreutils}/bin/sleep 1
+    done
+
+    if [ "$device_present" = false ]; then
+      message="hardware watchdog enforcement is unavailable: no watchdog character device exists"
+    else
+      message="hardware watchdog enforcement is unavailable: systemd does not hold a watchdog device"
+    fi
+
+    printf '%s\n' "$message" | ${pkgs.systemd}/bin/systemd-cat \
+      --identifier=watchdog-device-check \
+      --priority=warning
+  '';
 in
 {
   options.atomixos.watchdog = {
@@ -43,6 +78,21 @@ in
     environment.systemPackages = [
       watchdogBootCountCli
     ];
+
+    systemd.services.watchdog-device-check = lib.mkIf cfg.enableHardware {
+      description = "Report unavailable hardware watchdog enforcement";
+      wantedBy = [ "multi-user.target" ];
+      after = [
+        "multi-user.target"
+        "systemd-modules-load.service"
+        "systemd-udevd.service"
+      ];
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = watchdogDeviceCheck;
+        RemainAfterExit = true;
+      };
+    };
 
     systemd.services.watchdog-boot-count = {
       description = "Record watchdog boot-count and rollback state";

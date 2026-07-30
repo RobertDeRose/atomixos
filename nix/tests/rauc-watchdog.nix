@@ -84,7 +84,7 @@ nixos-lib.runTest {
   inherit hostPkgs;
 
   nodes.gateway =
-    { lib, ... }:
+    { ... }:
     {
       imports = [
         raucModule
@@ -121,18 +121,37 @@ nixos-lib.runTest {
       # Use a short watchdog timeout to speed up the test.
       # 10s runtime means systemd kicks every ~5s; if frozen, the
       # hardware watchdog fires after 10s and QEMU resets the VM.
-      systemd.settings.Manager = {
-        RuntimeWatchdogSec = lib.mkForce "10s";
-        RebootWatchdogSec = lib.mkForce "1min";
+      atomixos.watchdog = {
+        enableHardware = true;
+        runtimeWatchdogSec = "10s";
+        rebootWatchdogSec = "1min";
       };
 
     };
 
   testScript = ''
+    import json
+
+    def assert_no_watchdog_unavailable_warning():
+        entries = [
+            json.loads(line)
+            for line in gateway.succeed(
+                "journalctl -b -u watchdog-device-check.service --no-pager -o json"
+            ).splitlines()
+        ]
+        unavailable = [
+            entry
+            for entry in entries
+            if "hardware watchdog enforcement is unavailable"
+            in entry.get("MESSAGE", "")
+        ]
+        assert not unavailable, unavailable
+
     # Phase 1: Boot and verify watchdog infrastructure.
     gateway.start()
     gateway.wait_for_unit("multi-user.target")
     gateway.wait_for_unit("rauc.service")
+    gateway.wait_for_unit("watchdog-device-check.service")
     gateway.wait_until_succeeds("systemctl show -p Result --value watchdog-boot-count.service | grep -qx success")
 
     # Verify i6300esb watchdog device is present and the kernel module loaded
@@ -142,6 +161,7 @@ nixos-lib.runTest {
 
     # Verify systemd is actively kicking the watchdog
     gateway.succeed("systemctl show -p RuntimeWatchdogUSec | grep -q 10s")
+    assert_no_watchdog_unavailable_warning()
     gateway.log("Confirmed: systemd RuntimeWatchdogUSec=10s")
 
     gateway.succeed("rauc status mark-good")
@@ -177,6 +197,8 @@ nixos-lib.runTest {
     gateway.crash()
     gateway.start()
     gateway.wait_for_unit("multi-user.target")
+    gateway.wait_for_unit("watchdog-device-check.service")
+    assert_no_watchdog_unavailable_warning()
     gateway.log("VM restarted after simulated watchdog reboot 1")
 
     # Boot-count should have decremented from 2 to 1
@@ -193,6 +215,8 @@ nixos-lib.runTest {
     gateway.crash()
     gateway.start()
     gateway.wait_for_unit("multi-user.target")
+    gateway.wait_for_unit("watchdog-device-check.service")
+    assert_no_watchdog_unavailable_warning()
     gateway.log("VM restarted after simulated watchdog reboot 2")
 
     # Boot-count file should be gone (removed after rollback)

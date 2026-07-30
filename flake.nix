@@ -366,6 +366,7 @@
             nixstasis-module = import ./nix/tests/nixstasis-module.nix netTestArgs;
             nixstasis-client = import ./nix/tests/nixstasis-client.nix netTestArgs;
             watchdog-module = import ./nix/tests/watchdog-module.nix netTestArgs;
+            watchdog-missing-device = import ./nix/tests/watchdog-missing-device.nix netTestArgs;
             forensics-podman-log-path = import ./nix/tests/forensics-podman-log-path.nix netTestArgs;
             forensics-rsyslog-path = import ./nix/tests/forensics-rsyslog-path.nix netTestArgs;
             forensics-rsyslog-buffering = import ./nix/tests/forensics-rsyslog-buffering.nix netTestArgs;
@@ -418,6 +419,7 @@
             nixstasis-module = import ./nix/tests/nixstasis-module.nix darwinNetTestArgs;
             nixstasis-client = import ./nix/tests/nixstasis-client.nix darwinNetTestArgs;
             watchdog-module = import ./nix/tests/watchdog-module.nix darwinNetTestArgs;
+            watchdog-missing-device = import ./nix/tests/watchdog-missing-device.nix darwinNetTestArgs;
             forensics-podman-log-path = import ./nix/tests/forensics-podman-log-path.nix darwinNetTestArgs;
             forensics-rsyslog-path = import ./nix/tests/forensics-rsyslog-path.nix darwinNetTestArgs;
             forensics-rsyslog-buffering = import ./nix/tests/forensics-rsyslog-buffering.nix darwinNetTestArgs;
