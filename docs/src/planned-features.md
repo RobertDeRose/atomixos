@@ -453,6 +453,22 @@ this page remains the human-readable roadmap.
   first-boot-only job status fragments, preserving bootstrap CSRF and browser
   origin checks, and keeping Boot UI routes excluded from live OpenAPI.
 
+### Build Configuration (`build-configuration`)
+
+- Status: ready for implementation
+- Beads root: `atomixos-mol-0ws`
+- Design: [Build Configuration](./features/build-configuration/design.md)
+- Overview: Add a versioned build-stage `build.toml` contract for immutable image policy, with watchdog settings as the
+  first consumer and an ignored `build.dev.toml` overlay for local experiments.
+- Requirements:
+  - Keep committed `build.toml` complete, strict, and reproducible
+  - Automatically apply local overrides in supported `mise` build/check workflows with a conspicuous warning
+  - Reject unknown or malformed policy before artifacts build
+  - Embed effective non-secret policy and provenance in systems, images, and update bundles
+- Non-goals: Runtime provisioning settings, secrets, arbitrary Nix fragments, or multiple profile layers
+- Dependencies: None; delivery unblocks the physical Watchdog Enforcement validation chain
+- Suggested validation: Nix evaluation checks, command-level wrapper tests, artifact provenance checks, and strict docs
+
 ### Watchdog Enforcement (`watchdog-enforcement`)
 
 - Status: partially completed
@@ -474,7 +490,8 @@ this page remains the human-readable roadmap.
 - Risks and tradeoffs:
   - Aggressive timeout may cause false triggers on slow boots
   - Cannot be fully validated in QEMU
-- Dependencies: Physical hardware availability for soak testing
+- Dependencies: Build Configuration delivery for a reproducible watchdog-enabled image, plus physical hardware
+  availability for reboot, rollback, and soak testing
 - Suggested validation: module evaluation checks, `rauc-watchdog` VM check, and 72-hour soak test on physical Rock64
 - Delivered so far: `atomixos.watchdog.*` options, opt-in rendered manager settings, default-disabled evaluation checks,
   and hardware validation instructions.
