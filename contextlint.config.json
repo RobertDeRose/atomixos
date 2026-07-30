@@ -1,0 +1,9 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nozomi-koborinai/contextlint/v1.1.1/schema.json",
+  "include": ["README.md", "docs/**/*.md"],
+  "rules": [
+    { "rule": "ref001" },
+    { "rule": "ref005" },
+    { "rule": "ref006" }
+  ]
+}

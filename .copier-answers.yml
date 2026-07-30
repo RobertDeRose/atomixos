@@ -1,0 +1,76 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# This file is managed by Copier. Do not edit it manually.
+_commit: v0.6.1
+_src_path: gh:RobertDeRose/dstack
+language_profiles:
+- other
+project_boundaries: AtomixOS owns the immutable base OS, secure provisioning, update
+    and recovery lifecycle, hardware enablement, and platform validation. It is not
+    a general-purpose desktop/server distribution, container orchestrator, or universal
+    router. Application workloads and external fleet-management infrastructure remain
+    deployment-owned, and hardware support is added explicitly per board.
+project_kind: infrastructure
+project_name: AtomixOS
+project_purpose: Build a secure, reproducible appliance operating system for single-board
+    computers, with atomic A/B OTA updates, automatic rollback, and container-based
+    application deployment.
+project_scope: Develop and validate a NixOS-based SBC appliance platform with reproducible
+    images, immutable A/B updates and rollback, secure provisioning, persistent container
+    workloads, and optional remote management. The current implementation uses Rock64
+    and an isolated gateway profile as its initial reference platform.
+project_slug: atomixos
+project_users: Developers, device makers, system integrators, and operators building
+    and managing secure, reproducible appliances on single-board computers.
+repository_default_branch: dev
+repository_layout: single-package

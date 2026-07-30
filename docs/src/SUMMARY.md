@@ -2,6 +2,9 @@
 
 [Introduction](./introduction.md)
 
+- [Project Overview](./introduction/project-overview.md)
+- [Documentation Conventions](./introduction/documentation-conventions.md)
+
 <!-- rumdl-disable MD025 -->
 
 # User Guide
@@ -21,6 +24,11 @@
 - [Runtime Boundaries](./runtime-boundaries.md)
 - [Operational Unknowns](./unknowns.md)
 
+# Development
+
+- [Developer Tooling](./development/tooling.md)
+- [Feature Lifecycle](./development/feature-lifecycle.md)
+
 # Tutorials
 
 - [OIDC-Authenticated Device Management](./tutorials/oidc-device-management.md)
@@ -29,6 +37,7 @@
 
 - [Hardware Testing](./hardware-testing.md)
 - [NTP Settings](./operations/ntp-settings.md)
+- [GitHub Pages Deployment](./operations/github-pages.md)
 
 # Specifications
 
@@ -63,12 +72,16 @@
     - [Tasks](./features/nixstasis-client/tasks.md)
   - [Watchdog Enforcement](./features/watchdog-enforcement/design.md)
     - [Tasks](./features/watchdog-enforcement/tasks.md)
+- [Implemented Features](./features/index.md)
+  <!-- BEGIN IMPLEMENTED FEATURES -->
+  <!-- END IMPLEMENTED FEATURES -->
 
 # Reference
 
 - [Task Reference](./reference/tasks.md)
 - [Flake Outputs](./reference/flake-outputs.md)
 - [Project Structure](./reference/project-structure.md)
+- [Tooling](./reference/tooling.md)
 - [Code Reference](./code-reference.md)
   - [NixOS Modules](./code-reference/modules.md)
   - [Nix Derivations](./code-reference/derivations.md)

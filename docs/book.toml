@@ -1,12 +1,13 @@
 [book]
 title = "AtomixOS"
-description = "NixOS-based firmware with atomic A/B OTA updates for Rock64 edge gateways"
+description = "Secure, reproducible appliance OS with atomic updates and rollback"
 authors = ["Robert DeRose"]
 language = "en"
 src = "src"
 
 [build]
 build-dir = "../book"
+create-missing = false
 
 [preprocessor.mermaid]
 command = "mdbook-mermaid"
@@ -14,7 +15,7 @@ command = "mdbook-mermaid"
 [output.html]
 default-theme = "navy"
 preferred-dark-theme = "navy"
-git-repository-url = "https://github.com/RobertDeRose/AtomicNIx"
-edit-url-template = "https://github.com/RobertDeRose/AtomicNIx/edit/main/docs/{path}"
+git-repository-url = "https://github.com/RobertDeRose/atomixos"
+edit-url-template = "https://github.com/RobertDeRose/atomixos/edit/dev/docs/src/{path}"
 additional-css = ["theme/cobalt.css"]
 additional-js = ["mermaid.min.js", "mermaid-init.js"]

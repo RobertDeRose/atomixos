@@ -1,0 +1,28 @@
+name: Validation
+on:
+  push:
+  pull_request:
+permissions: {}
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+      - name: Set up mise
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
+        with:
+          install: false
+      - name: Install locked tools
+        env:
+          MISE_IGNORED_CONFIG_PATHS: /home/runner/.config/mise/config.toml
+        run: mise install --locked
+      - name: Run repository checks
+        env:
+          MISE_IGNORED_CONFIG_PATHS: /home/runner/.config/mise/config.toml
+        run: mise run check

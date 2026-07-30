@@ -1,3 +1,5 @@
+#:schema https://mise.jdx.dev/schema/mise.json
+
 [settings]
 experimental = true
 env_shell_expand = true
@@ -9,8 +11,12 @@ cargo-binstall = "1.17.6"
 "github:badboy/mdbook-mermaid" = "0.17.0"
 "github:joshrotenberg/mdbook-lint" = "0.14.3"
 hk = "1.44.3"
+cocogitto = "latest"
+harper-cli = "latest"
+"npm:@contextlint/cli" = { version = "latest", aube_args = "--allow-low-downloads" }
 mdbook = "0.5.2"
 node = "lts"
+uv = "latest"
 "npm:@commitlint/cli" = "20.5.3"
 "npm:markdown-table-formatter" = "1.7.0"
 pkl = "0.31.1"
@@ -24,6 +30,7 @@ typos = "1.45.0"
 "nix:nixfmt" = "1.3.1"
 
 [env]
+GIT_CONFIG_PARAMETERS = "'merge.ff=only'"
 HK_MISE = 1
 _.file = ".env"
 
@@ -33,8 +40,26 @@ postinstall = "hk install --mise"
 # ── Tasks ──────────────────────────────────────────────────────────────────────
 
 [tasks.check]
-description = "Verify flake evaluates cleanly (nix flake check)"
+description = "Run repository validation"
+depends = ["nix:check"]
+run = "hk check -a"
+
+[tasks.fix]
+description = "Apply deterministic repository fixes"
+run = "hk fix -a"
+
+[tasks."nix:check"]
+description = "Verify flake evaluates cleanly"
 run = "nix flake check"
+
+[tasks."docs:check"]
+description = "Validate and build the documentation"
+depends = ["docs:build"]
+run = "uv run scripts/check-docs.py"
+
+[tasks."docs:deployment:enable"]
+description = "Enable GitHub Pages deployment"
+run = "python3 scripts/enable-docs-deployment.py"
 
 [tasks._lima]
 description = "Ensure Lima VM is running (hidden helper)"

@@ -11,6 +11,108 @@ local commit_message_validation: Step = new Step {
     """#
 }
 
+local commit_message_beads: Step = new Step {
+  check =
+    #"""
+    awk '
+      /^# ------------------------ >8 ------------------------/ { exit }
+      /^diff --git / { exit }
+      /^#/ { next }
+      /^(Refs?|Tasks?|Issues?):/ {
+        printf "use the canonical Beads: footer instead of: %s\n", $0 > "/dev/stderr"
+        failed = 1
+      }
+      /^Beads:/ {
+        beads += 1
+        if ($0 !~ /^Beads: [a-z][a-z0-9-]*-[a-z0-9][a-z0-9.-]*(, [a-z][a-z0-9-]*-[a-z0-9][a-z0-9.-]*)*$/) {
+          printf "invalid Beads footer: %s\n", $0 > "/dev/stderr"
+          failed = 1
+        }
+      }
+      NF { last = $0 }
+      END {
+        if (beads > 1) {
+          print "commit message must contain at most one Beads: footer" > "/dev/stderr"
+          failed = 1
+        }
+        if (beads == 1 && last !~ /^Beads:/) {
+          print "Beads: must be the final nonblank line" > "/dev/stderr"
+          failed = 1
+        }
+        exit failed
+      }
+    ' {{commit_msg_file}}
+    """#
+}
+
+local commit_message_length: Step = new Step {
+  check =
+    #"""
+    awk '
+      /^# ------------------------ >8 ------------------------/ { exit }
+      /^diff --git / { exit }
+      /^#/ { next }
+      {
+        line += 1
+        limit = line == 1 ? 72 : 100
+        if (length($0) > limit) {
+          printf "commit message line %d is %d characters; maximum is %d\n", line, length($0), limit > "/dev/stderr"
+          failed = 1
+        }
+      }
+      END { exit failed }
+    ' {{commit_msg_file}}
+    """#
+}
+
+local commit_message_scope: Step = new Step {
+  check =
+    #"""
+    awk '
+      /^# ------------------------ >8 ------------------------/ { exit }
+      /^diff --git / { exit }
+      /^#/ { next }
+      NF {
+        if ($0 ~ /^(feat|fix|perf|refactor)!?: /) {
+          print "changelog-visible commit subject must use type(scope): summary" > "/dev/stderr"
+          exit 1
+        }
+        exit 0
+      }
+    ' {{commit_msg_file}}
+    """#
+}
+
+local cocogitto_commit_message: Step = new Step {
+  check = "cog --quiet verify --file {{commit_msg_file}}"
+}
+
+local harper_commit_message: Step = new Step {
+  check =
+    #"""
+    output=$(mktemp)
+    trap 'rm -f "$output"' EXIT
+    awk '
+      /^# ------------------------ >8 ------------------------/ { exit }
+      /^diff --git / { exit }
+      /^#/ { next }
+      /^Beads: [a-z][a-z0-9-]*-[a-z0-9][a-z0-9.-]*(, [a-z][a-z0-9-]*-[a-z0-9][a-z0-9.-]*)*$/ { next }
+      {
+        line = $0
+        if (!seen_subject && NF) {
+          seen_subject = 1
+          if (line ~ /^release: v[0-9]+\.[0-9]+\.[0-9]+$/) { next }
+          sub(/^[a-z]+(\([^)]+\))?!?: /, "", line)
+        }
+        print line
+      }
+    ' {{commit_msg_file}} | harper-cli lint --quiet --no-color --user-dict-path .config/harper-dictionary.txt 2>"$output"
+    status=$?
+    awk '!/^Note: Using user dictionary at /' "$output" >&2
+    exit "$status"
+    """#
+}
+
 local linters = new Mapping<String, Step> {
   ["actionlint"] = Builtins.actionlint
   ["check_byte_order_marker"] = Builtins.check_byte_order_marker
@@ -24,6 +126,14 @@ local linters = new Mapping<String, Step> {
     exclude = List("certs/dev.*.key.pem")
   }
   ["deadnix"] = Builtins.deadnix
+  ["contextlint"] = new Step {
+    glob = List("README.md", "docs/**/*.md", "contextlint.config.json")
+    check = "contextlint"
+  }
+  ["docs"] = new Step {
+    glob = List("docs/src/**/*.md", "docs/book.toml", "scripts/check-docs.py")
+    check = "uv run scripts/check-docs.py && mdbook build docs"
+  }
   ["mise"] = Builtins.mise
   ["mixed-line-ending"] = Builtins.mixed_line_ending
   ["markdown-table-formatter"] = new Step {
@@ -59,7 +169,7 @@ local linters = new Mapping<String, Step> {
   ["trailing-whitespace"] = Builtins.trailing_whitespace
 }
 
-default_branch = "main"
+default_branch = "dev"
 exclude = List("**/mermaid.min.js", "**/.opencode/*")
 fail_fast = false
 
@@ -72,6 +182,11 @@ hooks {
   ["commit-msg"] {
     steps = new Mapping<String, Step> {
       ["commit_message_format"] = commit_message_validation
+      ["cocogitto_commit_msg"] = cocogitto_commit_message
+      ["harper_commit_message"] = harper_commit_message
+      ["commit_message_beads"] = commit_message_beads
+      ["commit_message_length"] = commit_message_length
+      ["commit_message_scope"] = commit_message_scope
     }
   }
   ["check"] {

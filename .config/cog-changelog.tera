@@ -1,0 +1,23 @@
+{% if version.tag -%}
+## {{ version.tag }} — {{ date | date(format="%Y-%m-%d") }}
+{% else -%}
+## Unreleased
+{% endif -%}
+
+{% set breaking = commits | filter(attribute="breaking_change", value=true) -%}
+{% if breaking | length > 0 -%}
+### Breaking changes
+
+{% for commit in breaking -%}
+- **BREAKING** {% if commit.scope %}**{{ commit.scope }}:** {% endif %}{{ commit.summary | upper_first }} (`{{ commit.id | truncate(length=7, end="") }}`)
+{% endfor %}
+{% endif -%}
+
+{% set regular = commits | filter(attribute="breaking_change", value=false) -%}
+{% for value in regular | group_by_type -%}
+### {{ value.0 }}
+
+{% for commit in value.1 -%}
+- {% if commit.scope %}**{{ commit.scope }}:** {% endif %}{{ commit.summary | upper_first }} (`{{ commit.id | truncate(length=7, end="") }}`)
+{% endfor %}
+{% endfor -%}

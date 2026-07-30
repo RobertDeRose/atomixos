@@ -1,0 +1,15 @@
+aube
+bd
+cocogitto
+commitlint
+contextlint
+dstack
+gofumpt
+hk
+mise
+nixfmt
+rumdl
+shfmt
+yamlfmt
+yamllint
+zizmor

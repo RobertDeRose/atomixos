@@ -7,9 +7,14 @@ NixOS with atomic A/B OTA updates, automatic rollback, and a container-based app
 deployment model. The system uses a read-only squashfs rootfs and operator-provisioned
 Quadlet containers on a persistent `/data` partition.
 
+See the [project overview](./introduction/project-overview.md) for the current audience, scope, and ownership
+boundaries. After migration, Beads is authoritative for live status, dependencies, claims, and ready-work selection;
+this page remains the human-readable roadmap.
+
 ## Goals
 
-- Ship a complete, reproducible embedded gateway firmware with zero default credentials
+- Ship complete, reproducible embedded appliance firmware with zero default credentials, using the gateway profile as
+  the initial reference use case
 - Provide atomic, rollback-safe over-the-air updates for thousands of remote devices
 - Allow operators to provision application containers, networks, and volumes via a
   single `config.toml` without touching the base image
@@ -115,6 +120,14 @@ Quadlet containers on a persistent `/data` partition.
   `strategy = "rollback"` through rendered `/data/config/activation-policy.json`.
   `keep-failed`, `manual-confirm`, and platform-managed unit restarts remain
   deferred to preserve the current fail-closed rollback boundary.
+
+## Roadmap Conventions
+
+- Directory names use stable `<slug>` identities.
+- Detailed intent belongs in each feature's `design.md`.
+- Each feature is represented by one Beads epic with lifecycle and implementation tasks beneath it.
+- Live execution state is queried through Beads; this page retains concise direction and historical context.
+- Completed features move into [Implemented Features](./features/index.md).
 
 ## Feature Map
 
