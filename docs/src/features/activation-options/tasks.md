@@ -2,6 +2,8 @@
 
 ## T000 - Review and confirm feature spec
 
+Status: done
+
 - [x] Confirm feature name, scope, and non-goals.
 - [x] Resolve whether `keep-failed` belongs in the first implementation.
 - [x] Resolve the accepted unit namespace for `activation.restart` and
@@ -10,6 +12,8 @@
 - [x] Confirm affected docs and validation requirements.
 
 ## T010 - Define config contract and validation
+
+Status: done
 
 - [x] Extend `schemas/config.schema.json` for the selected `[activation]`
   fields.
@@ -23,6 +27,8 @@
 
 ## T020 - Render derived activation state
 
+Status: done
+
 - [x] Define `/data/config/activation-policy.json` as the derived activation
   policy state.
 - [x] Render activation policy from validated `config.toml`.
@@ -30,6 +36,8 @@
 - [x] Keep rendered state compatible with candidate promotion and rollback.
 
 ## T030 - Apply activation policy at runtime
+
+Status: done
 
 - [x] Update the activation path to consume rendered activation policy.
 - [x] Apply configured settle and timeout behavior.
@@ -40,6 +48,8 @@
 
 ## T040 - Update docs and examples
 
+Status: done
+
 - [x] Update runtime boundary docs for activation policy state.
 - [x] Update data-flow docs for rendered activation policy.
 - [x] Update provisioning docs or examples if operator-facing config changes.
@@ -48,6 +58,8 @@
 - [x] Update API/spec docs if job result semantics change.
 
 ## T050 - Add automated validation
+
+Status: done
 
 - [x] Add unit tests for default activation behavior compatibility.
 - [x] Add unit tests for timeout and settle policy validation.
@@ -63,6 +75,8 @@
   harness to support persistent re-apply state.
 
 ## T999 - Final verification and release readiness
+
+Status: done
 
 - [x] Run the relevant formatting, unit, and Nix checks.
 - [x] Run `hk check -a` before final review.

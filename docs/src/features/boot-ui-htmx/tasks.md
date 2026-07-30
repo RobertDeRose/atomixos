@@ -2,6 +2,8 @@
 
 ## T000 - Review and confirm feature spec
 
+Status: done
+
 - [x] Confirm feature name, branch name, and docs path.
 - [x] Confirm first implementation keeps Boot UI first-boot only.
 - [x] Confirm upload and paste flows remain in scope.
@@ -11,6 +13,8 @@
 
 ## T010 - Inventory current Boot UI behavior
 
+Status: done
+
 - [x] Review existing `/`, `/apply`, static asset, and provisioning API route behavior.
 - [x] Identify current bootstrap token, Host, Origin, and Referer enforcement points.
 - [x] Identify current tests covering first-boot-only exposure and programmatic
@@ -19,6 +23,8 @@
 - [x] Document any compatibility behavior that must remain unchanged before editing.
 
 ## T020 - Design server-rendered HTMX flow
+
+Status: done
 
 - [x] Define the page layout for upload and paste provisioning on desktop and mobile.
 - [x] Define job progress, success, warning, error, and rollback fragments.
@@ -30,6 +36,8 @@
 - [x] Ensure all rendered dynamic values are escaped.
 
 ## T030 - Implement first-boot UI routes and fragments
+
+Status: done
 
 - [x] Replace or extend the first-boot page with server-rendered HTMX markup.
 - [x] Preserve upload config submission through the existing apply pipeline.
@@ -43,6 +51,8 @@
 
 ## T040 - Preserve security boundaries
 
+Status: done
+
 - [x] Keep bootstrap token checks on browser form submissions.
 - [x] Keep Host, Origin, and Referer protections for browser routes.
 - [x] Ensure any fragment mutation route is first-boot only and token protected.
@@ -52,6 +62,8 @@
 - [x] Verify no unauthenticated post-provision mutation path is introduced.
 
 ## T050 - Update tests
+
+Status: done
 
 - [x] Add route tests for first-boot page rendering and expected form controls.
 - [x] Add route tests for HTMX job progress, success, failure, warnings, and rollback
@@ -68,12 +80,16 @@
 
 ## T060 - Update docs
 
+Status: done
+
 - [x] Update provisioning docs to describe the first-boot HTMX UI flow.
 - [x] Update runtime boundary docs if route or first-boot behavior descriptions change.
 - [x] Update live schema contract feature docs if API/schema route expectations change.
 - [x] Update planned-features status after implementation is complete.
 
 ## T999 - Final verification and release readiness
+
+Status: done
 
 - [x] Run relevant Python route and UI tests.
 - [x] Run relevant OpenAPI schema exclusion tests.

@@ -2,6 +2,8 @@
 
 ## T000 - Review and confirm feature spec
 
+Status: done
+
 - [x] Confirm feature name, branch name, and docs path.
 - [x] Confirm the public API routes that must appear in the live schema.
 - [x] Confirm Boot UI/static route exclusion rules.
@@ -12,6 +14,8 @@
 
 ## T010 - Audit current API schema output
 
+Status: done
+
 - [x] Generate or fetch the current OpenAPI schema in tests.
 - [x] Record current public route coverage, operation IDs, tags, request bodies, responses,
   and auth/header documentation.
@@ -19,6 +23,8 @@
 - [x] Add a focused audit test or fixture that future tasks can build on.
 
 ## T020 - Stabilize public route schema metadata
+
+Status: done
 
 - [x] Ensure each public API route has the intended operation ID.
 - [x] Ensure each public API route has the intended domain tag.
@@ -29,6 +35,8 @@
 
 ## T030 - Document authentication and request headers
 
+Status: done
+
 - [x] Document bootstrap-token behavior where relevant for first-boot UI submission paths.
 - [x] Document provisioned-device SSH signature headers for mutating and validation routes.
 - [x] Document nonce request and nonce/signature failure responses.
@@ -37,12 +45,16 @@
 
 ## T040 - Exclude non-public routes from schema
 
+Status: done
+
 - [x] Verify Boot UI page routes are absent from the public API schema unless explicitly
   documented.
 - [x] Verify static asset routes are absent from the public API schema.
 - [x] Add tests that prevent accidental inclusion of implementation-only routes.
 
 ## T050 - Update docs
+
+Status: done
 
 - [x] Reconcile live schema contract docs with existing provisioning API docs.
   This repo has no standalone provisioning API spec page; the contract is documented in
@@ -52,6 +64,8 @@
 - [x] Update `docs/src/planned-features.md` after implementation is complete.
 
 ## T999 - Final verification and release readiness
+
+Status: done
 
 - [x] Run relevant Python tests for API behavior and OpenAPI schema coverage.
 - [x] Run formatting/linting for touched files.

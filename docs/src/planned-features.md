@@ -131,6 +131,56 @@ this page remains the human-readable roadmap.
 
 ## Feature Map
 
+### Rock64 A/B image (`rock64-ab-image`)
+
+- Status: partially completed
+- Overview: Provides the initial Rock64 reference image, read-only squashfs root, A/B RAUC update path, rollback,
+  gateway profile, and validation harness.
+- Remaining work: Physical-device network, update, authentication, and watchdog validation remains open; the generic
+  appliance platform must not assume all future hardware uses the Rock64 layout or gateway profile.
+- Delivered so far: Flashable image and bundle outputs, boot-count rollback, QEMU checks, core networking, provisioning,
+  and the initial Rock64 hardware bring-up path.
+
+### First-boot local provisioning (`first-boot-local-provisioning`)
+
+- Status: completed
+- Overview: Imports a complete `config.toml` from the initial boot partition, USB media, or the constrained local web
+  console, validates it, persists desired state under `/data/config`, and confirms the slot only after provisioning.
+- Delivered in: `modules/first-boot.nix`, `scripts/first-boot.sh`, the provisioning package, and first-boot VM checks.
+
+### Durable journald logs (`durable-journald-logs`)
+
+- Status: partially completed
+- Overview: Separates bounded slot-local Tier 0 forensic events from volatile journald and batched persistent logs under
+  `/data/logs`.
+- Remaining work: Redesign and validate the initrd forensic path and complete the associated hardening regression
+  coverage.
+
+### Provisioning API service (`provisioning-api-service`)
+
+- Status: partially completed
+- Overview: Replaces the one-shot provisioning importer with the long-lived Litestar service and shared validation,
+  rendering, promotion, activation, rollback, and asynchronous job pipeline.
+- Dependencies: `first-boot-local-provisioning`, `config-reapply-improvements`
+- Remaining work: Close the retained full-build, config round-trip, and rootfs closure-budget validation tasks.
+
+### Network config extensions (`network-config-extensions`)
+
+- Status: completed
+- Overview: Adds validated DNS, search-domain, default-route, and Ethernet interface configuration to the shared atomic
+  config apply and rollback path while preserving the isolated gateway defaults.
+- Dependencies: `config-reapply-improvements`
+- Delivered in: The config schema and parser, derived network state, runtime application, rollback coverage, and
+  operator documentation.
+
+### Activation options (`activation-options`)
+
+- Status: completed
+- Overview: Adds bounded activation timeout, settle, restart, degraded-service, and rollback policy to the shared config
+  apply path without enabling arbitrary commands or unsafe systemd unit control.
+- Dependencies: `config-reapply-improvements`
+- Delivered in: The config schema and parser, `activation-policy.json`, runtime activation handling, tests, and docs.
+
 ### `caddy-authcrunch-cockpit-tutorial`
 
 - Status: completed
@@ -192,7 +242,7 @@ this page remains the human-readable roadmap.
 - **Cockpit package drift**: Container-installed Cockpit modules may not match host
   service versions exactly; native host packaging can be added later if needed.
 - Dependencies:
-  - Network and volume Quadlet support (completed: `85ec53c`)
+  - Network and volume Quadlet support, already delivered in commit 85ec53c
   - Bundle file support with `${FILES_DIR}` token substitution (completed)
   - Container, network, volume rendering and sync (completed)
   - Quadlet `.build` support (completed)
@@ -265,7 +315,7 @@ this page remains the human-readable roadmap.
 - Risks and tradeoffs:
   - Existing ad hoc test images may need option updates
   - Operators need a documented CA provisioning workflow before release builds
-- Dependencies: RAUC module options from provisioning API service foundation
+- Dependencies: RAUC module options from `provisioning-api-service`
 - Suggested validation: Nix evaluation tests for both fail-closed and dev opt-in modes
 - Suggested first workflow command: `/start-feature rauc-production-keyring-policy`
 
@@ -297,7 +347,7 @@ this page remains the human-readable roadmap.
 - Risks and tradeoffs:
   - Staging boundary adds implementation and test complexity
   - Progress reporting needs a simple result handoff contract
-- Dependencies: Provisioning API foundation
+- Dependencies: `provisioning-api-service`
 - Suggested validation: VM test proving unprivileged service can provision via the root worker
 - Delivered by running the bootstrap API as `atomixos-provision`, staging
   validated candidate jobs under `/run/atomixos-provision`, applying them through
@@ -329,7 +379,7 @@ this page remains the human-readable roadmap.
 - Risks and tradeoffs:
   - Litestar defaults may need explicit overrides for raw binary endpoints
   - Schema tests add maintenance cost but prevent client drift
-- Dependencies: Provisioning API foundation
+- Dependencies: `provisioning-api-service`
 - Suggested validation: Python tests against `/schema/openapi.json`
 - Delivered by adding focused OpenAPI schema assertions for public route coverage, operation
   IDs, domain tags, binary config upload bodies, auth headers, response schemas, error schemas,
@@ -363,7 +413,7 @@ this page remains the human-readable roadmap.
 - Risks and tradeoffs:
   - More API surface increases schema and validation maintenance
   - Some edits may require restart ordering or health semantics not yet modeled
-- Dependencies: Provisioning API foundation, live schema contract
+- Dependencies: `provisioning-api-service`, `provisioning-api-live-schema-contract`
 - Suggested validation: Python tests for typed patch-to-full-state conversion plus VM
   tests for at least one user and one container partial update
 - Delivered by adding authenticated partial endpoints for users, network, containers,
@@ -397,7 +447,7 @@ this page remains the human-readable roadmap.
 - Risks and tradeoffs:
   - More UI affordances increase bootstrap attack surface if not carefully scoped
   - HTMX fragments must stay aligned with API/job behavior
-- Dependencies: Provisioning API foundation
+- Dependencies: `provisioning-api-service`
 - Suggested validation: Python route tests and manual browser test in VM
 - Delivered by making `/apply` submit asynchronous provisioning jobs, rendering
   first-boot-only job status fragments, preserving bootstrap CSRF and browser

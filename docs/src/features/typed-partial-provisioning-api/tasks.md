@@ -2,6 +2,8 @@
 
 ## T000 - Review and confirm feature spec
 
+Status: done
+
 - [x] Confirm feature name, branch name, and docs path.
 - [x] Resolve first-implementation endpoint scope.
 - [x] Resolve config export and TOML formatting behavior.
@@ -12,6 +14,8 @@
 
 ## T010 - Define partial update model
 
+Status: done
+
 - [x] Define typed request/response schemas for selected endpoint scope.
 - [x] Define patch-to-full-state conversion rules.
 - [x] Define how current `/data/config/config.toml` is loaded and rewritten.
@@ -21,6 +25,8 @@
 
 ## T020 - Reuse full config validation and apply pipeline
 
+Status: done
+
 - [x] Add service-layer support for applying a typed partial request as a full candidate config.
 - [x] Reuse existing validate, render, promote, activate, rollback, and job progress behavior.
 - [x] Preserve single-flight behavior for partial updates and full imports.
@@ -29,6 +35,8 @@
 
 ## T030 - Add selected API endpoints
 
+Status: done
+
 - [x] Add selected typed route handlers with SSH signature authentication.
 - [x] Return async job responses equivalent to `POST /api/config` for mutating endpoints.
 - [x] Add route tests for auth failures, validation failures, conflicts, and accepted jobs.
@@ -36,12 +44,16 @@
 
 ## T040 - Update live OpenAPI schema coverage
 
+Status: done
+
 - [x] Add operation IDs and tags for each new route.
 - [x] Document request bodies, auth headers, job responses, and error responses.
 - [x] Extend live schema tests so new routes cannot drift silently.
 - [x] Verify existing public API schema assertions still pass.
 
 ## T050 - Add integration or VM coverage
+
+Status: done
 
 - [x] Add VM coverage for at least one user partial update.
 - [x] Add VM coverage for at least one network or container partial update if included in scope.
@@ -56,6 +68,8 @@
 
 ## T060 - Update docs
 
+Status: done
+
 - [x] Update provisioning docs with partial API usage and auth behavior.
 - [x] Update runtime boundary docs to state partial endpoints produce full desired state.
 - [x] Update data-flow docs for patch-to-full-state promotion flow.
@@ -63,6 +77,8 @@
 - [x] Update live schema contract feature docs if route surface expectations change.
 
 ## T999 - Final verification and release readiness
+
+Status: done
 
 - [x] Run relevant Python tests for parser, patch conversion, API routes, and OpenAPI schema.
 - [x] Run relevant Nix or VM tests for selected endpoint scope.

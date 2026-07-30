@@ -2,6 +2,8 @@
 
 ## T000 - Review and confirm feature spec
 
+Status: done
+
 - [x] Confirm the canonical `config.toml` top-level sections: `[users]`, `[network]`, `[activation]`, `[os_upgrade]`,
   and `[containers]`.
 - [x] Reject legacy top-level `[admin]`, `[firewall]`, `[lan]`, `[container]`, `[network]`, `[volume]`, and `[build]`
@@ -10,6 +12,8 @@
 - [x] Manage declared `[users.<name>]` local users in this feature.
 
 ## T010 - Define the official config schema
+
+Status: done
 
 - [x] Replace `schemas/config.schema.json` with the new canonical schema used by validation and documentation.
 - [x] Define `[users]` schema with default `isAdmin = false` and default empty `ssh_key`.
@@ -22,6 +26,8 @@
 - [x] Ensure schema errors include precise config paths and actionable messages.
 
 ## T020 - Implement config parser restructure
+
+Status: done
 
 - [x] Update `first-boot-provision.py` to parse `[users]` instead of top-level `[admin]`.
 - [x] Persist normalized managed user state under `/data/config` for boot-time and re-apply materialization.
@@ -38,6 +44,8 @@
 
 ## T030 - Harden re-apply authentication
 
+Status: done
+
 - [x] Detect already-provisioned devices by active persisted config state.
 - [x] Add nonce issuance for short-lived re-apply authentication challenges.
 - [x] Verify request-bound SSH signatures against active admin user keys before accepting candidate config bytes.
@@ -47,6 +55,8 @@
 
 ## T040 - Implement atomic candidate apply
 
+Status: done
+
 - [x] Validate and render candidate config in a temporary candidate directory.
 - [x] Prevent candidate validation/rendering from mutating active `/data/config`.
 - [x] Promote candidate config to `/data/config` with a crash-safe directory replacement strategy.
@@ -54,6 +64,8 @@
 - [x] Clean up stale candidate and rollback state safely.
 
 ## T050 - Implement rollback on failed activation
+
+Status: done
 
 - [x] Apply LAN settings, firewall state, and Quadlet sync after candidate promotion.
 - [x] Confirm required services reach the expected active state.
@@ -64,6 +76,8 @@
 
 ## T060 - Update examples and operator docs
 
+Status: done
+
 - [x] Update provisioning docs for the new `config.toml` structure.
 - [x] Update data-flow and runtime-boundary docs for candidate apply and rollback state.
 - [x] Update LAN/network docs for `[network]` defaults and overrides.
@@ -71,6 +85,8 @@
 - [x] Update code-reference docs for parser, rendered files, and API behavior.
 
 ## T070 - Add automated validation
+
+Status: done
 
 - [x] Add unit tests for schema defaults and invalid key rejection.
 - [x] Add unit tests for users/admin SSH key extraction.
@@ -85,6 +101,8 @@
 - [x] Add VM or integration test for activation failure rollback.
 
 ## T999 - Final verification and release readiness
+
+Status: done
 
 - [x] Run the repository's relevant formatting, unit, and Nix checks.
 - [x] Verify docs, examples, specs, and implementation all describe the same `config.toml` contract.

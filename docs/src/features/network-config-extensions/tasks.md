@@ -2,6 +2,8 @@
 
 ## T000 - Review and confirm feature spec
 
+Status: done
+
 - [x] Confirm feature name, scope, and non-goals.
 - [x] Confirm resolved review decisions in `design.md` still match operator
   needs.
@@ -9,6 +11,8 @@
 - [x] Confirm docs that must be updated with implementation.
 
 ## T010 - Define config contract and validation
+
+Status: done
 
 - [x] Extend `schemas/config.schema.json` for `dns_servers`,
   `dns_search_domains`, `default_gateway`, and `interfaces`.
@@ -25,6 +29,8 @@
 
 ## T020 - Render derived network state
 
+Status: done
+
 - [x] Define the derived network state files under `/data/config`.
 - [x] Render host DNS resolver settings from top-level and interface-specific
   network config.
@@ -36,6 +42,8 @@
 
 ## T030 - Apply runtime network settings
 
+Status: done
+
 - [x] Update the network apply service or script to consume the derived network
   state.
 - [x] Keep network apply idempotent for unchanged config.
@@ -43,6 +51,8 @@
 - [x] Ensure IP forwarding remains disabled after apply and reboot.
 
 ## T040 - Update docs and examples
+
+Status: done
 
 - [x] Update provisioning docs for the extended `[network]` contract.
 - [x] Update LAN range docs to explain runtime config replaces the old rebuild
@@ -57,6 +67,8 @@
   feature is implemented.
 
 ## T050 - Add automated validation
+
+Status: done
 
 - [x] Add parser/schema unit tests for accepted network config.
 - [x] Add parser/schema unit tests for invalid IP, CIDR, domain, gateway, and
@@ -74,6 +86,8 @@
 - [x] Add rollback coverage for failed network activation.
 
 ## T999 - Final verification and release readiness
+
+Status: done
 
 - [x] Run the relevant formatting, unit, and Nix checks.
 - [x] Run `hk check -a` before final review.

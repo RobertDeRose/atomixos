@@ -2,12 +2,16 @@
 
 ## T000 -- Feature spec review
 
+Status: done
+
 - [x] Review `design.md` for completeness and accuracy
 - [x] Confirm Caddy-gated `--local-session` approach for Cockpit
 - [x] Confirm AuthCrunch Caddyfile syntax against current docs
 - [x] Resolve open design questions (Cockpit auth boundary, custom image, `.build` support)
 
-## T00A -- Add Quadlet `.build` support
+## T010 -- Add Quadlet `.build` support
+
+Status: done
 
 This is a new infrastructure prerequisite discovered during spec review.
 The cockpit-ws container requires a custom Fedora image that installs Cockpit
@@ -24,7 +28,9 @@ them the same way it supports `.network` and `.volume`.
 - [ ] Validate that `.build` Quadlet units trigger image build on first
   `systemctl daemon-reload` + container start
 
-## T00B -- Write cockpit-ws Containerfile
+## T011 -- Write cockpit-ws Containerfile
+
+Status: done
 
 - [x] Create `files/cockpit/Containerfile` based on `quay.io/fedora/fedora:latest`
 - [x] Add Cockpit bridge and management modules via `dnf install --setopt=install_weak_deps=False`
@@ -33,12 +39,16 @@ them the same way it supports `.network` and `.volume`.
 
 ## T001 -- Use Caddy-gated local session auth
 
+Status: done
+
 - [x] Remove custom bearer auth script from the example bundle
 - [x] Use Caddy/AuthCrunch as the only public authentication boundary
 - [x] Run Cockpit with `--local-session` behind Caddy
 - [x] Restrict `/cockpit/*` to `authp/admin`
 
 ## T002 -- Write the Caddyfile
+
+Status: done
 
 - [x] Configure Entra OIDC identity provider with placeholder values
 - [x] Document how to swap the identity provider block for Google or another OIDC provider
@@ -53,11 +63,15 @@ them the same way it supports `.network` and `.volume`.
 
 ## T003 -- Configure Cockpit reverse proxy settings
 
+Status: done
+
 - [x] Generate `/etc/cockpit/cockpit.conf` at container startup
 - [x] Configure `Origins` from the `GATEWAY_DOMAIN` environment variable
 - [x] Configure `UrlRoot` for `/cockpit/` path prefix
 
 ## T004 -- Write config.toml
+
+Status: done
 
 - [x] Define `version = 2`
 - [x] Define `users.admin.ssh_key` with placeholder public key
@@ -79,11 +93,15 @@ them the same way it supports `.network` and `.volume`.
 
 ## T005 -- Validate config.toml
 
+Status: done
+
 - [x] Run `first-boot-provision validate` on the tutorial config
 - [x] Fix any schema or semantic validation errors
 - [ ] Verify all rendered Quadlet files have correct content
 
 ## T006 -- Write NixOS VM test
+
+Status: skipped
 
 Skipped. The existing `first-boot-provision.nix` test already covers all
 code paths used by the tutorial config (containers, networks, volumes,
@@ -91,6 +109,8 @@ builds, bundle files, sync-quadlet). A dedicated tutorial test would
 duplicate coverage without exercising new logic.
 
 ## T007 -- Write tutorial documentation page
+
+Status: done
 
 - [x] Write introduction explaining what the tutorial builds
 - [x] Document Azure App Registration prerequisites step by step
@@ -109,16 +129,22 @@ duplicate coverage without exercising new logic.
 
 ## T008 -- Update docs/src/SUMMARY.md
 
+Status: done
+
 - [x] Create a Tutorials section in SUMMARY.md (does not exist yet)
 - [x] Add tutorial entry under the new Tutorials section
 
 ## T009 -- Update planned-features.md
 
+Status: done
+
 - [x] Update `caddy-authcrunch-cockpit-tutorial` status to `in-progress`
 
 ## T999 -- Feature close-out
 
-- [x] All tasks T00A-T009 completed
+Status: done
+
+- [x] All tasks T001-T011 completed
 - [x] Tutorial config passes `first-boot-provision validate`
 - ~NixOS VM test passes~ (T006 skipped; existing test covers code paths)
 - [x] Documentation builds without errors
@@ -127,5 +153,5 @@ duplicate coverage without exercising new logic.
 
 ### Items deferred to hardware validation
 
-- T00A: Validate `.build` Quadlet units trigger image build on daemon-reload
-- T00B: Verify built image has the required Cockpit modules available
+- T010: Validate `.build` Quadlet units trigger image build on daemon-reload
+- T011: Verify built image has the required Cockpit modules available

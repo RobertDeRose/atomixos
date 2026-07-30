@@ -2,51 +2,51 @@
 
 ## 1. Provisioning Contract
 
-- [x] 1.1 Define the supported `config.toml` schema for managed users, activation requirements, and structured
+- [x] T001 1.1 Define the supported `config.toml` schema for managed users, activation requirements, and structured
   container/Quadlet data
-- [x] 1.2 Define the TOML-to-Quadlet rendering rules, including how arrays map to repeated Quadlet directives
-- [x] 1.3 Define the canonical persisted layout under `/data/config/`, including the imported `config.toml` and rendered
+- [x] T002 1.2 Define the TOML-to-Quadlet rendering rules, including how arrays map to repeated Quadlet directives
+- [x] T003 1.3 Define the canonical persisted layout under `/data/config/`, including the imported `config.toml` and rendered
   Quadlet unit files
 
 ## 2. First-Boot Source Discovery
 
-- [x] 2.1 Add initrd fresh-flash detection that checks whether `boot-b` is absent before repartitioning and persists a
-  marker for the switched-root provisioning path
-- [x] 2.2 Implement provisioning source search in fresh-flash order: `/boot/config.toml`, then USB mass storage, then
+- [x] T004 2.1 Add initrd fresh-flash detection that checks whether `boot-b` is absent before repartitioning and
+  persists a marker for the switched-root provisioning path
+- [x] T005 2.2 Implement provisioning source search in fresh-flash order: `/boot/config.toml`, then USB mass storage, then
   bootstrap web console
-- [x] 2.3 Implement reprovision source search in reset order: USB mass storage, then bootstrap web console
+- [x] T006 2.3 Implement reprovision source search in reset order: USB mass storage, then bootstrap web console
 
 ## 3. Import And Validation
 
-- [x] 3.1 Import a discovered `config.toml` into durable state under `/data/config/`
-- [x] 3.2 Render structured Quadlet definitions from `config.toml` into canonical files under `/data/config/quadlet/`
-- [x] 3.3 Validate the minimum provisioning contract: at least one admin SSH key, at least one
+- [x] T007 3.1 Import a discovered `config.toml` into durable state under `/data/config/`
+- [x] T008 3.2 Render structured Quadlet definitions from `config.toml` into canonical files under `/data/config/quadlet/`
+- [x] T009 3.3 Validate the minimum provisioning contract: at least one admin SSH key, at least one
   Quadlet-defined service, and explicit health requirements
 
 ## 4. First-Boot Commit Behavior
 
-- [x] 4.1 Change the production first-boot path so slot confirmation happens only after successful provisioning import
+- [x] T010 4.1 Change the production first-boot path so slot confirmation happens only after successful provisioning import
   and validation
-- [x] 4.2 Update the confirmation/health path to consume explicit health requirements from imported provisioning state
-- [x] 4.3 Preserve a development-safe fallback strategy for existing development-mode workflows while the new production
+- [x] T011 4.2 Update the confirmation/health path to consume explicit health requirements from imported provisioning state
+- [x] T012 4.3 Preserve a development-safe fallback strategy for existing development-mode workflows while the new production
   gate is introduced
 
 ## 5. Bootstrap Web Console
 
-- [x] 5.1 Add a constrained local bootstrap web console for unprovisioned devices when no seed file is found
-- [x] 5.2 Support uploading an existing `config.toml` through the bootstrap console
-- [x] 5.3 Support pasting a valid `config.toml` and applying it locally
-- [x] 5.4 Support programmatic local import of a complete `config.toml` through the bootstrap endpoint
-- [x] 5.5 After apply, show the final applied `config.toml` in the bootstrap UI and offer a download action for that
+- [x] T013 5.1 Add a constrained local bootstrap web console for unprovisioned devices when no seed file is found
+- [x] T014 5.2 Support uploading an existing `config.toml` through the bootstrap console
+- [x] T015 5.3 Support pasting a valid `config.toml` and applying it locally
+- [x] T016 5.4 Support programmatic local import of a complete `config.toml` through the bootstrap endpoint
+- [x] T017 5.5 After apply, show the final applied `config.toml` in the bootstrap UI and offer a download action for that
   artifact
-- [x] 5.6 Apply minimal AtomixOS branding to the bootstrap UI, including the logo and cobalt-blue theme styling aligned
+- [x] T018 5.6 Apply minimal AtomixOS branding to the bootstrap UI, including the logo and cobalt-blue theme styling aligned
   with the mdBook visual language
 
 ## 6. Reprovisioning And Documentation
 
-- [x] 6.1 Define and implement reprovisioning behavior so wiping `/data` returns the device to provisioning mode without
+- [x] T019 6.1 Define and implement reprovisioning behavior so wiping `/data` returns the device to provisioning mode without
   replaying `/boot/config.toml`
-- [x] 6.2 Update OpenSpec/docs to describe `/boot` initial seeding, USB reprovisioning, bootstrap UI fallback, and the
-  `/data/config/` persistence boundary
-- [x] 6.3 Add focused validation coverage for fresh flash, reprovisioning, seed-source precedence, and TOML-to-Quadlet
+- [x] T020 6.2 Update OpenSpec/docs to describe `/boot` initial seeding, USB reprovisioning, bootstrap UI fallback,
+  and the `/data/config/` persistence boundary
+- [x] T021 6.3 Add focused validation coverage for fresh flash, reprovisioning, seed-source precedence, and TOML-to-Quadlet
   rendering
