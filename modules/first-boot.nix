@@ -173,6 +173,7 @@ in
       ExecStopPost = provisionApplyFinalizeScript;
       TimeoutStartSec = 7500;
       PrivateTmp = true;
+      NoNewPrivileges = true;
       ProtectSystem = "strict";
       ProtectHome = true;
       ReadWritePaths = [
