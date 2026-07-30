@@ -344,7 +344,9 @@ Use a lab-validated systemd hang simulation that stops watchdog kicks without co
 
 **Pass criteria**:
 
-- With the opt-in target enabled, device reboots within ~30 seconds of stopped watchdog kicks
+- Record the timestamp when watchdog kicks are confirmed stopped and when the reset signal begins
+- With the default 30-second runtime timeout, reset begins no later than 35 seconds after confirmed kick cessation
+  (30-second policy plus 5 seconds of measurement and serial-console tolerance)
 - Serial console shows watchdog reset
 - U-Boot boot-count is decremented for the current slot
 
