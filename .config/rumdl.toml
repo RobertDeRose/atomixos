@@ -1,5 +1,6 @@
 [global]
 disable = ["MD033", "MD036"]
+exclude = ["migration/delivered-record-candidates/**"]
 
 [MD007]
 indent = 2

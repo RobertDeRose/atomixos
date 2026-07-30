@@ -1,6 +1,73 @@
 <!-- workflow-migration:legacy-markdown-to-beads -->
 
-# Feature: nixstasis-client
+# Feature: Nixstasis Client
+
+## Metadata
+
+- Beads feature root: `atomixos-4hw`
+- Feature slug: `nixstasis-client`
+- Design path: `docs/src/features/nixstasis-client/design.md`
+- Implemented record: `docs/src/features/nixstasis-client/index.md`
+- Base branch: `dev`
+- Status: delivered
+
+## Feature Summary
+
+Integrate the Nixstasis enrollment client as immutable, outage-tolerant base-system management code with persistent
+identity, bounded remote-access launch, and separate SSH authorization.
+
+## User Intent
+
+Operators need devices to enroll and accept approved remote access without shipping default credentials, hosting a local
+management plane, replacing provisioned admin keys, or making boot depend on a remote service.
+
+## User-Facing Behavior
+
+An enabled device registers when eligible, persists and reuses its identity, polls with backoff, and handles bounded
+remote-access responses. Network or server outages do not block local startup and recovery.
+
+## Requirements
+
+The client package, config, services, persistent paths, command allowlist, and SSH key source must be explicit. Identity
+and keys stay under `/data/nixstasis`; local operator keys remain separate; remote failures remain non-fatal.
+
+## Existing Context
+
+AtomixOS already had immutable rootfs, persistent `/data`, key-only SSH, and local recovery. The upstream Nixstasis
+client already defined registration, heartbeat, and FRP launch behavior. This feature packages and constrains that client
+for the appliance boundary.
+
+## Proposed Design
+
+Package the upstream client and FRP assets, render bounded config from NixOS options, run registration and polling
+services after network availability, persist state under `/data/nixstasis`, and expose a separate authorized-keys source.
+Detailed service and data flow remains below.
+
+## Architecture Consistency
+
+The design keeps management-critical client code in the immutable base, mutable identity on `/data`, remote orchestration
+server-side, and local recovery independent. Deny-by-default commands and separate key ownership preserve the trust
+model.
+
+## Operational Considerations
+
+Operators must provide a stable API URL and server inventory. Backoff and restart behavior handle WAN outages. Identity
+survives updates and should be removed deliberately when reprovisioning Nixstasis ownership.
+
+## Validation Strategy
+
+Use module evaluation for options/rendered config and the mock-server VM test for registration, persistence, polling,
+outage tolerance, SSH separation, and FRP launch-boundary behavior. Validate architecture/runtime docs.
+
+## Implementation Decomposition
+
+The legacy work separates upstream packaging, AtomixOS module/config, systemd integration, SSH/runtime boundaries, VM
+coverage, and documentation close-out. Beads preserves those tasks under `atomixos-4hw`.
+
+## Dependencies and Parallelism
+
+Upstream package work and AtomixOS option design could proceed in parallel. Systemd and VM integration depended on the
+packaged binary/config contract; end-to-end tunnel transport remained outside the bounded feature.
 
 ## Source
 

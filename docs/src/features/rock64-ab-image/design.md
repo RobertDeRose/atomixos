@@ -1,6 +1,103 @@
 <!-- workflow-migration:legacy-markdown-to-beads -->
 
-# Feature: rock64-ab-image
+# Feature: Rock64 A/B Image
+
+## Metadata
+
+- Beads feature root: `atomixos-zdc`
+- Feature slug: `rock64-ab-image`
+- Design path: `docs/src/features/rock64-ab-image/design.md`
+- Implemented record: `docs/src/features/rock64-ab-image/index.md`
+- Base branch: `dev`
+- Status: in progress
+
+## Feature Summary
+
+Deliver the initial Rock64 reference image and appliance profile with an immutable squashfs root, A/B RAUC updates,
+automatic rollback, persistent `/data`, constrained networking, provisioning, and reproducible VM/hardware validation.
+
+## User Intent
+
+Developers and operators need a flashable SBC image that can update and recover atomically, keep operator/application
+state outside the rootfs, and prove the platform on real hardware without making Rock64 or gateway behavior universal.
+
+## Goals
+
+- Build and flash a reproducible Rock64 image with U-Boot, A/B boot/rootfs slots, and persistent data.
+- Install signed RAUC bundles, confirm healthy slots, and roll back after boot-count or watchdog failure.
+- Supply the initial isolated gateway profile, Podman runtime, provisioning, and recovery paths.
+- Validate shared behavior in QEMU and hardware-specific behavior on Rock64.
+
+## Non-Goals
+
+- Defining every future SBC partition, bootloader, or network profile from the Rock64 implementation.
+- Enabling general routing, forwarding, a desktop/server distribution, or on-device fleet orchestration.
+- Declaring hardware watchdog and update paths complete before physical validation.
+
+## User-Facing Behavior
+
+Operators flash the generated image, provision desired state, install signed bundles into the inactive slot, and rely on
+health confirmation or automatic rollback. The initial gateway profile exposes bounded LAN services while forwarding
+remains disabled.
+
+## Existing Context
+
+The repository began around the Rock64/RK3328 bring-up and already contains shared NixOS modules, image and bundle
+derivations, U-Boot scripts, RAUC services, provisioning, and a broad VM suite. Remaining work is concentrated in
+physical-device validation and release hardening.
+
+## Proposed Design
+
+Assemble a GPT image with raw U-Boot and initial A slots, let initrd create the inactive slots and `/data`, boot a
+read-only squashfs closure, install paired boot/rootfs RAUC artifacts, and confirm only after local health. Keep hardware
+modules separate from shared appliance behavior. Detailed decisions and scenarios remain below.
+
+## Architecture Consistency
+
+The design establishes the project's immutable root, mutable data, A/B lifecycle, systemd ownership, key-only access,
+container/application separation, and fail-closed network/update invariants. Rock64 and gateway choices are reference
+implementations rather than platform-wide assumptions.
+
+## Operational Considerations
+
+Image flashing is destructive and hardware-specific. Operators need serial recovery, signing keys, reliable power, and
+clear slot/update diagnostics. Physical DHCP/NTP/firewall, update, auth, and watchdog checks remain required before a
+Rock64 release profile can be treated as complete.
+
+## Documentation Impact
+
+Maintain architecture, provisioning, building, testing, hardware-testing, update/rollback, partition, network, and
+reference pages. An implemented record is created only after the remaining physical validation and active Beads work are
+closed.
+
+## Validation Strategy
+
+Use flake evaluation, image/bundle inspection, focused NixOS VM checks for slots, update, confirmation, rollback,
+watchdog, power loss, network isolation, firewall, provisioning, and SSH toggling, plus explicit Rock64 serial and
+network hardware checks.
+
+## Implementation Decomposition
+
+Imported tasks cover flake/image/kernel, bootloader and partitioning, networking/firewall, RAUC/update, watchdog,
+provisioning/auth, VM tests, and physical integration. Beads under `atomixos-zdc` is authoritative for the remaining nine
+open hardware-oriented tasks.
+
+## Dependencies and Parallelism
+
+Image/kernel/bootloader work, shared service modules, and VM test infrastructure can progress independently until
+hardware integration. Physical slot, update, networking, auth, and watchdog validation share the target device and must
+be sequenced to preserve recoverability.
+
+## Risks and Tradeoffs
+
+Custom boot and partition logic can brick or overwrite devices; hardware behavior differs from QEMU; aggressive
+watchdogs can cause loops; and a broad reference feature can blur platform boundaries. Explicit hardware gates and
+hardware-neutral project docs contain those risks.
+
+## Open Questions
+
+Open work is executable rather than conceptual: complete the recorded physical DHCP/NTP/isolation/firewall, boot-count,
+RAUC install/confirmation, watchdog, and SSH authentication checks before close-out.
 
 ## Overview
 

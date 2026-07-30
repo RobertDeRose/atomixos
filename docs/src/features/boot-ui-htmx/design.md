@@ -1,6 +1,70 @@
 <!-- workflow-migration:legacy-markdown-to-beads -->
 
-# Feature: boot-ui-htmx
+# Feature: Boot UI HTMX
+
+## Metadata
+
+- Beads feature root: `atomixos-hns`
+- Feature slug: `boot-ui-htmx`
+- Design path: `docs/src/features/boot-ui-htmx/design.md`
+- Implemented record: `docs/src/features/boot-ui-htmx/index.md`
+- Base branch: `dev`
+- Status: delivered
+
+## Feature Summary
+
+Replace the blocking first-boot form response with a small server-rendered asynchronous provisioning UI and bounded job
+status fragments without adding a frontend build system.
+
+## User Intent
+
+An operator on desktop or mobile needs to upload or paste config, see progress and terminal outcomes, and recover the
+accepted artifact while the device preserves its strict first-boot and browser security boundaries.
+
+## User-Facing Behavior
+
+The page submits an async job, reports conflicts, polls progress, and renders success, warning, failure, or rollback
+results. UI routes are absent after provisioning and the programmatic API remains separate.
+
+## Requirements
+
+Upload and paste must reuse the normal job pipeline; dynamic output must be escaped; browser writes require bootstrap
+CSRF and origin checks; status fragments remain first-boot-only; UI and static routes stay out of OpenAPI.
+
+## Existing Context
+
+The provisioning service already served a synchronous first-boot form, accepted a bootstrap token, enforced browser
+origin checks, and exposed asynchronous API jobs. This feature connects the browser flow to those existing jobs.
+
+## Proposed Design
+
+Render the page and job fragments server-side, submit `/apply` asynchronously, and poll a first-boot-only fragment route
+until a terminal state. Use minimal progressive enhancement and keep explicit Litestar route wiring.
+
+## Architecture Consistency
+
+The design reuses the provisioning service, job manager, bootstrap token, escaping utilities, and first-boot state. It
+adds no SPA state, asset toolchain, authentication path, or post-provision control plane.
+
+## Operational Considerations
+
+The page must tolerate slow activation, service failure, rollback, and concurrent-job conflicts. UI status is derived
+from existing jobs, and restarting the service follows existing recovery behavior.
+
+## Validation Strategy
+
+Cover page controls, upload/paste, asynchronous return, polling, every terminal fragment, escaping, conflict, CSRF and
+origin failures, post-provision unavailability, and OpenAPI exclusion. Include desktop/mobile rendering review.
+
+## Implementation Decomposition
+
+The legacy work covers behavior inventory, UI/fragment design, route implementation, security preservation, tests, docs,
+and close-out. Beads preserves those slices under `atomixos-hns`.
+
+## Dependencies and Parallelism
+
+The feature depends on the Provisioning API Service. Template/fragment design and test planning could proceed in
+parallel; route integration depended on stable job and bootstrap-security contracts.
 
 ## Overview
 

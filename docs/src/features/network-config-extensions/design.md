@@ -1,6 +1,87 @@
 <!-- workflow-migration:legacy-markdown-to-beads -->
 
-# Feature: network-config-extensions
+# Feature: Network Config Extensions
+
+## Metadata
+
+- Beads feature root: `atomixos-ky9`
+- Feature slug: `network-config-extensions`
+- Design path: `docs/src/features/network-config-extensions/design.md`
+- Implemented record: `docs/src/features/network-config-extensions/index.md`
+- Base branch: `dev`
+- Status: delivered
+
+## Feature Summary
+
+Extend the canonical network contract with bounded DNS, search-domain, default-route, and Ethernet interface settings
+that use the existing atomic config apply and rollback pipeline.
+
+## User Intent
+
+Operators need to change supported appliance networking from desired state without rebuilding the image or creating a
+second network control plane. Omitted fields must retain the initial gateway profile's safe defaults.
+
+## User-Facing Behavior
+
+`config.toml` accepts validated resolver, route, and supported `ethN` settings. Conflicting LAN gateway values fail
+before promotion; successful changes apply through systemd-networkd and roll back with the rest of config state.
+
+## Requirements
+
+The schema must reject unsafe names, malformed IP/CIDR/domain values, incompatible interface modes, unknown keys, and
+conflicting `eth1`/dnsmasq gateway values. IP forwarding stays disabled and firewall exposure remains independently
+controlled.
+
+## Existing Context
+
+Config re-apply already owned dnsmasq, NTP, firewall, candidate promotion, activation, and rollback. The network helper
+already materialized gateway defaults. This feature fills the explicitly deferred host resolver, route, and interface
+contract without replacing those boundaries.
+
+## Proposed Design
+
+Parse the bounded fields into normalized desired state, render derived files below `/data/config`, reconcile one
+effective LAN CIDR, and apply the result idempotently through the existing network activation service. The detailed
+field semantics and runtime targets remain below.
+
+## Architecture Consistency
+
+The design reuses `config.toml` as authority, `/data/config` as persisted derived state, systemd-networkd as runtime
+owner, and shared promotion/rollback. It preserves gateway-local DNS, fail-closed validation, immutable rootfs, and no
+forwarding.
+
+## Operational Considerations
+
+Route and resolver changes may interrupt management connectivity during apply. The activation path must report failure
+clearly and restore prior state. Unchanged config must not rewrite runtime files, and LAN DHCP/NTP behavior must continue
+to derive from the effective gateway address.
+
+## Documentation Impact
+
+Update `docs/src/provisioning.md`, `docs/src/provisioning/lan-range.md`, `docs/src/data-flow.md`,
+`docs/src/runtime-boundaries.md`, `docs/src/specs/lan-gateway.md`, and `docs/src/operations/ntp-settings.md`. Create the
+implemented record at `docs/src/features/network-config-extensions/index.md`.
+
+## Validation Strategy
+
+Use provisioning parser/schema tests, `tests/test_lan_gateway_apply.py`, config re-apply rollback coverage, Nix module
+checks, and documentation validation. Include defaults, invalid values, CIDR conflicts, idempotency, and failed apply.
+
+## Implementation Decomposition
+
+The work separates schema/parser validation, derived-state rendering, runtime application, docs/examples, and automated
+validation. Imported Beads tasks under `atomixos-ky9` preserve those slices and their close-out evidence.
+
+## Dependencies and Parallelism
+
+The feature depends on Config Reapply Improvements. Schema and docs could advance with renderer work, while runtime
+activation depended on normalized render output and rollback integration.
+
+## Risks and Tradeoffs
+
+Applying network state can disrupt the connection used to submit it, and a bounded contract cannot express arbitrary
+networkd features. Restricting supported interfaces and behavior reduces flexibility but preserves safe rendering,
+rollback, and appliance invariants.
 
 ## Overview
 
@@ -21,9 +102,8 @@ additional network properties into a concrete implementation scope.
   already owns device networking, DNS, dnsmasq, and firewall configuration, but
   DNS servers, search domains, arbitrary interface configuration, and default
   gateway configuration were deferred until runtime support exists.
-- `docs/src/features/config-reapply-improvements/tasks.md`: T010 leaves the
-  DNS/search/interface/default-gateway schema task incomplete until runtime
-  support is implemented.
+- Config Reapply Improvements task T010 deferred the DNS, search, interface,
+  and default-gateway schema until runtime support was implemented.
 
 ## Goals
 
@@ -181,7 +261,7 @@ The apply path must be idempotent:
 - Network re-apply must preserve fail-closed behavior: invalid config, failed
   activation, or failed required health checks trigger rollback.
 
-## Documentation Impact
+## Detailed Documentation Changes
 
 Likely affected docs:
 
@@ -194,7 +274,6 @@ Likely affected docs:
 - `docs/src/reference/flake-outputs.md` if tests or outputs change
 - `docs/src/code-reference/modules.md`
 - `docs/src/code-reference/scripts.md`
-- `docs/src/features/config-reapply-improvements/tasks.md`
 - `docs/src/planned-features.md`
 
 ## Success Criteria

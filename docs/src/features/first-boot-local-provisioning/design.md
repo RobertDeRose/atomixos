@@ -1,6 +1,100 @@
 <!-- workflow-migration:legacy-markdown-to-beads -->
 
-# Feature: first-boot-local-provisioning
+# Feature: First-Boot Local Provisioning
+
+## Metadata
+
+- Beads feature root: `atomixos-ehv`
+- Feature slug: `first-boot-local-provisioning`
+- Design path: `docs/src/features/first-boot-local-provisioning/design.md`
+- Implemented record: `docs/src/features/first-boot-local-provisioning/index.md`
+- Base branch: `dev`
+- Status: delivered
+
+## Feature Summary
+
+Provide a bounded local provisioning contract that discovers, validates, persists, and activates one `config.toml`
+artifact before confirming a freshly installed slot.
+
+## User Intent
+
+An operator must be able to flash or reset an appliance, supply desired state locally without baked-in credentials, and
+recover the exact accepted config. A device that merely boots Linux without valid access and required services is not
+ready.
+
+## Goals
+
+- Keep fresh-flash and reprovisioning source order deterministic.
+- Persist operator intent under `/data/config` and activate it in the same boot.
+- Gate first-slot confirmation on successful provisioning and required health.
+- Keep the bootstrap UI narrow and remove its WAN exposure after provisioning.
+
+## Non-Goals
+
+- Remote fleet orchestration or Nixstasis-delivered provisioning.
+- A general cloud-init, compose, arbitrary-file-write, or device-management framework.
+- Storing device-specific secrets in the immutable image.
+
+## User-Facing Behavior
+
+Fresh images search `/boot/config.toml`, USB media, and then the local console. Reprovisioning after `/data` is wiped
+skips the boot-partition seed. Operators can upload or paste config, inspect and download the accepted artifact, and
+receive a failed provisioning result without the slot being confirmed.
+
+## Existing Context
+
+AtomixOS already had an immutable A/B image, initrd repartitioning, a development-oriented first-boot service, Quadlet,
+and `/data` persistence. This feature replaced ad hoc post-boot file copying with one validated contract while
+preserving those lifecycle boundaries.
+
+## Proposed Design
+
+Detect fresh-flash state in initrd, persist a marker for switched-root services, discover the seed in the applicable
+order, validate and render it under `/data/config`, synchronize runtime state, verify required health, and only then
+write the first-boot sentinel and confirm the RAUC slot. The detailed decisions and normative scenarios remain below.
+
+## Architecture Consistency
+
+The design reuses the immutable root, mutable `/data`, systemd service ordering, standard Quadlet discovery paths, and
+RAUC confirmation boundary. It preserves no-default-credential and fail-closed activation invariants. Later provisioning
+API work extends the same desired-state and activation pipeline rather than introducing a second mutation path.
+
+## Operational Considerations
+
+A `/data` wipe deliberately re-enters provisioning. Fresh-flash markers must survive the initrd-to-root transition.
+Import, runtime apply, and health failures are observable through systemd and provisioning job results and must leave the
+slot unconfirmed.
+
+## Documentation Impact
+
+- Update `docs/src/provisioning.md` for source order, reset behavior, and the bootstrap console.
+- Update `docs/src/data-flow.md` and `docs/src/runtime-boundaries.md` for persisted and active state ownership.
+- Update `docs/src/architecture/partition-layout.md` and `docs/src/architecture/authentication.md` for lifecycle and
+  credential boundaries.
+- Create `docs/src/features/first-boot-local-provisioning/index.md` during migration close-out.
+
+## Validation Strategy
+
+Use `nix/tests/initrd-fresh-flash-marker.nix`, `nix/tests/first-boot-source-discovery.nix`, and
+`nix/tests/first-boot-provision.nix` to cover source precedence, reset behavior, validation, rendering, activation, and
+failure paths. Validate reader documentation and build the mdBook.
+
+## Implementation Decomposition
+
+The legacy work was split into contract definition, initrd discovery, import/rendering, slot-confirmation behavior,
+bootstrap UI, reprovisioning, and documentation/validation slices. Beads now preserves those tasks under
+`atomixos-ehv`.
+
+## Dependencies and Parallelism
+
+The feature builds on the Rock64 A/B image and existing first-boot service. Contract/schema work and initrd source
+discovery could proceed independently before integration; slot confirmation depended on both import and runtime apply.
+
+## Risks and Tradeoffs
+
+The local console can become an unintended management plane, stale boot seeds can surprise operators, and a bounded TOML
+contract exposes less than arbitrary Quadlet. The design accepts that reduced flexibility to preserve validation,
+reproducibility, and a clear reset boundary.
 
 ## Overview
 

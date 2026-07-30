@@ -1,6 +1,69 @@
 <!-- workflow-migration:legacy-markdown-to-beads -->
 
-# Feature: provisioning-api-live-schema-contract
+# Feature: Provisioning API Live Schema Contract
+
+## Metadata
+
+- Beads feature root: `atomixos-doh`
+- Feature slug: `provisioning-api-live-schema-contract`
+- Design path: `docs/src/features/provisioning-api-live-schema-contract/design.md`
+- Implemented record: `docs/src/features/provisioning-api-live-schema-contract/index.md`
+- Base branch: `dev`
+- Status: delivered
+
+## Feature Summary
+
+Make the provisioning service's generated OpenAPI document an explicit, tested public client contract.
+
+## User Intent
+
+Client authors need accurate machine-readable routes, payloads, headers, responses, and errors without discovering
+framework output by trial and error or accidentally depending on Boot UI implementation routes.
+
+## User-Facing Behavior
+
+Online clients can inspect the live schema to submit and validate config, request nonces, poll jobs, and handle errors.
+Authentication requirements and first-boot exceptions are represented without exposing non-public UI/static routes.
+
+## Requirements
+
+Every public API route must have stable operation IDs and tags, accurate request and response schemas, documented auth
+headers and errors, and focused assertions. UI, static, and internal routes remain excluded.
+
+## Existing Context
+
+The Litestar app already exposed a generated schema, typed response models, explicit route wiring, SSH-signature auth,
+and first-boot exceptions, but coverage depended on framework inference and incomplete metadata.
+
+## Proposed Design
+
+Annotate public controllers and typed schemas explicitly, then test the live document produced by `create_app()`. Keep
+reader guidance in existing provisioning/runtime pages while treating `/schema/openapi.json` as the exact reference.
+
+## Architecture Consistency
+
+The design keeps schema ownership beside route behavior, uses existing typed domain boundaries, and adds no state store
+or authentication mechanism. Config artifacts remain canonical; OpenAPI describes transport only.
+
+## Operational Considerations
+
+Public API changes require schema and test updates in the same work unit. Clients should treat operation IDs and typed
+shapes as stable and avoid UI routes. Framework upgrades must run the live-schema suite.
+
+## Validation Strategy
+
+Generate the live document in `test_app.py` and assert route inventory, metadata, raw config bodies, auth headers,
+responses, errors, and exclusions. Run API behavior tests, linting, Nix checks, and documentation validation.
+
+## Implementation Decomposition
+
+The legacy work covers schema audit, public metadata, authentication headers, non-public exclusions, docs, and final
+verification. Beads preserves those slices under `atomixos-doh`.
+
+## Dependencies and Parallelism
+
+The feature depends on the Provisioning API Service. Route inventory and typed response work could proceed in parallel;
+final schema assertions depended on the complete public surface.
 
 ## Overview
 

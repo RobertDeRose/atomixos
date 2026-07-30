@@ -1,6 +1,66 @@
 <!-- workflow-migration:legacy-markdown-to-beads -->
 
-# Feature: watchdog-enforcement
+# Feature: Watchdog Enforcement
+
+## Metadata
+
+- Beads feature root: `atomixos-aua`
+- Feature slug: `watchdog-enforcement`
+- Design path: `docs/src/features/watchdog-enforcement/design.md`
+- Implemented record: `docs/src/features/watchdog-enforcement/index.md`
+- Base branch: `dev`
+- Status: in progress
+
+## Feature Summary
+
+Add opt-in systemd hardware watchdog enforcement while keeping release profiles disabled until physical Rock64 reboot,
+rollback, and soak validation proves the policy safe.
+
+## User Intent
+
+Operators need hung devices to reboot and eventually roll back automatically, but must not accept false-positive reboot
+loops or infer physical watchdog correctness from software-only VM simulation.
+
+## User-Facing Behavior
+
+Supported profiles can enable bounded runtime and reboot watchdog settings. Defaults remain disabled. VM tests preserve
+rollback simulation, while Rock64 enablement remains blocked on device/driver, hang, boot-count, and soak evidence.
+
+## Requirements
+
+Enabled hardware must expose the expected watchdog device and render `RuntimeWatchdogSec=30s` and
+`RebootWatchdogSec=10min`. Watchdog reboots must consume boot attempts and reach rollback after repeated failure without
+breaking disabled development and VM profiles.
+
+## Existing Context
+
+The repository already has watchdog options, a boot-count script, U-Boot/RAUC rollback assumptions, and a QEMU watchdog
+simulation. Hardware enforcement had been disabled after unstable Rock64 behavior and needed an explicit gated policy.
+
+## Architecture Consistency
+
+The design reuses systemd manager watchdog ownership and the existing boot-count/RAUC rollback chain. It keeps hardware
+profile defaults conservative and separates VM simulation from physical acceptance evidence.
+
+## Operational Considerations
+
+Physical tests can deliberately crash or reboot a device and require serial recovery and a known-good slot. Operators
+must verify driver/device availability, timing, three-failure rollback, and a 72-hour soak before release enablement.
+
+## Validation Strategy
+
+Use Nix evaluation/module assertions for defaults and rendered settings, retain the `rauc-watchdog` VM check, and execute
+recorded physical hang, reboot timing, boot-count rollback, driver availability, and soak procedures on Rock64.
+
+## Implementation Decomposition
+
+Imported tasks cover policy decisions, option surface, Rock64 systemd settings, rollback integration, automated checks,
+hardware procedures, docs, and close-out. Beads under `atomixos-aua` preserves three open physical-validation tasks.
+
+## Dependencies and Parallelism
+
+Module and VM validation can proceed independently of hardware execution. Physical driver, hang, rollback, and soak
+checks share the Rock64 target and must be sequenced from recoverable smoke tests to prolonged enablement.
 
 ## Source
 
@@ -113,7 +173,7 @@ Physical Rock64 validation must cover:
 - `docs/src/planned-features.md`: update status and delivered behavior at closeout.
 - `docs/src/architecture/update-rollback.md`: document watchdog-triggered rollback.
 - `docs/src/hardware-testing.md`: add physical watchdog validation and soak steps.
-- `docs/src/features/watchdog-enforcement/tasks.md`: track validation gaps and closeout.
+- Beads root `atomixos-aua`: track validation gaps and close-out.
 - Existing watchdog specs/docs under `docs/src/specs/` or module references, if present.
 
 ## Validation

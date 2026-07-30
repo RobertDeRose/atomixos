@@ -1,6 +1,72 @@
 <!-- workflow-migration:legacy-markdown-to-beads -->
 
-# Feature: provisioning-api-privilege-separation
+# Feature: Provisioning API Privilege Separation
+
+## Metadata
+
+- Beads feature root: `atomixos-vfi`
+- Feature slug: `provisioning-api-privilege-separation`
+- Design path: `docs/src/features/provisioning-api-privilege-separation/design.md`
+- Implemented record: `docs/src/features/provisioning-api-privilege-separation/index.md`
+- Base branch: `dev`
+- Status: delivered
+
+## Feature Summary
+
+Separate the network-facing provisioning service from privileged host mutation through verified tmpfs staging and a
+root systemd worker.
+
+## User Intent
+
+Operators must retain first-boot and authenticated re-apply behavior without allowing compromise of the HTTP process to
+become direct root filesystem mutation or arbitrary command execution.
+
+## User-Facing Behavior
+
+Submissions continue to return asynchronous jobs and familiar terminal results. A bounded queue may reject excess work;
+tampered, stale, malformed, or interrupted jobs fail without changing active config, and activation failures roll back.
+
+## Requirements
+
+The API remains unprivileged, validates and stages complete candidates, and atomically publishes ready jobs. The root
+worker independently verifies manifest paths, owners, modes, symlinks, hashes, sizes, and allowed entries before
+re-rendering and mutating `/data` through allowlisted operations.
+
+## Existing Context
+
+The provisioning service already handled schema validation, bundles, partial updates, jobs, promotion, activation, and
+rollback, but those paths ran in a process with excessive authority. Systemd and tmpfs already provided suitable local
+coordination primitives.
+
+## Architecture Consistency
+
+The design preserves one desired-state pipeline, read-only rootfs, `/data/config` ownership, systemd service boundaries,
+first-boot auth bypass, SSH-signed re-apply, and fail-closed rollback. It adds no database, daemon, or general IPC layer.
+
+## Operational Considerations
+
+Queue and result files are runtime state and disappear on reboot; boot recovery resolves interrupted active work.
+Capacity is bounded, mutation remains single-file, and operators diagnose failures through job results and systemd logs.
+
+## Validation Strategy
+
+Use Python tests for every staging and queue invariant, API/job compatibility, tamper rejection, recovery, and rollback;
+use the focused Nix VM boundary test for users, modes, systemd hardening, and end-to-end apply. Run final security review.
+
+## Implementation Decomposition
+
+The work separates contract design, unprivileged staging, root worker, systemd hardening, automated tests, and docs/
+close-out. Imported Beads tasks under `atomixos-vfi` preserve those slices.
+
+## Dependencies and Parallelism
+
+The feature depends on the provisioning API service. Manifest/staging and worker verification could progress in parallel
+after the handoff contract was fixed; integration and hardening depended on both.
+
+## Open Questions
+
+No unresolved boundary decisions remain. New privileged operations must be explicitly designed and allowlisted rather
+than widening the worker generically.
 
 ## Source
 
@@ -309,8 +375,7 @@ Root worker responsibilities:
   describe host mutation behavior.
 - `docs/src/planned-features.md`: close out delivered behavior only after the
   systemd-worker implementation lands.
-- `docs/src/features/provisioning-api-privilege-separation/tasks.md`: track
-  implementation and validation.
+- Beads root `atomixos-vfi`: preserve implementation and validation evidence.
 
 ## Validation
 

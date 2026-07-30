@@ -1,6 +1,85 @@
 <!-- workflow-migration:legacy-markdown-to-beads -->
 
-# Feature: provisioning-api-service
+# Feature: Provisioning API Service
+
+## Metadata
+
+- Beads feature root: `atomixos-dhe`
+- Feature slug: `provisioning-api-service`
+- Design path: `docs/src/features/provisioning-api-service/design.md`
+- Implemented record: `docs/src/features/provisioning-api-service/index.md`
+- Base branch: `dev`
+- Status: in progress
+
+## Feature Summary
+
+Evolve local provisioning from a one-shot script into a long-lived Litestar service with typed domain boundaries,
+asynchronous jobs, config import/export, and one reusable desired-state apply pipeline.
+
+## User Intent
+
+Operators and client developers need a stable local control plane for first boot, re-apply, validation, recovery, and
+future typed changes without losing the canonical config artifact or adding a database and second mutation path.
+
+## User-Facing Behavior
+
+The service exposes nonce, config submission, validation, jobs, health, export, CLI maintenance, and first-boot UI
+behavior through systemd socket activation. Fresh bootstrap and provisioned SSH-signature rules remain distinct.
+
+## Requirements
+
+The package must preserve config and bundle compatibility, socket activation, key-based auth, async single-flight jobs,
+atomic promotion, activation, rollback, small closure, explicit routing, and dependency-light operation.
+
+## Existing Context
+
+First-Boot Local Provisioning and Config Reapply already supplied parsing, rendering, auth, promotion, and rollback in a
+monolithic script. The service refactor modularizes those capabilities and is the foundation for live schema, partial
+API, HTMX UI, and privilege separation.
+
+## Proposed Design
+
+Package the implementation as `atomixos_provision`, keep explicit Litestar controllers and service facades, model
+responses and domain errors, preserve CLI and inherited systemd sockets, and route every mutation through complete desired
+state. Detailed package layout and flows remain below.
+
+## Architecture Consistency
+
+The design preserves one `config.toml` authority, immutable rootfs, mutable `/data/config`, systemd activation, SSH
+signatures, first-boot exceptions, bounded jobs, and rollback. It avoids SQL, Redis, auto-discovery, and fleet concerns.
+
+## Operational Considerations
+
+The service is long-lived and socket-activated, so upgrades must preserve the inherited descriptor and unit contract.
+Jobs are process/runtime scoped unless staged worker results persist them. Closure size and full target builds remain
+active validation obligations.
+
+## Documentation Impact
+
+Maintain `docs/src/provisioning.md`, `docs/src/data-flow.md`, `docs/src/runtime-boundaries.md`, testing and code-reference
+pages, and API-related feature records. Create the implemented record after the retained validation tasks close.
+
+## Validation Strategy
+
+Run provisioning package pytest and Ruff checks, route/schema/auth/job/promotion tests, relevant NixOS VM checks, Nix
+parse/evaluation, full target build where available, config import/export round-trip, closure-budget verification, and
+documentation validation.
+
+## Implementation Decomposition
+
+Imported work covers package structure, parsing/rendering, auth, bundles, activation, jobs, HTTP/UI/CLI, Nix integration,
+service-domain refactoring, dynamic API groundwork, docs, and validation. Beads under `atomixos-dhe` preserves three open
+validation tasks.
+
+## Dependencies and Parallelism
+
+The feature builds on first-boot provisioning and config re-apply. Package/domain refactoring and typed schema work could
+advance in parallel; route and Nix integration depended on the stable service and socket contracts.
+
+## Open Questions
+
+No architecture question remains for the delivered foundation. Active close-out work is concrete: complete the retained
+full aarch64 build/VM run, config import/export round-trip test, and rootfs closure-budget verification.
 
 ## Overview
 

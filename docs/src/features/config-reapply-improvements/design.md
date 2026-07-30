@@ -2,6 +2,82 @@
 
 # Config Reapply Improvements
 
+## Metadata
+
+- Beads feature root: `atomixos-iej`
+- Feature slug: `config-reapply-improvements`
+- Design path: `docs/src/features/config-reapply-improvements/design.md`
+- Implemented record: `docs/src/features/config-reapply-improvements/index.md`
+- Base branch: `dev`
+- Status: delivered
+
+## Feature Summary
+
+Harden config re-apply with a canonical schema, admin SSH-signature authentication, isolated candidate rendering,
+crash-safe promotion, activation checks, recovery, and rollback.
+
+## User Intent
+
+Operators need to safely update a running appliance without losing access or active desired state when input is invalid,
+the process crashes, or required services fail. Fresh-device bootstrap must remain usable without pre-existing keys.
+
+## User-Facing Behavior
+
+Provisioned mutations require a signed nonce/path/payload contract and return asynchronous job results. Invalid config
+never replaces active state; failed activation restores the prior config and reports rollback status.
+
+## Requirements
+
+The versioned schema must validate users, network, activation, upgrades, and containers; candidate work must not mutate
+active files; promotion must be crash-safe; runtime apply must check required health; and recovery must converge after
+interruption.
+
+## Existing Context
+
+A first-boot importer and persistent bootstrap endpoint already overwrote `/data/config` and synchronized Quadlet. That
+path lacked provisioned-device authentication, a single canonical config shape, isolated candidates, and robust rollback.
+
+## Proposed Design
+
+Authenticate provisioned requests, validate and render a complete candidate directory, fsync and atomically promote it
+while retaining rollback state, activate all derived runtime state, confirm required health, and restore the prior tree
+and runtime on failure. Detailed schema and state flow remain below.
+
+## Architecture Consistency
+
+The design preserves immutable rootfs, `/data/config` desired-state ownership, key-only administration, systemd/Quadlet
+runtime ownership, and fail-closed activation. Later service and privilege-separation work must reuse this state machine.
+
+## Operational Considerations
+
+Operators need an active admin key and may experience service or network interruption during apply. Recovery must handle
+stale candidates, interrupted promotion, and failed rollback clearly without silently accepting partial state.
+
+## Validation Strategy
+
+Use schema/parser, auth, user, network, Quadlet, candidate, promotion, recovery, activation, and rollback tests plus
+focused Nix VM paths. Verify docs/examples and ensure fresh provisioning remains compatible.
+
+## Implementation Decomposition
+
+The legacy work covers schema, parser/runtime users, auth, candidate promotion, rollback, docs/examples, automated
+validation, and close-out. Beads preserves those slices under `atomixos-iej`.
+
+## Dependencies and Parallelism
+
+The feature builds on first-boot provisioning but originally had no new roadmap prerequisite. Schema/auth and candidate
+state work could progress separately before integration with activation and rollback.
+
+## Risks and Tradeoffs
+
+Re-apply can interrupt services, rollback cannot undo application data mutations, and stronger auth increases operator
+steps. A strict schema and full-state replacement trade compatibility for auditability and deterministic recovery.
+
+## Open Questions
+
+No unresolved decisions remain for the delivered contract. Network and activation extensions were completed as separate
+features; persistent managed-user reboot VM coverage remains deferred.
+
 ## Summary
 
 Harden the existing `config.toml` re-apply path and formalize the configuration contract. The feature keeps first-time

@@ -1,6 +1,72 @@
 <!-- workflow-migration:legacy-markdown-to-beads -->
 
-# Feature: activation-options
+# Feature: Activation Options
+
+## Metadata
+
+- Beads feature root: `atomixos-ivy`
+- Feature slug: `activation-options`
+- Design path: `docs/src/features/activation-options/design.md`
+- Implemented record: `docs/src/features/activation-options/index.md`
+- Base branch: `dev`
+- Status: delivered
+
+## Feature Summary
+
+Add a bounded activation policy contract for timing, restart order, degraded services, and fail-closed rollback.
+
+## User Intent
+
+Operators need enough control to activate appliance services reliably without gaining arbitrary command execution or a
+second orchestration system. Default behavior must remain compatible when no new fields are supplied.
+
+## User-Facing Behavior
+
+Validated config can tune activation timeout and settle values, order restarts for declared services, and allow selected
+services to report degraded. Unsupported strategies and unsafe unit references fail validation before active state
+changes.
+
+## Requirements
+
+Policy values must be bounded, service references must resolve to declared containers, required and degraded sets must
+not overlap, and only `strategy = "rollback"` is accepted. Rendering and rollback must remain deterministic.
+
+## Existing Context
+
+The provisioning service already promoted candidate state, activated services, checked required health, reported jobs,
+and restored prior config on failure. This feature extends that path rather than replacing it.
+
+## Proposed Design
+
+Validate the selected `[activation]` fields, render `/data/config/activation-policy.json`, and have the existing
+activation service consume that file for timing, restart, degraded, and rollback decisions. Detailed field semantics
+remain below.
+
+## Architecture Consistency
+
+The design preserves `config.toml` as desired-state authority, `/data/config` as rendered state, allowlisted service
+operations, explicit health requirements, and rollback-on-failure. No config value becomes a shell command.
+
+## Operational Considerations
+
+Timeout and settle settings affect job duration; restart ordering can cause temporary service interruption. Degraded
+services remain visible in results. Any non-allowed failure restores prior desired and runtime state.
+
+## Validation Strategy
+
+Cover schema bounds and conflicts in config tests, rendering and runtime behavior in activation tests, integration and
+rollback in provisioning tests, and validate documentation. The explicitly deferred persistent-state VM case remains
+recorded below.
+
+## Implementation Decomposition
+
+The work separates contract validation, derived policy rendering, runtime consumption, docs/examples, and automated
+coverage. Imported Beads tasks under `atomixos-ivy` preserve those slices.
+
+## Dependencies and Parallelism
+
+The feature depends on Config Reapply Improvements and the provisioning service's shared activation pipeline. Schema and
+render tests could proceed before runtime integration; activation integration depended on the final rendered contract.
 
 ## Overview
 
@@ -156,7 +222,7 @@ Likely affected docs:
 - `docs/src/runtime-boundaries.md`
 - `docs/src/data-flow.md`
 - `docs/src/features/config-reapply-improvements/design.md`
-- `docs/src/features/config-reapply-improvements/tasks.md`
+- Config Reapply Improvements delivery record and Beads history
 - `docs/src/specs/provisioning-api.md` if API job results change
 - `docs/src/provisioning.md` if user-facing config examples include activation
   policy

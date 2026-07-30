@@ -1,6 +1,98 @@
 <!-- workflow-migration:legacy-markdown-to-beads -->
 
-# Feature: durable-journald-logs
+# Feature: Durable Journald Logs
+
+## Metadata
+
+- Beads feature root: `atomixos-mdx`
+- Feature slug: `durable-journald-logs`
+- Design path: `docs/src/features/durable-journald-logs/design.md`
+- Implemented record: `docs/src/features/durable-journald-logs/index.md`
+- Base branch: `dev`
+- Status: in progress
+
+## Feature Summary
+
+Provide bounded lifecycle forensics and low-write persistent logging without turning the flash-backed data partition into
+a synchronous mirror of every journal event.
+
+## User Intent
+
+Operators need enough evidence to reconstruct boot, update, confirmation, rollback, watchdog, and shutdown failures after
+power loss while preserving flash endurance and keeping ordinary application logging useful.
+
+## Goals
+
+- Keep a small immediately durable Tier 0 event stream for critical lifecycle evidence.
+- Keep host journald volatile and bounded during normal runtime.
+- Batch general host and container logs sequentially to `/data/logs` with retention limits.
+- Define ordering, rollover, torn-write tolerance, and shutdown flush behavior.
+
+## Non-Goals
+
+- Persisting the full system journal synchronously.
+- Guaranteeing the latest buffered general log survives sudden power loss.
+- Replacing remote log collection or application-specific durable data.
+
+## User-Facing Behavior
+
+Operators can inspect slot-local forensic records after failed boots or updates and broader rotated logs under
+`/data/logs` after normal operation. Critical events flush promptly; ordinary logs favor bounded RAM buffering and batched
+writes.
+
+## Existing Context
+
+AtomixOS has read-only rootfs, per-slot boot partitions, mutable F2FS `/data`, RAUC/update services, watchdog rollback,
+Podman journald logging, and early-boot scripts. Earlier forensic implementations exposed initrd mount and filtering
+problems that remain active work.
+
+## Proposed Design
+
+Write structured Tier 0 records with per-boot IDs and sequence numbers into bounded slot-local segments, keep journald
+volatile, place rsyslog behind it with a RAM queue, and append large batches to rotated files under `/data/logs`.
+Redesign initrd capture so it uses a reliable early-boot storage boundary. Detailed layout and scenarios remain below.
+
+## Architecture Consistency
+
+The design respects immutable rootfs, explicitly partitions durable lifecycle evidence from buffered diagnostics, keeps
+container logs on the standard journald path, and avoids unbounded writes or hidden persistence locations.
+
+## Operational Considerations
+
+Tier 0 has a hard per-slot budget and overwrites oldest segments. General logs can lose the newest RAM-buffered batch on
+power failure. Shutdown attempts a flush. Readers must tolerate torn final lines and use boot ID plus sequence ordering.
+
+## Documentation Impact
+
+Update architecture logging/data-flow pages, operational diagnostics and recovery guidance, update/rollback docs, and
+testing/hardware procedures. Create an implemented record only after the initrd path and hardening tasks close.
+
+## Validation Strategy
+
+Test retention limits, rollover, torn records, boot ordering, critical-event coverage, batched append, rotation, Podman
+routing, shutdown flush, failed update/rollback evidence, and the redesigned initrd path without failed units on healthy
+boots.
+
+## Implementation Decomposition
+
+Imported tasks cover Tier 0 layout, critical events, volatile journald and rsyslog batching, retention, container logs,
+docs, and validation. Beads under `atomixos-mdx` preserves the three remaining initrd/hardening tasks.
+
+## Dependencies and Parallelism
+
+Tier 0 record/retention logic and runtime batching can be tested independently. Initrd event capture depends on the final
+early-boot storage path; end-to-end rollback evidence depends on both lifecycle instrumentation and update tests.
+
+## Risks and Tradeoffs
+
+Immediate durability increases boot-media writes, buffering loses recent general logs on power failure, and initrd
+storage access can destabilize boot. Hard budgets, narrow events, sequential batching, and explicit power-loss boundaries
+control those tradeoffs.
+
+## Open Questions
+
+No product-scope question remains. The active decision is implementation-specific: select and validate an initrd Tier 0
+path that records early evidence without ad hoc mounts or failed units.
 
 ## Overview
 

@@ -1,6 +1,71 @@
 <!-- workflow-migration:legacy-markdown-to-beads -->
 
-# Feature: typed-partial-provisioning-api
+# Feature: Typed Partial Provisioning API
+
+## Metadata
+
+- Beads feature root: `atomixos-c08`
+- Feature slug: `typed-partial-provisioning-api`
+- Design path: `docs/src/features/typed-partial-provisioning-api/design.md`
+- Implemented record: `docs/src/features/typed-partial-provisioning-api/index.md`
+- Base branch: `dev`
+- Status: delivered
+
+## Feature Summary
+
+Add bounded typed partial endpoints that transform current desired state into a complete canonical config and reuse the
+existing validated asynchronous apply pipeline.
+
+## User Intent
+
+Clients need safe common edits without reconstructing an entire config file, while operators still need one exportable,
+auditable desired-state artifact and identical authentication, activation, and rollback behavior.
+
+## User-Facing Behavior
+
+Authenticated clients can update supported users, network settings, containers, networks, and volumes, then poll the
+normal job resource. Config export returns the complete state after partial mutations.
+
+## Requirements
+
+Every mutation must load current config, validate a typed request, generate full desired state, run complete validation,
+render, promote, activate, and roll back on failure. Partial routes must not widen first-boot auth or mutate derived state.
+
+## Existing Context
+
+The provisioning service already accepted full config, enforced SSH signatures after provisioning, serialized jobs, and
+owned atomic promotion and rollback. The live schema contract supplied stable typed transport metadata.
+
+## Proposed Design
+
+Implement typed transformation helpers and explicit route/service methods for selected domains. Serialize the transformed
+full state to canonical TOML and submit it through the same job and privilege-separated apply boundary as a full import.
+
+## Architecture Consistency
+
+The design preserves `config.toml` as the only desired-state authority, keeps derived files write-only outputs of the
+renderer, and reuses authentication, single-flight, validation, promotion, activation, rollback, jobs, and OpenAPI.
+
+## Operational Considerations
+
+Partial mutations may restart services or change connectivity exactly like full imports. Canonical serialization does
+not preserve comments or key order. Export should be used for backup, cloning, and audit after changes.
+
+## Validation Strategy
+
+Cover typed request validation, transformation, malformed/missing state, auth, conflicts, full-state validation,
+accepted jobs, failed apply/rollback, live schema, and selected VM paths. Reuse full re-apply failure coverage where the
+runtime path is identical.
+
+## Implementation Decomposition
+
+The legacy work covers models, shared pipeline reuse, endpoint wiring, OpenAPI, integration/VM coverage, docs, and final
+verification. Beads preserves those slices under `atomixos-c08`.
+
+## Dependencies and Parallelism
+
+The feature depends on the Provisioning API Service and Live Schema Contract. Transformation helpers and typed schemas
+could proceed in parallel; route integration depended on stable service and job contracts.
 
 ## Overview
 

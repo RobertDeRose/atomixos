@@ -1,6 +1,89 @@
 <!-- workflow-migration:legacy-markdown-to-beads -->
 
-# Design: caddy-authcrunch-cockpit-tutorial
+# Design: Caddy AuthCrunch Cockpit Tutorial
+
+## Metadata
+
+- Beads feature root: `atomixos-b45`
+- Feature slug: `caddy-authcrunch-cockpit-tutorial`
+- Design path: `docs/src/features/caddy-authcrunch-cockpit-tutorial/design.md`
+- Implemented record: `docs/src/features/caddy-authcrunch-cockpit-tutorial/index.md`
+- Base branch: `dev`
+- Status: delivered
+
+## Feature Summary
+
+Provide a copyable config bundle and tutorial for Caddy/AuthCrunch OIDC authentication, role mapping, and admin-only
+Cockpit access using AtomixOS's normal provisioning and Quadlet contracts.
+
+## User Intent
+
+An operator should be able to substitute identity-provider and domain values, provision a device, and obtain one
+well-explained authenticated management stack without modifying the immutable base image.
+
+## Goals
+
+- Demonstrate Entra OIDC, JWT role mapping, and Caddy authorization policy.
+- Keep Cockpit behind the admin route and avoid a second login prompt.
+- Exercise supported container, network, volume, build, and bundle-file config.
+- Explain provider substitution, local TLS, powerful mounts, and production caveats.
+
+## User-Facing Behavior
+
+The tutorial guides operators through identity-provider registration, config substitution, validation, provisioning,
+local DNS/TLS, role mapping, and Cockpit use. Caddy denies the Cockpit route unless the authenticated identity has the
+admin role.
+
+## Requirements
+
+The example must use only supported config fields, obvious placeholders, rootful Caddy where host ports require it, a
+bounded Cockpit image build, explicit bundle files, and Caddy as the only public authentication boundary.
+
+## Existing Context
+
+AtomixOS already rendered Quadlet containers, networks, and volumes and imported bundle files. This feature added the
+remaining build example and assembled those capabilities into an operator tutorial rather than a base-system service.
+
+## Proposed Design
+
+Ship the maintained example under `example/caddy-oidc` and explain it in the tutorial. Caddy/AuthCrunch handles OIDC,
+JWT, roles, TLS, and route policy; the Cockpit container uses local-session mode only behind the admin-gated proxy. The
+detailed config and Caddyfile design remains below.
+
+## Architecture Consistency
+
+The design preserves the immutable/application boundary: the OS supplies Podman, Quadlet, provisioning, and policy;
+operators supply the management stack and secrets. No default credentials or new base-image management plane is added.
+
+## Operational Considerations
+
+Operators must configure DNS, identity-provider claims, secrets, certificates, and image versions. Host socket mounts
+are high privilege and must stay limited to the admin container. AuthCrunch syntax and provider behavior can drift.
+
+## Documentation Impact
+
+Update `docs/src/tutorials/oidc-device-management.md`, `docs/src/SUMMARY.md`, and the example bundle. Create
+`docs/src/features/caddy-authcrunch-cockpit-tutorial/index.md` during migration close-out.
+
+## Validation Strategy
+
+Validate the example config, rendered Quadlet/build files, Caddyfile structure, tutorial links, and docs build. Reuse the
+provisioning VM coverage for common rendering/import paths and retain real-tenant verification as manual evidence.
+
+## Implementation Decomposition
+
+The legacy slices cover build support, Cockpit image, Caddy/local-session policy, config and bundle files, validation,
+tutorial/navigation, and close-out. Beads preserves them under `atomixos-b45`.
+
+## Dependencies and Parallelism
+
+The tutorial depends on existing config bundle, Quadlet rendering/sync, and build support. Documentation and example
+assembly could proceed in parallel after those primitives were available.
+
+## Open Questions
+
+No unresolved product questions remain for the delivered tutorial. Real-tenant validation and target image-build checks
+remain deferred operational validation, not changes to the documented contract.
 
 ## Summary
 
@@ -360,7 +443,7 @@ Existing dependencies are satisfied. One new capability is required:
 - `docs/src/SUMMARY.md` -- add tutorial entry under new Tutorials section
 - `docs/src/planned-features.md` -- update status to `in-progress`
 - New: `docs/src/features/caddy-authcrunch-cockpit-tutorial/design.md` (this file)
-- New: `docs/src/features/caddy-authcrunch-cockpit-tutorial/tasks.md`
+- Beads root `atomixos-b45` for executable task and validation history
 - New: tutorial page under `docs/src/tutorials/`
 - New: directly packageable example bundle under `example/caddy-oidc/`
 
