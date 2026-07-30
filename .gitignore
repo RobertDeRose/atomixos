@@ -33,6 +33,7 @@ Thumbs.db
 # Local development overrides
 .env
 .local
+build.dev.toml
 
 # mdBook output
 book/
