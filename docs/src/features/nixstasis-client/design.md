@@ -1,3 +1,5 @@
+<!-- workflow-migration:legacy-markdown-to-beads -->
+
 # Feature: nixstasis-client
 
 ## Source

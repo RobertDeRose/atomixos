@@ -1,3 +1,5 @@
+<!-- workflow-migration:legacy-markdown-to-beads -->
+
 # Feature: first-boot-local-provisioning
 
 ## Overview

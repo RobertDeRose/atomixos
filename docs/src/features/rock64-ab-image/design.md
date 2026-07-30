@@ -1,3 +1,5 @@
+<!-- workflow-migration:legacy-markdown-to-beads -->
+
 # Feature: rock64-ab-image
 
 ## Overview

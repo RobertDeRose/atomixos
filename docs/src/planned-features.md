@@ -131,7 +131,7 @@ this page remains the human-readable roadmap.
 
 ## Feature Map
 
-### Rock64 A/B image (`rock64-ab-image`)
+### Rock64 A/B Image (`rock64-ab-image`)
 
 - Status: partially completed
 - Overview: Provides the initial Rock64 reference image, read-only squashfs root, A/B RAUC update path, rollback,
@@ -141,14 +141,14 @@ this page remains the human-readable roadmap.
 - Delivered so far: Flashable image and bundle outputs, boot-count rollback, QEMU checks, core networking, provisioning,
   and the initial Rock64 hardware bring-up path.
 
-### First-boot local provisioning (`first-boot-local-provisioning`)
+### First-Boot Local Provisioning (`first-boot-local-provisioning`)
 
 - Status: completed
 - Overview: Imports a complete `config.toml` from the initial boot partition, USB media, or the constrained local web
   console, validates it, persists desired state under `/data/config`, and confirms the slot only after provisioning.
 - Delivered in: `modules/first-boot.nix`, `scripts/first-boot.sh`, the provisioning package, and first-boot VM checks.
 
-### Durable journald logs (`durable-journald-logs`)
+### Durable Journald Logs (`durable-journald-logs`)
 
 - Status: partially completed
 - Overview: Separates bounded slot-local Tier 0 forensic events from volatile journald and batched persistent logs under
@@ -156,7 +156,7 @@ this page remains the human-readable roadmap.
 - Remaining work: Redesign and validate the initrd forensic path and complete the associated hardening regression
   coverage.
 
-### Provisioning API service (`provisioning-api-service`)
+### Provisioning API Service (`provisioning-api-service`)
 
 - Status: partially completed
 - Overview: Replaces the one-shot provisioning importer with the long-lived Litestar service and shared validation,
@@ -164,7 +164,7 @@ this page remains the human-readable roadmap.
 - Dependencies: `first-boot-local-provisioning`, `config-reapply-improvements`
 - Remaining work: Close the retained full-build, config round-trip, and rootfs closure-budget validation tasks.
 
-### Network config extensions (`network-config-extensions`)
+### Network Config Extensions (`network-config-extensions`)
 
 - Status: completed
 - Overview: Adds validated DNS, search-domain, default-route, and Ethernet interface configuration to the shared atomic
@@ -173,7 +173,7 @@ this page remains the human-readable roadmap.
 - Delivered in: The config schema and parser, derived network state, runtime application, rollback coverage, and
   operator documentation.
 
-### Activation options (`activation-options`)
+### Activation Options (`activation-options`)
 
 - Status: completed
 - Overview: Adds bounded activation timeout, settle, restart, degraded-service, and rollback policy to the shared config
@@ -181,7 +181,7 @@ this page remains the human-readable roadmap.
 - Dependencies: `config-reapply-improvements`
 - Delivered in: The config schema and parser, `activation-policy.json`, runtime activation handling, tests, and docs.
 
-### `caddy-authcrunch-cockpit-tutorial`
+### Caddy AuthCrunch Cockpit Tutorial (`caddy-authcrunch-cockpit-tutorial`)
 
 - Status: completed
 - Overview: Provides a comprehensive tutorial section in the documentation with a
@@ -253,7 +253,7 @@ this page remains the human-readable roadmap.
 - Delivered in: `docs/src/tutorials/oidc-device-management.md` and
   `example/caddy-oidc/`
 
-### `nixstasis-client`
+### Nixstasis Client (`nixstasis-client`)
 
 - Status: completed
 - Overview: AtomixOS can include the Nixstasis enrollment client from the
@@ -290,7 +290,7 @@ this page remains the human-readable roadmap.
 - Delivered in: `modules/nixstasis.nix`, `nix/tests/nixstasis-client.nix`, and
   `docs/src/features/nixstasis-client/`
 
-### `rauc-production-keyring-policy`
+### RAUC Production Keyring Policy (`rauc-production-keyring-policy`)
 
 - Status: planned
 - Overview: Make RAUC production images fail closed unless a production keyring is
@@ -319,7 +319,7 @@ this page remains the human-readable roadmap.
 - Suggested validation: Nix evaluation tests for both fail-closed and dev opt-in modes
 - Suggested first workflow command: `/start-feature rauc-production-keyring-policy`
 
-### `provisioning-api-privilege-separation`
+### Provisioning API Privilege Separation (`provisioning-api-privilege-separation`)
 
 - Status: completed
 - Overview: Split the network-facing provisioning API process from privileged host
@@ -354,7 +354,7 @@ this page remains the human-readable roadmap.
   a root `systemd.path`/oneshot worker, and documenting the result/queue lock
   handoff in the runtime boundary docs.
 
-### `provisioning-api-live-schema-contract`
+### Provisioning API Live Schema Contract (`provisioning-api-live-schema-contract`)
 
 - Status: completed
 - Overview: Treat the live OpenAPI schema exposed by the provisioning service as a
@@ -385,7 +385,7 @@ this page remains the human-readable roadmap.
   IDs, domain tags, binary config upload bodies, auth headers, response schemas, error schemas,
   and Boot UI/static route exclusion.
 
-### `typed-partial-provisioning-api`
+### Typed Partial Provisioning API (`typed-partial-provisioning-api`)
 
 - Status: completed
 - Overview: Add typed partial configuration endpoints for common operations while
@@ -421,7 +421,7 @@ this page remains the human-readable roadmap.
   canonical `config.toml` candidates and reuse the existing async validation, render,
   promotion, activation, rollback, and job pipeline.
 
-### `boot-ui-htmx`
+### Boot UI HTMX (`boot-ui-htmx`)
 
 - Status: completed
 - Overview: Redesign the first-boot Boot UI as a small server-rendered HTMX interface
@@ -453,7 +453,7 @@ this page remains the human-readable roadmap.
   first-boot-only job status fragments, preserving bootstrap CSRF and browser
   origin checks, and keeping Boot UI routes excluded from live OpenAPI.
 
-### `watchdog-enforcement`
+### Watchdog Enforcement (`watchdog-enforcement`)
 
 - Status: partially completed
 - Overview: Add opt-in hardware watchdog enforcement with `RuntimeWatchdogSec=30s` and
@@ -479,7 +479,7 @@ this page remains the human-readable roadmap.
 - Delivered so far: `atomixos.watchdog.*` options, opt-in rendered manager settings, default-disabled evaluation checks,
   and hardware validation instructions.
 
-### `usb-wifi`
+### USB WiFi (`usb-wifi`)
 
 - Status: deferred
 - Overview: Enable WiFi support for selected USB WiFi hardware.
@@ -501,7 +501,7 @@ this page remains the human-readable roadmap.
 - Suggested validation: Hardware test with selected adapter
 - Suggested first workflow command: `/start-feature usb-wifi`
 
-### `config-reapply-improvements`
+### Config Reapply Improvements (`config-reapply-improvements`)
 
 - Status: completed
 - Overview: Harden the existing config re-apply path (`POST /api/config` on the

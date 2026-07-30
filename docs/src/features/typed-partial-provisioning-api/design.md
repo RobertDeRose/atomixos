@@ -1,3 +1,5 @@
+<!-- workflow-migration:legacy-markdown-to-beads -->
+
 # Feature: typed-partial-provisioning-api
 
 ## Overview

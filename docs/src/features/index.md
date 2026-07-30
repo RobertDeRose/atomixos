@@ -6,5 +6,4 @@ Planned or partially implemented work remains in [Planned features](../planned-f
 ## Feature index
 
 <!-- BEGIN IMPLEMENTED FEATURES -->
-_No features have completed close-out yet._
 <!-- END IMPLEMENTED FEATURES -->

@@ -1,3 +1,5 @@
+<!-- workflow-migration:legacy-markdown-to-beads -->
+
 # Feature: provisioning-api-live-schema-contract
 
 ## Overview
