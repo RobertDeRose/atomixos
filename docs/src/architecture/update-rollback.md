@@ -75,8 +75,13 @@ systemd uses these default manager settings:
 - **Reboot watchdog**: 10 minutes -- if a reboot hangs, the watchdog forces a hard reset
 
 These settings remain disabled by default on Rock64, VM, and development images until physical Rock64 boot-reliability
-validation approves active enforcement. The intended hardware behavior is that both scenarios feed into the boot-count
-rollback path: repeated unsuccessful boots decrement the selected slot counter until U-Boot returns to the previous slot.
+validation approves active enforcement. If an enabled system has no usable watchdog device,
+`watchdog-device-check.service` warns and exits successfully: boot and update verification continue, and the condition
+does not itself mutate RAUC state.
+
+The intended hardware rollback behavior applies to a newly updated, still-unconfirmed slot. Repeated watchdog resets
+before `os-verification` can mark that slot good consume its U-Boot attempts until U-Boot returns to the previous slot.
+An already confirmed slot is outside this rollback claim.
 
 ## Update Polling
 
