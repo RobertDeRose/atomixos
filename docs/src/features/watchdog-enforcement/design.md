@@ -59,8 +59,10 @@ hardware procedures, docs, and close-out. Beads under `atomixos-aua` preserves t
 
 ## Dependencies and Parallelism
 
-Module and VM validation can proceed independently of hardware execution. Physical driver, hang, rollback, and soak
-checks share the Rock64 target and must be sequenced from recoverable smoke tests to prolonged enablement.
+Module and VM validation can proceed independently of hardware execution. Build Configuration delivery owns the
+reproducible `build.toml` path for producing a watchdog-enabled test image and blocks physical driver, hang, and first
+reboot evidence. Physical driver, hang, rollback, and soak checks share the Rock64 target and must be sequenced from
+recoverable smoke tests to prolonged enablement.
 
 ## Source
 

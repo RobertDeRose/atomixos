@@ -67,6 +67,7 @@
   - [Boot UI HTMX](./features/boot-ui-htmx/design.md)
   - [Caddy AuthCrunch Cockpit Tutorial](./features/caddy-authcrunch-cockpit-tutorial/design.md)
   - [Nixstasis Client](./features/nixstasis-client/design.md)
+  - [Build Configuration](./features/build-configuration/design.md)
   - [Watchdog Enforcement](./features/watchdog-enforcement/design.md)
 - [Implemented Features](./features/index.md)
   <!-- BEGIN IMPLEMENTED FEATURES -->
