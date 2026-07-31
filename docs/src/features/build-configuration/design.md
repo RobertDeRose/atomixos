@@ -7,7 +7,7 @@
 - Design path: `docs/src/features/build-configuration/design.md`
 - Implemented record: `docs/src/features/build-configuration/index.md`
 - Base branch: `dev`
-- Status: ready for delivery
+- Status: delivered
 
 ## Feature Summary
 
