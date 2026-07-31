@@ -91,6 +91,38 @@ marker means only that local build-policy overrides were applied. It does not de
 mode, signing certificate trust, or release readiness. Without a local override, the suffix is absent and
 `local_override` is `false`.
 
+## Supported Command Contract
+
+`scripts/nix-with-build-config.sh` resolves only repository-root `build.dev.toml`. It removes any caller-provided
+`ATOMIXOS_BUILD_DEV_CONFIG`; when the file exists, it sets that internal transport to the canonical repository path,
+prints the warning, and appends `--impure` to the Nix command. The wrapper does not accept another configuration path or
+parse policy itself. Lima tasks invoke the same wrapper inside the repository mounted at the same path.
+
+| `mise` task                 | Applies local overlay | Contract                                              |
+|-----------------------------|-----------------------|-------------------------------------------------------|
+| `check`, `nix:check`        | Yes                   | Evaluate and test effective policy                    |
+| `build`                     | Yes                   | Build and retain configured artifacts                 |
+| `build:squashfs`            | Yes                   | Build immutable configured system policy              |
+| `build:rauc-bundle`         | Yes                   | Build configured update and audit sidecars            |
+| `build:boot-script`         | Yes                   | Reference the configured closure and squashfs ID      |
+| `vm:bundle-test`            | Yes                   | Build an interactive configured-system test           |
+| `e2e`, `e2e:*`, `e2e:debug` | No                    | Fixtures own explicit isolated configuration          |
+| `serial:*`, `_lima`, `gc`   | No                    | Commands do not construct configured AtomixOS outputs |
+
+Direct `nix build .#...` and `nix flake check` remain pure and committed-policy-only. External `nixpkgs` helper builds
+also remain outside this contract.
+
+## Failure and Retention Contract
+
+Effective policy is evaluated before a configured command creates or replaces an output link. The full retained build
+runs an explicit preflight before creating `.gcroots`, builds all replacements under temporary `.new` links, and renames
+them over retained links only after every build succeeds. Renames use platform-specific no-dereference behavior so a
+symlink to a Nix store directory is replaced rather than treated as a destination directory.
+
+A syntax, schema, evaluation, or later build failure preserves all previous retained kernel, system, bootloader, image,
+and bundle roots. Temporary links are removed on exit. Correct the document—or remove `build.dev.toml` to return to
+committed policy—and rerun the same command.
+
 ## Security Boundary
 
 Build configuration must not contain credentials, signing keys, certificates, tokens, or arbitrary Nix expressions.

@@ -27,9 +27,53 @@ mise run build:boot-script     # result-boot-script/
 mise run build
 ```
 
-`mise run build` refreshes the rooted build outputs under `.gcroots/`, keeps the
-latest two distinct images and the latest two RAUC bundles, and can optionally
-copy the newest `.img` to an explicit output path with `-o <path>`.
+`mise run build` validates effective build policy before touching retained links, prepares every replacement under a
+`.new` link, and replaces `.gcroots/` only after all builds succeed. It keeps the latest two distinct images and RAUC
+bundles and can copy the newest `.img` to an explicit output path with `-o <path>`. A validation or later build failure
+leaves the prior retained roots unchanged.
+
+## Local Build Overrides
+
+Create an ignored repository-root `build.dev.toml` to test build-policy changes before committing them. Included `mise`
+tasks detect it automatically and print this warning before each affected Nix evaluation:
+
+```text
+WARNING: applying local build.dev.toml overrides; outputs will be marked -dev.
+```
+
+The overlay may contain only fields being tested. See [Build Configuration](./reference/build-configuration.md) for the
+schema and task matrix. Local-override image and bundle filenames include `-dev`, and their metadata records
+`local_override` as `true`.
+
+To promote a tested change, copy the intended values into committed `build.toml`, remove `build.dev.toml`, run
+`mise run check`, and rebuild. To abandon or recover from a malformed override, remove or rename `build.dev.toml` and
+rerun the command. Nix reports TOML syntax errors with source locations and schema errors with field paths; no prior
+retained root is removed by validation failure.
+
+### Verify Build Policy Evidence
+
+Image and RAUC bundle output directories contain `build.toml` and `build-metadata.json`. Verify the lowercase SHA-256 in
+metadata against the exact policy bytes:
+
+```sh
+artifact_dir=result-image
+nix shell nixpkgs#coreutils nixpkgs#jq -c sh -c '
+  expected=$(jq -r .policy_sha256 "$1/build-metadata.json")
+  printf "%s  %s\n" "$expected" "$1/build.toml" | sha256sum -c -
+' _ "$artifact_dir"
+```
+
+To compare a sidecar with a running image, copy both sidecars to the device without changing them and compare bytes:
+
+```sh
+scp "$artifact_dir"/build.toml "$artifact_dir"/build-metadata.json atomixos:/tmp/
+ssh atomixos \
+  'cmp /tmp/build.toml /etc/atomixos/build.toml &&
+   cmp /tmp/build-metadata.json /etc/atomixos/build-metadata.json'
+```
+
+The `-dev` suffix and `local_override` field describe local build-policy overrides only. They do not establish signing
+trust or release readiness.
 
 ### Building via Lima VM
 
@@ -60,6 +104,9 @@ Lima, so the flake path works unchanged.
 | Disk image      | `build`             | `packages.aarch64-linux.image`       | Latest `.img` rooted under `.gcroots/images/image.1/` |
 
 ## Building with Nix Directly
+
+Direct Git-backed Nix commands use committed `build.toml` only. They intentionally do not discover ignored
+`build.dev.toml`; use the supported `mise` tasks when testing a local overlay.
 
 ```sh
 # Build the flashable image

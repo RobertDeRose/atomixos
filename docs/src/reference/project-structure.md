@@ -4,9 +4,12 @@
 flake.nix                          Main flake (pinned nixpkgs release, aarch64-linux)
 flake.lock                         Pinned nixpkgs
 mise.toml                          Tool versions, build tasks, hooks
+build.toml                         Committed immutable build policy
+build.dev.toml                     Ignored local build-policy overlay, when present
 
 modules/
   base.nix                         Shared NixOS config (systemd, ssh, auth, closure opts)
+  build-configuration.nix          Effective build-policy mapping and immutable audit files
   hardware-rock64.nix              RK3328 kernel, DTB, eMMC/watchdog drivers
   hardware-qemu.nix                QEMU aarch64-virt target for testing
   networking.nix                   NIC naming (.link files), eth0/eth1 config
@@ -22,11 +25,15 @@ modules/
   openvpn.nix                      OpenVPN recovery tunnel
 
 nix/
+  build-configuration.nix          Strict parser, merge, validation, and canonical renderer
   squashfs.nix                     Squashfs image derivation (closureInfo + mksquashfs)
   rauc-bundle.nix                  Multi-slot RAUC bundle derivation
   boot-script.nix                  U-Boot boot.scr compilation
   image.nix                        Flashable eMMC disk image derivation
-  tests/                           NixOS VM integration tests (nixos-lib.runTest)
+  tests/                           Evaluation, command, and NixOS VM integration tests
+    build-configuration.nix        Schema, provenance, option, and sidecar assertions
+    build-config-workflow.nix      Wrapper/task/retained-root command test derivation
+    build-config-workflow.sh       Isolated fake-Nix workflow scenarios
     rauc-slots.nix                 RAUC slot detection + custom backend
     rauc-update.nix                Bundle install + slot switch
     rauc-rollback.nix              Install -> mark-bad -> rollback
@@ -42,6 +49,8 @@ nix/
     ssh-wan-toggle.nix             SSH-on-WAN flag enable/disable
 
 scripts/
+  nix-with-build-config.sh         Fixed-path local override wrapper for Nix commands
+  build.sh                         Preflighted atomic retained-artifact build
   build-squashfs.sh                Squashfs build template (Nix derivation)
   build-rauc-bundle.sh             RAUC bundle build template (Nix derivation)
   build-image.sh                   Disk image assembly template (Nix derivation)

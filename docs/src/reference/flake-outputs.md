@@ -1,6 +1,14 @@
 # Flake Outputs
 
-The Nix flake (`flake.nix`) provides the following outputs:
+The Nix flake (`flake.nix`) provides the following outputs. Direct Git-backed Nix commands evaluate committed
+`build.toml`; supported `mise` tasks supply ignored local overrides through their wrapper.
+
+## Library
+
+| Output                                         | Description                                              |
+|------------------------------------------------|----------------------------------------------------------|
+| `lib.effectiveBuildConfiguration`              | Validated values, canonical policy, hash, and provenance |
+| `lib.effectiveBuildConfiguration.policySHA256` | Preflight-friendly hash of canonical effective policy    |
 
 ## NixOS Configurations
 
@@ -41,8 +49,9 @@ Tests are available for both Linux and macOS:
 | `checks.aarch64-linux.*`  | E2E tests running under TCG (software emulation)                        |
 | `checks.aarch64-darwin.*` | Same tests running natively on macOS via Apple Virtualization Framework |
 
-Available test names: `rauc-slots`, `rauc-update`, `rauc-rollback`, `rauc-confirm`, `rauc-power-loss`, `rauc-watchdog`,
-`firewall`, `initrd-fresh-flash-marker`, `first-boot-provision`, `first-boot-source-discovery`, `forensics-podman-log-path`,
+Available test names: `build-configuration`, `build-config-workflow`, `rauc-slots`, `rauc-update`, `rauc-rollback`,
+`rauc-confirm`, `rauc-power-loss`, `rauc-watchdog`, `firewall`, `initrd-fresh-flash-marker`, `first-boot-provision`,
+`first-boot-source-discovery`, `forensics-podman-log-path`,
 `forensics-rsyslog-path`, `forensics-rsyslog-buffering`, `forensics-shutdown-flush`, `network-isolation`, `ssh-wan-toggle`.
 
 ## Overlay
