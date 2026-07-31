@@ -53,6 +53,10 @@ nix build .#checks.aarch64-darwin.nixstasis-client --no-link
 nix build .#checks.aarch64-linux.nixstasis-client --no-link
 nix build .#checks.aarch64-darwin.watchdog-module --no-link
 nix build .#checks.aarch64-linux.watchdog-module --no-link
+nix build .#checks.aarch64-darwin.build-configuration --no-link
+nix build .#checks.aarch64-linux.build-configuration --no-link
+nix build .#checks.aarch64-darwin.build-config-workflow --no-link
+nix build .#checks.aarch64-linux.build-config-workflow --no-link
 ```
 
 The `nixstasis-client` VM check boots AtomixOS with a mock Nixstasis API. It
@@ -63,6 +67,14 @@ that stopping the mock API does not stop local recovery targets.
 The `watchdog-module` check verifies hardware watchdog enforcement remains off
 by default and renders the configured systemd manager watchdog settings only when
 explicitly enabled.
+
+The `build-configuration` check covers strict schema parsing, merge behavior, timeout bounds, canonical bytes,
+provenance, NixOS option mapping, and artifact sidecar inputs. The `build-config-workflow` check uses an isolated fake
+Nix command to cover automatic fixed-path overrides, warning/transport behavior, the included task matrix, Lima command
+execution, validation ordering, and retained-link preservation.
+
+Direct flake checks use committed policy. To test a local overlay, create `build.dev.toml` and run `mise run check`; the
+warning must appear before effective-policy evaluation.
 
 ## Test Descriptions
 
@@ -80,10 +92,12 @@ explicitly enabled.
 
 Additional flake-only checks:
 
-| Test               | Nodes | What it validates                                                                                         |
-|--------------------|-------|-----------------------------------------------------------------------------------------------------------|
-| `nixstasis-client` | 1     | Nixstasis registration, identity reuse, polling, FRP launch-boundary, and post-enrollment API outage path |
-| `watchdog-module`  | 0     | Watchdog option defaults and opt-in systemd manager settings                                              |
+| Test                    | Nodes | What it validates                                                                                         |
+|-------------------------|-------|-----------------------------------------------------------------------------------------------------------|
+| `nixstasis-client`      | 1     | Nixstasis registration, identity reuse, polling, FRP launch-boundary, and post-enrollment API outage path |
+| `watchdog-module`       | 0     | Watchdog option defaults and opt-in systemd manager settings                                              |
+| `build-configuration`   | 0     | Schema, canonical policy, provenance, module mapping, and sidecar inputs                                  |
+| `build-config-workflow` | 0     | Local override wrapper, task matrix, Lima behavior, and atomic retained links                             |
 
 ## Platform Performance
 

@@ -50,7 +50,7 @@ run = "hk fix -a"
 
 [tasks."nix:check"]
 description = "Verify flake evaluates cleanly"
-run = "nix flake check"
+run = "./scripts/nix-with-build-config.sh flake check"
 
 [tasks."docs:check"]
 description = "Validate and build the documentation"
@@ -89,7 +89,7 @@ if [ "${usage_lima:-false}" = "true" ]; then
   mise run _lima "${usage_vm}"
   cmd+=(limactl shell "${usage_vm}" --)
 fi
-"${cmd[@]}" nix build .#squashfs -o result-squashfs
+"${cmd[@]}" ./scripts/nix-with-build-config.sh build .#squashfs -o result-squashfs
 """
 
 [tasks."build:rauc-bundle"]
@@ -106,7 +106,7 @@ if [ "${usage_lima:-false}" = "true" ]; then
   mise run _lima "${usage_vm}"
   cmd+=(limactl shell "${usage_vm}" --)
 fi
-"${cmd[@]}" nix build .#rauc-bundle -o result-rauc-bundle
+"${cmd[@]}" ./scripts/nix-with-build-config.sh build .#rauc-bundle -o result-rauc-bundle
 """
 
 [tasks."build:boot-script"]
@@ -123,7 +123,7 @@ if [ "${usage_lima:-false}" = "true" ]; then
   mise run _lima "${usage_vm}"
   cmd+=(limactl shell "${usage_vm}" --)
 fi
-"${cmd[@]}" nix build .#boot-script -o result-boot-script
+"${cmd[@]}" ./scripts/nix-with-build-config.sh build .#boot-script -o result-boot-script
 """
 
 [tasks."vm:bundle-test"]
@@ -136,7 +136,7 @@ run = """
 #!/usr/bin/env bash
 set -euo pipefail
 
-nix build .#nixosConfigurations.bundle-test-vm.config.system.build.vm -o result-bundle-test-vm
+./scripts/nix-with-build-config.sh build .#nixosConfigurations.bundle-test-vm.config.system.build.vm -o result-bundle-test-vm
 
 runner=./result-bundle-test-vm/bin/run-gateway-vm
 host_runner="$runner"
@@ -217,91 +217,7 @@ flag "--lima" help="Build inside a Lima VM"
 flag "--vm <name>" help="Lima VM instance name" default="default"
 flag "-o --output <path>" help="Copy .img to this path (default: cwd)"
 """
-run = """
-#!/usr/bin/env bash
-set -euo pipefail
-cmd=()
-using_lima=false
-if [ "${usage_lima:-false}" = "true" ]; then
-  mise run _lima "${usage_vm}"
-  cmd+=(limactl shell "${usage_vm}" --)
-  using_lima=true
-fi
-
-GCROOTS=.gcroots
-IMGROOT="$GCROOTS/images"
-BUNDLEROOT="$GCROOTS/bundles"
-
-"${cmd[@]}" mkdir -p "$IMGROOT" "$BUNDLEROOT"
-
-"${cmd[@]}" rm -f "$GCROOTS/kernel" "$GCROOTS/toplevel" "$GCROOTS/uboot" "$GCROOTS/uboot-env-tools"
-"${cmd[@]}" nix build .#nixosConfigurations.rock64.config.system.build.kernel -o "$GCROOTS/kernel"
-"${cmd[@]}" nix build .#nixosConfigurations.rock64.config.system.build.toplevel -o "$GCROOTS/toplevel"
-"${cmd[@]}" nix build .#uboot -o "$GCROOTS/uboot"
-"${cmd[@]}" nix build .#uboot-env-tools -o "$GCROOTS/uboot-env-tools"
-
-prev_image_target=""
-if [ -L "$IMGROOT/image.1" ]; then
-  prev_image_target=$(readlink "$IMGROOT/image.1")
-fi
-
-"${cmd[@]}" rm -f "$IMGROOT/image.1.new"
-"${cmd[@]}" nix build .#image -o "$IMGROOT/image.1.new"
-new_image_target=$(readlink "$IMGROOT/image.1.new")
-
-if [ -n "$prev_image_target" ] && [ "$prev_image_target" != "$new_image_target" ]; then
-  "${cmd[@]}" rm -f "$IMGROOT/image.2"
-  "${cmd[@]}" mv "$IMGROOT/image.1" "$IMGROOT/image.2"
-fi
-
-"${cmd[@]}" rm -f "$IMGROOT/image.1"
-"${cmd[@]}" mv "$IMGROOT/image.1.new" "$IMGROOT/image.1"
-
-prev_bundle_target=""
-if [ -L "$BUNDLEROOT/rauc-bundle.1" ]; then
-  prev_bundle_target=$(readlink "$BUNDLEROOT/rauc-bundle.1")
-fi
-
-"${cmd[@]}" rm -f "$BUNDLEROOT/rauc-bundle.1.new"
-"${cmd[@]}" nix build .#rauc-bundle -o "$BUNDLEROOT/rauc-bundle.1.new"
-new_bundle_target=$(readlink "$BUNDLEROOT/rauc-bundle.1.new")
-
-if [ -n "$prev_bundle_target" ] && [ "$prev_bundle_target" != "$new_bundle_target" ]; then
-  "${cmd[@]}" rm -f "$BUNDLEROOT/rauc-bundle.2"
-  "${cmd[@]}" mv "$BUNDLEROOT/rauc-bundle.1" "$BUNDLEROOT/rauc-bundle.2"
-fi
-
-"${cmd[@]}" rm -f "$BUNDLEROOT/rauc-bundle.1"
-"${cmd[@]}" mv "$BUNDLEROOT/rauc-bundle.1.new" "$BUNDLEROOT/rauc-bundle.1"
-
-IMG=$("${cmd[@]}" sh -c 'set -- "$1"/*.img; [ -e "$1" ] && printf "%s\n" "$1"' _ "$IMGROOT/image.1")
-
-if [ -n "${usage_output:-}" ]; then
-  DEST="${usage_output}"
-  if [ "${DEST#/}" != "$DEST" ]; then
-    DEST_PATH="$DEST"
-  else
-    DEST_PATH="$PWD/$DEST"
-  fi
-  if [ "$using_lima" = "true" ]; then
-    "${cmd[@]}" sh -c 'cat "$1"' _ "$IMG" >"$DEST_PATH"
-  else
-    cp "$IMG" "$DEST_PATH"
-  fi
-  chmod u+w "$DEST_PATH"
-  SIZE=$(stat -c%s "$DEST_PATH" 2>/dev/null || stat -f%z "$DEST_PATH")
-  echo ""
-  echo "Image: $DEST_PATH ($((SIZE / 1024 / 1024)) MiB)"
-else
-  if [ "$using_lima" = "true" ]; then
-    SIZE=$("${cmd[@]}" sh -c 'stat -c%s "$1" 2>/dev/null || stat -f%z "$1"' _ "$IMG")
-  else
-    SIZE=$(stat -c%s "$IMG" 2>/dev/null || stat -f%z "$IMG")
-  fi
-  echo ""
-  echo "Image: $IMG ($((SIZE / 1024 / 1024)) MiB)"
-fi
-"""
+run = "./scripts/build.sh"
 
 [tasks.gc]
 description = "Garbage collect unrooted Nix store paths"

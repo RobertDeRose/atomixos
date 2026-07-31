@@ -186,6 +186,8 @@
         };
     in
     {
+      lib.effectiveBuildConfiguration = effectiveBuildConfig;
+
       # ── NixOS system configurations ────────────────────────────────────────
 
       nixosConfigurations.rock64 = nixpkgs.lib.nixosSystem {
@@ -375,6 +377,7 @@
 
           allTests = raucTests // netTests;
           evalChecks = {
+            build-config-workflow = import ./nix/tests/build-config-workflow.nix netTestArgs;
             build-configuration = import ./nix/tests/build-configuration.nix netTestArgs;
             nixstasis-module = import ./nix/tests/nixstasis-module.nix netTestArgs;
             watchdog-module = import ./nix/tests/watchdog-module.nix netTestArgs;
@@ -396,6 +399,7 @@
             hostPkgs = darwinPkgs;
           };
           darwinTests = {
+            build-config-workflow = import ./nix/tests/build-config-workflow.nix darwinNetTestArgs;
             build-configuration = import ./nix/tests/build-configuration.nix darwinNetTestArgs;
             rauc-slots = import ./nix/tests/rauc-slots.nix darwinRaucTestArgs;
             rauc-update = import ./nix/tests/rauc-update.nix darwinRaucTestArgs;
