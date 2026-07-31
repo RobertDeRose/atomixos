@@ -3,9 +3,9 @@
 ## Delivery Summary
 
 - Beads feature root: `atomixos-mol-0ws`
-- Status: implementation complete; delivery action pending
+- Status: delivered locally
 - Pull request: not created
-- Merge commit: not applicable before delivery
+- Delivery: fast-forwarded into local `dev` at `d6046e4f564a4c6cc046b721197b5d048cd57d2c`
 - Design record: [design.md](design.md)
 - Implementation commits: `1e9874ec88dda42c3d364143072cdeb826d52147`,
   `de794fe423bea98280d3150eae0bc7b20113c627`, and `42608e796311dddaedcd6a3bdfba495184d4a970`
@@ -116,5 +116,6 @@ layers, unmarked local artifacts, and automatic local overrides for direct Nix c
 Specification reconciliation completed in `231c7e8f94d0facc9abbd83c6a882f1a64396824`. Implementation tasks
 `atomixos-mol-off.1`, `atomixos-mol-off.2`, and `atomixos-mol-off.3` delivered the schema, immutable policy integration,
 and supported workflow in the three implementation commits listed above. Each task used test-first evidence, focused
-validation, aligned reader documentation, and an independent implementation review. Beads preserves detailed findings,
-resolutions, validation limitations, and commit evidence under the feature root.
+validation, aligned reader documentation, and an independent implementation review. The feature was fast-forwarded
+into local `dev` at `d6046e4f564a4c6cc046b721197b5d048cd57d2c`; no pull request or remote branch push occurred. Beads
+preserves detailed findings, resolutions, validation limitations, and commit evidence under the feature root.

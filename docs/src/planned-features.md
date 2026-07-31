@@ -455,7 +455,7 @@ this page remains the human-readable roadmap.
 
 ### Build Configuration (`build-configuration`)
 
-- Status: ready for delivery
+- Status: delivered locally
 - Beads root: `atomixos-mol-0ws`
 - Design: [Build Configuration](./features/build-configuration/design.md)
 - Implemented record: [Build Configuration delivery](./features/build-configuration/index.md)
