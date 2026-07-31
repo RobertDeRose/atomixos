@@ -3,6 +3,19 @@
 # Build retained AtomixOS artifacts without discarding the previous good roots.
 set -euo pipefail
 
+REPO_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
+if [[ -n "${usage_output:-}" && -f "$REPO_ROOT/build.dev.toml" ]]; then
+	output_name=${usage_output%/}
+	output_name=${output_name##*/}
+	case "$output_name" in
+	*-dev | *-dev.*) ;;
+	*)
+		echo "ERROR: local override output filename must include -dev: $output_name" >&2
+		exit 1
+		;;
+	esac
+fi
+
 cmd=()
 using_lima=false
 if [[ "${usage_lima:-false}" == true ]]; then

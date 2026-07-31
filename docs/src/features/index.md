@@ -1,7 +1,8 @@
 # Implemented features
 
-This index contains features that have completed implementation, documentation reconciliation, validation, and delivery.
-Planned or partially implemented work remains in [Planned features](../planned-features.md) and Beads.
+This index contains features that have completed implementation, documentation reconciliation, validation, and
+close-out. Each feature record states its current pull-request or merge status. Planned or partially implemented work
+remains in [Planned features](../planned-features.md) and Beads.
 
 ## Feature index
 
@@ -17,5 +18,6 @@ Planned or partially implemented work remains in [Planned features](../planned-f
 - [Typed Partial Provisioning API](typed-partial-provisioning-api/index.md)
 - [Boot UI HTMX](boot-ui-htmx/index.md)
 - [Config Reapply Improvements](config-reapply-improvements/index.md)
+- [Build Configuration](build-configuration/index.md)
 
 <!-- END IMPLEMENTED FEATURES -->

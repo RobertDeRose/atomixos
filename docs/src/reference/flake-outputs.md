@@ -12,13 +12,15 @@ The Nix flake (`flake.nix`) provides the following outputs. Direct Git-backed Ni
 
 ## NixOS Configurations
 
-| Output                            | Description                                                            |
-|-----------------------------------|------------------------------------------------------------------------|
-| `nixosConfigurations.rock64`      | Real hardware NixOS system (RK3328, eMMC, all service modules)         |
-| `nixosConfigurations.rock64-qemu` | QEMU aarch64-virt testing target (virtio devices, custom RAUC backend) |
+| Output                               | Description                                                                  |
+|--------------------------------------|------------------------------------------------------------------------------|
+| `nixosConfigurations.rock64`         | Real hardware NixOS system (RK3328, eMMC, all service modules)               |
+| `nixosConfigurations.rock64-qemu`    | QEMU aarch64-virt testing target (virtio devices, custom RAUC backend)       |
+| `nixosConfigurations.bundle-test-vm` | Interactive QEMU target for testing provisioning bundles and forwarded ports |
 
-Both configurations share `modules/base.nix` and all service modules. They differ only in hardware-specific
-configuration (kernel drivers, device paths, boot method).
+All three configurations receive the effective build policy and share `modules/base.nix`. The Rock64 target uses its
+hardware module; both VM targets use `modules/hardware-qemu.nix`; and `bundle-test-vm` adds interactive VM resources,
+login behavior, and forwarded service ports.
 
 ## Packages
 
@@ -39,6 +41,7 @@ from macOS when a linux-builder is available (the alias points to the same `aarc
 | Output                              | Description                                 |
 |-------------------------------------|---------------------------------------------|
 | `apps.aarch64-linux.rock64-qemu-vm` | QEMU VM runner (`nix run .#rock64-qemu-vm`) |
+| `apps.aarch64-linux.bundle-test-vm` | Interactive bundle-test VM runner           |
 
 ## Checks (Tests)
 
@@ -60,4 +63,4 @@ The flake includes an `embeddedOverlay` that strips unnecessary dependencies to 
 
 - `crun` is built without CRIU support (removes `criu` + `python3`, saving ~102 MB)
 
-This overlay is applied to both NixOS configurations via the `overlayModule`.
+This overlay is applied to all three NixOS configurations via the `overlayModule`.

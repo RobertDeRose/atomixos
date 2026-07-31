@@ -29,8 +29,9 @@ mise run build
 
 `mise run build` validates effective build policy before touching retained links, prepares every replacement under a
 `.new` link, and replaces `.gcroots/` only after all builds succeed. It keeps the latest two distinct images and RAUC
-bundles and can copy the newest `.img` to an explicit output path with `-o <path>`. A validation or later build failure
-leaves the prior retained roots unchanged.
+bundles and can copy the newest `.img` to an explicit output path with `-o <path>`. When a local override is active,
+the output filename must include `-dev`; the command rejects an unmarked destination before evaluation or retained-link
+mutation. A validation or later build failure leaves the prior retained roots unchanged.
 
 ## Local Build Overrides
 

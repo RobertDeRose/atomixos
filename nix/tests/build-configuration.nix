@@ -75,6 +75,7 @@ let
     };
   committedSystem = (evalSystem defaults).config;
   overriddenSystem = (evalSystem overridden).config;
+  effective = self.lib.effectiveBuildConfiguration;
   imagePackage = self.packages.aarch64-linux.image;
   raucBundlePackage = self.packages.aarch64-linux.rauc-bundle;
   evaluationFails = args: !(builtins.tryEval (builtins.deepSeq (evaluate args) true)).success;
@@ -170,17 +171,22 @@ pkgs.runCommand "build-configuration-check" { } ''
     )
   } = true
 
-  # Image and update derivations consume the same immutable sidecar sources.
-  test ${builtins.toJSON (imagePackage.buildConfiguration.tomlFile == defaults.tomlFile)} = true
+  # Image and update derivations consume the flake's effective immutable sidecar sources.
+  # The standalone defaults and overridden fixtures above retain committed-policy coverage.
+  test ${builtins.toJSON (imagePackage.buildConfiguration.tomlFile == effective.tomlFile)} = true
   test ${
-    builtins.toJSON (imagePackage.buildConfiguration.metadataFile == defaults.metadataFile)
+    builtins.toJSON (imagePackage.buildConfiguration.metadataFile == effective.metadataFile)
   } = true
-  test ${builtins.toJSON (imagePackage.buildConfiguration.localOverride == false)} = true
-  test ${builtins.toJSON (raucBundlePackage.buildConfiguration.tomlFile == defaults.tomlFile)} = true
   test ${
-    builtins.toJSON (raucBundlePackage.buildConfiguration.metadataFile == defaults.metadataFile)
+    builtins.toJSON (imagePackage.buildConfiguration.localOverride == effective.localOverride)
   } = true
-  test ${builtins.toJSON (raucBundlePackage.buildConfiguration.localOverride == false)} = true
+  test ${builtins.toJSON (raucBundlePackage.buildConfiguration.tomlFile == effective.tomlFile)} = true
+  test ${
+    builtins.toJSON (raucBundlePackage.buildConfiguration.metadataFile == effective.metadataFile)
+  } = true
+  test ${
+    builtins.toJSON (raucBundlePackage.buildConfiguration.localOverride == effective.localOverride)
+  } = true
 
   # Committed documents are complete and versioned.
   test ${builtins.toJSON (baseFails ''
