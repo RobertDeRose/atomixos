@@ -32,19 +32,27 @@ approves active watchdog enforcement.
 
 ### ADDED: Configurable timeouts
 
-The watchdog timeouts are configured in `modules/watchdog.nix` through `atomixos.watchdog.*` options:
+Immutable build policy configures the existing `atomixos.watchdog.*` NixOS options:
 
-```nix
-atomixos.watchdog = {
-  enableHardware = true;
-  runtimeWatchdogSec = "30s";
-  rebootWatchdogSec = "10min";
-};
+```toml
+version = 1
+
+[watchdog]
+enable_hardware = false
+runtime_timeout = "30s"
+reboot_timeout = "10min"
 ```
+
+The fields map to `enableHardware`, `runtimeWatchdogSec`, and `rebootWatchdogSec` respectively. Runtime values must
+resolve to 10 seconds–5 minutes; reboot values must resolve to 1–10 minutes. The committed defaults remain:
 
 - **Runtime**: 30 seconds -- aggressive enough to catch hangs quickly, long enough to avoid false triggers during normal
   operation
 - **Reboot**: 10 minutes -- generous because clean shutdown may need time to stop containers
+
+Accepted policy is not proof that a physical watchdog implements the exact requested value. Systemd may select the
+nearest timeout supported by the driver and device. Physical validation must record the programmed hardware timeout and
+confirm observed reset timing before release enablement.
 
 ### ADDED: Watchdog interacts with boot-count rollback
 

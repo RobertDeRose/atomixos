@@ -9,6 +9,7 @@
   mtools,
   util-linux,
   ubootRock64,
+  buildConfiguration,
   nixosConfig,
   squashfsImage,
   bootScript,
@@ -24,7 +25,7 @@ let
       match = builtins.match "([0-9]+\\.[0-9]+).*" nixosVersion;
     in
     if match == null then nixosVersion else builtins.elemAt match 0;
-  imageName = "atomixos-${nixosSeries}.img";
+  imageName = "atomixos-${nixosSeries}${buildConfiguration.artifactSuffix}.img";
 
   buildScript = stdenv.mkDerivation {
     name = "build-image-script";
@@ -61,5 +62,12 @@ stdenv.mkDerivation {
 
   installPhase = ''
     bash ${buildScript}
+    install -m 0444 ${buildConfiguration.tomlFile} "$out/build.toml"
+    install -m 0444 ${buildConfiguration.metadataFile} "$out/build-metadata.json"
   '';
+
+  passthru = {
+    artifactName = imageName;
+    inherit buildConfiguration;
+  };
 }

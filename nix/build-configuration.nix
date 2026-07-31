@@ -183,11 +183,26 @@ in
     else
       let
         effectiveDocument = lib.recursiveUpdate baseDocument overlayDocument;
-      in
-      {
-        inherit effectiveDocument;
         canonicalTOML = renderCanonical effectiveDocument;
         localOverride = overlayText != null;
+        policySHA256 = builtins.hashString "sha256" canonicalTOML;
+        canonicalMetadataJSON = ''
+          {"local_override":${if localOverride then "true" else "false"},"policy_sha256":"${policySHA256}"}
+        '';
+        tomlFile = builtins.toFile "atomixos-build.toml" canonicalTOML;
+        metadataFile = builtins.toFile "atomixos-build-metadata.json" canonicalMetadataJSON;
+      in
+      {
+        inherit
+          canonicalMetadataJSON
+          canonicalTOML
+          effectiveDocument
+          localOverride
+          metadataFile
+          policySHA256
+          tomlFile
+          ;
+        artifactSuffix = if localOverride then "-dev" else "";
         watchdog = {
           enableHardware = effectiveDocument.watchdog.enable_hardware;
           runtimeTimeout = effectiveDocument.watchdog.runtime_timeout;

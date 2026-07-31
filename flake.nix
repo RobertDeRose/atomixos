@@ -37,6 +37,17 @@
         overlays = [ embeddedOverlay ];
       };
 
+      buildConfigurationEvaluator = import ./nix/build-configuration.nix {
+        lib = nixpkgs.lib;
+      };
+      buildDevConfigPath = builtins.getEnv "ATOMIXOS_BUILD_DEV_CONFIG";
+      effectiveBuildConfig = buildConfigurationEvaluator.evaluate {
+        baseName = "build.toml";
+        baseText = builtins.readFile ./build.toml;
+        overlayName = "build.dev.toml";
+        overlayText = if buildDevConfigPath == "" then null else builtins.readFile buildDevConfigPath;
+      };
+
       developmentMode = builtins.getEnv "DEVELOPMENT" == "1";
 
       mkDocsToolchain =
@@ -182,10 +193,16 @@
         modules = [
           overlayModule
           ./modules/base.nix
+          ./modules/build-configuration.nix
           ./modules/hardware-rock64.nix
         ];
         specialArgs = {
-          inherit self developmentMode nixstasis;
+          inherit
+            self
+            developmentMode
+            effectiveBuildConfig
+            nixstasis
+            ;
         };
       };
 
@@ -194,10 +211,16 @@
         modules = [
           overlayModule
           ./modules/base.nix
+          ./modules/build-configuration.nix
           ./modules/hardware-qemu.nix
         ];
         specialArgs = {
-          inherit self developmentMode nixstasis;
+          inherit
+            self
+            developmentMode
+            effectiveBuildConfig
+            nixstasis
+            ;
         };
       };
 
@@ -207,11 +230,17 @@
           "${nixpkgs}/nixos/modules/virtualisation/qemu-vm.nix"
           overlayModule
           ./modules/base.nix
+          ./modules/build-configuration.nix
           ./modules/hardware-qemu.nix
           bundleTestVmModule
         ];
         specialArgs = {
-          inherit self developmentMode nixstasis;
+          inherit
+            self
+            developmentMode
+            effectiveBuildConfig
+            nixstasis
+            ;
         };
       };
 
@@ -258,6 +287,7 @@
         # Uses development signing keys by default (committed to repo).
         # For production: override signingCert/signingKeyPath with production keys.
         rauc-bundle = pkgs.callPackage ./nix/rauc-bundle.nix {
+          buildConfiguration = effectiveBuildConfig;
           nixosConfig = rock64Config;
           squashfsImage = self.packages.${system}.squashfs;
           bootScript = self.packages.${system}.boot-script;
@@ -276,6 +306,7 @@
         # Flash with: dd if=result-image/atomixos-<nixos-series>.img of=/dev/mmcblkN bs=4M
         # Or use a tool like Etcher.
         image = pkgs.callPackage ./nix/image.nix {
+          buildConfiguration = effectiveBuildConfig;
           nixosConfig = rock64Config;
           squashfsImage = self.packages.${system}.squashfs;
           bootScript = self.packages.${system}.boot-script;

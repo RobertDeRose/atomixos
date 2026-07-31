@@ -73,8 +73,23 @@ runtime_timeout = "30s"
 reboot_timeout = "10min"
 ```
 
-Artifact embedding, provenance, supported command behavior, and audit procedures are documented as their integration is
-delivered.
+## Immutable Policy and Provenance
+
+Configured systems expose the canonical bytes at `/etc/atomixos/build.toml`. The adjacent
+`/etc/atomixos/build-metadata.json` is one compact JSON object plus a final newline:
+
+```json
+{"local_override":false,"policy_sha256":"<64 lowercase hexadecimal characters>"}
+```
+
+`policy_sha256` is SHA-256 over the exact canonical TOML bytes, including the final newline. Image and RAUC bundle
+output directories contain `build.toml` and `build-metadata.json` copied from the same immutable Nix store files, so the
+sidecars and running-system files are byte-identical.
+
+When a local override is effective, `local_override` is `true` and image and bundle filenames include `-dev`. This
+marker means only that local build-policy overrides were applied. It does not describe the separate NixOS development
+mode, signing certificate trust, or release readiness. Without a local override, the suffix is absent and
+`local_override` is `false`.
 
 ## Security Boundary
 

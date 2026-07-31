@@ -212,7 +212,7 @@ Use `scripts/nix-with-build-config.sh <nix-subcommand> [arguments...]` for every
 2. If repository-root `build.dev.toml` is absent, execute `nix <subcommand> ...` unchanged.
 3. If it exists, print the exact warning to standard error before evaluation, set
    `ATOMIXOS_BUILD_DEV_CONFIG` to that exact canonical repository-root path, and execute
-   `nix --impure <subcommand> ...`.
+   `nix <subcommand> --impure ...`.
 4. `flake.nix` reads that environment variable only during impure evaluation, reads the fixed file bytes, and passes
    those bytes to the shared evaluator. The resulting effective values, normalized bytes, and hash become derivation
    inputs. The wrapper accepts no option or environment override for another path.
