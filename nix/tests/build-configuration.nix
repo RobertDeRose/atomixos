@@ -1,5 +1,6 @@
 {
   pkgs,
+  qemuModule,
   self,
   ...
 }:
@@ -52,6 +53,30 @@ let
     ''reboot_timeout = "10min"''
     ""
   ];
+  expectedMetadata = canonicalTOML: localOverride: ''
+    {"local_override":${
+      if localOverride then "true" else "false"
+    },"policy_sha256":"${builtins.hashString "sha256" canonicalTOML}"}
+  '';
+  evalSystem =
+    effectiveBuildConfig:
+    self.inputs.nixpkgs.lib.nixosSystem {
+      system = "aarch64-linux";
+      modules = [
+        ../../modules/base.nix
+        ../../modules/build-configuration.nix
+        qemuModule
+      ];
+      specialArgs = {
+        inherit self effectiveBuildConfig;
+        developmentMode = true;
+        nixstasis = self.inputs.nixstasis;
+      };
+    };
+  committedSystem = (evalSystem defaults).config;
+  overriddenSystem = (evalSystem overridden).config;
+  imagePackage = self.packages.aarch64-linux.image;
+  raucBundlePackage = self.packages.aarch64-linux.rauc-bundle;
   evaluationFails = args: !(builtins.tryEval (builtins.deepSeq (evaluate args) true)).success;
   baseFails = text: evaluationFails { baseText = text; };
   overlayFails =
@@ -90,12 +115,72 @@ pkgs.runCommand "build-configuration-check" { } ''
   test ${builtins.toJSON (defaults.watchdog.rebootTimeout == "10min")} = true
   test ${builtins.toJSON (!defaults.localOverride)} = true
   test ${builtins.toJSON (defaults.canonicalTOML == expectedCanonical)} = true
+  test ${
+    builtins.toJSON (defaults.policySHA256 == builtins.hashString "sha256" expectedCanonical)
+  } = true
+  test ${
+    builtins.toJSON (defaults.canonicalMetadataJSON == expectedMetadata expectedCanonical false)
+  } = true
+  test ${builtins.toJSON (builtins.readFile defaults.tomlFile == expectedCanonical)} = true
+  test ${
+    builtins.toJSON (
+      builtins.readFile defaults.metadataFile == expectedMetadata expectedCanonical false
+    )
+  } = true
+  test ${builtins.toJSON (defaults.artifactSuffix == "")} = true
 
   test ${builtins.toJSON overridden.watchdog.enableHardware} = true
   test ${builtins.toJSON (overridden.watchdog.runtimeTimeout == "45s")} = true
   test ${builtins.toJSON (overridden.watchdog.rebootTimeout == "10min")} = true
   test ${builtins.toJSON overridden.localOverride} = true
   test ${builtins.toJSON (overridden.canonicalTOML == expectedOverrideCanonical)} = true
+  test ${
+    builtins.toJSON (
+      overridden.canonicalMetadataJSON == expectedMetadata expectedOverrideCanonical true
+    )
+  } = true
+  test ${builtins.toJSON (builtins.readFile overridden.tomlFile == expectedOverrideCanonical)} = true
+  test ${
+    builtins.toJSON (
+      builtins.readFile overridden.metadataFile == expectedMetadata expectedOverrideCanonical true
+    )
+  } = true
+  test ${builtins.toJSON (overridden.artifactSuffix == "-dev")} = true
+
+  # Effective policy maps to immutable NixOS options and audit files.
+  test ${builtins.toJSON (!committedSystem.atomixos.watchdog.enableHardware)} = true
+  test ${builtins.toJSON (committedSystem.atomixos.watchdog.runtimeWatchdogSec == "30s")} = true
+  test ${builtins.toJSON (committedSystem.atomixos.watchdog.rebootWatchdogSec == "10min")} = true
+  test ${
+    builtins.toJSON (committedSystem.environment.etc."atomixos/build.toml".source == defaults.tomlFile)
+  } = true
+  test ${
+    builtins.toJSON (
+      committedSystem.environment.etc."atomixos/build-metadata.json".source == defaults.metadataFile
+    )
+  } = true
+  test ${builtins.toJSON overriddenSystem.atomixos.watchdog.enableHardware} = true
+  test ${builtins.toJSON (overriddenSystem.atomixos.watchdog.runtimeWatchdogSec == "45s")} = true
+  test ${
+    builtins.toJSON (overriddenSystem.systemd.settings.Manager.RuntimeWatchdogSec == "45s")
+  } = true
+  test ${
+    builtins.toJSON (
+      overriddenSystem.environment.etc."atomixos/build.toml".source == overridden.tomlFile
+    )
+  } = true
+
+  # Image and update derivations consume the same immutable sidecar sources.
+  test ${builtins.toJSON (imagePackage.buildConfiguration.tomlFile == defaults.tomlFile)} = true
+  test ${
+    builtins.toJSON (imagePackage.buildConfiguration.metadataFile == defaults.metadataFile)
+  } = true
+  test ${builtins.toJSON (imagePackage.buildConfiguration.localOverride == false)} = true
+  test ${builtins.toJSON (raucBundlePackage.buildConfiguration.tomlFile == defaults.tomlFile)} = true
+  test ${
+    builtins.toJSON (raucBundlePackage.buildConfiguration.metadataFile == defaults.metadataFile)
+  } = true
+  test ${builtins.toJSON (raucBundlePackage.buildConfiguration.localOverride == false)} = true
 
   # Committed documents are complete and versioned.
   test ${builtins.toJSON (baseFails ''

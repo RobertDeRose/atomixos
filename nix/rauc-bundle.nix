@@ -6,6 +6,7 @@
   dosfstools,
   mtools,
   squashfsTools,
+  buildConfiguration,
   nixosConfig,
   squashfsImage,
   bootScript,
@@ -19,6 +20,7 @@ let
   initrd = nixosConfig.system.build.initialRamdisk;
   dtbPath = "rockchip/rk3328-rock64.dtb";
   version = nixosConfig.system.nixos.version;
+  bundleName = "rock64${buildConfiguration.artifactSuffix}.raucb";
 
   buildScript = stdenv.mkDerivation {
     name = "build-rauc-bundle-script";
@@ -58,9 +60,16 @@ stdenv.mkDerivation {
   '';
 
   installPhase = ''
-    mkdir -p $out
-    cp rock64.raucb $out/
-    echo "RAUC bundle created: $out/rock64.raucb"
-    ls -lh $out/rock64.raucb
+    mkdir -p "$out"
+    install -m 0444 rock64.raucb "$out/${bundleName}"
+    install -m 0444 ${buildConfiguration.tomlFile} "$out/build.toml"
+    install -m 0444 ${buildConfiguration.metadataFile} "$out/build-metadata.json"
+    echo "RAUC bundle created: $out/${bundleName}"
+    ls -lh "$out/${bundleName}"
   '';
+
+  passthru = {
+    artifactName = bundleName;
+    inherit buildConfiguration;
+  };
 }
