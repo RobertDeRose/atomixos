@@ -455,9 +455,10 @@ this page remains the human-readable roadmap.
 
 ### Build Configuration (`build-configuration`)
 
-- Status: ready for implementation
+- Status: ready for delivery
 - Beads root: `atomixos-mol-0ws`
 - Design: [Build Configuration](./features/build-configuration/design.md)
+- Implemented record: [Build Configuration delivery](./features/build-configuration/index.md)
 - Overview: Add a versioned build-stage `build.toml` contract for immutable image policy, with watchdog settings as the
   first consumer and an ignored `build.dev.toml` overlay for local experiments.
 - Requirements:
@@ -468,6 +469,8 @@ this page remains the human-readable roadmap.
 - Non-goals: Runtime provisioning settings, secrets, arbitrary Nix fragments, or multiple profile layers
 - Dependencies: None; delivery unblocks the physical Watchdog Enforcement validation chain
 - Suggested validation: Nix evaluation checks, command-level wrapper tests, artifact provenance checks, and strict docs
+- Delivered: strict version-1 policy and local-overlay validation, watchdog option mapping, immutable system and artifact
+  provenance, `-dev` identity, configuration-aware `mise` routing, and failure-safe retained artifact replacement
 
 ### Watchdog Enforcement (`watchdog-enforcement`)
 

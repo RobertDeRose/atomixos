@@ -110,7 +110,8 @@ parse policy itself. Lima tasks invoke the same wrapper inside the repository mo
 | `serial:*`, `_lima`, `gc`   | No                    | Commands do not construct configured AtomixOS outputs |
 
 Direct `nix build .#...` and `nix flake check` remain pure and committed-policy-only. External `nixpkgs` helper builds
-also remain outside this contract.
+also remain outside this contract. When `mise run build` exports a local-override image with `-o <path>`, the destination
+filename must include `-dev`; an unmarked destination is rejected before evaluation or retained-link mutation.
 
 ## Failure and Retention Contract
 

@@ -116,8 +116,23 @@ test "$(readlink "$TEST_REPO/.gcroots/bundles/rauc-bundle.1")" != "$TEST_REPO/ol
 test ! -e "$TEST_REPO/.gcroots/images/image.1.new"
 test ! -e "$TEST_REPO/.gcroots/bundles/rauc-bundle.1.new"
 
-# Lima executes the same fixed-path wrapper inside the mounted repository.
+# Local-override exports cannot discard durable -dev filename identity.
 printf '%s\n' '[watchdog]' 'enable_hardware = true' >"$TEST_REPO/build.dev.toml"
+: >"$log"
+if (cd "$TEST_REPO" && usage_output="$TEST_REPO/atomixos.img" ./scripts/build.sh) \
+	>"$TEST_REPO/export.out" 2>"$TEST_REPO/export.err"; then
+	echo "local override export without -dev unexpectedly succeeded" >&2
+	exit 1
+fi
+grep -F 'ERROR: local override output filename must include -dev: atomixos.img' \
+	"$TEST_REPO/export.err"
+test ! -e "$TEST_REPO/atomixos.img"
+test ! -s "$log"
+(cd "$TEST_REPO" && usage_output="$TEST_REPO/atomixos-dev.img" ./scripts/build.sh) \
+	>"$TEST_REPO/export-dev.out" 2>"$TEST_REPO/export-dev.err"
+test -f "$TEST_REPO/atomixos-dev.img"
+
+# Lima executes the same fixed-path wrapper inside the mounted repository.
 : >"$log"
 (cd "$TEST_REPO" && usage_lima=true usage_vm=test-vm ./scripts/build.sh) \
 	>"$TEST_REPO/lima.out" 2>"$TEST_REPO/lima.err"
