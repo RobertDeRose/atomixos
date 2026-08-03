@@ -3,8 +3,8 @@
 ## Delivery Summary
 
 - Beads feature root: `atomixos-aua`
-- Status: implementation, physical watchdog-path validation, documentation, and validation close-out complete; ready
-  for delivery
+- Status: delivered
+- Merge commit: `27a049364e7581cf9d9943e4e5f787bf70735c19` (fast-forward into `dev`)
 - Pull request: not created
 - Design record: [design.md](design.md)
 
@@ -48,8 +48,8 @@ systemctl show --property WatchdogDevice --property RuntimeWatchdogUSec --proper
 journalctl -b --no-pager | grep -E 'Using hardware watchdog|Watchdog running'
 ```
 
-Physical watchdog tests are destructive and require serial capture, recovery access, and a known-good slot. Rollback and
-72-hour soak validation remain part of the RAUC OTA campaign.
+Physical watchdog tests are destructive and require serial capture, recovery access, and a known-good slot. External
+reset timing, rollback, and 72-hour soak validation remain part of the RAUC OTA campaign.
 
 ## Reference and Contracts
 
@@ -96,6 +96,7 @@ Physical watchdog tests are destructive and require serial capture, recovery acc
 
 ### Deferred Work
 
+- External watchdog reset timing validation.
 - Three-attempt watchdog rollback on an unconfirmed RAUC-updated slot.
 - 72-hour normal-workload soak.
 - Release-profile enablement remains deferred until the RAUC OTA validation campaign completes.
@@ -116,6 +117,7 @@ Physical watchdog tests are destructive and require serial capture, recovery acc
 - `docs/src/unknowns.md`
 - `docs/src/planned-features.md`
 - `docs/src/features/watchdog-enforcement/index.md`
+- `docs/src/features/watchdog-enforcement/design.md`
 - `docs/src/features/index.md`
 - `docs/src/SUMMARY.md`
 
@@ -124,5 +126,6 @@ Physical watchdog tests are destructive and require serial capture, recovery acc
 Implementation and physical evidence were recorded on Beads task `atomixos-aua.7.32`; implementation coordinator
 `atomixos-aua.7`, documentation reconciliation `atomixos-aua.8`, validation `atomixos-aua.9`, and the delivery/drift
 reviews `atomixos-aua.10` and `atomixos-aua.11` are complete. The repository-wide check waiver and its residual risk are
-recorded on `atomixos-aua.9`. Delivery `atomixos-aua.12` remains open pending an explicit delivery choice; RAUC
-rollback/soak work remains explicitly deferred to the OTA campaign.
+recorded on `atomixos-aua.9`. Delivery `atomixos-aua.12` and feature root `atomixos-aua` are complete after the
+fast-forward delivery to `dev`; merge commit `27a049364e7581cf9d9943e4e5f787bf70735c19` was used and no pull request was
+created. External reset timing, RAUC rollback, and soak work remain explicitly deferred to the OTA campaign.

@@ -6,8 +6,8 @@
 
 Current status: Rock64 runtime watchdog enforcement is opt-in and intentionally disabled by default. Both the onboard
 RK3328 DesignWare path and the external TI UCC2946 path have passed physical device and ownership validation; the
-internal path has also passed induced-reboot validation. Rollback and 72-hour soak evidence remain deferred to RAUC OTA
-testing.
+internal path has also passed induced-reboot validation. External reset timing, rollback, and 72-hour soak evidence
+remain deferred to RAUC OTA testing.
 
 ### Hardware watchdog enforcement remains opt-in
 
@@ -23,7 +23,7 @@ settings are enabled only when `atomixos.watchdog.enableHardware = true`.
 ### Reboot watchdog
 
 A separate reboot watchdog (`RebootWatchdogSec`) remains disabled by default in committed policy. It is available in
-opt-in images; release-profile enablement remains gated on RAUC rollback and soak validation.
+opt-in images; release-profile enablement remains gated on external reset timing, RAUC rollback, and soak validation.
 
 #### Scenario: Reboot hang recovery
 
