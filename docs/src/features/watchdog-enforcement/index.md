@@ -4,7 +4,7 @@
 
 - Beads feature root: `atomixos-aua`
 - Status: delivered
-- Merge commit: `27a049364e7581cf9d9943e4e5f787bf70735c19` (fast-forward into `dev`)
+- Merge commit: `f9367607ce49f10cb48c98b68f82d4d8bb2346f8` (fast-forward into `dev`)
 - Pull request: not created
 - Design record: [design.md](design.md)
 
@@ -127,5 +127,5 @@ Implementation and physical evidence were recorded on Beads task `atomixos-aua.7
 `atomixos-aua.7`, documentation reconciliation `atomixos-aua.8`, validation `atomixos-aua.9`, and the delivery/drift
 reviews `atomixos-aua.10` and `atomixos-aua.11` are complete. The repository-wide check waiver and its residual risk are
 recorded on `atomixos-aua.9`. Delivery `atomixos-aua.12` and feature root `atomixos-aua` are complete after the
-fast-forward delivery to `dev`; merge commit `27a049364e7581cf9d9943e4e5f787bf70735c19` was used and no pull request was
+fast-forward delivery to `dev`; merge commit `f9367607ce49f10cb48c98b68f82d4d8bb2346f8` was used and no pull request was
 created. External reset timing, RAUC rollback, and soak work remain explicitly deferred to the OTA campaign.
