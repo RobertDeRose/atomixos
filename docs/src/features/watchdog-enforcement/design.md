@@ -13,8 +13,9 @@
 
 ## Feature Summary
 
-Finish opt-in systemd hardware watchdog enforcement without enabling it in release profiles until physical Rock64
-reboot, rollback, and soak evidence proves the policy safe. Build-time configuration is owned by the separate Build
+Finish opt-in systemd hardware watchdog enforcement without enabling it in release profiles by default. The onboard
+RK3328 and external UCC2946 paths have passed physical Rock64 device and induced-reboot validation. Rollback and soak
+evidence are deferred to the RAUC OTA validation campaign. Build-time configuration is owned by the separate Build
 Configuration feature; runtime `config.toml` does not control watchdog policy.
 
 ## User Intent
@@ -39,8 +40,8 @@ The user made these specification decisions during review:
 3. Verify that enabled-but-unavailable hardware fails open with an observable warning.
 4. Verify that watchdog resets on a newly updated, unconfirmed slot consume U-Boot boot attempts and cause fallback
    after three failed attempts.
-5. Record physical Rock64 evidence for watchdog presence, reboot timing, rollback, and a 72-hour soak before release
-   enablement.
+5. Record physical Rock64 evidence for watchdog presence and reboot timing before release enablement; record rollback
+   and 72-hour soak evidence during the RAUC OTA validation campaign.
 
 ## Non-Goals
 
@@ -54,20 +55,24 @@ The user made these specification decisions during review:
 
 ## User-Facing Behavior
 
-A supported image build can opt into hardware watchdog enforcement through the Build Configuration interface. Omitted
-watchdog timeout settings use `30s` and `10min`. Disabled builds retain current VM, development, and Rock64 behavior.
+A supported image build can opt into hardware watchdog enforcement through the Build Configuration interface. Set
+`watchdog.backend = "internal"` for the onboard RK3328 DesignWare device or `backend = "external"` for the example TI
+UCC2946/I2C-expander path. Omitted watchdog timeout settings use `30s` and `10min`. Set
+`watchdog.enable_hardware = false` to disable enforcement; the backend remains a required build-policy field but has no
+runtime effect. Disabled builds retain current VM, development, and Rock64 behavior.
 
 When enforcement is enabled but systemd cannot use a watchdog device, the system continues booting and emits a warning.
 The absence does not independently fail update verification, mark a slot bad, or trigger rollback.
 
-Release and deployment profiles remain disabled until the hardware checklist records successful presence, reboot,
-rollback, and soak evidence.
+Release and deployment profiles remain disabled until the hardware checklist records successful presence and reboot
+evidence. Rollback and soak evidence are tracked as deferred RAUC OTA validation work.
 
 ## Requirements
 
 ### Functional Requirements
 
-- Use the canonical `atomixos.watchdog.enableHardware` NixOS option.
+- Use the canonical `atomixos.watchdog.enableHardware` NixOS option and the build-policy backend enum (`internal` or
+  `external`).
 - Render `RuntimeWatchdogSec` and `RebootWatchdogSec` only when hardware enforcement is enabled.
 - Default enabled values to `30s` and `10min`.
 - Consume build-stage watchdog settings supplied by the Build Configuration feature; do not read provisioning
@@ -104,9 +109,9 @@ rollback, and soak evidence.
 manager settings, and installs the boot-count helper. `nix/tests/watchdog-module.nix` evaluates disabled, enabled, and
 custom values. `nix/tests/rauc-watchdog.nix` simulates rollback with a QEMU watchdog and custom file-backed counter.
 
-The Rock64 kernel configuration includes DesignWare watchdog support, but current repository evidence does not prove
-runtime driver registration or device availability on physical hardware. The hardware checklist has no recorded pass
-results.
+The Rock64 kernel configuration includes DesignWare watchdog support. Physical validation now proves runtime
+registration, device ownership, and induced reset for both the onboard and external paths. The hardware checklist still
+tracks rollback and soak evidence separately.
 
 The current boot-count service is imported by the base module even when RAUC is disabled. This coupling must be removed
 while preserving the RAUC-enabled U-Boot and custom-backend paths.
@@ -122,8 +127,11 @@ path.
 
 ### Systemd Watchdog Ownership
 
-Systemd PID 1 remains the sole owner of hardware watchdog kicks. AtomixOS does not add a heartbeat daemon. When enabled,
-manager settings use the configured build values, defaulting to:
+Systemd PID 1 remains the sole owner of hardware watchdog kicks. AtomixOS does not add a heartbeat daemon. On the
+Rock64, build policy selects either the onboard RK3328 DesignWare watchdog or the external UCC2946 path. The
+onboard path uses the kernel `dw_wdt` driver and `/dev/watchdog-internal`; the external path uses `gpio-wdt` over the
+I2C GPIO expander at address `0x41` on bus 1 and `/dev/watchdog-external`. When enabled, manager settings use the
+configured build values, defaulting to:
 
 - `RuntimeWatchdogSec=30s`
 - `RebootWatchdogSec=10min`
@@ -196,7 +204,8 @@ method spike must stop without destructive execution if those prerequisites are 
 The selected method must be repeatable, stop watchdog kicks without corrupting persistent state, preserve a recovery
 path, and produce identifiable serial evidence. It must define a test-only startup fixture that prevents the updated
 slot from being marked good and triggers before `os-verification` can confirm it; that fixture must not enter a
-production profile. `kill -STOP 1` is not accepted without proof because PID 1 signal handling is special.
+production profile. The current Rock64 fixture, `run0 kill -STOP 1`, has now been physically validated and remains
+board-specific rather than a general production command.
 
 ## Documentation Impact
 
@@ -232,37 +241,31 @@ check as evidence.
 
 ### Physical Rock64
 
-- Confirm `dw_wdt` registration and `/dev/watchdog` presence.
-- Record one watchdog-triggered reset beginning within 35 seconds of confirmed kick cessation for the default
-  30-second runtime timeout.
+- Confirmed onboard `dw_wdt` registration, the 16-cell TOP table, and `/dev/watchdog-internal` ownership.
+- Confirmed the external UCC2946/PCA9536-compatible path and `/dev/watchdog-external` ownership.
+- Recorded an internal watchdog-triggered reset with a fresh serial U-Boot sequence and SSH recovery.
 - Record three consumed attempts and fallback from a newly updated, unconfirmed slot.
 - Record 72 hours under normal workload without an unexpected watchdog reset.
 
 ## Implementation Decomposition
 
-Beads is authoritative for executable work. Remaining slices are:
+Beads is authoritative for executable work. Delivered slices include the Build Configuration consumer, RAUC-only
+boot-count integration, fail-open missing-device behavior, the bounded Rock64 hang fixture, both physical watchdog paths,
+and the internal induced-reboot test. Remaining slices are:
 
-1. Deliver the separate Build Configuration prerequisite with watchdog as its first consumer.
-2. Gate boot-count integration to RAUC-enabled profiles and add automated coverage.
-3. Verify or add warning-only fail-open behavior for an enabled profile without a usable watchdog.
-4. Run the bounded hang-method spike.
-5. Confirm physical driver and device availability.
-6. Execute and record one watchdog reboot and boot-attempt consumption.
-7. Execute and record three-attempt rollback on an unconfirmed update slot.
-8. Execute and record the 72-hour soak.
+1. Execute and record three-attempt rollback on an unconfirmed update slot.
+2. Execute and record the 72-hour soak.
 
 Physical evidence-only tasks need not create repository commits. Any defect found during execution becomes a separate
-bounded implementation task with tests, documentation impact, and a commit.
+bounded implementation task with tests, documentation impact, and a commit. The remaining physical gates are RAUC
+rollback and the 72-hour soak.
 
 ## Dependencies and Parallelism
 
-- Build Configuration (`atomixos-mol-0ws`) blocks Watchdog Enforcement delivery and all physical acceptance using the
-  supported build interface; its delivery gate does not block independent software cleanup.
-- Boot-count service cleanup and missing-device warning coverage proceed after specification reconciliation while
-  Build Configuration is implemented.
-- After Build Configuration, device confirmation and hang-method selection are parallel-safe.
-- Both block the first reboot test; reboot blocks rollback; rollback blocks the 72-hour soak.
-- Every implementation child also depends on specification reconciliation.
+- Build Configuration (`atomixos-mol-0ws`) supplied the supported build interface used for physical acceptance.
+- Device confirmation and hang-method selection are complete; the internal reboot test is complete.
+- Rollback remains a prerequisite for the 72-hour soak and both remain part of the RAUC OTA campaign.
+- Every implementation child remains traceable through Beads and the feature design.
 
 ## Rollout and Migration
 
@@ -285,7 +288,8 @@ is recorded.
 - Embedding a one-off watchdog build parser in this feature: rejected in favor of reusable Build Configuration.
 - Fail-closed missing-device behavior: rejected by user decision; boot and update verification continue.
 - Custom heartbeat daemon: rejected because systemd already owns hardware watchdog integration.
-- `kill -STOP 1` as an assumed hang test: rejected unless the bounded spike proves it safe and effective.
+- Treating `kill -STOP 1` as a portable hang test: rejected; it is documented only as the validated fixture for the
+  current Rock64 test image and requires serial/recovery prerequisites.
 
 ## Open Questions
 

@@ -7,6 +7,7 @@
 {
   atomixos.watchdog = {
     enableHardware = effectiveBuildConfig.watchdog.enableHardware;
+    backend = effectiveBuildConfig.watchdog.backend;
     runtimeWatchdogSec = effectiveBuildConfig.watchdog.runtimeTimeout;
     rebootWatchdogSec = effectiveBuildConfig.watchdog.rebootTimeout;
   };

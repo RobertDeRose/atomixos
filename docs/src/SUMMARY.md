@@ -80,6 +80,7 @@
   - [Provisioning API Live Schema Contract](./features/provisioning-api-live-schema-contract/index.md)
   - [Typed Partial Provisioning API](./features/typed-partial-provisioning-api/index.md)
   - [Boot UI HTMX](./features/boot-ui-htmx/index.md)
+  - [Watchdog Enforcement](./features/watchdog-enforcement/index.md)
   - [Config Reapply Improvements](./features/config-reapply-improvements/index.md)
   - [Build Configuration](./features/build-configuration/index.md)
   <!-- END IMPLEMENTED FEATURES -->

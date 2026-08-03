@@ -81,18 +81,17 @@ if gpio input ${recovery_button_pin}; then
   fi
 fi
 
-# Fallback: if RAUC bootmeth didn't set distro_rootpart (e.g. env_save failed
-# on first boot with uninitialized SPI flash), derive it from distro_bootpart.
+# Derive the rootfs from the selected boot partition. RAUC bootmeth can leave
+# a stale distro_rootpart in the environment, so never trust that value without
+# checking it against distro_bootpart.
 # Boot partition 1 → rootfs partition 2, boot partition 3 → rootfs partition 4.
-if test -z "${distro_rootpart}"; then
-  if test "${distro_bootpart}" = "1"; then
-    setenv distro_rootpart 2
-  elif test "${distro_bootpart}" = "3"; then
-    setenv distro_rootpart 4
-  else
-    setenv distro_rootpart 2
-  fi
-  echo "WARNING: distro_rootpart was empty, defaulted to ${distro_rootpart}"
+if test "${distro_bootpart}" = "1"; then
+  setenv distro_rootpart 2
+elif test "${distro_bootpart}" = "3"; then
+  setenv distro_rootpart 4
+else
+  setenv distro_rootpart 2
+  echo "WARNING: unknown distro_bootpart, defaulted rootfs to ${distro_rootpart}"
 fi
 
 # RAUC's U-Boot backend needs the boot slot identity (boot.0 / boot.1), not the

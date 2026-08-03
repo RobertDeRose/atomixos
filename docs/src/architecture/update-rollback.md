@@ -68,16 +68,19 @@ is enabled. After this, all subsequent boots use the full health-check path.
 
 ## Watchdog Integration
 
-The RK3328 hardware watchdog (`dw_wdt`) integration is opt-in through `atomixos.watchdog.enableHardware`. When enabled,
-systemd uses these default manager settings:
+Hardware watchdog enforcement is opt-in through the immutable `build.toml` policy field
+`watchdog.enable_hardware`. When enabled, `watchdog.backend = "internal"` selects the RK3328 DesignWare device
+`/dev/watchdog-internal`; `watchdog.backend = "external"` selects the TI UCC2946 path
+`/dev/watchdog-external` through the I2C expander at bus 1/address `0x41`. Systemd remains the sole owner of either
+path and uses these default manager settings:
 
 - **Runtime watchdog**: 30 seconds -- if systemd hangs, the device reboots
 - **Reboot watchdog**: 10 minutes -- if a reboot hangs, the watchdog forces a hard reset
 
-These settings remain disabled by default on Rock64, VM, and development images until physical Rock64 boot-reliability
-validation approves active enforcement. If an enabled system has no usable watchdog device,
-`watchdog-device-check.service` warns and exits successfully: boot and update verification continue, and the condition
-does not itself mutate RAUC state.
+Both paths have passed physical Rock64 device and induced-reboot validation. Enforcement remains disabled by default on
+Rock64, VM, and development images; rollback and soak validation remain deferred to the RAUC OTA campaign. If an
+enabled system has no usable watchdog device, `watchdog-device-check.service` warns and exits successfully: boot and
+update verification continue, and the condition does not itself mutate RAUC state.
 
 The boot-count helper package and service are present only when RAUC is enabled; non-RAUC profiles do not carry this
 update rollback integration. The intended hardware rollback behavior applies to a newly updated, still-unconfirmed slot.

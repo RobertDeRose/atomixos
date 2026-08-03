@@ -54,6 +54,15 @@ in
   options.atomixos.watchdog = {
     enableHardware = lib.mkEnableOption "systemd hardware watchdog enforcement";
 
+    backend = lib.mkOption {
+      type = lib.types.enum [
+        "internal"
+        "external"
+      ];
+      default = "external";
+      description = "Watchdog implementation selected by immutable build policy on hardware-specific systems.";
+    };
+
     runtimeWatchdogSec = lib.mkOption {
       type = lib.types.str;
       default = "30s";
@@ -65,6 +74,12 @@ in
       default = "10min";
       description = "systemd RebootWatchdogSec value used when hardware watchdog enforcement is enabled.";
     };
+
+    device = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Stable watchdog device path selected by systemd when hardware enforcement is enabled.";
+    };
   };
 
   config = {
@@ -73,6 +88,7 @@ in
     systemd.settings.Manager = lib.mkIf cfg.enableHardware {
       RuntimeWatchdogSec = cfg.runtimeWatchdogSec;
       RebootWatchdogSec = cfg.rebootWatchdogSec;
+      WatchdogDevice = lib.mkIf (cfg.device != null) cfg.device;
     };
 
     environment.systemPackages = lib.optionals config.atomixos.rauc.enable [

@@ -19,5 +19,6 @@ remains in [Planned features](../planned-features.md) and Beads.
 - [Boot UI HTMX](boot-ui-htmx/index.md)
 - [Config Reapply Improvements](config-reapply-improvements/index.md)
 - [Build Configuration](build-configuration/index.md)
+- [Watchdog Enforcement](watchdog-enforcement/index.md)
 
 <!-- END IMPLEMENTED FEATURES -->

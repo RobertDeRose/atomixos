@@ -41,8 +41,19 @@ let
       {
         atomixos.watchdog = {
           enableHardware = true;
+          backend = "internal";
           runtimeWatchdogSec = "45s";
           rebootWatchdogSec = "5min";
+        };
+      }
+    ]).config;
+  external =
+    (evalSystem [
+      nonRaucModule
+      {
+        atomixos.watchdog = {
+          enableHardware = true;
+          device = "/dev/watchdog-external";
         };
       }
     ]).config;
@@ -81,18 +92,26 @@ pkgs.runCommand "watchdog-module-check" { } ''
   set -euo pipefail
 
   test ${builtins.toJSON (defaults.atomixos.watchdog.enableHardware == false)} = true
+  test ${builtins.toJSON (defaults.atomixos.watchdog.backend == "external")} = true
   test ${builtins.toJSON (defaults.atomixos.watchdog.runtimeWatchdogSec == "30s")} = true
   test ${builtins.toJSON (defaults.atomixos.watchdog.rebootWatchdogSec == "10min")} = true
   test ${builtins.toJSON (!(defaults.systemd.settings.Manager ? RuntimeWatchdogSec))} = true
   test ${builtins.toJSON (!(defaults.systemd.settings.Manager ? RebootWatchdogSec))} = true
+  test ${builtins.toJSON (defaults.atomixos.watchdog.device == null)} = true
+  test ${builtins.toJSON (!(defaults.systemd.settings.Manager ? WatchdogDevice))} = true
   test ${builtins.toJSON (!builtins.hasAttr "watchdog-boot-count" defaults.systemd.services)} = true
   test ${builtins.toJSON (!hasBootCountPackage defaults)} = true
 
   test ${builtins.toJSON (enabled.systemd.settings.Manager.RuntimeWatchdogSec == "30s")} = true
   test ${builtins.toJSON (enabled.systemd.settings.Manager.RebootWatchdogSec == "10min")} = true
 
+  test ${builtins.toJSON (custom.atomixos.watchdog.backend == "internal")} = true
   test ${builtins.toJSON (custom.systemd.settings.Manager.RuntimeWatchdogSec == "45s")} = true
   test ${builtins.toJSON (custom.systemd.settings.Manager.RebootWatchdogSec == "5min")} = true
+
+  test ${
+    builtins.toJSON (external.systemd.settings.Manager.WatchdogDevice == "/dev/watchdog-external")
+  } = true
 
   test ${builtins.toJSON (hasBootCountPackage customRauc)} = true
   test ${builtins.toJSON (serviceContract customService)} = true

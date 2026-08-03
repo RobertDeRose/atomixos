@@ -378,6 +378,8 @@
 
           allTests = raucTests // netTests;
           evalChecks = {
+            boot-script = import ./nix/tests/boot-script.nix netTestArgs;
+            device-tree-overlay = import ./nix/tests/device-tree-overlay.nix netTestArgs;
             build-config-workflow = import ./nix/tests/build-config-workflow.nix netTestArgs;
             build-configuration = import ./nix/tests/build-configuration.nix netTestArgs;
             nixstasis-module = import ./nix/tests/nixstasis-module.nix netTestArgs;

@@ -1,17 +1,17 @@
 # Watchdog
 
-> Source: `docs/src/features/rock64-ab-image/design.md#watchdog`
+> Source: `docs/src/features/watchdog-enforcement/design.md`
 
 ## Requirements
 
-Current status: implementation hooks are present, but Rock64 runtime watchdog enforcement is opt-in and intentionally
-disabled by default until physical boot-reliability validation approves active enforcement. The scenarios below define the
-current default behavior and the opt-in target settings.
+Current status: Rock64 runtime watchdog enforcement is opt-in and intentionally disabled by default. Both the onboard
+RK3328 DesignWare path and the external TI UCC2946 path have passed physical device, ownership, and induced-reboot
+validation. Rollback and 72-hour soak evidence remain deferred to RAUC OTA testing.
 
-### ADDED: Hardware watchdog target is deferred
+### Hardware watchdog enforcement remains opt-in
 
-The RK3328 hardware watchdog (`dw_wdt`) target is documented, but systemd manager watchdog settings are enabled only when
-`atomixos.watchdog.enableHardware = true`.
+The RK3328 hardware watchdog (`dw_wdt`) and the external UCC2946 path are available, but systemd manager watchdog
+settings are enabled only when `atomixos.watchdog.enableHardware = true`.
 
 #### Scenario: Watchdog triggers on hang
 
@@ -19,10 +19,10 @@ The RK3328 hardware watchdog (`dw_wdt`) target is documented, but systemd manage
 - Then AtomixOS leaves `RuntimeWatchdogSec` unset
 - And the opt-in target remains `RuntimeWatchdogSec=30s`
 
-### ADDED: Reboot watchdog
+### Reboot watchdog
 
-A separate reboot watchdog (`RebootWatchdogSec`) remains disabled by default until Rock64 boot reliability validation
-approves active watchdog enforcement.
+A separate reboot watchdog (`RebootWatchdogSec`) remains disabled by default in committed policy. It is available in
+opt-in images; release-profile enablement remains gated on RAUC rollback and soak validation.
 
 #### Scenario: Reboot hang recovery
 
@@ -39,12 +39,37 @@ version = 1
 
 [watchdog]
 enable_hardware = false
+backend = "external"
 runtime_timeout = "30s"
 reboot_timeout = "10min"
 ```
 
-The fields map to `enableHardware`, `runtimeWatchdogSec`, and `rebootWatchdogSec` respectively. Runtime values must
-resolve to 10 seconds–5 minutes; reboot values must resolve to 1–10 minutes. The committed defaults remain:
+The fields map to `enableHardware`, `backend`, `runtimeWatchdogSec`, and `rebootWatchdogSec` respectively. `backend`
+accepts `internal` for the RK3328 DesignWare watchdog or `external` for the UCC2946 path through the I2C GPIO
+expander. Runtime values must resolve to 10 seconds–5 minutes; reboot values must resolve to 1–10 minutes. The
+committed defaults remain:
+
+Build-time selection examples are:
+
+```toml
+# Onboard watchdog
+[watchdog]
+enable_hardware = true
+backend = "internal"
+
+# Or the external SOM watchdog:
+# backend = "external"
+
+# Or disable enforcement completely:
+# enable_hardware = false
+```
+
+The full committed document must retain both `enable_hardware` and `backend`; a partial `build.dev.toml` overlay may
+contain only the fields being tested. With `enable_hardware = false`, systemd leaves all watchdog manager settings
+unset, and the external always-running device-tree node is not included. The backend value is retained only so a future
+enablement is explicit.
+
+The committed defaults remain:
 
 - **Runtime**: 30 seconds -- aggressive enough to catch hangs quickly, long enough to avoid false triggers during normal
   operation
@@ -53,6 +78,19 @@ resolve to 10 seconds–5 minutes; reboot values must resolve to 1–10 minutes.
 Accepted policy is not proof that a physical watchdog implements the exact requested value. Systemd may select the
 nearest timeout supported by the driver and device. Physical validation must record the programmed hardware timeout and
 confirm observed reset timing before release enablement.
+
+### Internal RK3328 watchdog path
+
+The Rock64's onboard Synopsys DesignWare watchdog is selected with `backend = "internal"`. Its device-tree overlay
+supplies the RK3328 TOP interval table, and the image exposes it to systemd as `/dev/watchdog-internal`.
+
+### External SOM watchdog path
+
+The SOM watchdog is a TI UCC2946 driven through a four-bit I2C GPIO expander at address `0x41` on I2C bus 1. The
+expander's GPIO0 is held low to enable the watchdog and GPIO1 is toggled for `WDI`. The kernel `gpio-pca953x` and
+`gpio-wdt` drivers expose this path as `/dev/watchdog-external`; systemd selects that stable udev alias when hardware
+watchdog enforcement is enabled. The external device-tree node is included only when both the external backend and
+hardware enforcement are selected. The legacy userspace `i2cset` kicker is not used.
 
 ### ADDED: Missing hardware fails open with a warning
 

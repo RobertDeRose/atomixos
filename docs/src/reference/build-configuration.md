@@ -12,16 +12,18 @@ version = 1
 
 [watchdog]
 enable_hardware = false
+backend = "external"
 runtime_timeout = "30s"
 reboot_timeout = "10min"
 ```
 
-| Field                      | Type    | Required in `build.toml` | Default | Validation                        |
-|----------------------------|---------|--------------------------|---------|-----------------------------------|
-| `version`                  | Integer | Yes                      | `1`     | Must equal `1`                    |
-| `watchdog.enable_hardware` | Boolean | Yes                      | `false` | `true` or `false`                 |
-| `watchdog.runtime_timeout` | String  | Yes                      | `30s`   | Inclusive range: 10 seconds–5 min |
-| `watchdog.reboot_timeout`  | String  | Yes                      | `10min` | Inclusive range: 1 minute–10 min  |
+| Field                      | Type    | Required in `build.toml` | Default    | Validation                        |
+|----------------------------|---------|--------------------------|------------|-----------------------------------|
+| `version`                  | Integer | Yes                      | `1`        | Must equal `1`                    |
+| `watchdog.enable_hardware` | Boolean | Yes                      | `false`    | `true` or `false`                 |
+| `watchdog.backend`         | String  | Yes                      | `external` | `internal` or `external`          |
+| `watchdog.runtime_timeout` | String  | Yes                      | `30s`      | Inclusive range: 10 seconds–5 min |
+| `watchdog.reboot_timeout`  | String  | Yes                      | `10min`    | Inclusive range: 1 minute–10 min  |
 
 Duration strings contain a positive integer followed immediately by one of `ms`, `s`, `min`, or `h`. Signs, zero,
 decimals, compound spans, whitespace, unitless numbers, values that overflow conversion, and values outside the field's
@@ -39,11 +41,59 @@ omitted field inherits the committed value. For example:
 ```toml
 [watchdog]
 enable_hardware = true
+backend = "internal"
 runtime_timeout = "45s"
 ```
 
 The overlay may omit `version`. If present, `version` must equal `1`. It cannot remove a committed field or introduce an
 unknown field. The effective document must still be complete after merging.
+
+## Watchdog Backend Selection
+
+`watchdog.enable_hardware` is the master switch. `watchdog.backend` remains required even when enforcement is disabled;
+it selects the hardware path that will be used when enforcement is enabled. Neither setting is read from runtime
+`config.toml`.
+
+Use an ignored `build.dev.toml` for a local test build, or put the same values in committed `build.toml` for a promoted
+build. The timeout fields may be omitted from a local overlay and inherit the committed values.
+
+### Internal Rock64 Watchdog
+
+The onboard RK3328 DesignWare watchdog uses the corrected TOP interval table and is exposed as
+`/dev/watchdog-internal`:
+
+```toml
+[watchdog]
+enable_hardware = true
+backend = "internal"
+```
+
+### External SOM Watchdog
+
+The external example path uses the TI UCC2946 through the PCA/TCA9536-compatible I2C expander at bus 1, address `0x41`.
+It is exposed as `/dev/watchdog-external`:
+
+```toml
+[watchdog]
+enable_hardware = true
+backend = "external"
+```
+
+Systemd remains the sole owner of either device. The legacy userspace `i2cset` kicker is not used.
+
+### Disable Watchdog Enforcement
+
+Keep a valid backend value but set the master switch to `false`:
+
+```toml
+[watchdog]
+enable_hardware = false
+backend = "internal"
+```
+
+With enforcement disabled, systemd does not set `WatchdogDevice`, `RuntimeWatchdogSec`, or `RebootWatchdogSec`. The
+external always-running device-tree node is also omitted, so the external hardware is not armed accidentally. The
+backend choice has no runtime effect until enforcement is enabled.
 
 ## Strict Validation
 
@@ -69,6 +119,7 @@ version = 1
 
 [watchdog]
 enable_hardware = false
+backend = "external"
 runtime_timeout = "30s"
 reboot_timeout = "10min"
 ```

@@ -43,8 +43,8 @@ WARNING: applying local build.dev.toml overrides; outputs will be marked -dev.
 ```
 
 The overlay may contain only fields being tested. See [Build Configuration](./reference/build-configuration.md) for the
-schema and task matrix. Local-override image and bundle filenames include `-dev`, and their metadata records
-`local_override` as `true`.
+schema, watchdog backend examples, disablement behavior, and task matrix. Local-override image and bundle filenames
+include `-dev`, and their metadata records `local_override` as `true`.
 
 To promote a tested change, copy the intended values into committed `build.toml`, remove `build.dev.toml`, run
 `mise run check`, and rebuild. To abandon or recover from a malformed override, remove or rename `build.dev.toml` and

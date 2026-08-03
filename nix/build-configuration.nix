@@ -7,6 +7,7 @@ let
   ];
   allowedWatchdog = [
     "enable_hardware"
+    "backend"
     "runtime_timeout"
     "reboot_timeout"
   ];
@@ -85,6 +86,18 @@ let
             [ ]
           else
             [ "${name}: watchdog.enable_hardware: expected a boolean" ];
+        backendErrors =
+          if !(builtins.hasAttr "backend" value) then
+            [ ]
+          else if !builtins.isString value.backend then
+            [ "${name}: watchdog.backend: expected \"internal\" or \"external\"" ]
+          else
+            lib.optional (
+              !(builtins.elem value.backend [
+                "internal"
+                "external"
+              ])
+            ) "${name}: watchdog.backend: expected \"internal\" or \"external\"";
         runtimeErrors = lib.optionals (builtins.hasAttr "runtime_timeout" value) (durationErrors {
           inherit name;
           field = "runtime_timeout";
@@ -105,6 +118,7 @@ let
       unknownFieldErrors name "watchdog." allowedWatchdog value
       ++ requiredErrors
       ++ boolErrors
+      ++ backendErrors
       ++ runtimeErrors
       ++ rebootErrors;
 
@@ -148,6 +162,7 @@ let
       ""
       "[watchdog]"
       "enable_hardware = ${if document.watchdog.enable_hardware then "true" else "false"}"
+      ''backend = "${document.watchdog.backend}"''
       ''runtime_timeout = "${document.watchdog.runtime_timeout}"''
       ''reboot_timeout = "${document.watchdog.reboot_timeout}"''
       ""
@@ -205,6 +220,7 @@ in
         artifactSuffix = if localOverride then "-dev" else "";
         watchdog = {
           enableHardware = effectiveDocument.watchdog.enable_hardware;
+          backend = effectiveDocument.watchdog.backend;
           runtimeTimeout = effectiveDocument.watchdog.runtime_timeout;
           rebootTimeout = effectiveDocument.watchdog.reboot_timeout;
         };

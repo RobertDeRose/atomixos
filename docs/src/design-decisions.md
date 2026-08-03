@@ -66,13 +66,16 @@ applied via the kernel config (not U-Boot patches), keeping the build simple.
 
 ## Decision 6: Watchdog strategy
 
-**Choice**: defer active systemd hardware watchdog enforcement while keeping 30s runtime / 10min reboot timeouts as the
-target settings.
+**Choice**: keep active systemd hardware watchdog enforcement opt-in and disabled by default, while supporting
+build-time selection of the onboard RK3328 DesignWare watchdog or the external TI UCC2946 path. The target settings are
+30s runtime and 10min reboot.
 
-**Rationale**: Rock64 boot reliability validation is not complete. The target values remain documented, but the current
-release leaves `systemd.settings.Manager = { }` to avoid watchdog-triggered reset loops during development.
+**Rationale**: Both watchdog paths have passed physical Rock64 device and induced-reboot validation, but rollback and
+72-hour soak evidence remain part of the RAUC OTA campaign. The default-disabled policy avoids enabling enforcement in
+unvalidated release profiles.
 
-**Integration**: Once enabled, watchdog reboots feed directly into the boot-count rollback path.
+**Integration**: When enabled, systemd is the sole watchdog owner and watchdog reboots feed into the U-Boot boot-count
+rollback path.
 
 ## Decision 7: Local health-check (no phone-home)
 

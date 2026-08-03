@@ -14,6 +14,7 @@ let
 
     [watchdog]
     enable_hardware = false
+    backend = "external"
     runtime_timeout = "30s"
     reboot_timeout = "10min"
   '';
@@ -32,6 +33,7 @@ let
     overlayText = ''
       [watchdog]
       enable_hardware = true
+      backend = "internal"
       runtime_timeout = "45s"
     '';
   };
@@ -40,6 +42,7 @@ let
     ""
     "[watchdog]"
     "enable_hardware = false"
+    ''backend = "external"''
     ''runtime_timeout = "30s"''
     ''reboot_timeout = "10min"''
     ""
@@ -49,6 +52,7 @@ let
     ""
     "[watchdog]"
     "enable_hardware = true"
+    ''backend = "internal"''
     ''runtime_timeout = "45s"''
     ''reboot_timeout = "10min"''
     ""
@@ -112,6 +116,7 @@ pkgs.runCommand "build-configuration-check" { } ''
   set -euo pipefail
 
   test ${builtins.toJSON (defaults.watchdog.enableHardware == false)} = true
+  test ${builtins.toJSON (defaults.watchdog.backend == "external")} = true
   test ${builtins.toJSON (defaults.watchdog.runtimeTimeout == "30s")} = true
   test ${builtins.toJSON (defaults.watchdog.rebootTimeout == "10min")} = true
   test ${builtins.toJSON (!defaults.localOverride)} = true
@@ -131,6 +136,7 @@ pkgs.runCommand "build-configuration-check" { } ''
   test ${builtins.toJSON (defaults.artifactSuffix == "")} = true
 
   test ${builtins.toJSON overridden.watchdog.enableHardware} = true
+  test ${builtins.toJSON (overridden.watchdog.backend == "internal")} = true
   test ${builtins.toJSON (overridden.watchdog.runtimeTimeout == "45s")} = true
   test ${builtins.toJSON (overridden.watchdog.rebootTimeout == "10min")} = true
   test ${builtins.toJSON overridden.localOverride} = true
@@ -150,6 +156,7 @@ pkgs.runCommand "build-configuration-check" { } ''
 
   # Effective policy maps to immutable NixOS options and audit files.
   test ${builtins.toJSON (!committedSystem.atomixos.watchdog.enableHardware)} = true
+  test ${builtins.toJSON (committedSystem.atomixos.watchdog.backend == "external")} = true
   test ${builtins.toJSON (committedSystem.atomixos.watchdog.runtimeWatchdogSec == "30s")} = true
   test ${builtins.toJSON (committedSystem.atomixos.watchdog.rebootWatchdogSec == "10min")} = true
   test ${
@@ -161,6 +168,7 @@ pkgs.runCommand "build-configuration-check" { } ''
     )
   } = true
   test ${builtins.toJSON overriddenSystem.atomixos.watchdog.enableHardware} = true
+  test ${builtins.toJSON (overriddenSystem.atomixos.watchdog.backend == "internal")} = true
   test ${builtins.toJSON (overriddenSystem.atomixos.watchdog.runtimeWatchdogSec == "45s")} = true
   test ${
     builtins.toJSON (overriddenSystem.systemd.settings.Manager.RuntimeWatchdogSec == "45s")
@@ -219,6 +227,10 @@ pkgs.runCommand "build-configuration-check" { } ''
   '')} = true
   test ${builtins.toJSON schemaDiagnostic} = true
   test ${builtins.toJSON typeDiagnostic} = true
+  test ${builtins.toJSON (overlayFails ''
+    [watchdog]
+    backend = "sidecar"
+  '')} = true
 
   # Durations use the restricted grammar and converted policy bounds.
   test ${builtins.toJSON (overlayFails ''

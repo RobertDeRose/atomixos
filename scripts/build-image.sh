@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Build a flashable disk image for the Rock64 eMMC.
 # Called from the Nix derivation — variables are substituted by Nix:
-#   @kernel@       — path to kernel package (contains Image and dtbs/)
-#   @initrd@       — path to initrd package (contains initrd)
+#   @kernel@       — path to kernel package (contains Image)
+#   @deviceTree@   — path to overlaid device-tree directory
 #   @dtbPath@      — relative DTB path (e.g. rockchip/rk3328-rock64.dtb)
 #   @squashfs@     — path to squashfs image directory (contains rootfs.squashfs)
 #   @bootScript@   — path to boot-script directory (contains boot.scr)
@@ -77,7 +77,7 @@ mmd -i "$BOOT_VFAT" ::dtbs
 mmd -i "$BOOT_VFAT" ::dtbs/rockchip
 mcopy -i "$BOOT_VFAT" "@kernel@/Image" ::Image
 mcopy -i "$BOOT_VFAT" "@initrd@/initrd" ::initrd
-mcopy -i "$BOOT_VFAT" "@kernel@/dtbs/@dtbPath@" "::dtbs/rockchip/rk3328-rock64.dtb"
+mcopy -i "$BOOT_VFAT" "@deviceTree@/@dtbPath@" "::dtbs/rockchip/rk3328-rock64.dtb"
 mcopy -i "$BOOT_VFAT" "@bootScript@/boot.scr" ::boot.scr
 
 # Write boot vfat into the image at the correct offset
