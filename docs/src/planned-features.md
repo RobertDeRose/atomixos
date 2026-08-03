@@ -474,9 +474,9 @@ this page remains the human-readable roadmap.
 
 ### Watchdog Enforcement (`watchdog-enforcement`)
 
-- Status: partially completed; blocked by `build-configuration` and physical acceptance
-- Overview: Add opt-in hardware watchdog enforcement with `RuntimeWatchdogSec=30s` and
-  `RebootWatchdogSec=10min`, while keeping Rock64 release profiles disabled until physical validation passes.
+- Status: partially completed; physical watchdog paths accepted, blocked by RAUC rollback and soak validation
+- Overview: Add opt-in hardware watchdog enforcement with build-time selection of the onboard or external watchdog,
+  `RuntimeWatchdogSec=30s`, and `RebootWatchdogSec=10min`, while keeping Rock64 release profiles disabled by default.
 - Requirements:
   - Reuse the existing opt-in systemd manager watchdog settings
   - Keep active enforcement disabled by default
@@ -498,8 +498,8 @@ this page remains the human-readable roadmap.
 - Dependencies: `build-configuration`, a sacrificial Rock64, serial recovery, and hardware soak availability
 - Suggested validation: module evaluation checks, `rauc-watchdog` VM check, and ordered physical reboot, rollback, and
   72-hour soak evidence
-- Delivered so far: `atomixos.watchdog.*` options, opt-in rendered manager settings, default-disabled evaluation checks,
-  and hardware validation instructions.
+- Delivered so far: `atomixos.watchdog.*` options, internal/external build-time selection, default-disabled behavior,
+  fail-open checks, physical device and induced-reboot validation for both paths, and hardware validation instructions.
 
 ### USB WiFi (`usb-wifi`)
 

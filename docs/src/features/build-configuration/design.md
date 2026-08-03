@@ -67,6 +67,7 @@ version = 1
 
 [watchdog]
 enable_hardware = false
+backend = "external"
 runtime_timeout = "30s"
 reboot_timeout = "10min"
 ```
@@ -76,6 +77,7 @@ A valid local overlay may be partial:
 ```toml
 [watchdog]
 enable_hardware = true
+backend = "internal"
 runtime_timeout = "45s"
 ```
 
@@ -91,6 +93,7 @@ runtime_timeout = "45s"
 - An optional overlay `version` must equal `1`. The committed document must contain `version = 1`.
 - The version-1 schema permits only `version` and `[watchdog]`, with exactly these watchdog fields:
   - `enable_hardware`: Boolean.
+  - `backend`: Either `internal` or `external`.
   - `runtime_timeout`: positive integer followed by `ms`, `s`, `min`, or `h`.
   - `reboot_timeout`: positive integer followed by `ms`, `s`, `min`, or `h`.
 - Zero, signs, decimals, compound spans, whitespace variants, unitless values, and other systemd duration syntax are
@@ -104,6 +107,7 @@ runtime_timeout = "45s"
   evaluation before any artifact derivation builds.
 - Effective watchdog fields map to existing NixOS options:
   - `enable_hardware` → `atomixos.watchdog.enableHardware`.
+  - `backend` → `atomixos.watchdog.backend`.
   - `runtime_timeout` → `atomixos.watchdog.runtimeWatchdogSec`.
   - `reboot_timeout` → `atomixos.watchdog.rebootWatchdogSec`.
 - The normalized effective policy must be available read-only at `/etc/atomixos/build.toml`. Its canonical UTF-8 bytes
@@ -114,6 +118,7 @@ runtime_timeout = "45s"
 
   [watchdog]
   enable_hardware = false
+  backend = "external"
   runtime_timeout = "30s"
   reboot_timeout = "10min"
   ```

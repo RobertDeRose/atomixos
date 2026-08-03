@@ -29,7 +29,8 @@ Builds a signed RAUC bundle (`.raucb`).
 
 | Input                            | Description                                            |
 |----------------------------------|--------------------------------------------------------|
-| `@kernel@`                       | Kernel package (contains `Image` and `dtbs/`)          |
+| `@kernel@`                       | Kernel package (contains `Image`)                      |
+| `@deviceTree@`                   | Device-tree package, including applied overlays        |
 | `@initrd@`                       | Initrd package (contains `initrd`)                     |
 | `@dtbPath@`                      | Relative DTB path (e.g., `rockchip/rk3328-rock64.dtb`) |
 | `@squashfs@`                     | Squashfs image directory                               |
@@ -45,13 +46,14 @@ Builds a signed RAUC bundle (`.raucb`).
 
 Assembles the flashable disk image.
 
-| Input                               | Description       |
-|-------------------------------------|-------------------|
-| `@kernel@`, `@initrd@`, `@dtbPath@` | Kernel artifacts  |
-| `@squashfs@`                        | Squashfs image    |
-| `@bootScript@`                      | Compiled boot.scr |
-| `@uboot@`                           | U-Boot package    |
-| `@imageName@`                       | Output filename   |
+| Input                       | Description                 |
+|-----------------------------|-----------------------------|
+| `@kernel@`, `@initrd@`      | Kernel and initrd artifacts |
+| `@deviceTree@`, `@dtbPath@` | Selected overlaid DTB       |
+| `@squashfs@`                | Squashfs image              |
+| `@bootScript@`              | Compiled boot.scr           |
+| `@uboot@`                   | U-Boot package              |
+| `@imageName@`               | Output filename             |
 
 **Steps:** Create sparse image, write U-Boot at raw offsets, create GPT with slot A partitions (`boot-a`, `rootfs-a`),
 create the slot A vfat boot partition with mtools, and write squashfs to `rootfs-a`. Slot B and `/data` are created by

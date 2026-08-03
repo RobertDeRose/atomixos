@@ -146,6 +146,10 @@ let
     # Board-local support required by the Rock64 DTS or shared boot plumbing.
     I2C = lib.mkForce yes;
     I2C_RK3X = lib.mkForce yes;
+    GPIOLIB = lib.mkForce yes;
+    GPIO_CDEV = lib.mkForce yes;
+    GPIO_PCA953X = lib.mkForce yes;
+    GPIO_WATCHDOG = lib.mkForce yes;
     SERIAL_8250 = lib.mkForce yes;
     SERIAL_8250_CONSOLE = lib.mkForce yes;
     SERIAL_8250_DW = lib.mkForce yes;

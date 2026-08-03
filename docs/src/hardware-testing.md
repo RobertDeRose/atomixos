@@ -311,48 +311,107 @@ reboot
 
 ## Phase 8: Watchdog
 
-### Test 8.1: Hardware watchdog presence
+### Test 8.1: Build-time backend selection and watchdog presence
 
-```sh
-dmesg | grep -i watchdog
-ls /dev/watchdog*
+Watchdog selection is immutable build policy. Choose one of these snippets in the repository-root `build.dev.toml` for a
+local test image, or promote the values to committed `build.toml`:
+
+```toml
+# Onboard RK3328 DesignWare watchdog
+[watchdog]
+enable_hardware = true
+backend = "internal"
+
+# For the example external SOM watchdog, use instead:
+# backend = "external"
+
+# To disable enforcement completely:
+# enable_hardware = false
 ```
 
-**Pass criteria**:
+Run `mise run build`; supported `mise` tasks apply `build.dev.toml` automatically and mark outputs `-dev`. Direct Nix
+commands use committed `build.toml` only. The backend is required even when `enable_hardware = false`.
 
-- `dw_wdt` driver is loaded
-- `/dev/watchdog` device exists
+For every enabled image, verify the policy and systemd owner:
+
+```sh
+cat /etc/atomixos/build.toml
+systemctl show --property WatchdogDevice --property RuntimeWatchdogUSec --property RebootWatchdogUSec
+journalctl -b --no-pager | grep -E 'Using hardware watchdog|Watchdog running'
+```
+
+For `backend = "internal"`, verify the onboard path:
+
+```sh
+ls -l /dev/watchdog-internal
+readlink -f /dev/watchdog-internal
+readlink -f /sys/class/watchdog/watchdog0/device/driver
+```
+
+Expected results include `/dev/watchdog-internal -> /dev/watchdog0`, the `dw_wdt` driver, and systemd's
+`Synopsys DesignWare Watchdog` message.
+
+For `backend = "external"`, verify the included TI UCC2946 example path:
+
+```sh
+run0 i2cdetect -y 1
+run0 i2cget -y 1 0x41 0x00 b
+run0 i2cget -y 1 0x41 0x01 b
+run0 i2cget -y 1 0x41 0x02 b
+run0 i2cget -y 1 0x41 0x03 b
+external_device=$(readlink -f /dev/watchdog-external)
+ls -l /dev/watchdog-external "$external_device"
+readlink -f "/sys/class/watchdog/$(basename "$external_device")/device/driver"
+```
+
+Expected results include address `0x41` claimed by the PCA/TCA9536-compatible expander, `/dev/watchdog-external`, and
+the `gpio-wdt` driver. Systemd remains the sole owner; do not run the legacy `i2cset` kicker.
+
+For `enable_hardware = false`, `systemctl show` must omit `WatchdogDevice`, `RuntimeWatchdogUSec`, and
+`RebootWatchdogUSec`. The external always-running device-tree node is omitted; an internal image may still expose an
+unarmed `/dev/watchdog-internal`, so verify that PID 1 does not hold the device rather than relying only on node absence.
 
 ### Test 8.2: Watchdog-triggered reboot
 
-> Active watchdog enforcement is disabled by default. Run this only on a test device built with
-> `atomixos.watchdog.enableHardware = true`; do not enable it in release or deployment profiles until this phase passes.
+> This is destructive. Use a sacrificial test device with serial capture, recovery access, and a known-good slot. Active
+> enforcement remains disabled by default; do not enable it in release or deployment profiles for this test.
+
+Start serial capture from the host before inducing the hang:
 
 ```sh
-# Confirm the opt-in manager settings rendered on the test image
-systemctl show --property RuntimeWatchdogUSec --property RebootWatchdogUSec
-# Expected with default opt-in settings:
-# RuntimeWatchdogUSec=30s
-# RebootWatchdogUSec=10min
+mise run serial:capture -- --port /dev/cu.usbserial-<id> \
+  --log /tmp/rock64-watchdog-reset.log --bg
+```
 
-# Confirm U-Boot is tracking the current RAUC slot before inducing the hang
+On the device, confirm the active policy and U-Boot state:
+
+```sh
+systemctl show --property WatchdogDevice --property RuntimeWatchdogUSec --property RebootWatchdogUSec
 fw_printenv BOOT_ORDER BOOT_A_LEFT BOOT_B_LEFT
 ```
 
-Use a lab-validated systemd hang simulation that stops watchdog kicks without corrupting persistent state. Do not treat
-`kill -STOP 1` as sufficient proof; PID 1 signal handling is special and may not reliably simulate a systemd deadlock.
+On the validated Rock64 test image, the bounded hang fixture is:
+
+```sh
+run0 kill -STOP 1
+```
+
+This stops PID 1's watchdog kicks without intentionally modifying persistent state. Do not use this method without the
+serial and recovery prerequisites; it is a destructive, board-specific test fixture, not a general production command.
 
 **Pass criteria**:
 
-- Record the timestamp when watchdog kicks are confirmed stopped and when the reset signal begins
+- Record the timestamp when the fixture runs and when the serial reset sequence begins
 - With the default 30-second runtime timeout, reset begins no later than 35 seconds after confirmed kick cessation
   (30-second policy plus 5 seconds of measurement and serial-console tolerance)
-- Serial console shows watchdog reset
-- U-Boot boot-count is decremented for the current slot
+- Serial console shows a fresh U-Boot TPL/SPL/U-Boot sequence and a new AtomixOS boot
+- SSH recovers after the reboot and systemd again reports the selected watchdog device
+- U-Boot boot-count evidence is recorded for the current slot
 
-### Test 8.3: Watchdog-triggered rollback
+### Test 8.3: Watchdog-triggered rollback (deferred to RAUC OTA testing)
 
-> Run only after Test 8.2 passes. Keep serial console attached and have recovery media available.
+> Deferred until the RAUC OTA testing work exercises installation, boot confirmation, and rollback together. Keep
+> serial console attached and have recovery media available when executing it.
 
 ```sh
 # Install an update bundle to the inactive slot and reboot into it
@@ -372,7 +431,9 @@ fw_printenv BOOT_ORDER BOOT_A_LEFT BOOT_B_LEFT
 - After the counter reaches 0, U-Boot boots the previous slot
 - The previous slot reaches `multi-user.target` and remains marked good
 
-### Test 8.4: Watchdog soak
+### Test 8.4: Watchdog soak (deferred to RAUC OTA testing)
+
+> Deferred until the RAUC OTA validation campaign. Run the soak on the same image and workload used for OTA testing.
 
 ```sh
 # Leave the opt-in watchdog image running under normal workload for 72 hours.
@@ -390,25 +451,25 @@ last -x reboot | head
 
 ## Task Checklist
 
-| #   | Test                  | Status |
-|-----|-----------------------|--------|
-| 1.1 | Flash + U-Boot output |        |
-| 1.2 | First-boot service    |        |
-| 2.1 | eMMC + core hardware  |        |
-| 2.2 | USB Ethernet module   |        |
-| 3.1 | eth0 is onboard       |        |
-| 3.2 | DHCP server on LAN    |        |
-| 3.3 | NTP server on LAN     |        |
-| 3.4 | LAN isolation         |        |
-| 4.1 | WAN port access       |        |
-| 4.2 | SSH-on-WAN toggle     |        |
-| 5.1 | Update confirmation   |        |
-| 6.1 | SSH key auth          |        |
-| 6.2 | Serial root recovery  |        |
-| 7.1 | RAUC status           |        |
-| 7.2 | Bundle install        |        |
-| 7.3 | Boot-count rollback   |        |
-| 8.1 | Watchdog presence     |        |
-| 8.2 | Watchdog reboot       |        |
-| 8.3 | Watchdog rollback     |        |
-| 8.4 | Watchdog soak         |        |
+| #   | Test                  | Status                              |
+|-----|-----------------------|-------------------------------------|
+| 1.1 | Flash + U-Boot output |                                     |
+| 1.2 | First-boot service    |                                     |
+| 2.1 | eMMC + core hardware  |                                     |
+| 2.2 | USB Ethernet module   |                                     |
+| 3.1 | eth0 is onboard       |                                     |
+| 3.2 | DHCP server on LAN    |                                     |
+| 3.3 | NTP server on LAN     |                                     |
+| 3.4 | LAN isolation         |                                     |
+| 4.1 | WAN port access       |                                     |
+| 4.2 | SSH-on-WAN toggle     |                                     |
+| 5.1 | Update confirmation   |                                     |
+| 6.1 | SSH key auth          |                                     |
+| 6.2 | Serial root recovery  |                                     |
+| 7.1 | RAUC status           |                                     |
+| 7.2 | Bundle install        |                                     |
+| 7.3 | Boot-count rollback   |                                     |
+| 8.1 | Watchdog presence     | Passed: internal and external paths |
+| 8.2 | Watchdog reboot       | Passed: internal and external paths |
+| 8.3 | Watchdog rollback     | Deferred to RAUC OTA testing        |
+| 8.4 | Watchdog soak         | Deferred to RAUC OTA testing        |

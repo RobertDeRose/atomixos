@@ -13,8 +13,8 @@
 ## Delivered Capability
 
 AtomixOS now has a strict, versioned build-stage policy contract. Committed `build.toml` supplies reproducible immutable
-watchdog policy, while an ignored partial `build.dev.toml` lets maintainers test local changes through supported `mise`
-commands without changing reviewed defaults.
+watchdog policy, including selection of the internal or external backend, while an ignored partial `build.dev.toml` lets
+maintainers test local changes through supported `mise` commands without changing reviewed defaults.
 
 The effective policy is validated before artifacts build, mapped to existing watchdog options, embedded with provenance
 in configured systems, and copied byte-for-byte beside disk-image and RAUC bundle artifacts.
@@ -33,8 +33,8 @@ commands and excluded test or utility tasks continue to use committed policy onl
 
 Build policy remains separate from mutable runtime provisioning under `/data`. The evaluator is the single parser,
 validator, merger, and canonical renderer. A narrow NixOS module maps effective values to
-`atomixos.watchdog.enableHardware`, `runtimeWatchdogSec`, and `rebootWatchdogSec`; it does not create a runtime mutation
-surface.
+`atomixos.watchdog.enableHardware`, `backend`, `runtimeWatchdogSec`, and `rebootWatchdogSec`; it does not create a
+runtime mutation surface.
 
 Canonical TOML, compact JSON provenance, and the policy hash come from shared immutable Nix store files. The system,
 image, and bundle therefore use identical audit bytes. Source revision, `flake.lock`, certificates, signing credentials,

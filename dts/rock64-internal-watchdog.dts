@@ -1,0 +1,17 @@
+/dts-v1/;
+/plugin/;
+
+/* Apply this overlay only to the Rock64 base DTB. */
+/ {
+  compatible = "pine64,rock64", "rockchip,rk3328";
+};
+
+/* The RK3328 DesignWare watchdog exposes custom TOP values. */
+&wdt {
+  snps,watchdog-tops = <
+    0x00001000 0x00002000 0x00004000 0x00008000
+    0x00010000 0x00020000 0x00040000 0x00080000
+    0x00100000 0x00200000 0x00400000 0x00800000
+    0x01000000 0x02000000 0x04000000 0x08000000
+  >;
+};

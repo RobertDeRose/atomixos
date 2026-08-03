@@ -11,3 +11,5 @@ HSA = "HSA"
 storaged = "storaged"
 # Device product naming used in local tutorial examples.
 som = "som"
+# Valid hardware and watchdog vendor names.
+Synopsys = "Synopsys"

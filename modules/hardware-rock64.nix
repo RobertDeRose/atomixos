@@ -24,6 +24,12 @@ let
       install -m0644 "${pkgs.linux-firmware}/lib/firmware/rtl_nic/$fw" "$out/lib/firmware/rtl_nic/$fw"
     done
   '';
+  watchdogDevice =
+    {
+      internal = "/dev/watchdog-internal";
+      external = "/dev/watchdog-external";
+    }
+    .${config.atomixos.watchdog.backend};
   bootToUms = pkgs.writeShellScriptBin "boot_to_ums" ''
     set -euo pipefail
 
@@ -435,6 +441,7 @@ in
   environment.systemPackages = [
     ubootEnvTools
     bootToUms
+    pkgs.i2c-tools
   ];
   environment.etc."fw_env.config".text = ''
     # MTD device for SPI flash env (matches U-Boot CONFIG_ENV_OFFSET/SIZE)
@@ -470,10 +477,30 @@ in
     }
   ];
 
+  # Select the watchdog implementation requested by immutable build policy.
+  atomixos.watchdog.device = watchdogDevice;
+  services.udev.extraRules = ''
+    SUBSYSTEM=="watchdog", KERNEL=="watchdog*", KERNELS=="ff1a0000.watchdog", SYMLINK+="watchdog-internal"
+    SUBSYSTEM=="watchdog", KERNEL=="watchdog*", KERNELS=="watchdog-external", SYMLINK+="watchdog-external"
+  '';
+
   # Device tree for Rock64
   hardware.deviceTree = {
     enable = true;
     name = "rockchip/rk3328-rock64.dtb";
+    overlays = [
+      {
+        name = "rock64-internal-watchdog";
+        dtsFile = ../dts/rock64-internal-watchdog.dts;
+      }
+    ]
+    ++
+      lib.optional
+        (config.atomixos.watchdog.enableHardware && config.atomixos.watchdog.backend == "external")
+        {
+          name = "rock64-i2c-header";
+          dtsFile = ../dts/rock64-i2c-header.dts;
+        };
   };
 
   # ── Hardware-specific settings ───────────────────────────────────────────────

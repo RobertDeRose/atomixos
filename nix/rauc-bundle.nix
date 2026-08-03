@@ -15,8 +15,9 @@
 }:
 
 let
-  # Extract kernel and DTB from the NixOS configuration
+  # Extract kernel and the overlaid DTB package from the NixOS configuration
   kernel = nixosConfig.boot.kernelPackages.kernel;
+  deviceTree = nixosConfig.hardware.deviceTree.package;
   initrd = nixosConfig.system.build.initialRamdisk;
   dtbPath = "rockchip/rk3328-rock64.dtb";
   version = nixosConfig.system.nixos.version;
@@ -30,6 +31,7 @@ let
     installPhase = ''
       substitute $src $out \
         --replace-fail "@kernel@" "${kernel}" \
+        --replace-fail "@deviceTree@" "${deviceTree}" \
         --replace-fail "@initrd@" "${initrd}" \
         --replace-fail "@dtbPath@" "${dtbPath}" \
         --replace-fail "@squashfs@" "${squashfsImage}" \

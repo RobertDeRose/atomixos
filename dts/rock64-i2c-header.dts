@@ -1,0 +1,45 @@
+/dts-v1/;
+/plugin/;
+
+/* Apply this overlay only to the Rock64 base DTB. */
+/ {
+  compatible = "pine64,rock64", "rockchip,rk3328";
+};
+
+/* gpio-wdt is a platform device, not an I2C child. */
+&{/} {
+  watchdog-external {
+    compatible = "linux,wdt-gpio";
+    /* GPIO_ACTIVE_HIGH is zero in the standard GPIO binding. */
+    gpios = <&watchdog_gpio 1 0>;
+    hw_algo = "toggle";
+    hw_margin_ms = <60000>;
+    always-running;
+  };
+};
+
+/*
+ * The SOM watchdog is a TI UCC2946 driven through a four-bit I2C GPIO
+ * expander at 0x41. The legacy implementation confirms that GPIO0 enables
+ * the watchdog (active low) and GPIO1 receives the WDI toggle.
+ */
+&i2c1 {
+  status = "okay";
+
+  watchdog_gpio: gpio@41 {
+    compatible = "ti,pca9536";
+    reg = <0x41>;
+    gpio-controller;
+    #gpio-cells = <2>;
+    gpio-line-names = "watchdog-enable", "watchdog-wdi", "unused-2", "unused-3";
+
+    watchdog-enable-hog {
+      gpio-hog;
+      /* GPIO_ACTIVE_HIGH is zero in the standard GPIO binding. */
+      gpios = <0 0>;
+      output-low;
+      line-name = "watchdog-enable";
+    };
+  };
+
+};
