@@ -3,7 +3,8 @@
 ## Delivery Summary
 
 - Beads feature root: `atomixos-aua`
-- Status: implementation and physical watchdog-path validation complete; documentation and validation close-out pending
+- Status: implementation, physical watchdog-path validation, documentation, and validation close-out complete; ready
+  for delivery
 - Pull request: not created
 - Design record: [design.md](design.md)
 
@@ -69,6 +70,12 @@ Physical watchdog tests are destructive and require serial capture, recovery acc
 - Serial evidence: `/tmp/rock64-internal-watchdog-reset.log`.
 - Post-reset systemd evidence: selected device, 30-second runtime timeout, 10-minute reboot timeout, running system,
   and no failed units.
+- Feature-specific validation passed: `uv run scripts/check-docs.py`, `mise exec -- hk check -a`, the Linux/Darwin
+  watchdog and build-configuration checks, Linux device-tree and boot-script checks, Linux/Darwin build-config-workflow
+  and missing-device checks, and `mise run e2e:rauc-watchdog`.
+- Repository-wide `mise check` was attempted and explicitly waived by the user for this delivery. It failed in the
+  unrelated `nixstasis-client` Go-module sandbox setup (`sandbox network setup timed out`; `pasta exited with code 1`).
+  Repository-wide validation remains residual risk for a follow-up change; feature-specific validation is current.
 
 ## Design Reconciliation
 
@@ -114,6 +121,8 @@ Physical watchdog tests are destructive and require serial capture, recovery acc
 
 ## Audit Trail
 
-Implementation and physical evidence were recorded on Beads task `atomixos-aua.7.32`. The implementation coordinator
-`atomixos-aua.7` is closed. Documentation and validation close-out are tracked by
-`atomixos-aua.8` and `atomixos-aua.9`; RAUC rollback/soak work remains explicitly deferred to the OTA campaign.
+Implementation and physical evidence were recorded on Beads task `atomixos-aua.7.32`; implementation coordinator
+`atomixos-aua.7`, documentation reconciliation `atomixos-aua.8`, validation `atomixos-aua.9`, and the delivery/drift
+reviews `atomixos-aua.10` and `atomixos-aua.11` are complete. The repository-wide check waiver and its residual risk are
+recorded on `atomixos-aua.9`. Delivery `atomixos-aua.12` remains open pending an explicit delivery choice; RAUC
+rollback/soak work remains explicitly deferred to the OTA campaign.
