@@ -499,7 +499,8 @@ this page remains the human-readable roadmap.
 - Suggested validation: module evaluation checks, `rauc-watchdog` VM check, and ordered physical reboot, rollback, and
   72-hour soak evidence
 - Delivered so far: `atomixos.watchdog.*` options, internal/external build-time selection, default-disabled behavior,
-  fail-open checks, physical device and induced-reboot validation for both paths, and hardware validation instructions.
+  fail-open checks, physical device and ownership validation for both paths, internal induced-reboot validation, and
+  hardware validation instructions.
 
 ### USB WiFi (`usb-wifi`)
 

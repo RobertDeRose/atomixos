@@ -14,7 +14,8 @@
 ## Feature Summary
 
 Finish opt-in systemd hardware watchdog enforcement without enabling it in release profiles by default. The onboard
-RK3328 and external UCC2946 paths have passed physical Rock64 device and induced-reboot validation. Rollback and soak
+RK3328 and external UCC2946 paths have passed physical Rock64 device, ownership, and timeout validation; the onboard
+RK3328 path has also passed induced-reboot validation. Rollback and soak
 evidence are deferred to the RAUC OTA validation campaign. Build-time configuration is owned by the separate Build
 Configuration feature; runtime `config.toml` does not control watchdog policy.
 
@@ -110,8 +111,8 @@ manager settings, and installs the boot-count helper. `nix/tests/watchdog-module
 custom values. `nix/tests/rauc-watchdog.nix` simulates rollback with a QEMU watchdog and custom file-backed counter.
 
 The Rock64 kernel configuration includes DesignWare watchdog support. Physical validation now proves runtime
-registration, device ownership, and induced reset for both the onboard and external paths. The hardware checklist still
-tracks rollback and soak evidence separately.
+registration and device ownership for both the onboard and external paths, and an induced reset for the onboard path.
+The hardware checklist still tracks rollback and soak evidence separately.
 
 The current boot-count service is imported by the base module even when RAUC is disabled. This coupling must be removed
 while preserving the RAUC-enabled U-Boot and custom-backend paths.
@@ -242,7 +243,7 @@ check as evidence.
 ### Physical Rock64
 
 - Confirmed onboard `dw_wdt` registration, the 16-cell TOP table, and `/dev/watchdog-internal` ownership.
-- Confirmed the external UCC2946/PCA9536-compatible path and `/dev/watchdog-external` ownership.
+- Confirmed the external UCC2946/PCA9536-compatible path, `/dev/watchdog-external` ownership, and configured timeout.
 - Recorded an internal watchdog-triggered reset with a fresh serial U-Boot sequence and SSH recovery.
 - Record three consumed attempts and fallback from a newly updated, unconfirmed slot.
 - Record 72 hours under normal workload without an unexpected watchdog reset.

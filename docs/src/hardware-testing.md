@@ -451,25 +451,25 @@ last -x reboot | head
 
 ## Task Checklist
 
-| #   | Test                  | Status                              |
-|-----|-----------------------|-------------------------------------|
-| 1.1 | Flash + U-Boot output |                                     |
-| 1.2 | First-boot service    |                                     |
-| 2.1 | eMMC + core hardware  |                                     |
-| 2.2 | USB Ethernet module   |                                     |
-| 3.1 | eth0 is onboard       |                                     |
-| 3.2 | DHCP server on LAN    |                                     |
-| 3.3 | NTP server on LAN     |                                     |
-| 3.4 | LAN isolation         |                                     |
-| 4.1 | WAN port access       |                                     |
-| 4.2 | SSH-on-WAN toggle     |                                     |
-| 5.1 | Update confirmation   |                                     |
-| 6.1 | SSH key auth          |                                     |
-| 6.2 | Serial root recovery  |                                     |
-| 7.1 | RAUC status           |                                     |
-| 7.2 | Bundle install        |                                     |
-| 7.3 | Boot-count rollback   |                                     |
-| 8.1 | Watchdog presence     | Passed: internal and external paths |
-| 8.2 | Watchdog reboot       | Passed: internal and external paths |
-| 8.3 | Watchdog rollback     | Deferred to RAUC OTA testing        |
-| 8.4 | Watchdog soak         | Deferred to RAUC OTA testing        |
+| #   | Test                  | Status                                             |
+|-----|-----------------------|----------------------------------------------------|
+| 1.1 | Flash + U-Boot output |                                                    |
+| 1.2 | First-boot service    |                                                    |
+| 2.1 | eMMC + core hardware  |                                                    |
+| 2.2 | USB Ethernet module   |                                                    |
+| 3.1 | eth0 is onboard       |                                                    |
+| 3.2 | DHCP server on LAN    |                                                    |
+| 3.3 | NTP server on LAN     |                                                    |
+| 3.4 | LAN isolation         |                                                    |
+| 4.1 | WAN port access       |                                                    |
+| 4.2 | SSH-on-WAN toggle     |                                                    |
+| 5.1 | Update confirmation   |                                                    |
+| 6.1 | SSH key auth          |                                                    |
+| 6.2 | Serial root recovery  |                                                    |
+| 7.1 | RAUC status           |                                                    |
+| 7.2 | Bundle install        |                                                    |
+| 7.3 | Boot-count rollback   |                                                    |
+| 8.1 | Watchdog presence     | Passed: internal and external paths                |
+| 8.2 | Watchdog reboot       | Passed: internal; external path pending reset test |
+| 8.3 | Watchdog rollback     | Deferred to RAUC OTA testing                       |
+| 8.4 | Watchdog soak         | Deferred to RAUC OTA testing                       |

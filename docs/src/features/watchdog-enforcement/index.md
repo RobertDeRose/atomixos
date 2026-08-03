@@ -3,7 +3,7 @@
 ## Delivery Summary
 
 - Beads feature root: `atomixos-aua`
-- Status: implementation and physical watchdog-path validation complete; close-out remains pending RAUC OTA evidence
+- Status: implementation and physical watchdog-path validation complete; documentation and validation close-out pending
 - Pull request: not created
 - Design record: [design.md](design.md)
 
@@ -78,7 +78,8 @@ Physical watchdog tests are destructive and require serial capture, recovery acc
 - Systemd is the sole hardware watchdog owner.
 - Internal and external Rock64 paths are selectable without introducing runtime configuration.
 - Missing hardware remains fail-open.
-- Physical device and induced-reboot evidence exists for both watchdog paths.
+- Physical device and ownership evidence exists for both watchdog paths; induced-reboot evidence exists for the
+  internal path.
 
 ### Intentional Changes
 
@@ -113,5 +114,6 @@ Physical watchdog tests are destructive and require serial capture, recovery acc
 
 ## Audit Trail
 
-Implementation and physical evidence were recorded on Beads task `atomixos-aua.7.32`. The implementation coordinator and
-RAUC rollback/soak work remain open until the deferred validation is complete.
+Implementation and physical evidence were recorded on Beads task `atomixos-aua.7.32`. The implementation coordinator
+`atomixos-aua.7` is closed. Documentation and validation close-out are tracked by
+`atomixos-aua.8` and `atomixos-aua.9`; RAUC rollback/soak work remains explicitly deferred to the OTA campaign.

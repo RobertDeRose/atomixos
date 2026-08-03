@@ -68,7 +68,8 @@ that stopping the mock API does not stop local recovery targets.
 
 The `watchdog-module` check verifies hardware watchdog enforcement remains off
 by default and renders the configured systemd manager watchdog settings only when
-explicitly enabled. The `watchdog-missing-device` VM check enables that policy without exposing a watchdog device, then verifies boot continues, RAUC state is unchanged, and an actionable warning reports unavailable enforcement.
+explicitly enabled. The `watchdog-missing-device` VM check enables that policy without exposing a watchdog device,
+then verifies boot continues, RAUC state is unchanged, and an actionable warning reports unavailable enforcement.
 
 The `build-configuration` check covers strict schema parsing, merge behavior, timeout bounds, canonical bytes,
 provenance, NixOS option mapping, and artifact sidecar inputs. The `build-config-workflow` check uses an isolated fake
@@ -94,12 +95,12 @@ warning must appear before effective-policy evaluation.
 
 Additional flake-only checks:
 
-| Test                    | Nodes | What it validates                                                                                         |
-|-------------------------|-------|-----------------------------------------------------------------------------------------------------------|
-| `nixstasis-client`      | 1     | Nixstasis registration, identity reuse, polling, FRP launch-boundary, and post-enrollment API outage path |
-| `watchdog-module`       | 0     | Watchdog option defaults and opt-in systemd manager settings                                              |
-| `build-configuration`   | 0     | Schema, canonical policy, provenance, module mapping, and sidecar inputs                                  |
-| `build-config-workflow` | 0     | Local override wrapper, task matrix, Lima behavior, and atomic retained links                             |
+| Test                      | Nodes | What it validates                                                                                         |
+|---------------------------|-------|-----------------------------------------------------------------------------------------------------------|
+| `nixstasis-client`        | 1     | Nixstasis registration, identity reuse, polling, FRP launch-boundary, and post-enrollment API outage path |
+| `watchdog-module`         | 0     | Watchdog option defaults and opt-in systemd manager settings                                              |
+| `build-configuration`     | 0     | Schema, canonical policy, provenance, module mapping, and sidecar inputs                                  |
+| `build-config-workflow`   | 0     | Local override wrapper, task matrix, Lima behavior, and atomic retained links                             |
 | `watchdog-missing-device` | 1     | Enabled policy without hardware boots, preserves RAUC state, and emits an actionable warning              |
 
 ## Platform Performance

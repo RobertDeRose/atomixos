@@ -5,8 +5,9 @@
 ## Requirements
 
 Current status: Rock64 runtime watchdog enforcement is opt-in and intentionally disabled by default. Both the onboard
-RK3328 DesignWare path and the external TI UCC2946 path have passed physical device, ownership, and induced-reboot
-validation. Rollback and 72-hour soak evidence remain deferred to RAUC OTA testing.
+RK3328 DesignWare path and the external TI UCC2946 path have passed physical device and ownership validation; the
+internal path has also passed induced-reboot validation. Rollback and 72-hour soak evidence remain deferred to RAUC OTA
+testing.
 
 ### Hardware watchdog enforcement remains opt-in
 
