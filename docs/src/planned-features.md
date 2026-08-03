@@ -474,7 +474,7 @@ this page remains the human-readable roadmap.
 
 ### Watchdog Enforcement (`watchdog-enforcement`)
 
-- Status: partially completed; physical watchdog paths accepted, blocked by RAUC rollback and soak validation
+- Status: delivered; external reset timing, RAUC rollback, and soak validation remain deferred to the OTA campaign
 - Overview: Add opt-in hardware watchdog enforcement with build-time selection of the onboard or external watchdog,
   `RuntimeWatchdogSec=30s`, and `RebootWatchdogSec=10min`, while keeping Rock64 release profiles disabled by default.
 - Requirements:

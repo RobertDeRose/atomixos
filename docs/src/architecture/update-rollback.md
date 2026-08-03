@@ -79,7 +79,8 @@ path and uses these default manager settings:
 
 Both paths have passed physical Rock64 device and ownership validation; the internal path has also passed induced-reboot
 validation. Enforcement remains disabled by default on
-Rock64, VM, and development images; rollback and soak validation remain deferred to the RAUC OTA campaign. If an
+Rock64, VM, and development images; external reset timing, rollback, and soak validation remain deferred to the RAUC OTA
+campaign. If an
 enabled system has no usable watchdog device, `watchdog-device-check.service` warns and exits successfully: boot and
 update verification continue, and the condition does not itself mutate RAUC state.
 

@@ -9,14 +9,14 @@
 - Design path: `docs/src/features/watchdog-enforcement/design.md`
 - Implemented record: `docs/src/features/watchdog-enforcement/index.md`
 - Base branch: `dev`
-- Status: in progress
+- Status: delivered
 
 ## Feature Summary
 
 Finish opt-in systemd hardware watchdog enforcement without enabling it in release profiles by default. The onboard
 RK3328 and external UCC2946 paths have passed physical Rock64 device, ownership, and timeout validation; the onboard
-RK3328 path has also passed induced-reboot validation. Rollback and soak
-evidence are deferred to the RAUC OTA validation campaign. Build-time configuration is owned by the separate Build
+RK3328 path has also passed induced-reboot validation. External reset timing, rollback, and soak evidence are deferred
+to the RAUC OTA validation campaign. Build-time configuration is owned by the separate Build
 Configuration feature; runtime `config.toml` does not control watchdog policy.
 
 ## User Intent
@@ -66,7 +66,7 @@ When enforcement is enabled but systemd cannot use a watchdog device, the system
 The absence does not independently fail update verification, mark a slot bad, or trigger rollback.
 
 Release and deployment profiles remain disabled until the hardware checklist records successful presence and reboot
-evidence. Rollback and soak evidence are tracked as deferred RAUC OTA validation work.
+evidence. External reset timing, rollback, and soak evidence are tracked as deferred RAUC OTA validation work.
 
 ## Requirements
 
@@ -112,7 +112,7 @@ custom values. `nix/tests/rauc-watchdog.nix` simulates rollback with a QEMU watc
 
 The Rock64 kernel configuration includes DesignWare watchdog support. Physical validation now proves runtime
 registration and device ownership for both the onboard and external paths, and an induced reset for the onboard path.
-The hardware checklist still tracks rollback and soak evidence separately.
+The hardware checklist still tracks external reset timing, rollback, and soak evidence separately.
 
 The current boot-count service is imported by the base module even when RAUC is disabled. This coupling must be removed
 while preserving the RAUC-enabled U-Boot and custom-backend paths.
@@ -254,18 +254,20 @@ Beads is authoritative for executable work. Delivered slices include the Build C
 boot-count integration, fail-open missing-device behavior, the bounded Rock64 hang fixture, both physical watchdog paths,
 and the internal induced-reboot test. Remaining slices are:
 
-1. Execute and record three-attempt rollback on an unconfirmed update slot.
-2. Execute and record the 72-hour soak.
+1. Execute and record external watchdog reset timing.
+2. Execute and record three-attempt rollback on an unconfirmed update slot.
+3. Execute and record the 72-hour soak.
 
 Physical evidence-only tasks need not create repository commits. Any defect found during execution becomes a separate
-bounded implementation task with tests, documentation impact, and a commit. The remaining physical gates are RAUC
-rollback and the 72-hour soak.
+bounded implementation task with tests, documentation impact, and a commit. The remaining physical gates are external
+reset timing, RAUC rollback, and the 72-hour soak.
 
 ## Dependencies and Parallelism
 
 - Build Configuration (`atomixos-mol-0ws`) supplied the supported build interface used for physical acceptance.
 - Device confirmation and hang-method selection are complete; the internal reboot test is complete.
-- Rollback remains a prerequisite for the 72-hour soak and both remain part of the RAUC OTA campaign.
+- External reset timing and rollback remain part of the RAUC OTA campaign; rollback remains a prerequisite for the
+  72-hour soak.
 - Every implementation child remains traceable through Beads and the feature design.
 
 ## Rollout and Migration
