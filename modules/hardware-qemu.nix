@@ -47,6 +47,13 @@ lib.mkMerge [
     # Boot-storage diagnostics target Rock64 eMMC and U-Boot hardware, which
     # is not present in virtual machines.
     systemd.services.boot-storage-debug.wantedBy = lib.mkForce [ ];
+    # The QEMU image has no wireless interfaces, but networkd-dispatcher still
+    # probes optional iwconfig support during startup. Preserve dispatcher
+    # errors while hiding that expected warning in wired-only checks.
+    services.networkd-dispatcher.extraArgs = lib.mkAfter [
+      "--quiet"
+      "--quiet"
+    ];
     # The NixOS test harness sets this for general-purpose kernels, but the
     # stripped virtual kernel does not expose the corresponding sysctl.
     boot.kernel.sysctl."kernel.hung_task_timeout_secs" = lib.mkForce null;

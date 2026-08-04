@@ -82,6 +82,7 @@ nixos-lib.runTest {
 
     gateway.start()
     gateway.wait_for_unit("multi-user.target")
+    gateway.fail("journalctl -b -u networkd-dispatcher --no-pager | grep -F 'No valid path found for iwconfig'")
     gateway.wait_for_unit("rauc.service")
     gateway.wait_for_unit("watchdog-test-rauc-state.service")
     gateway.wait_for_unit("watchdog-device-check.service")
