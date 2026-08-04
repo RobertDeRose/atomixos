@@ -29,8 +29,7 @@ disabled-rules = [
   "CONTENT003",
   # Future tense -- too pedantic for technical docs
   "CONTENT011",
+  # Unordered-list indentation -- valid mdBook navigation and nested-list syntax
+  # requires context-specific indentation that this rule flags incorrectly.
+  "MD007",
 ]
-
-# Rule-specific configuration
-[MD007]
-indent = 2
