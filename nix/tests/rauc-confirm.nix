@@ -221,7 +221,7 @@ nixos-lib.runTest {
     gateway.succeed("rm -f /data/config/lan-settings.json /data/config/health-required.json")
     gateway.succeed("systemctl restart chronyd.service")
     gateway.wait_for_unit("chronyd.service")
-    gateway.fail("(sleep 3; systemctl stop chronyd.service) & PATH=${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=5 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ${verificationScript} >/tmp/os-verification-chrony-regress.log 2>&1")
+    gateway.fail("(while ! grep -q 'Starting sustained health check' /tmp/os-verification-chrony-regress.log; do sleep 0.1; done; sleep 1; systemctl stop chronyd.service) & PATH=${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=5 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ${verificationScript} >/tmp/os-verification-chrony-regress.log 2>&1")
     gateway.succeed("grep 'FAIL: System health regressed during sustained check' /tmp/os-verification-chrony-regress.log")
     gateway.succeed("test \"$(cat /var/lib/rauc/state.A)\" = pending")
     gateway.succeed("systemctl restart chronyd.service")
