@@ -2,7 +2,7 @@
 
 # Legacy Workflow Migration Report
 
-Generated: `2026-07-30T16:39:45+00:00`
+Generated: `2026-08-04T01:43:49+00:00`
 
 ## Inventory
 
@@ -12,9 +12,9 @@ Generated: `2026-07-30T16:39:45+00:00`
 - Unparsed task files: 0
 - Parsed legacy tasks: 456
 - Reconciliation findings: 0
-- `completed`: 10
+- `completed`: 11
 - `deferred`: 1
-- `in_progress`: 4
+- `in_progress`: 3
 - `planned`: 1
 
 ## hk Reconciliation
@@ -133,10 +133,10 @@ Generated: `2026-07-30T16:39:45+00:00`
   - Findings: 0
 - **Feature:** `watchdog-enforcement`
   - Target: `watchdog-enforcement`
-  - Classification: `in_progress`
-  - Roadmap: partially completed
+  - Classification: `completed (override)`
+  - Roadmap: completed
   - Design: —
-  - Index: no
+  - Index: yes
   - Findings: 0
 - **Feature:** `usb-wifi`
   - Target: `usb-wifi`
@@ -194,6 +194,10 @@ Generated: `2026-07-30T16:39:45+00:00`
 ### Config Reapply Improvements (`config-reapply-improvements`)
 
 - Classification override: `completed` — T000 through T999 are closed with one VM case explicitly deferred, and authenticated atomic promotion, rollback behavior, tests, docs, and follow-up closeouts corroborate delivery.
+
+### Watchdog Enforcement (`watchdog-enforcement`)
+
+- Classification override: `completed` — The Beads root is closed and the delivered record, roadmap, navigation, implementation, and physical internal/external watchdog evidence corroborate delivery. Legacy physical/OTA gaps remain explicitly deferred, and release/default enforcement remains intentionally disabled.
 
 ## Migration Stages
 

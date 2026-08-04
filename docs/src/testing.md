@@ -95,13 +95,20 @@ warning must appear before effective-policy evaluation.
 
 Additional flake-only checks:
 
-| Test                      | Nodes | What it validates                                                                                         |
-|---------------------------|-------|-----------------------------------------------------------------------------------------------------------|
-| `nixstasis-client`        | 1     | Nixstasis registration, identity reuse, polling, FRP launch-boundary, and post-enrollment API outage path |
-| `watchdog-module`         | 0     | Watchdog option defaults and opt-in systemd manager settings                                              |
-| `build-configuration`     | 0     | Schema, canonical policy, provenance, module mapping, and sidecar inputs                                  |
-| `build-config-workflow`   | 0     | Local override wrapper, task matrix, Lima behavior, and atomic retained links                             |
-| `watchdog-missing-device` | 1     | Enabled policy without hardware boots, preserves RAUC state, and emits an actionable warning              |
+| Test                          | Nodes | What it validates                                                                                         |
+|-------------------------------|-------|-----------------------------------------------------------------------------------------------------------|
+| `nixstasis-client`            | 1     | Nixstasis registration, identity reuse, polling, FRP launch-boundary, and post-enrollment API outage path |
+| `watchdog-module`             | 0     | Watchdog option defaults and opt-in systemd manager settings                                              |
+| `build-configuration`         | 0     | Schema, canonical policy, provenance, module mapping, and sidecar inputs                                  |
+| `build-config-workflow`       | 0     | Local override wrapper, task matrix, Lima behavior, and atomic retained links                             |
+| `watchdog-missing-device`     | 1     | Enabled policy without hardware boots, preserves RAUC state, and emits an actionable warning              |
+| `first-boot-provision`        | 1     | Provisioning import, validation, apply, auth, and rollback behavior                                       |
+| `first-boot-source-discovery` | 1     | Boot/USB/bootstrap source precedence and first-boot marker behavior                                       |
+| `initrd-fresh-flash-marker`   | 1     | Initrd repartitioning creates slot B/data and persists the fresh-flash marker                             |
+| `forensics-podman-log-path`   | 1     | Podman journald output reaches the persistent `/data/logs` path                                           |
+| `forensics-rsyslog-path`      | 1     | Buffered rsyslog output is written to persistent `/data/logs`                                             |
+| `forensics-rsyslog-buffering` | 1     | Rsyslog batches writes instead of synchronously writing every message                                     |
+| `forensics-shutdown-flush`    | 1     | The logging shutdown-flush service persists buffered log output                                           |
 
 ## Platform Performance
 
