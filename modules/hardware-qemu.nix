@@ -47,6 +47,15 @@ lib.mkMerge [
     # its root backdoor. Keep the appliance's locked root password as the
     # single password option instead of allowing both options to merge.
     users.users.root.hashedPasswordFile = lib.mkForce null;
+
+    # Systemd's D-Bus policy references this user even when timesyncd is
+    # disabled, so keep the identity present in QEMU-only test images.
+    users.users.systemd-timesync = {
+      isSystemUser = true;
+      group = "systemd-timesync";
+    };
+    users.groups.systemd-timesync = { };
+
     boot.initrd.systemd.repart.enable = lib.mkForce false;
     boot.initrd.systemd.services.initrd-prepare-overlay-lower.enable = lib.mkForce false;
 
