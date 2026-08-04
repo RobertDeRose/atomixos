@@ -110,6 +110,8 @@ lib.mkMerge [
 
             # QEMU virt CPU/interrupt/timer/firmware path.
             ARM_PSCI_FW = lib.mkForce yes;
+            # The test runner does not expose a virtual performance monitor.
+            ARM_PMU = lib.mkForce no;
             ARM_GIC = lib.mkForce yes;
             ARM_GIC_V3 = lib.mkForce yes;
             ARM_ARCH_TIMER = lib.mkForce yes;
