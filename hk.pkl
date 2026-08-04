@@ -142,6 +142,7 @@ local linters = new Mapping<String, Step> {
     fix = "markdown-table-formatter {{ files }}"
   }
   ["rumdl"] = (Builtins.rumdl) {
+    exclude = List("migration/delivered-record-candidates/**")
     check_diff = "rumdl check --config .config/rumdl.toml --diff {{ files }}"
     fix = "rumdl check --config .config/rumdl.toml --fix {{ files }}"
   }
