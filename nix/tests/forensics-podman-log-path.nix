@@ -52,6 +52,10 @@ nixos-lib.runTest {
           runroot = "/run/containers/storage";
         };
       };
+
+      # The stripped VM kernel does not expose the systemd cgroup layout that
+      # conmon expects when it watches memory.events.
+      virtualisation.containers.containersConf.settings.engine.cgroup_manager = "cgroupfs";
     };
 
   testScript = ''
