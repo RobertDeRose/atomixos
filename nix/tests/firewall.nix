@@ -36,7 +36,7 @@ nixos-lib.runTest {
   inherit hostPkgs;
 
   nodes.gateway =
-    { lib, ... }:
+    { ... }:
     {
       imports = [
         qemuModule
@@ -96,7 +96,6 @@ nixos-lib.runTest {
         pkgs.python3Minimal
       ];
 
-      systemd.services.provisioned-firewall-inbound.unitConfig.ConditionPathExists = lib.mkForce "";
     };
 
   # Single probe node on BOTH VLANs — tests WAN and LAN rules from one VM.
@@ -148,6 +147,10 @@ nixos-lib.runTest {
 
     probe.start()
     probe.wait_for_unit("multi-user.target")
+    # multi-user.target can be reached before the VLAN address units finish.
+    # Wait for both test interfaces before probing gateway services.
+    probe.wait_until_succeeds("ip -4 addr show eth1 | grep '192.168.1.2'")
+    probe.wait_until_succeeds("ip -4 addr show eth2 | grep '172.20.30.2'")
 
     # Log the nftables ruleset for debugging
     gateway.succeed("nft list ruleset")
