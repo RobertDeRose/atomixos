@@ -39,6 +39,9 @@ lib.mkMerge [
     # QEMU checks use explicit nftables configurations where needed; never
     # start the legacy iptables firewall against the stripped test kernel.
     networking.firewall.enable = lib.mkForce false;
+    # The NixOS test harness sets this for general-purpose kernels, but the
+    # stripped virtual kernel does not expose the corresponding sysctl.
+    boot.kernel.sysctl."kernel.hung_task_timeout_secs" = lib.mkForce null;
 
     boot.initrd.postMountCommands = lib.mkForce "";
     boot.initrd.systemd.enable = lib.mkForce true;
