@@ -415,7 +415,9 @@ in
     ];
     boot.initrd.systemd.storePaths = [
       "${config.boot.initrd.systemd.package}/lib/udev/mtd_probe"
+      pkgs.glibc
     ];
+    boot.initrd.systemd.services.systemd-repart.environment.GCONV_PATH = "${pkgs.glibc}/lib/gconv";
     boot.initrd.systemd.repart = {
       enable = true;
       empty = "allow";
