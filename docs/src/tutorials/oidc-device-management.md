@@ -80,8 +80,8 @@ oauth identity provider google {
 }
 ```
 
-Also update `enable identity provider azure` to `enable identity provider
-google` and update transform rules from `match realm azure` to `match realm
+Also replace the Azure identity-provider and realm references with their
+Google equivalents in the Caddyfile and transform rules.
 
 ## Architecture
 
