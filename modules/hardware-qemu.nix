@@ -38,6 +38,11 @@ lib.mkMerge [
 
     boot.initrd.postMountCommands = lib.mkForce "";
     boot.initrd.systemd.enable = lib.mkForce true;
+
+    # The NixOS VM test instrumentation supplies an empty password file for
+    # its root backdoor. Keep the appliance's locked root password as the
+    # single password option instead of allowing both options to merge.
+    users.users.root.hashedPasswordFile = lib.mkForce null;
     boot.initrd.systemd.repart.enable = lib.mkForce false;
     boot.initrd.systemd.services.initrd-prepare-overlay-lower.enable = lib.mkForce false;
 

@@ -17,6 +17,9 @@ let
       };
 
       boot.initrd.postMountCommands = lib.mkForce "";
+      # Keep the base module's locked root password instead of merging the
+      # test driver's empty password file into the VM configuration.
+      users.users.root.hashedPasswordFile = lib.mkForce null;
       boot.initrd.systemd.services.initrd-prepare-overlay-lower.enable = lib.mkForce false;
       systemd.repart.enable = lib.mkForce false;
 
