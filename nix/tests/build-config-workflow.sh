@@ -144,7 +144,8 @@ rm "$TEST_REPO/build.dev.toml"
 
 # The supported task matrix routes only configuration-bearing project commands.
 grep -F 'depends = ["nix:check"]' "$TEST_REPO/mise.toml"
-grep -F 'run = "./scripts/nix-with-build-config.sh flake check"' "$TEST_REPO/mise.toml"
+grep -F './scripts/nix-with-build-config.sh flake check --all-systems --no-build' "$TEST_REPO/mise.toml"
+grep -F './scripts/nix-with-build-config.sh flake check' "$TEST_REPO/mise.toml"
 grep -F './scripts/nix-with-build-config.sh build .#squashfs' "$TEST_REPO/mise.toml"
 grep -F './scripts/nix-with-build-config.sh build .#rauc-bundle' "$TEST_REPO/mise.toml"
 grep -F './scripts/nix-with-build-config.sh build .#boot-script' "$TEST_REPO/mise.toml"
