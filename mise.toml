@@ -49,8 +49,11 @@ description = "Apply deterministic repository fixes"
 run = "hk fix -a"
 
 [tasks."nix:check"]
-description = "Verify flake evaluates cleanly"
-run = "./scripts/nix-with-build-config.sh flake check"
+description = "Evaluate all flake systems and run host-compatible checks"
+run = """
+./scripts/nix-with-build-config.sh flake check --all-systems --no-build
+./scripts/nix-with-build-config.sh flake check
+"""
 
 [tasks."docs:check"]
 description = "Validate and build the documentation"

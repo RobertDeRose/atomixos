@@ -301,7 +301,7 @@ All tasks are run with `mise run <task>`. Run `mise tasks` to list them.
 
 | Task                    | Description                                                 |
 |-------------------------|-------------------------------------------------------------|
-| `check`                 | Verify flake evaluates cleanly (`nix flake check`)          |
+| `check`                 | Evaluate all systems, then run host-compatible checks       |
 | **Build**               |                                                             |
 | `build`                 | Build and retain image artifacts under `.gcroots/`          |
 | `build:squashfs`        | Build squashfs rootfs → `result-squashfs/`                  |

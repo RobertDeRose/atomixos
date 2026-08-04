@@ -8,7 +8,7 @@ All `build:*` tasks accept `--lima` to run inside a Lima VM and `--vm <name>` to
 
 | Task                | Description                                           |
 |---------------------|-------------------------------------------------------|
-| `check`             | Verify flake evaluates cleanly (`nix flake check`)    |
+| `check`             | Evaluate all systems, then run host-compatible checks |
 | `build`             | Build and retain image artifacts under `.gcroots/`    |
 | `build:squashfs`    | Build squashfs rootfs &rarr; `result-squashfs/`       |
 | `build:rauc-bundle` | Build signed RAUC bundle &rarr; `result-rauc-bundle/` |
