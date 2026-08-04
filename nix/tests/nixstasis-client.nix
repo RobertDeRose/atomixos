@@ -33,6 +33,10 @@ let
                 (STATE / "heartbeat.json").write_bytes(body)
                 self.reply(200, {"data": {"remote_access_token": "frp-token", "commands": []}})
                 return
+            if path == "/mock/frpc":
+                (STATE / "frpc.started").write_bytes(body)
+                self.reply(200, {"ok": True})
+                return
             self.reply(404, {"error": "not found"})
 
         def log_message(self, *_args):
@@ -47,6 +51,14 @@ let
             self.wfile.write(data)
 
     HTTPServer(("127.0.0.1", 4000), Handler).serve_forever()
+  '';
+  mockFrpc = pkgs.writeShellScriptBin "nixstasis-test-frpc" ''
+    set -eu
+    test -n "''${FRPS_AUTH_TOKEN:-}"
+    ${pkgs.curl}/bin/curl -fsS -X POST http://127.0.0.1:4000/mock/frpc --data-binary started >/dev/null
+    while true; do
+      ${pkgs.coreutils}/bin/sleep 1
+    done
   '';
 in
 nixos-lib.runTest {
@@ -82,6 +94,10 @@ nixos-lib.runTest {
         runtime.execCommands.uname = "/run/current-system/sw/bin/uname";
       };
 
+      environment.systemPackages = [ mockFrpc ];
+      systemd.services.nixstasis-poll.environment.NIXSTASIS_FRPC_BINARY_PATH =
+        lib.mkForce "${mockFrpc}/bin/nixstasis-test-frpc";
+
       systemd.services.nixstasis-mock-api = {
         description = "Mock Nixstasis API";
         wantedBy = [ "multi-user.target" ];
@@ -111,12 +127,21 @@ nixos-lib.runTest {
     gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nheartbeat = json.loads(Path('/tmp/nixstasis-mock/heartbeat.json').read_text())\nassert 'telemetry' in heartbeat, heartbeat\nassert 'connection_status' in heartbeat, heartbeat\nPY")
 
     gateway.wait_until_succeeds("journalctl -u nixstasis-poll -b --no-pager | grep 'Server requested remote access'", timeout=120)
-    gateway.wait_until_succeeds("systemctl list-units --all 'nixstasis-frpc.service' --no-legend | grep nixstasis-frpc", timeout=120)
+    gateway.wait_until_succeeds("systemctl is-active --quiet nixstasis-frpc.service", timeout=120)
+    gateway.wait_until_succeeds("test -s /tmp/nixstasis-mock/frpc.started", timeout=120)
+    gateway.succeed("systemctl cat nixstasis-frpc.service | grep -E '^EnvironmentFile=.*frpc.env'")
+    gateway.succeed("systemctl show nixstasis-frpc.service -p Result --value | grep '^success$'")
+    gateway.succeed("systemctl show nixstasis-frpc.service -p ExecMainStatus --value | grep '^0$'")
     gateway.fail("systemctl show nixstasis-frpc.service -p Environment --value | grep 'FRPS_AUTH_TOKEN=frp-token'")
+    gateway.fail("journalctl -b --no-pager | grep -E '243/CREDENTIALS|Failed at step CREDENTIALS|start-limit-hit|already loaded or has a fragment file'")
     gateway.fail("journalctl -u nixstasis-frpc -b --no-pager | grep 'frp-token'")
 
+    gateway.succeed("systemctl stop nixstasis-poll.service")
+    gateway.succeed("systemctl stop nixstasis-frpc.service")
+    gateway.succeed("systemctl show nixstasis-frpc.service -p Result --value | grep '^success$'")
+    gateway.succeed("systemctl show nixstasis-frpc.service -p ExecMainStatus --value | grep '^0$'")
     gateway.succeed("systemctl stop nixstasis-mock-api.service")
     gateway.succeed("systemctl is-active multi-user.target")
-    gateway.succeed("systemctl is-active nixstasis-poll.service")
+    gateway.fail("systemctl is-active --quiet nixstasis-poll.service")
   '';
 }

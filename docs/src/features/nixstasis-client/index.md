@@ -44,7 +44,7 @@ AtomixOS owns the bounded client execution and local recovery boundary.
 
 - `nix/tests/nixstasis-module.nix` validates options and rendered configuration.
 - `nix/tests/nixstasis-client.nix` uses a mock API to validate registration, identity reuse, polling, outage behavior,
-  and the FRP launch boundary.
+  and a successful transient FRP unit with a mock `frpc`.
 - Commit `f3cf5a5bb9fdd2812a1c875063f16ac8ac5802b6` delivered the module integration.
 - Commit `80a1c84c272e7432c6e17aaf0b6b4e7be3562809` delivered the focused VM test.
 
@@ -57,8 +57,8 @@ allowlisting, and mock-server validation were delivered.
 
 ### Intentional Changes
 
-Full FRP tunnel transport was narrowed to validation of the launch boundary; remote tunnel reliability belongs to
-integration with the Nixstasis server and deployment network.
+Full FRP tunnel transport remains deferred; the VM proves the transient unit and credential boundary with a mock
+`frpc`, while remote tunnel reliability belongs to integration with the Nixstasis server and deployment network.
 
 ### Deferred Work
 

@@ -273,10 +273,10 @@ from the device to the configured Nixstasis/FRP server.
   endpoints.
 - VM test verifies registration creates persistent identity under `/data`.
 - VM test verifies polling sends heartbeat data after registration.
-- VM test verifies a mock `remote_access_token` triggers the FRP launch boundary:
-  the client attempts to start the transient FRP unit and passes the token through
-  the intended credential path. Full end-to-end FRP server/tunnel validation is
-  deferred.
+- VM test verifies a mock `remote_access_token` starts an operational transient FRP
+  unit backed by a mock `frpc`, with successful result/status and no token exposure
+  in the unit environment or journal. Full end-to-end FRP server/tunnel validation
+  is deferred.
 - VM test verifies server unavailability does not block boot or local SSH/LAN
   recovery.
 
