@@ -304,7 +304,7 @@ from the device to the configured Nixstasis/FRP server.
 ## Resolved Review Decisions
 
 - The existing Nixstasis client and API contract are authoritative. AtomixOS will
-  not define a local placeholder protocol.
+  not define a local protocol.
 - The feature is about including and wiring the client into the OS squashfs as a
   flake/package dependency.
 - Nix flake packaging should be added to the Nixstasis repository rather than

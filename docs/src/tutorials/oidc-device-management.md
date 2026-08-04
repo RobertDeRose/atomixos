@@ -129,15 +129,15 @@ files/
     Containerfile
 ```
 
-Substitute the placeholder values in `config.toml`, package this directory, and
+Substitute the example values in `config.toml`, package this directory, and
 provision the device. The Caddyfile and generated Cockpit configuration read
 those values from container environment variables.
 
-## Placeholder Values
+## Example Values
 
 Replace these values before provisioning:
 
-| Placeholder                | Where       | Description                          |
+| Example value              | Where       | Description                          |
 |----------------------------|-------------|--------------------------------------|
 | `<SSH_PUBLIC_KEY>`         | config.toml | Your SSH public key for admin access |
 | `<AZURE_TENANT_ID>`        | config.toml | Entra directory (tenant) ID          |
@@ -147,7 +147,7 @@ Replace these values before provisioning:
 | `<GATEWAY_DOMAIN>`         | config.toml | Local DNS name for the device        |
 | `<ENTRA_ADMIN_GROUP_NAME>` | config.toml | Entra group name for admin role      |
 
-If you switch to Google or another provider, replace the Azure placeholders
+If you switch to Google or another provider, replace the Azure example values
 with that provider's client ID/secret variables and update the Caddyfile
 environment entries accordingly.
 
