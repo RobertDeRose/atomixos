@@ -44,6 +44,9 @@ lib.mkMerge [
     # search path. QEMU images already expose those services through system.path;
     # retaining only that aggregate avoids duplicate service registrations.
     services.dbus.packages = lib.mkForce [ config.system.path ];
+    # Boot-storage diagnostics target Rock64 eMMC and U-Boot hardware, which
+    # is not present in virtual machines.
+    systemd.services.boot-storage-debug.wantedBy = lib.mkForce [ ];
     # The NixOS test harness sets this for general-purpose kernels, but the
     # stripped virtual kernel does not expose the corresponding sysctl.
     boot.kernel.sysctl."kernel.hung_task_timeout_secs" = lib.mkForce null;
