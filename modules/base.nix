@@ -42,6 +42,10 @@ in
 
   config = {
 
+    # Systemd's filesystem sandboxing requires the BPF LSM. The stripped
+    # kernels compile only that LSM, so request exactly the supported set.
+    security.lsm = lib.mkForce [ "bpf" ];
+
     # ── Base system ──────────────────────────────────────────────────────────────
 
     system.stateVersion = "25.11";

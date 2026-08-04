@@ -59,17 +59,22 @@ nix build .#checks.aarch64-darwin.build-config-workflow --no-link
 nix build .#checks.aarch64-linux.build-config-workflow --no-link
 nix build .#checks.aarch64-darwin.watchdog-missing-device --no-link
 nix build .#checks.aarch64-linux.watchdog-missing-device --no-link
+nix build .#checks.aarch64-darwin.kernel-security --no-link
+nix build .#checks.aarch64-linux.kernel-security --no-link
 ```
 
 The `nixstasis-client` VM check boots AtomixOS with a mock Nixstasis API. It
 validates registration, `/data/nixstasis` identity reuse across a registration
-service restart, heartbeat polling, the FRP transient-unit launch boundary, and
+service restart, heartbeat polling, a successful mock FRP transient unit, and
 that stopping the mock API does not stop local recovery targets.
 
 The `watchdog-module` check verifies hardware watchdog enforcement remains off
 by default and renders the configured systemd manager watchdog settings only when
 explicitly enabled. The `watchdog-missing-device` VM check enables that policy without exposing a watchdog device,
 then verifies boot continues, RAUC state is unchanged, and an actionable warning reports unavailable enforcement.
+
+The `kernel-security` VM check verifies the stripped kernel exposes the BPF LSM and BTF required by systemd filesystem
+sandboxing. It also rejects unsupported-BPF, MTD-probe, boot-storage, and hung-task-sysctl startup diagnostics.
 
 The `build-configuration` check covers strict schema parsing, merge behavior, timeout bounds, canonical bytes,
 provenance, NixOS option mapping, and artifact sidecar inputs. The `build-config-workflow` check uses an isolated fake
@@ -102,6 +107,7 @@ Additional flake-only checks:
 | `build-configuration`         | 0     | Schema, canonical policy, provenance, module mapping, and sidecar inputs                                  |
 | `build-config-workflow`       | 0     | Local override wrapper, task matrix, Lima behavior, and atomic retained links                             |
 | `watchdog-missing-device`     | 1     | Enabled policy without hardware boots, preserves RAUC state, and emits an actionable warning              |
+| `kernel-security`             | 1     | BPF LSM/BTF support is active and unsupported hardware/sysctl startup diagnostics are absent              |
 | `first-boot-provision`        | 1     | Provisioning import, validation, apply, auth, and rollback behavior                                       |
 | `first-boot-source-discovery` | 1     | Boot/USB/bootstrap source precedence and first-boot marker behavior                                       |
 | `initrd-fresh-flash-marker`   | 1     | Initrd repartitioning creates slot B/data and persists the fresh-flash marker                             |

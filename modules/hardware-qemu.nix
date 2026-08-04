@@ -10,6 +10,15 @@
 
 let
   kernelConfig = import ./kernel-config.nix { inherit lib; };
+  qemuMtdProbeRule = pkgs.writeTextFile {
+    name = "qemu-udev-rules";
+    destination = "/lib/udev/rules.d/75-probe_mtd.rules";
+    text = ''
+      # QEMU exposes firmware pflash as mtd0ro, but this profile has no MTD
+      # storage to probe. The systemd rule references an optional mtd_probe
+      # helper that is not present in the NixOS systemd package.
+    '';
+  };
 in
 lib.mkMerge [
   (lib.optionalAttrs (options ? atomixos.rauc.enable) {
@@ -50,6 +59,9 @@ lib.mkMerge [
     # Boot-storage diagnostics target Rock64 eMMC and U-Boot hardware, which
     # is not present in virtual machines.
     systemd.services.boot-storage-debug.wantedBy = lib.mkForce [ ];
+    # Shadow systemd's MTD probe rule in QEMU. The virtual firmware device is
+    # not AtomixOS storage, and probing it only emits a missing-helper warning.
+    services.udev.packages = lib.mkAfter [ qemuMtdProbeRule ];
     # networkd-dispatcher resolves its optional wireless helpers at import
     # time, before its logging flags are parsed. Add the helper to the service
     # PATH without adding wireless tooling to every VM shell environment.

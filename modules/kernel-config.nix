@@ -222,6 +222,18 @@ let
     F2FS_FS = lib.mkForce yes;
     OVERLAY_FS = lib.mkForce yes;
 
+    # Systemd's RestrictFileSystems= hardening unconditionally probes and uses
+    # the BPF LSM when the kernel exposes it. Keep the complete capability set
+    # available rather than booting with an unsupported LSM request.
+    BPF = lib.mkForce yes;
+    BPF_SYSCALL = lib.mkForce yes;
+    BPF_JIT = lib.mkForce yes;
+    FTRACE = lib.mkForce yes;
+    UPROBE_EVENTS = lib.mkForce yes;
+    BPF_LSM = lib.mkForce yes;
+    DEBUG_INFO_REDUCED = lib.mkForce no;
+    DEBUG_INFO_BTF = lib.mkForce yes;
+
     # Networking baseline used by the gateway image.
     WIREGUARD = lib.mkForce module;
     TUN = lib.mkForce yes;
