@@ -62,6 +62,7 @@ nixos-lib.runTest {
     gateway.wait_for_unit("multi-user.target")
     gateway.wait_for_unit("networkd-dispatcher.service")
     gateway.wait_for_unit("chronyd.service")
+    gateway.fail("journalctl -b -u networkd-dispatcher --no-pager | grep -F 'No valid path found for iwconfig'")
 
     gateway.wait_until_succeeds("chronyc activity | grep '^0 sources online$'", timeout=60)
     gateway.succeed("chronyc activity | grep 'sources with unknown address'")
