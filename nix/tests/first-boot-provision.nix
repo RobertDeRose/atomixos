@@ -152,10 +152,10 @@ nixos-lib.runTest {
         gateway.succeed("grep '^Volume=/data/config/local.env:/app/local.env:ro$' /data/config/quadlet/myapp.container")
         gateway.succeed("grep '^Subnet=10.89.0.0/24$' /data/config/quadlet/frontend.network")
         gateway.succeed("grep '^Gateway=10.89.0.1$' /data/config/quadlet/frontend.network")
-        gateway.succeed("grep '^\[Network\]$' /data/config/quadlet/frontend.network")
+        gateway.succeed("grep -F '[Network]' /data/config/quadlet/frontend.network")
         gateway.succeed("grep '^Driver=local$' /data/config/quadlet/app-data.volume")
-        gateway.succeed("grep '^\[Volume\]$' /data/config/quadlet/app-data.volume")
-        gateway.succeed("grep '^\[Build\]$' /data/config/quadlet/custom-ws.build")
+        gateway.succeed("grep -F '[Volume]' /data/config/quadlet/app-data.volume")
+        gateway.succeed("grep -F '[Build]' /data/config/quadlet/custom-ws.build")
         gateway.succeed("grep '^File=/data/config/files/cockpit/Containerfile$' /data/config/quadlet/custom-ws.build")
         gateway.succeed("grep '^ImageTag=localhost/custom-ws:latest$' /data/config/quadlet/custom-ws.build")
 
@@ -449,7 +449,7 @@ nixos-lib.runTest {
         gateway.succeed("/tmp/sign-reapply /tmp/partial-user-nonce.txt /api/config/users/alice /tmp/partial-user.json /tmp/auth-test-key /tmp/partial-user-signature-b64.txt")
         gateway.succeed("curl -fsS -X PUT -H 'Content-Type: application/json' -H \"X-AtomixOS-Nonce: $(cat /tmp/partial-user-nonce.txt)\" -H \"X-AtomixOS-Signature: $(cat /tmp/partial-user-signature-b64.txt)\" --data-binary @/tmp/partial-user.json http://127.0.0.1:18081/api/config/users/alice > /tmp/partial-user-response.json")
         gateway.succeed("python3 /tmp/assert-api-job http://127.0.0.1:18081 /tmp/partial-user-response.json succeeded")
-        gateway.succeed("grep '\[users.alice\]' /tmp/auth-root/config.toml")
+        gateway.succeed("grep -F '[users.alice]' /tmp/auth-root/config.toml")
         gateway.succeed("cat /tmp/auth-test-key.pub > /tmp/auth-root/admin-signers")
 
         gateway.succeed("curl -fsS http://127.0.0.1:18081/api/nonce > /tmp/partial-network-nonce.json")
@@ -465,7 +465,7 @@ nixos-lib.runTest {
         gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nnonce = json.loads(Path('/tmp/partial-export-nonce.json').read_text())['nonce']\nPath('/tmp/partial-export-nonce.txt').write_text(nonce)\nPath('/tmp/empty-body').write_bytes(bytes())\nPY")
         gateway.succeed("/tmp/sign-reapply /tmp/partial-export-nonce.txt /api/config/export /tmp/empty-body /tmp/auth-test-key /tmp/partial-export-signature-b64.txt")
         gateway.succeed("curl -fsS -H \"X-AtomixOS-Nonce: $(cat /tmp/partial-export-nonce.txt)\" -H \"X-AtomixOS-Signature: $(cat /tmp/partial-export-signature-b64.txt)\" http://127.0.0.1:18081/api/config/export > /tmp/partial-export.toml")
-        gateway.succeed("grep '\[users.alice\]' /tmp/partial-export.toml")
+        gateway.succeed("grep -F '[users.alice]' /tmp/partial-export.toml")
 
         # Signature is bound to the submitted payload digest.
         gateway.succeed("curl -fsS http://127.0.0.1:18081/api/nonce > /tmp/auth-tamper-nonce-response.json")
