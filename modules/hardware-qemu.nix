@@ -36,6 +36,10 @@ lib.mkMerge [
       neededForBoot = false;
     };
 
+    # QEMU checks use explicit nftables configurations where needed; never
+    # start the legacy iptables firewall against the stripped test kernel.
+    networking.firewall.enable = lib.mkForce false;
+
     boot.initrd.postMountCommands = lib.mkForce "";
     boot.initrd.systemd.enable = lib.mkForce true;
 
