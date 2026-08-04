@@ -294,7 +294,6 @@ in
     # dirs to exist under /var. tmpfiles.d rules create them early in boot.
     systemd.tmpfiles.rules = [
       "d /var/empty 0555 root root -"
-      "d /var/lib 0755 root root -"
       "d /var/lib/systemd 0755 root root -"
       "d /var/lib/systemd/network 0755 systemd-network systemd-network -"
       "d /var/lib/private 0700 root root -"
@@ -306,9 +305,7 @@ in
       "d /var/lib/appsvc/.config 0750 appsvc appsvc -"
       "d /var/lib/appsvc/.config/containers 0750 appsvc appsvc -"
       "d /var/lib/appsvc/.config/containers/systemd 0750 appsvc appsvc -"
-      "d /var/cache 0755 root root -"
       "d /var/cache/nscd 0755 nscd nscd -"
-      "d /var/log 0755 root root -"
       "d /var/log/journal 2755 root systemd-journal -"
       "d /var/db 0755 root root -"
       "d /run/chrony 0750 chrony chrony -"
