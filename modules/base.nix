@@ -413,6 +413,9 @@ in
       pkgs.gnugrep
       pkgs.util-linux
     ];
+    boot.initrd.systemd.storePaths = [
+      "${config.boot.initrd.systemd.package}/lib/udev/mtd_probe"
+    ];
     boot.initrd.systemd.repart = {
       enable = true;
       empty = "allow";
