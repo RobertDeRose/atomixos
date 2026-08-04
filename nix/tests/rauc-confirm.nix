@@ -101,6 +101,7 @@ nixos-lib.runTest {
       # The os-verification script checks `systemctl is-active chronyd.service`.
       services.chrony = {
         enable = true;
+        enableRTCTrimming = false;
         extraConfig = ''
           local stratum 10
         '';
