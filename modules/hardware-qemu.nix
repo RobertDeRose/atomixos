@@ -1,6 +1,7 @@
 # QEMU aarch64-virt hardware configuration for development/testing.
 # Shares all service configuration from base.nix but targets virtual hardware.
 {
+  config,
   lib,
   options,
   pkgs,
@@ -39,6 +40,10 @@ lib.mkMerge [
     # QEMU checks use explicit nftables configurations where needed; never
     # start the legacy iptables firewall against the stripped test kernel.
     networking.firewall.enable = lib.mkForce false;
+    # NixOS adds both individual service packages and system.path to the D-Bus
+    # search path. QEMU images already expose those services through system.path;
+    # retaining only that aggregate avoids duplicate service registrations.
+    services.dbus.packages = lib.mkForce [ config.system.path ];
     # The NixOS test harness sets this for general-purpose kernels, but the
     # stripped virtual kernel does not expose the corresponding sysctl.
     boot.kernel.sysctl."kernel.hung_task_timeout_secs" = lib.mkForce null;
