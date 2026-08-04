@@ -182,7 +182,7 @@ The implemented platform centers on:
 
 ### Goals / Non-Goals
 
-**Goals**
+#### Design Goals
 
 - Atomic A/B updates that only write the inactive slot pair
 - Automatic rollback when a new slot fails to boot or cannot stay healthy
@@ -191,7 +191,7 @@ The implemented platform centers on:
 - A small runtime closure that still supports Podman workloads and recovery access
 - A QEMU target that shares the real configuration for rapid iteration and test coverage
 
-**Non-Goals**
+#### Design Non-Goals
 
 - Running a permanent Cockpit/Traefik management surface directly on the device
 - Embedding device credentials or per-device secrets in the base image
