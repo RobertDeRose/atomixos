@@ -14,7 +14,7 @@ hk = "1.44.3"
 cocogitto = "latest"
 harper-cli = "latest"
 "npm:@contextlint/cli" = { version = "latest", aube_args = "--allow-low-downloads" }
-mdbook = "0.5.2"
+mdbook = "0.5.0"
 node = "lts"
 uv = "latest"
 "npm:@commitlint/cli" = "20.5.3"

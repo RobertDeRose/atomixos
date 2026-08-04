@@ -192,23 +192,23 @@ url = "https://github.com/jdx/hk/releases/download/v1.44.3/hk-aarch64-apple-darw
 url_api = "https://api.github.com/repos/jdx/hk/releases/assets/409190415"
 
 [[tools.mdbook]]
-version = "0.5.2"
+version = "0.5.0"
 backend = "aqua:rust-lang/mdBook"
 
 [tools.mdbook."platforms.linux-x64"]
-checksum = "sha256:8e9d802bbecea34380aabfc65bec4fdba23c07453ef2c7e06fa34c282082e2c4"
-url = "https://github.com/rust-lang/mdBook/releases/download/v0.5.2/mdbook-v0.5.2-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/rust-lang/mdBook/releases/assets/327545066"
+checksum = "sha256:34c7a1b8cbd8daec5060aa9ed85441e0c50219a37c8c7975b69b991848a202ce"
+url = "https://github.com/rust-lang/mdBook/releases/download/v0.5.0/mdbook-v0.5.0-x86_64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/rust-lang/mdBook/releases/assets/317671007"
 
 [tools.mdbook."platforms.macos-arm64"]
-checksum = "sha256:17cc64478ec279a73881420e850bd8f9d460552e56b50159ff465bc97eb90d6c"
-url = "https://github.com/rust-lang/mdBook/releases/download/v0.5.2/mdbook-v0.5.2-x86_64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/rust-lang/mdBook/releases/assets/327545156"
+checksum = "sha256:98e539c6b7b099caf42d1ad40ae33d7a30155956f2d7f83b8001ece6c13e27b8"
+url = "https://github.com/rust-lang/mdBook/releases/download/v0.5.0/mdbook-v0.5.0-x86_64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/rust-lang/mdBook/releases/assets/317671066"
 
 [tools.mdbook."platforms.macos-x64"]
-checksum = "sha256:17cc64478ec279a73881420e850bd8f9d460552e56b50159ff465bc97eb90d6c"
-url = "https://github.com/rust-lang/mdBook/releases/download/v0.5.2/mdbook-v0.5.2-x86_64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/rust-lang/mdBook/releases/assets/327545156"
+checksum = "sha256:98e539c6b7b099caf42d1ad40ae33d7a30155956f2d7f83b8001ece6c13e27b8"
+url = "https://github.com/rust-lang/mdBook/releases/download/v0.5.0/mdbook-v0.5.0-x86_64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/rust-lang/mdBook/releases/assets/317671066"
 
 [[tools."nix:deadnix"]]
 version = "1.3.1"
