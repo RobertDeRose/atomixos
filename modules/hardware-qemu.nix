@@ -43,7 +43,10 @@ lib.mkMerge [
     # NixOS adds both individual service packages and system.path to the D-Bus
     # search path. QEMU images already expose those services through system.path;
     # retaining only that aggregate avoids duplicate service registrations.
-    services.dbus.packages = lib.mkForce [ config.system.path ];
+    services.dbus.packages = lib.mkForce (
+      [ config.system.path ]
+      ++ lib.optional config.services.dnsmasq.enable config.services.dnsmasq.package
+    );
     # Boot-storage diagnostics target Rock64 eMMC and U-Boot hardware, which
     # is not present in virtual machines.
     systemd.services.boot-storage-debug.wantedBy = lib.mkForce [ ];
