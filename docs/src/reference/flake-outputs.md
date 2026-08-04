@@ -54,8 +54,13 @@ Tests are available for both Linux and macOS:
 
 Available test names: `build-configuration`, `build-config-workflow`, `rauc-slots`, `rauc-update`, `rauc-rollback`,
 `rauc-confirm`, `rauc-power-loss`, `rauc-watchdog`, `firewall`, `initrd-fresh-flash-marker`, `first-boot-provision`,
-`first-boot-source-discovery`, `watchdog-module`, `watchdog-missing-device`, `forensics-podman-log-path`,
+`first-boot-source-discovery`, `kernel-security`, `watchdog-module`, `watchdog-missing-device`, `forensics-podman-log-path`,
 `forensics-rsyslog-path`, `forensics-rsyslog-buffering`, `forensics-shutdown-flush`, `network-isolation`, `ssh-wan-toggle`.
+
+`mise run check` evaluates both `aarch64-linux` and `aarch64-darwin` outputs with
+`nix flake check --all-systems --no-build`, then builds the checks compatible with
+the current host. The evaluation pass does not execute incompatible VM tests;
+run the target-specific check directly when execution evidence is required.
 
 ## Overlay
 

@@ -373,6 +373,7 @@
             forensics-shutdown-flush = import ./nix/tests/forensics-shutdown-flush.nix netTestArgs;
             chrony-wan-recovery = import ./nix/tests/chrony-wan-recovery.nix netTestArgs;
             network-isolation = import ./nix/tests/network-isolation.nix netTestArgs;
+            kernel-security = import ./nix/tests/kernel-security.nix netTestArgs;
             ssh-wan-toggle = import ./nix/tests/ssh-wan-toggle.nix netTestArgs;
           };
 
@@ -428,6 +429,7 @@
             forensics-shutdown-flush = import ./nix/tests/forensics-shutdown-flush.nix darwinNetTestArgs;
             chrony-wan-recovery = import ./nix/tests/chrony-wan-recovery.nix darwinNetTestArgs;
             network-isolation = import ./nix/tests/network-isolation.nix darwinNetTestArgs;
+            kernel-security = import ./nix/tests/kernel-security.nix darwinNetTestArgs;
             ssh-wan-toggle = import ./nix/tests/ssh-wan-toggle.nix darwinNetTestArgs;
           };
         in
