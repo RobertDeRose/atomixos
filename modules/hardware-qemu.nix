@@ -37,7 +37,7 @@ lib.mkMerge [
     };
 
     boot.initrd.postMountCommands = lib.mkForce "";
-    boot.initrd.systemd.enable = lib.mkForce false;
+    boot.initrd.systemd.enable = lib.mkForce true;
     boot.initrd.systemd.repart.enable = lib.mkForce false;
     boot.initrd.systemd.services.initrd-prepare-overlay-lower.enable = lib.mkForce false;
 
