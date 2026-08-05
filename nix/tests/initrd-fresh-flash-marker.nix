@@ -156,7 +156,10 @@ nixos-lib.runTest {
 
       system.stateVersion = "25.11";
 
-      # This test only needs the initrd repartition/detection path.
+      # This QEMU profile exercises only initrd repartition/detection. It does
+      # not provide RAUC or Rock64 boot-storage integration.
+      atomixos.rauc.enable = lib.mkForce false;
+      systemd.services.boot-storage-debug.wantedBy = lib.mkForce [ ];
       networking.firewall.enable = false;
       systemd.services.first-boot.enable = false;
       systemd.services.quadlet-sync.enable = false;
@@ -173,6 +176,7 @@ nixos-lib.runTest {
     gateway.wait_for_unit("multi-user.target")
 
     gateway.succeed("test -f /etc/atomixos/fresh-flash")
+    gateway.fail("journalctl -b -u boot-storage-debug --no-pager | grep 'Capture boot storage diagnostics'")
     gateway.succeed("journalctl -b -u systemd-repart --no-pager | grep 'Applying changes to /dev/vdb'")
     gateway.succeed("journalctl -b -u systemd-repart --no-pager | grep 'boot-b'")
     gateway.succeed("journalctl -b -u systemd-repart --no-pager | grep 'rootfs-b'")
