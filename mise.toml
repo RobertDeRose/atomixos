@@ -49,9 +49,11 @@ description = "Apply deterministic repository fixes"
 run = "hk fix -a"
 
 [tasks."nix:check"]
-description = "Evaluate all flake systems and run host-compatible checks"
+description = "Evaluate Linux target outputs and run host-compatible checks"
 run = """
-./scripts/nix-with-build-config.sh flake check --all-systems --no-build
+# Keep the target-system evaluation separate from optional host-system checks.
+# Evaluating every system in one pass duplicates large NixOS graphs in memory.
+./scripts/nix-with-build-config.sh flake check --no-build --option eval-system aarch64-linux
 ./scripts/nix-with-build-config.sh flake check
 """
 

@@ -57,10 +57,13 @@ Available test names: `build-configuration`, `build-config-workflow`, `rauc-slot
 `first-boot-source-discovery`, `kernel-security`, `watchdog-module`, `watchdog-missing-device`, `forensics-podman-log-path`,
 `forensics-rsyslog-path`, `forensics-rsyslog-buffering`, `forensics-shutdown-flush`, `network-isolation`, `ssh-wan-toggle`.
 
-`mise run check` evaluates both `aarch64-linux` and `aarch64-darwin` outputs with
-`nix flake check --all-systems --no-build`, then builds the checks compatible with
-the current host. The evaluation pass does not execute incompatible VM tests;
-run the target-specific check directly when execution evidence is required.
+`mise run check` evaluates the `aarch64-linux` target explicitly with
+`nix flake check --no-build --option eval-system aarch64-linux`, then builds the
+checks compatible with the current host. On macOS, the second phase uses the
+Darwin test driver while the Linux guest remains built by the configured Linux
+builder. This avoids evaluating both large system graphs in one pass. The
+explicit evaluation phase does not execute VM tests; run a target-specific
+check directly when execution evidence is required.
 
 ## Overlay
 

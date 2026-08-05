@@ -6,13 +6,13 @@ All tasks are run with `mise run <task>`. Run `mise tasks` to list them.
 
 All `build:*` tasks accept `--lima` to run inside a Lima VM and `--vm <name>` to specify which VM (default: `default`).
 
-| Task                | Description                                           |
-|---------------------|-------------------------------------------------------|
-| `check`             | Evaluate all systems, then run host-compatible checks |
-| `build`             | Build and retain image artifacts under `.gcroots/`    |
-| `build:squashfs`    | Build squashfs rootfs &rarr; `result-squashfs/`       |
-| `build:rauc-bundle` | Build signed RAUC bundle &rarr; `result-rauc-bundle/` |
-| `build:boot-script` | Build U-Boot boot script &rarr; `result-boot-script/` |
+| Task                | Description                                             |
+|---------------------|---------------------------------------------------------|
+| `check`             | Evaluate Linux targets, then run host-compatible checks |
+| `build`             | Build and retain image artifacts under `.gcroots/`      |
+| `build:squashfs`    | Build squashfs rootfs &rarr; `result-squashfs/`         |
+| `build:rauc-bundle` | Build signed RAUC bundle &rarr; `result-rauc-bundle/`   |
+| `build:boot-script` | Build U-Boot boot script &rarr; `result-boot-script/`   |
 
 `build` also accepts `-o <path>` to copy the latest `.img` to a path.
 
