@@ -229,6 +229,9 @@ let
     BPF_SYSCALL = lib.mkForce yes;
     BPF_JIT = lib.mkForce yes;
     FTRACE = lib.mkForce yes;
+    # BPF LSM attaches through the kernel's BPF trampoline, which needs
+    # function-entry instrumentation on the stripped arm64 kernel.
+    FUNCTION_TRACER = lib.mkForce yes;
     UPROBE_EVENTS = lib.mkForce yes;
     BPF_LSM = lib.mkForce yes;
     DEBUG_INFO_REDUCED = lib.mkForce no;

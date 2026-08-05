@@ -40,7 +40,7 @@ nixos-lib.runTest {
     gateway.succeed("grep -qw bpf /sys/kernel/security/lsm")
     gateway.succeed("test -r /sys/kernel/btf/vmlinux")
     gateway.succeed("grep -Eq '(^| )lsm=bpf($| )' /proc/cmdline")
-    gateway.fail("journalctl -b --no-pager | grep -E 'BPF LSM hook not enabled|BPF LSM not supported'")
+    gateway.fail("journalctl -b --no-pager | grep -E 'BPF LSM hook not enabled|BPF LSM not supported|bpf-restrict-fs: Failed to link program'")
     gateway.fail("journalctl -b --no-pager | grep 'mtd_probe'")
     gateway.fail("journalctl -b --no-pager | grep 'boot-storage-debug'")
     gateway.succeed("systemctl is-active systemd-sysctl.service")
