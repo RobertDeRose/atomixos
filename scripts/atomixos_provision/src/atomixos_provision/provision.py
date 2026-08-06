@@ -65,6 +65,7 @@ from atomixos_provision.staging import (
     write_json_atomic,
     write_result,
 )
+from atomixos_provision.state import FIRST_CONFIG_MARKER, is_provisioned_config_root
 
 __all__ = [
     "apply_config_bytes",
@@ -108,7 +109,6 @@ PROVISION_SERVICE_GROUP = "atomixos-provision"
 PROVISION_LOCK_DIR = Path("/run/atomixos-provision")
 PROVISION_RUNTIME_DIR_ENV = "ATOMIXOS_PROVISION_RUNTIME_DIR"
 PROVISION_WORKER_ACTIVE_ENV = "ATOMIXOS_PROVISION_WORKER_ACTIVE"
-FIRST_CONFIG_MARKER = ".first-config"
 STAGED_RESULT_TIMEOUT_SECONDS = int(
     os.environ.get("ATOMIXOS_PROVISION_RESULT_TIMEOUT_SECONDS", "1200")
 )
@@ -165,10 +165,10 @@ def _first_config_marker_path(config_root: Path) -> Path:
 def _has_first_config_marker(config_root: Path) -> bool:
     return _first_config_marker_path(config_root).is_file()
 
+
 def _is_provisioned_config_root(config_root: Path) -> bool:
-    return _has_first_config_marker(config_root) or (config_root / "config.toml").is_file()
-
-
+    """Return whether the configuration root represents a provisioned device."""
+    return is_provisioned_config_root(config_root)
 
 
 def _write_first_config_marker(candidate_root: Path) -> None:

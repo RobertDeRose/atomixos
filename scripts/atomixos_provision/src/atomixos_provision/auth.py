@@ -14,6 +14,8 @@ from litestar.connection import ASGIConnection
 from litestar.exceptions import NotAuthorizedException
 from litestar.handlers import BaseRouteHandler
 
+from atomixos_provision.state import is_provisioned_config_root
+
 __all__ = [
     "NonceStore",
     "SignerState",
@@ -226,7 +228,7 @@ async def ssh_auth_guard(connection: ASGIConnection, _: BaseRouteHandler) -> Non
     # missing/corrupt signers must fail closed.
     allowed_path = build_allowed_signers(config_root)
     if allowed_path is None:
-        if signer_state.initialized or (config_root / "config.toml").exists():
+        if signer_state.initialized or is_provisioned_config_root(config_root):
             raise NotAuthorizedException(detail="admin signers temporarily unavailable")
         return
     await signer_state.mark_initialized()

@@ -311,18 +311,22 @@ class StagedJobManager(JobManager):
             return job
 
     def get(self, job_id: str) -> Job | None:
+        """Return the staged job for the requested identifier."""
+        from atomixos_provision.staging import validate_job_id
+
         try:
-            with self._recovery_lock:
-                job = super().get(job_id)
-                if job is not None:
-                    self._refresh_from_result(job)
-                    return job
-                recovered = self._job_from_result(job_id)
-                if recovered is not None:
-                    self._jobs[job_id] = recovered
-                return recovered
+            validate_job_id(job_id)
         except ProvisionError:
             return None
+        with self._recovery_lock:
+            job = super().get(job_id)
+            if job is not None:
+                self._refresh_from_result(job)
+                return job
+            recovered = self._job_from_result(job_id)
+            if recovered is not None:
+                self._jobs[job_id] = recovered
+            return recovered
 
     async def _stage_and_monitor(
         self,
@@ -355,43 +359,62 @@ class StagedJobManager(JobManager):
             if staged:
                 if heartbeat_task is not None:
                     heartbeat_task.cancel()
-                    with suppress(asyncio.CancelledError):
+                    try:
                         await heartbeat_task
+                    except asyncio.CancelledError:
+                        pass
+                    except Exception as exc:
+                        self._mark_failed(job, exc)
+                        raise
                     heartbeat_task = None
-                self._refresh_reservation(job)
+                try:
+                    self._refresh_reservation(job)
+                except Exception as exc:
+                    self._mark_failed(job, exc)
+                    raise
                 job.set_stage("queued", "waiting for privileged apply worker")
                 self._start_monitor_if_possible(job)
                 return job
-            self._release_reservation(job)
-            with job._lock:
-                job.state = JobState.FAILED
-                job.error = "staged job manager task was cancelled"
-                job.completed_at = time.monotonic()
+            try:
+                self._release_reservation(job)
+            except Exception as exc:
+                self._mark_failed(job, exc)
+                raise
+            self._mark_failed(job, "staged job manager task was cancelled")
             raise
-        except Exception as exc:
-            self._release_reservation(job)
+        except Exception as original_error:
+            failure: BaseException = original_error
+            try:
+                self._release_reservation(job)
+            except Exception as cleanup_error:
+                failure = cleanup_error
             from atomixos_provision.provision import StagedQueueBusyError
 
-            if isinstance(exc, StagedQueueBusyError):
-                with job._lock:
-                    job.state = JobState.FAILED
-                    job.error = str(exc)
-                    job.completed_at = time.monotonic()
+            self._mark_failed(job, failure)
+            if isinstance(failure, StagedQueueBusyError):
                 raise
-            with job._lock:
-                job.state = JobState.FAILED
-                job.error = str(exc)
-                if hasattr(exc, "rollback_status"):
-                    job.rollback_status = exc.rollback_status
-                job.completed_at = time.monotonic()
             return job
         finally:
             if heartbeat_task is not None:
                 heartbeat_task.cancel()
-                with suppress(asyncio.CancelledError):
+                try:
                     await heartbeat_task
+                except asyncio.CancelledError:
+                    pass
+                except Exception as exc:
+                    self._mark_failed(job, exc)
         self._start_monitor_if_possible(job)
         return job
+
+    @staticmethod
+    def _mark_failed(job: Job, error: BaseException | str) -> None:
+        """Publish terminal failure for a staged job."""
+        with job._lock:
+            job.state = JobState.FAILED
+            job.error = str(error)
+            if hasattr(error, "rollback_status"):
+                job.rollback_status = error.rollback_status
+            job.completed_at = time.monotonic()
 
     async def _heartbeat_reservation(self, job: Job) -> None:
         while True:
@@ -440,9 +463,7 @@ class StagedJobManager(JobManager):
             from atomixos_provision.staging import read_result
 
             result = read_result(_runtime_paths(), job.id)
-        except ProvisionError:
-            raise
-        except Exception:
+        except FileNotFoundError:
             return False
         if result is None:
             return False
@@ -467,8 +488,8 @@ class StagedJobManager(JobManager):
             from atomixos_provision.staging import release_staged_job_slot
 
             release_staged_job_slot(_runtime_paths(), job.id)
-        except Exception:
-            pass
+        except FileNotFoundError:
+            return
 
     def _refresh_reservation(self, job: Job) -> None:
         try:
@@ -476,8 +497,8 @@ class StagedJobManager(JobManager):
             from atomixos_provision.staging import refresh_staged_job_slot
 
             refresh_staged_job_slot(_runtime_paths(), job.id)
-        except Exception:
-            pass
+        except FileNotFoundError:
+            return
 
     def _job_from_result(self, job_id: str) -> Job | None:
         job = Job(id=job_id)
@@ -488,7 +509,7 @@ class StagedJobManager(JobManager):
             from atomixos_provision.staging import staged_job_presence
 
             presence = staged_job_presence(_runtime_paths(), job_id)
-        except Exception:
+        except FileNotFoundError:
             return None
         if presence == "queued":
             job.set_stage("queued", "waiting for privileged apply worker")

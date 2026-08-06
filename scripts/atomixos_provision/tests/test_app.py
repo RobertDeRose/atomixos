@@ -1123,7 +1123,8 @@ async def test_apply_form_rejects_malformed_origin(tmp_path):
 
 
 async def test_ui_job_fragment_returns_404_on_provisioned_device(tmp_path):
-    (tmp_path / "admin-signers").write_text("ssh-ed25519 AAAA test\n")
+    """Verify that ui job fragment returns 404 on provisioned device."""
+    (tmp_path / ".first-config").write_text("ok\n")
     async with AsyncTestClient(app=create_app(config_root=tmp_path)) as client:
         response = await client.get("/ui/jobs/missing")
 
@@ -1131,7 +1132,8 @@ async def test_ui_job_fragment_returns_404_on_provisioned_device(tmp_path):
 
 
 async def test_logo_returns_404_on_provisioned_device(tmp_path):
-    (tmp_path / "admin-signers").write_text("ssh-ed25519 AAAA test\n")
+    """Verify that logo returns 404 on provisioned device."""
+    (tmp_path / ".first-config").write_text("ok\n")
     async with AsyncTestClient(app=create_app(config_root=tmp_path)) as client:
         response = await client.get("/assets/atomixos.png")
 
@@ -1139,7 +1141,8 @@ async def test_logo_returns_404_on_provisioned_device(tmp_path):
 
 
 async def test_config_dropzone_image_returns_404_on_provisioned_device(tmp_path):
-    (tmp_path / "admin-signers").write_text("ssh-ed25519 AAAA test\n")
+    """Verify that config dropzone image returns 404 on provisioned device."""
+    (tmp_path / ".first-config").write_text("ok\n")
     async with AsyncTestClient(app=create_app(config_root=tmp_path)) as client:
         response = await client.get("/assets/config_dropzone.png")
 
@@ -1147,7 +1150,8 @@ async def test_config_dropzone_image_returns_404_on_provisioned_device(tmp_path)
 
 
 async def test_apply_form_returns_404_on_provisioned_device(tmp_path):
-    (tmp_path / "admin-signers").write_text("ssh-ed25519 AAAA test\n")
+    """Verify that apply form returns 404 on provisioned device."""
+    (tmp_path / ".first-config").write_text("ok\n")
     async with AsyncTestClient(app=create_app(config_root=tmp_path)) as client:
         response = await client.post("/apply", data={"config": "version = 1\n"})
 
@@ -1155,7 +1159,8 @@ async def test_apply_form_returns_404_on_provisioned_device(tmp_path):
 
 
 async def test_boot_ui_returns_404_on_provisioned_device(tmp_path):
-    (tmp_path / "admin-signers").write_text("ssh-ed25519 AAAA test\n")
+    """Verify that boot ui returns 404 on provisioned device."""
+    (tmp_path / ".first-config").write_text("ok\n")
     async with AsyncTestClient(app=create_app(config_root=tmp_path)) as client:
         response = await client.get("/")
 

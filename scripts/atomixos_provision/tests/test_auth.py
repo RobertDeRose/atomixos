@@ -217,3 +217,13 @@ async def test_auth_guard_fails_closed_when_provisioned_signers_missing(tmp_path
 
     with pytest.raises(NotAuthorizedException, match="admin signers"):
         await ssh_auth_guard(connection, None)
+
+
+@pytest.mark.asyncio
+async def test_auth_guard_fails_closed_when_marker_exists_without_signers(tmp_path):
+    """Verify that auth guard fails closed when marker exists without signers."""
+    (tmp_path / ".first-config").write_text("ok\n")
+    connection = _UnsignedConnection(tmp_path)
+
+    with pytest.raises(NotAuthorizedException, match="admin signers"):
+        await ssh_auth_guard(connection, None)

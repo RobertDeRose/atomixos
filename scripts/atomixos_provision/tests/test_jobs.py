@@ -6,7 +6,12 @@ from contextlib import suppress
 import pytest
 
 from atomixos_provision.config import ProvisionError
-from atomixos_provision.jobs import Job, JobManager, JobState, StagedJobManager
+from atomixos_provision.jobs import (
+    Job,
+    JobManager,
+    JobState,
+    StagedJobManager,
+)
 from atomixos_provision.staging import (
     count_staged_jobs,
     ensure_runtime_layout,
@@ -441,6 +446,45 @@ class TestStagedJobManager:
         assert rejected is None
         assert mgr._jobs == {}
         assert count_staged_jobs(runtime_paths(tmp_path / "run")) == 0
+
+    def test_staged_reservation_refresh_surfaces_permission_errors(self, monkeypatch):
+        """Verify that staged reservation refresh surfaces permission errors."""
+        manager = StagedJobManager()
+
+        def fail_refresh(*_args, **_kwargs):
+            """Raise the simulated refresh failure."""
+            raise PermissionError("permission denied")
+
+        monkeypatch.setattr("atomixos_provision.staging.refresh_staged_job_slot", fail_refresh)
+
+        with pytest.raises(PermissionError, match="permission denied"):
+            manager._refresh_reservation(Job(id="job-1"))
+
+    def test_staged_reservation_release_surfaces_permission_errors(self, monkeypatch):
+        """Verify that staged reservation release surfaces permission errors."""
+        manager = StagedJobManager()
+
+        def fail_release(*_args, **_kwargs):
+            """Raise the simulated release failure."""
+            raise PermissionError("permission denied")
+
+        monkeypatch.setattr("atomixos_provision.staging.release_staged_job_slot", fail_release)
+
+        with pytest.raises(PermissionError, match="permission denied"):
+            manager._release_reservation(Job(id="job-1"))
+
+    def test_staged_result_read_surfaces_permission_errors(self, monkeypatch):
+        """Verify that staged result read surfaces permission errors."""
+        manager = StagedJobManager()
+
+        def fail_read(*_args, **_kwargs):
+            """Raise the simulated read failure."""
+            raise PermissionError("permission denied")
+
+        monkeypatch.setattr("atomixos_provision.staging.read_result", fail_read)
+
+        with pytest.raises(PermissionError, match="permission denied"):
+            manager._refresh_from_result(Job(id="job-1"))
 
     @pytest.mark.asyncio
     async def test_staged_submit_returns_failed_job_when_reservation_fails(

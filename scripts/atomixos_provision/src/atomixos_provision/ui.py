@@ -25,6 +25,7 @@ from atomixos_provision.bootstrap_security import enforce_bootstrap_browser_orig
 from atomixos_provision.config import ProvisionError
 from atomixos_provision.domain.config.coordinator import ProvisionCoordinator
 from atomixos_provision.jobs import Job, JobManager
+from atomixos_provision.state import is_provisioned_config_root
 
 __all__ = ["ui_routes"]
 
@@ -348,12 +349,13 @@ async def _require_unprovisioned_or_boot_ui_terminal_job(connection, _: Any) -> 
 
     # Provisioning can restart the bootstrap service, which drops in-memory jobs.
     # Once config exists, let the reconnecting Boot UI render terminal success.
-    if not (config_root / "config.toml").exists():
+    if not _device_is_provisioned(config_root):
         raise NotFoundException()
 
 
 def _device_is_provisioned(config_root: Path) -> bool:
-    return (config_root / "config.toml").exists() or (config_root / "admin-signers").exists()
+    """Return whether the device configuration has been provisioned."""
+    return is_provisioned_config_root(config_root)
 
 
 def _render_recovered_success_fragment() -> str:
@@ -550,7 +552,7 @@ async def job_fragment(job_id: str, job_manager: JobManager, state: State) -> Re
     boot_ui_jobs, boot_ui_jobs_lock = _boot_ui_job_state(state)
     job = job_manager.get(job_id)
     if job is None:
-        if (state.config_root / "config.toml").exists():
+        if _device_is_provisioned(state.config_root):
             with boot_ui_jobs_lock:
                 boot_ui_jobs.discard(job_id)
                 _forget_boot_ui_job(job_id)
@@ -563,9 +565,7 @@ async def job_fragment(job_id: str, job_manager: JobManager, state: State) -> Re
     body = render_job_fragment(job)
     if str(job.snapshot()["state"]) in {"succeeded", "failed"}:
         with boot_ui_jobs_lock:
-            if (state.config_root / "config.toml").exists() or (
-                state.config_root / "admin-signers"
-            ).exists():
+            if _device_is_provisioned(state.config_root):
                 if job_id not in boot_ui_jobs and not _has_boot_ui_job_marker(job_id):
                     raise NotFoundException()
                 boot_ui_jobs.discard(job_id)
@@ -583,7 +583,7 @@ async def job_events(job_id: str, job_manager: JobManager, state: State) -> Resp
     boot_ui_jobs, boot_ui_jobs_lock = _boot_ui_job_state(state)
     job = job_manager.get(job_id)
     if job is None:
-        if (state.config_root / "config.toml").exists():
+        if _device_is_provisioned(state.config_root):
             async def recovered_stream():
                 yield {"data": _render_recovered_success_fragment()}
                 yield {"event": "done", "data": ""}
@@ -608,9 +608,7 @@ async def job_events(job_id: str, job_manager: JobManager, state: State) -> Resp
             if str(job.snapshot()["state"]) in {"succeeded", "failed"}:
                 yield {"event": "done", "data": ""}
                 with boot_ui_jobs_lock:
-                    if (state.config_root / "config.toml").exists() or (
-                        state.config_root / "admin-signers"
-                    ).exists():
+                    if _device_is_provisioned(state.config_root):
                         boot_ui_jobs.discard(job_id)
                         _forget_boot_ui_job(job_id)
                 break
