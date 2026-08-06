@@ -140,8 +140,9 @@ def test_locked_export_uses_runtime_lock_for_data_config(monkeypatch, tmp_path):
         lambda root, **_kwargs: Path("/data/config") if root == config_root else root,
     )
     monkeypatch.setattr(
-        "atomixos_provision.partial_config.export_config_bytes",
-        lambda _root: (config_root / "config.toml").read_bytes(),
+        provision,
+        "export_bundle_bytes",
+        lambda _root: b"\x1f\x8bexported-bundle",
     )
     monkeypatch.setattr(
         provision,
@@ -149,7 +150,7 @@ def test_locked_export_uses_runtime_lock_for_data_config(monkeypatch, tmp_path):
         lambda _root: (_ for _ in ()).throw(AssertionError("export recovered root")),
     )
 
-    assert locked_export_config_bytes(config_root) == b"version = 1\n"
+    assert locked_export_config_bytes(config_root) == b"\x1f\x8bexported-bundle"
     assert (lock_dir / "config.lock").exists()
 
 

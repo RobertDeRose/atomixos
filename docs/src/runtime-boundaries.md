@@ -46,10 +46,10 @@ expected entries, re-renders the verified staged `config.toml` into `/data/confi
 promotion, activation, rollback, and recovery protocol. Root-written `/data/config` state is group-readable by
 `atomixos-provision` so the unprivileged API can authenticate and export approved state; bundle `files/` payloads remain
 owned by the application runtime user and are preserved through a no-symlink snapshot path. Export is allowlisted to
-`config.toml` and `files/` and excludes generated runtime state. Initial promotion also writes
-`/data/config/.first-config`; the target shared provisioning predicate treats that marker or a valid `config.toml` as
-the compatibility signal, while missing signer state fails closed. The partially complete implementation still has
-separate UI/signers detection; the execution-hardening task unifies those guards before delivery.
+`config.toml` and `files/`, returns a deterministic `config-bundle.tar.gz` under the provisioning lock, and excludes
+generated runtime state. Initial promotion also writes `/data/config/.first-config`; the shared provisioning predicate
+treats that marker or a valid `config.toml` as the compatibility signal across provisioning, authentication, and Boot UI
+guards, while missing signer state fails closed.
 
 Runtime result files under `/run/atomixos-provision/results` are root-writable and group-readable only. Claim and queued-job
 abandonment share `/run/atomixos-provision/queue.lock`, and the root worker finalizer records failed results for claimed

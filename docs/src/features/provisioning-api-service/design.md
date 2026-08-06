@@ -83,7 +83,7 @@ builds remain active validation obligations.
 ## Documentation Impact
 
 - `docs/src/provisioning.md`: current API routes, authentication matrix, staged/direct job semantics, and complete export
-  archive contract; update with T086 when the endpoint changes.
+  archive contract; updated with T086 when the endpoint changed.
 - `docs/src/data-flow.md`: raw USB seed versus API bundle sources, persisted `files/` payloads, marker fallback, and
   export/import bookend.
 - `docs/src/runtime-boundaries.md`: WAN/LAN bootstrap exposure, unprivileged/root ownership, export allowlist, and the
@@ -98,7 +98,7 @@ builds remain active validation obligations.
   and register the delivered record only after T063, T086, and T092 close.
 
 Documentation updates for current delivered behavior are part of specification reconciliation; the final export response
-and round-trip instructions are owned by T086 and the documentation-reconcile gate.
+and round-trip instructions were completed by T086 and remain subject to the documentation-reconcile gate.
 
 ## Validation Strategy
 
@@ -120,9 +120,9 @@ advance in parallel; route and Nix integration depended on the stable service an
 
 ## Open Questions
 
-The export contract decision is resolved in favor of complete compressed-tar bundle export. T086 owns the implementation
-and round-trip evidence. Remaining close-out work is concrete: complete bundle export, the full aarch64 build/VM run,
-and rootfs closure-budget verification.
+The export contract decision is resolved in favor of complete compressed-tar bundle export, and T086 now owns the
+implemented archive and round-trip evidence. Remaining close-out work is concrete: the full aarch64 build/VM run and
+rootfs closure-budget verification.
 
 ## Overview
 
@@ -303,7 +303,7 @@ this feature.
 | GET    | `/api/jobs/{job_id}`   | job UUID                                  | JSON     | Poll async job status                 |
 | GET    | `/assets/atomixos.png` | none                                      | image    | Static logo                           |
 | POST   | `/api/config`          | SSH sig (provisioned) / none (first-boot) | JSON     | Submit config, returns job ID (async) |
-| GET    | `/api/config/export`   | SSH signature                             | tar.gz   | T086 target: export complete bundle   |
+| GET    | `/api/config/export`   | SSH signature                             | tar.gz   | Export complete config bundle         |
 | POST   | `/api/validate`        | SSH sig                                   | JSON     | Validate config without applying      |
 | POST   | `/apply`               | bootstrap token (first-boot only)         | HTML     | Form upload → async job progress page |
 
@@ -314,7 +314,7 @@ The current and planned resource surface is:
 | Method | Path                            | Description                                               |
 |--------|---------------------------------|-----------------------------------------------------------|
 | GET    | `/api/config/current`           | Return normalized current desired state                   |
-| GET    | `/api/config/export`            | T086 target: complete config.toml + managed files bundle  |
+| GET    | `/api/config/export`            | Complete config.toml + managed files bundle               |
 | PATCH  | `/api/config/users/{name}`      | Apply a typed user change through candidate promotion     |
 | PATCH  | `/api/config/network`           | Apply typed network changes through candidate promotion   |
 | PATCH  | `/api/config/containers/{name}` | Apply typed container changes through candidate promotion |
@@ -531,11 +531,10 @@ state, not a second mutation surface. They use the same authenticated job and
 candidate pipeline as full imports. Future typed partial APIs must follow the same
 rule and must not directly edit rendered runtime artifacts.
 
-The export bookend is being completed in T086; the current endpoint remains
-TOML-only until that task lands. Its target contract is a compressed
-tar archive generated from normalized desired state and managed files, preserving
-the config bundle as the portable artifact. The implementation must not archive
-unrelated `/data/config` state.
+The export bookend is implemented by T086. The endpoint returns a deterministic
+compressed tar bundle generated from the canonical desired state and managed files,
+preserving the config bundle as the portable artifact. The implementation does not
+archive unrelated `/data/config` state.
 
 Future read/mutation examples include:
 
@@ -555,8 +554,8 @@ Every partial mutation must run the same safety pipeline as full config import:
 
 Partial APIs must not directly mutate files under `/data/config/quadlet/`, sync
 systemd/Quadlet search paths, or edit runtime systemd state. Complete bundle
-import/export round-trip tests must land with T086 so API-managed state can always
-be backed up or cloned as a config bundle. Drift
+import/export round-trip tests now ensure API-managed state can always be backed up
+or cloned as a config bundle. Drift
 detection should report differences between normalized desired state and rendered
 files under `/data/config/`, but drift reports are read-only and must not repair
 state outside the safe apply pipeline.

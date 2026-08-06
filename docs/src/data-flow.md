@@ -83,11 +83,15 @@ commands that explicitly run with `ATOMIXOS_PROVISION_WORKER_ACTIVE=1`.
 
 ## Bundle Export Flow
 
-The current `GET /api/config/export` endpoint returns authenticated canonical
-`config.toml` bytes. The retained bundle-export implementation will take the
-provisioning lock, snapshot only `config.toml` and `/data/config/files/`, and return
-a compressed tar archive accepted by the same importer. Generated JSON, Quadlet
-output, markers, signer material, and other `/data/config` state are excluded.
+Authenticated `GET /api/config/export` takes the provisioning lock and snapshots
+only the canonical `config.toml` plus the managed `/data/config/files/` tree. It
+returns a deterministic `config-bundle.tar.gz` (`application/gzip`) accepted by
+the same importer. Generated JSON, Quadlet output, markers, signer material, and
+other `/data/config` state are excluded. Missing `files/` is omitted; an existing
+empty directory is represented as an empty `files` archive entry. Archive members
+are relative regular files or directories and remain bounded by the import size,
+member, and count limits, so exporting and importing the bundle preserves the
+canonical config and managed-file contents without exposing runtime credentials.
 
 ## Managed Users Flow
 

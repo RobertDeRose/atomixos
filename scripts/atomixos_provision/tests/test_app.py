@@ -410,6 +410,41 @@ async def test_config_export_requires_auth(tmp_path):
     assert response.status_code == 401
 
 
+async def test_authenticated_config_export_returns_complete_bundle(tmp_path, monkeypatch):
+    """Verify that authenticated config export returns complete bundle."""
+
+    class AcceptingNonceStore:
+        """Provide the AcceptingNonceStore test helper."""
+
+        async def consume(self, nonce):
+            """Accept the nonce for this test."""
+            return nonce == "test"
+
+    (tmp_path / "config.toml").write_text("version = 1\n")
+    (tmp_path / "files").mkdir()
+    (tmp_path / "files" / "cert.pem").write_text("CERT\n")
+    (tmp_path / "admin-signers").write_text("ssh-ed25519 AAAA test\n")
+    monkeypatch.setattr(
+        "atomixos_provision.auth.verify_ssh_signature",
+        lambda message, signature_blob, allowed_keys_path: True,
+    )
+    app = create_app(config_root=tmp_path)
+    app.state.nonce_store = AcceptingNonceStore()
+
+    async with AsyncTestClient(app=app) as client:
+        response = await client.get(
+            "/api/config/export",
+            headers={"x-atomixos-nonce": "test", "x-atomixos-signature": "dGVzdA=="},
+        )
+
+    assert response.status_code == 200
+    assert response.content.startswith(b"\x1f\x8b")
+    assert response.headers["content-type"].startswith("application/gzip")
+    assert response.headers["content-disposition"] == (
+        'attachment; filename="config-bundle.tar.gz"'
+    )
+
+
 async def test_partial_config_rejects_unknown_top_level_keys(tmp_path, monkeypatch):
     async def fake_apply_config_operation(operation, config_root, progress=None):
         from atomixos_provision.partial_config import apply_operation
@@ -1340,7 +1375,10 @@ async def test_openapi_documents_public_api_contract(tmp_path):
     assert submit["responses"]["202"]["content"]["application/json"]["schema"]["$ref"].endswith(
         "/SubmitConfigResponseBody"
     )
-    assert "application/toml" in export["responses"]["200"]["content"]
+    assert export["responses"]["200"]["content"]["application/gzip"]["schema"] == {
+        "type": "string",
+        "format": "binary",
+    }
     assert validate["responses"]["200"]["content"]["application/json"]["schema"]["$ref"].endswith(
         "/ValidationResponseBody"
     )

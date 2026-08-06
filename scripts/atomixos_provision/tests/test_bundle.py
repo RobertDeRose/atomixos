@@ -9,6 +9,7 @@ import pytest
 from atomixos_provision.bundle import (
     copy_bundle_files,
     detect_bundle_kind,
+    export_bundle_bytes,
     extract_bundle_archive,
     prepare_source_bytes,
     prepare_source_path,
@@ -209,7 +210,6 @@ class TestCopyBundleFiles:
 
         assert not destination.exists()
 
-
     def test_cleans_existing(self, tmp_path):
         config_root = tmp_path / "config"
         config_root.mkdir()
@@ -219,6 +219,120 @@ class TestCopyBundleFiles:
 
         copy_bundle_files(None, config_root)
         assert not files_dir.exists()
+
+
+class TestExportBundle:
+    """Group tests for ExportBundle."""
+
+    @staticmethod
+    def _members(bundle: bytes) -> dict[str, bytes | None]:
+        """Handle members."""
+        tar_bytes = gzip.decompress(bundle)
+        with tarfile.open(fileobj=io.BytesIO(tar_bytes), mode="r:") as archive:
+            members = {}
+            for member in archive.getmembers():
+                extracted = archive.extractfile(member)
+                members[member.name] = extracted.read() if extracted is not None else None
+            return members
+
+    def test_is_deterministic_and_allowlisted(self, tmp_path):
+        """Verify that is deterministic and allowlisted."""
+        (tmp_path / "config.toml").write_bytes(b"version = 1\n")
+        files = tmp_path / "files"
+        (files / "nested").mkdir(parents=True)
+        (files / "z.txt").write_text("z\n")
+        (files / "nested" / "a.txt").write_text("a\n")
+        for excluded in (
+            ".first-config",
+            "admin-signers",
+            "users.json",
+            "quadlet-runtime.json",
+        ):
+            (tmp_path / excluded).write_text("must not export\n")
+
+        first = export_bundle_bytes(tmp_path)
+        second = export_bundle_bytes(tmp_path)
+
+        assert first == second
+        assert first.startswith(b"\x1f\x8b")
+        assert self._members(first) == {
+            "config.toml": b"version = 1\n",
+            "files": None,
+            "files/nested": None,
+            "files/nested/a.txt": b"a\n",
+            "files/z.txt": b"z\n",
+        }
+
+    def test_omits_missing_files_and_preserves_empty_files_directory(self, tmp_path):
+        """Verify that omits missing files and preserves empty files directory."""
+        (tmp_path / "config.toml").write_bytes(b"version = 1\n")
+
+        assert set(self._members(export_bundle_bytes(tmp_path))) == {"config.toml"}
+
+        (tmp_path / "files").mkdir()
+        assert set(self._members(export_bundle_bytes(tmp_path))) == {"config.toml", "files"}
+
+    def test_round_trips_through_bundle_importer(self, tmp_path):
+        """Verify that round trips through bundle importer."""
+        (tmp_path / "config.toml").write_bytes(b"version = 1\n")
+        (tmp_path / "files").mkdir()
+        (tmp_path / "files" / "cert.pem").write_text("CERT\n")
+
+        bundle = export_bundle_bytes(tmp_path)
+        tmpdir, config_path, files_path = prepare_source_bytes(bundle, "config-bundle.tar.gz")
+        try:
+            assert config_path.read_bytes() == b"version = 1\n"
+            assert files_path is not None
+            imported_files = tmp_path / "imported-files"
+            stage_bundle_files(files_path, imported_files)
+            assert (imported_files / "cert.pem").read_text() == "CERT\n"
+        finally:
+            tmpdir.cleanup()
+
+    def test_rejects_symlinked_export_paths(self, tmp_path):
+        """Verify that rejects symlinked export paths."""
+        target = tmp_path / "target"
+        target.write_text("version = 1\n")
+        (tmp_path / "config.toml").symlink_to(target)
+        with pytest.raises(ProvisionError, match="must be a regular file"):
+            export_bundle_bytes(tmp_path)
+
+        (tmp_path / "config.toml").unlink()
+        (tmp_path / "config.toml").write_text("version = 1\n")
+        (tmp_path / "files").mkdir()
+        (tmp_path / "files" / "linked").symlink_to(target)
+        with pytest.raises(ProvisionError, match="must not be a symlink"):
+            export_bundle_bytes(tmp_path)
+
+    def test_rejects_export_member_over_size_limit(self, tmp_path, monkeypatch):
+        """Verify that rejects export member over size limit."""
+        (tmp_path / "config.toml").write_bytes(b"version = 1\n")
+        (tmp_path / "files").mkdir()
+        (tmp_path / "files" / "large.txt").write_text("large\n")
+        monkeypatch.setattr("atomixos_provision.bundle.MAX_BUNDLE_MEMBER_BYTES", 1)
+
+        with pytest.raises(ProvisionError, match=r"exceeds .* byte limit"):
+            export_bundle_bytes(tmp_path)
+
+    def test_rejects_export_archive_limits(self, tmp_path, monkeypatch):
+        """Verify that rejects export archive limits."""
+        (tmp_path / "config.toml").write_bytes(b"version = 1\n")
+
+        monkeypatch.setattr("atomixos_provision.bundle.MAX_BUNDLE_MEMBERS", 0)
+        with pytest.raises(ProvisionError, match="member limit"):
+            export_bundle_bytes(tmp_path)
+
+        monkeypatch.setattr("atomixos_provision.bundle.MAX_BUNDLE_MEMBERS", 4096)
+        monkeypatch.setattr("atomixos_provision.bundle.MAX_DECOMPRESSED_BYTES", 1)
+        with pytest.raises(ProvisionError, match="decompressed limit"):
+            export_bundle_bytes(tmp_path)
+
+        monkeypatch.setattr(
+            "atomixos_provision.bundle.MAX_DECOMPRESSED_BYTES", 256 * 1024 * 1024
+        )
+        monkeypatch.setattr("atomixos_provision.bundle.MAX_SOURCE_BYTES", 1)
+        with pytest.raises(ProvisionError, match="export exceeds"):
+            export_bundle_bytes(tmp_path)
 
 
 class TestPrepareSourcePath:

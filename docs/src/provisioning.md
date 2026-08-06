@@ -48,23 +48,23 @@ The bootstrap console is backed by a long-lived Litestar service running as the
 unprivileged `atomixos-provision` user. API routes are grouped by domain but
 still wired explicitly by the app factory:
 
-| Route                                          | Behavior                                                                                    |
-|------------------------------------------------|---------------------------------------------------------------------------------------------|
-| `GET /api/health`                              | Returns service liveness.                                                                   |
-| `GET /api/nonce`                               | Issues a single-use nonce for SSH-signature authentication.                                 |
-| `POST /api/validate`                           | Validates a `config.toml` or config bundle without applying it.                             |
-| `POST /api/config`                             | Accepts a config source and returns `202 Accepted` with a job URL.                          |
-| `GET /api/config/export`                       | Returns the current canonical `config.toml` bytes; complete bundle export is retained work. |
-| `PUT /api/config/users/{name}`                 | Creates or replaces a declared user and applies the full config.                            |
-| `DELETE /api/config/users/{name}`              | Removes a declared user and applies the full config.                                        |
-| `PATCH /api/config/network`                    | Merges network, LAN, NTP, DNS, and firewall fields and applies the full config.             |
-| `PUT /api/config/containers/{name}`            | Creates or replaces a declared Quadlet container.                                           |
-| `DELETE /api/config/containers/{name}`         | Removes a declared Quadlet container.                                                       |
-| `PUT /api/config/container-networks/{name}`    | Creates or replaces a declared Quadlet network.                                             |
-| `DELETE /api/config/container-networks/{name}` | Removes a declared Quadlet network.                                                         |
-| `PUT /api/config/container-volumes/{name}`     | Creates or replaces a declared Quadlet volume.                                              |
-| `DELETE /api/config/container-volumes/{name}`  | Removes a declared Quadlet volume.                                                          |
-| `GET /api/jobs/{job_id}`                       | Returns current provisioning job status, events, result, and rollback state.                |
+| Route                                          | Behavior                                                                        |
+|------------------------------------------------|---------------------------------------------------------------------------------|
+| `GET /api/health`                              | Returns service liveness.                                                       |
+| `GET /api/nonce`                               | Issues a single-use nonce for SSH-signature authentication.                     |
+| `POST /api/validate`                           | Validates a `config.toml` or config bundle without applying it.                 |
+| `POST /api/config`                             | Accepts a config source and returns `202 Accepted` with a job URL.              |
+| `GET /api/config/export`                       | Returns the complete deterministic `config-bundle.tar.gz` archive.              |
+| `PUT /api/config/users/{name}`                 | Creates or replaces a declared user and applies the full config.                |
+| `DELETE /api/config/users/{name}`              | Removes a declared user and applies the full config.                            |
+| `PATCH /api/config/network`                    | Merges network, LAN, NTP, DNS, and firewall fields and applies the full config. |
+| `PUT /api/config/containers/{name}`            | Creates or replaces a declared Quadlet container.                               |
+| `DELETE /api/config/containers/{name}`         | Removes a declared Quadlet container.                                           |
+| `PUT /api/config/container-networks/{name}`    | Creates or replaces a declared Quadlet network.                                 |
+| `DELETE /api/config/container-networks/{name}` | Removes a declared Quadlet network.                                             |
+| `PUT /api/config/container-volumes/{name}`     | Creates or replaces a declared Quadlet volume.                                  |
+| `DELETE /api/config/container-volumes/{name}`  | Removes a declared Quadlet volume.                                              |
+| `GET /api/jobs/{job_id}`                       | Returns current provisioning job status, events, result, and rollback state.    |
 
 ### API authentication and transport
 
@@ -85,11 +85,11 @@ Binary config submissions use `application/octet-stream` and identify the source
 with `x-config-filename` (for example `config.toml` or `config.tar.zst`); the
 server also detects supported archive magic bytes. Signatures cover the exact raw
 request body. JSON partial requests sign their exact JSON body. A `GET` export has
-an empty body, so its signed digest is SHA-256 of zero bytes. The current export
-response is `application/toml` with a `config.toml` attachment; completion of the
-retained bundle-export task changes it to an authenticated compressed archive
-containing `config.toml` and managed `files/` payloads only. The live transport
-contract is available at `/schema/openapi.json`.
+an empty body, so its signed digest is SHA-256 of zero bytes. The export response is
+`application/gzip` with a `config-bundle.tar.gz` attachment. The deterministic
+archive contains only top-level `config.toml` and managed `files/` payloads; it
+excludes generated runtime state, markers, signer material, and unrelated config
+files. The live transport contract is available at `/schema/openapi.json`.
 
 On production staged systems, mutating apply jobs are accepted into a bounded
 FIFO queue and applied one at a time. Clients receive `409 Conflict` when the
@@ -126,9 +126,10 @@ candidate through the same asynchronous validate/render/promote/activate/rollbac
 `POST /api/config`. On staged production systems, partial endpoints require the staged queue to be
 otherwise empty and return `409 Conflict` when another staged job is queued or active. They do not
 mutate derived JSON, Quadlet, firewall, network, or user state
-directly. The generated `config.toml` is the current exported backup artifact; comments and original TOML ordering are not
-preserved after a successful partial update. The retained bundle-export task will extend that backup artifact with the
-managed `files/` payloads while excluding generated runtime state.
+directly. The generated `config.toml` is the canonical desired-state member of the exported backup artifact; comments and
+original TOML ordering are not preserved after a successful partial update. Bundle export also includes managed
+`/data/config/files/` payloads and excludes generated runtime state, markers, signer material, and unrelated config
+files. The archive can be imported through the same bundle importer into a clean config root.
 
 ## USB Recovery Mode
 

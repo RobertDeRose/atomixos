@@ -230,7 +230,9 @@ class ConfigOperation(Operation):
                 self.request_body = _PARTIAL_REQUEST_BODIES[self.operation_id]
             if self.operation_id == "configExport" and self.responses:
                 self.responses["200"].content = {
-                    "application/toml": OpenAPIMediaType(schema=Schema(type=OpenAPIType.STRING))
+                    "application/gzip": OpenAPIMediaType(
+                        schema=Schema(type=OpenAPIType.STRING, format=OpenAPIFormat.BINARY)
+                    )
                 }
             if self.operation_id == "configValidate":
                 self.request_body = _BINARY_CONFIG_BODY
@@ -316,7 +318,7 @@ async def submit_config(
     "/api/config/export",
     guards=[ssh_auth_required_guard],
     operation_id="configExport",
-    summary="Export the current canonical config.toml",
+    summary="Export the complete canonical config bundle",
     operation_class=ConfigOperation,
     responses={**_API_ERROR_RESPONSES},
     tags=["config"],
@@ -324,8 +326,8 @@ async def submit_config(
 async def export_config(config_service: ConfigService) -> Response[bytes]:
     return Response(
         config_service.export_config(),
-        media_type="application/toml",
-        headers={"content-disposition": 'attachment; filename="config.toml"'},
+        media_type="application/gzip",
+        headers={"content-disposition": 'attachment; filename="config-bundle.tar.gz"'},
     )
 
 
