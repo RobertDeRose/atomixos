@@ -15,7 +15,8 @@ not rewrite operator data.
 ## Provisioning Flow
 
 Provisioning imports exactly one operator configuration into `/data/config/` from `/boot/config.toml` on fresh flash, a
-USB seed, a supported seed bundle, or the LAN bootstrap console.
+raw USB `config.toml` seed, or the LAN bootstrap console. The API, Boot UI, and compatibility CLI also accept supported
+compressed config bundles; USB discovery itself does not select bundle archives.
 
 Persisted outputs are:
 
@@ -74,10 +75,19 @@ worker path. Partial updates are accepted only when the staged queue is otherwis
 rendered partial candidates cannot overwrite each other. If validation or activation fails, the previous
 active `/data/config` tree remains active or is restored by the same rollback path used by full re-apply.
 
-First provisioning (no root-written `.first-config` marker) remains unauthenticated, but external writes
-to `/data/config` still stage through the root worker. Direct `/data/config` mutation is limited to the
-privileged worker and bootstrap maintenance commands that explicitly run with
-`ATOMIXOS_PROVISION_WORKER_ACTIVE=1`.
+First provisioning is unauthenticated when neither the root-written `.first-config` marker nor a valid
+`config.toml` exists. The marker-or-config fallback preserves compatibility with state created before the marker was
+introduced; missing signer state fails closed once the root is provisioned. External writes to `/data/config` still stage
+through the root worker. Direct `/data/config` mutation is limited to the privileged worker and bootstrap maintenance
+commands that explicitly run with `ATOMIXOS_PROVISION_WORKER_ACTIVE=1`.
+
+## Bundle Export Flow
+
+The current `GET /api/config/export` endpoint returns authenticated canonical
+`config.toml` bytes. The retained bundle-export implementation will take the
+provisioning lock, snapshot only `config.toml` and `/data/config/files/`, and return
+a compressed tar archive accepted by the same importer. Generated JSON, Quadlet
+output, markers, signer material, and other `/data/config` state are excluded.
 
 ## Managed Users Flow
 

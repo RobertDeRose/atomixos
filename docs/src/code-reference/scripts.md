@@ -186,6 +186,20 @@ Litestar provisioning service package used by first boot and re-apply flows.
 reports provisioning steps, service deployment/status events, final result, and
 rollback status.
 
+The `atomixos-provision` CLI also exposes these maintenance commands:
+
+| Command                                               | Purpose                                                 |
+|-------------------------------------------------------|---------------------------------------------------------|
+| `serve`                                               | Run the socket-activated Litestar service               |
+| `validate PATH`                                       | Validate a TOML file or supported bundle                |
+| `import SOURCE CONFIG_ROOT`                           | Import a source through the maintenance path            |
+| `apply-staged CONFIG_ROOT`                            | Consume one or all queued jobs as the root worker       |
+| `finalize-staged`                                     | Publish failures for jobs left by an interrupted worker |
+| `recover CONFIG_ROOT`                                 | Recover an interrupted atomic promotion                 |
+| `sync-quadlet CONFIG_ROOT QUADLET_DIR [ROOTLESS_DIR]` | Sync rendered Quadlet units                             |
+| `check-health CONFIG_ROOT`                            | Check required provisioned services                     |
+| `complete-initial CONFIG_ROOT`                        | Finish initial promotion after first-boot checks        |
+
 ### ssh-wan-toggle.sh
 
 **Location:** `scripts/ssh-wan-toggle.sh`

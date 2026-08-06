@@ -44,16 +44,19 @@ and a manifest with relative paths, modes, sizes, and SHA-256 hashes, then publi
 `atomixos-provision-apply.service` claims queued jobs, verifies manifest paths, owners, modes, symlinks, hashes, and
 expected entries, re-renders the verified staged `config.toml` into `/data/config-candidate`, and runs the existing
 promotion, activation, rollback, and recovery protocol. Root-written `/data/config` state is group-readable by
-`atomixos-provision` so the unprivileged API can export config and authenticate future requests; bundle `files/` payloads
-remain owned by the application runtime user and are preserved through a no-symlink snapshot path. Initial promotion also
-writes `/data/config/.first-config`; re-apply checks that root-written marker rather than trusting `config.toml` alone.
+`atomixos-provision` so the unprivileged API can authenticate and export approved state; bundle `files/` payloads remain
+owned by the application runtime user and are preserved through a no-symlink snapshot path. Export is allowlisted to
+`config.toml` and `files/` and excludes generated runtime state. Initial promotion also writes
+`/data/config/.first-config`; the target shared provisioning predicate treats that marker or a valid `config.toml` as
+the compatibility signal, while missing signer state fails closed. The partially complete implementation still has
+separate UI/signers detection; the execution-hardening task unifies those guards before delivery.
 
 Runtime result files under `/run/atomixos-provision/results` are root-writable and group-readable only. Claim and queued-job
 abandonment share `/run/atomixos-provision/queue.lock`, and the root worker finalizer records failed results for claimed
 jobs left behind by an interrupted worker.
 
 The first-boot Boot UI is a browser-only wrapper around that same boundary. It
-submits uploaded or dropped config sources through `/apply`, uses the bootstrap CSRF
+submits uploaded or dropped `config.toml` or supported bundle sources through `/apply`, uses the bootstrap CSRF
 token plus browser origin checks, and renders first-boot-only HTML job fragments
 from the in-memory job state. It is not a post-provision management UI and does
 not add a durable polling token or unauthenticated mutation path after

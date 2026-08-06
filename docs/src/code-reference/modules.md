@@ -391,8 +391,8 @@ configure an operational hawkBit systemd service in the current image.
 
 Mutually exclusive with `os-verification.service` via the sentinel file.
 
-`atomixos-bootstrap.service` runs `atomixos-provision serve` on the LAN bootstrap endpoint and remains available after
-provisioning so operators can recover or reprovision without re-imaging.
+`atomixos-bootstrap.service` runs `atomixos-provision serve` on the socket-activated bootstrap endpoint. The browser
+Boot UI is first-boot-only; after provisioning, authenticated API routes provide re-apply and recovery operations.
 
 ---
 

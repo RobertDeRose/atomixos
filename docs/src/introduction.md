@@ -53,7 +53,8 @@ Each AtomixOS device acts as a gateway between an isolated LAN and the internet:
 - **WAN (eth0)**: DHCP client, deny-by-default inbound; application/VPN ports are provisioned explicitly
 - **LAN (eth1)**: Provisioned static IP, runs DHCP/DNS server (dnsmasq) and NTP server (chrony) for local devices
 - **No routing**: IP forwarding is disabled; LAN devices have zero internet access
-- **Remote management**: Nixstasis-hosted management and SSH key-only access; bootstrap stays LAN-local
+- **Remote management**: Nixstasis-hosted management and SSH key-only access; before initial provisioning the bootstrap
+  console is reachable on WAN and LAN, then the socket rebinds to the provisioned LAN gateway
 
 ## Quick Start
 
