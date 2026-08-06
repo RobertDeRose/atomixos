@@ -22,6 +22,7 @@ from litestar.response import Response
 
 from atomixos_provision.auth import ssh_auth_guard, ssh_auth_required_guard
 from atomixos_provision.bootstrap_security import enforce_bootstrap_browser_origin
+from atomixos_provision.config import ProvisionError, ProvisionSystemError
 from atomixos_provision.domain.config.coordinator import ProvisionCoordinator
 from atomixos_provision.domain.config.service import ConfigService
 from atomixos_provision.exceptions import ConflictError, ValidationApiError, api_error_response
@@ -547,5 +548,7 @@ async def validate_config(
     try:
         result = await config_service.validate_bytes(body, filename)
         return Response(schema_dict(ValidationResponse(ok=True, **result)))
-    except Exception as exc:
+    except ProvisionSystemError:
+        raise
+    except ProvisionError as exc:
         return api_error_response(ValidationApiError(str(exc)))

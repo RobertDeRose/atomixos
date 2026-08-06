@@ -103,7 +103,11 @@ SSH_KEY_TYPES = frozenset(
 
 
 class ProvisionError(RuntimeError):
-    """Raised when config parsing or validation fails."""
+    """Raised when submitted config parsing or validation fails."""
+
+
+class ProvisionSystemError(ProvisionError):
+    """Raised when the appliance's server-side validation setup is invalid."""
 
 
 def provision_error(message: str) -> ProvisionError:
@@ -148,11 +152,11 @@ def load_config_schema() -> dict[str, Any]:
                 return json.loads(candidate.read_text())
             except json.JSONDecodeError as exc:
                 message = f"invalid config schema in {candidate}: {exc}"
-                raise provision_error(message) from exc
+                raise ProvisionSystemError(message) from exc
 
     searched = ", ".join(str(c) for c in candidates)
     message = f"unable to find config schema (checked: {searched})"
-    raise provision_error(message)
+    raise ProvisionSystemError(message)
 
 
 # --- Schema Validation Engine ---

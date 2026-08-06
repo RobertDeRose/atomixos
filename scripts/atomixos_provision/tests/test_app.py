@@ -3,10 +3,13 @@
 import asyncio
 from pathlib import Path
 
+from litestar import Litestar, post
+from litestar.response import Response
 from litestar.testing import AsyncTestClient
 
 from atomixos_provision.app import create_app
-from atomixos_provision.config import ProvisionError
+from atomixos_provision.config import ProvisionError, ProvisionSystemError
+from atomixos_provision.domain.config.controller import validate_config
 from atomixos_provision.jobs import Job, JobManager, JobState, StagedJobManager
 from atomixos_provision.staging import reserve_staged_job_slot, runtime_paths
 
@@ -22,6 +25,74 @@ def _job_fragment_url(response_text: str) -> str:
 
 def _job_events_url(response_text: str) -> str:
     return _job_fragment_url(response_text) + "/events"
+
+
+class _ValidationRequest:
+    """Provide the ValidationRequest test helper."""
+
+    def __init__(self, body: bytes = b"invalid"):
+        """Initialize this helper."""
+        self._body = body
+        self.headers = {}
+
+    async def body(self):
+        """Return the stored request body."""
+        return self._body
+
+
+class _ValidationService:
+    """Provide the ValidationService test helper."""
+
+    def __init__(self, error):
+        """Initialize this helper."""
+        self.error = error
+
+    async def validate_bytes(self, body, filename):
+        """Validate bytes."""
+        assert body == b"invalid"
+        assert filename == "config.toml"
+        raise self.error
+
+
+async def test_validate_maps_known_provision_errors_to_bad_request():
+    """Verify that validate maps known provision errors to bad request."""
+    response = await validate_config.fn(
+        _ValidationRequest(), _ValidationService(ProvisionError("invalid config"))
+    )
+
+    assert response.status_code == 400
+    assert response.content == {"ok": False, "error": "invalid config"}
+
+
+def _validation_app(error):
+    """Handle validation app."""
+
+    @post("/api/validate")
+    async def endpoint() -> Response:
+        return await validate_config.fn(
+            _ValidationRequest(), _ValidationService(error)
+        )
+
+    return Litestar(route_handlers=[endpoint])
+
+
+async def test_validate_propagates_unexpected_errors_for_framework_500():
+    async with AsyncTestClient(
+        app=_validation_app(OSError("schema unavailable"))
+    ) as client:
+        response = await client.post("/api/validate", content=b"invalid")
+
+    assert response.status_code == 500
+
+
+async def test_validate_propagates_internal_schema_errors_for_framework_500():
+    """Verify that validate propagates internal schema errors for framework 500."""
+    async with AsyncTestClient(
+        app=_validation_app(ProvisionSystemError("schema unavailable"))
+    ) as client:
+        response = await client.post("/api/validate", content=b"invalid")
+
+    assert response.status_code == 500
 
 
 async def test_nonce_response_returns_nonce(tmp_path):
