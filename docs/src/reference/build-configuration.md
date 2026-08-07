@@ -15,15 +15,29 @@ enable_hardware = false
 backend = "external"
 runtime_timeout = "30s"
 reboot_timeout = "10min"
+
+[provisioning]
+bootstrap_transport = "network"
+
+[nixstasis]
+enable = false
+api_url = ""
+frp_server_addr = ""
+frp_server_port = 7000
 ```
 
-| Field                      | Type    | Required in `build.toml` | Default    | Validation                        |
-|----------------------------|---------|--------------------------|------------|-----------------------------------|
-| `version`                  | Integer | Yes                      | `1`        | Must equal `1`                    |
-| `watchdog.enable_hardware` | Boolean | Yes                      | `false`    | `true` or `false`                 |
-| `watchdog.backend`         | String  | Yes                      | `external` | `internal` or `external`          |
-| `watchdog.runtime_timeout` | String  | Yes                      | `30s`      | Inclusive range: 10 seconds–5 min |
-| `watchdog.reboot_timeout`  | String  | Yes                      | `10min`    | Inclusive range: 1 minute–10 min  |
+| Field                              | Type    | Required in `build.toml` | Default    | Validation                          |
+|------------------------------------|---------|--------------------------|------------|-------------------------------------|
+| `version`                          | Integer | Yes                      | `1`        | Must equal `1`                      |
+| `watchdog.enable_hardware`         | Boolean | Yes                      | `false`    | `true` or `false`                   |
+| `watchdog.backend`                 | String  | Yes                      | `external` | `internal` or `external`            |
+| `watchdog.runtime_timeout`         | String  | Yes                      | `30s`      | Inclusive range: 10 seconds–5 min   |
+| `watchdog.reboot_timeout`          | String  | Yes                      | `10min`    | Inclusive range: 1 minute–10 min    |
+| `provisioning.bootstrap_transport` | String  | Yes                      | `network`  | `network` or `nixstasis`            |
+| `nixstasis.enable`                 | Boolean | Yes                      | `false`    | `true` or `false`                   |
+| `nixstasis.api_url`                | String  | Yes                      | `""`       | Non-empty when Nixstasis is enabled |
+| `nixstasis.frp_server_addr`        | String  | Yes                      | `""`       | Non-empty when Nixstasis is enabled |
+| `nixstasis.frp_server_port`        | Integer | Yes                      | `7000`     | Inclusive range: 1–65535            |
 
 Duration strings contain a positive integer followed immediately by one of `ms`, `s`, `min`, or `h`. Signs, zero,
 decimals, compound spans, whitespace, unitless numbers, values that overflow conversion, and values outside the field's
@@ -46,7 +60,40 @@ runtime_timeout = "45s"
 ```
 
 The overlay may omit `version`. If present, `version` must equal `1`. It cannot remove a committed field or introduce an
-unknown field. The effective document must still be complete after merging.
+unknown field. The effective document must still be complete after merging. A fleet overlay can opt into the reviewed
+transport and provide the public Nixstasis endpoints:
+
+```toml
+[provisioning]
+bootstrap_transport = "nixstasis"
+
+[nixstasis]
+enable = true
+api_url = "https://nixstasis.example.invalid"
+frp_server_addr = "frps.example.invalid"
+frp_server_port = 7000
+```
+
+## Provisioning Transport and Nixstasis
+
+`provisioning.bootstrap_transport` is independent from `nixstasis.enable`:
+
+- `network` keeps the existing network bootstrap exposure and is the committed default.
+- `nixstasis` selects the fleet loopback transport; the runtime listener and firewall behavior are owned by the fleet
+  implementation.
+- Enabling Nixstasis while retaining `network` is valid and does not change the provisioning listener.
+
+The evaluator maps the effective fields to typed NixOS options without runtime TOML parsing:
+
+- `provisioning.bootstrap_transport` → `atomixos.provisioning.bootstrapTransport`.
+- `nixstasis.enable` → `atomixos.nixstasis.enable`.
+- `nixstasis.api_url` → `atomixos.nixstasis.apiUrl`.
+- `nixstasis.frp_server_addr` and `nixstasis.frp_server_port` → the corresponding
+  `atomixos.nixstasis.frp.*` options.
+
+When `nixstasis.enable` is `true`, both `api_url` and `frp_server_addr` must be non-empty. These values are public
+routing configuration only; runtime tokens, FRP credentials, signing keys, and other secrets are not valid build-policy
+fields.
 
 ## Watchdog Backend Selection
 
@@ -99,11 +146,15 @@ backend choice has no runtime effect until enforcement is enabled.
 
 Both documents reject:
 
-- unknown top-level sections or watchdog fields;
+- unknown top-level sections or fields in any supported table;
 - wrong TOML value types;
 - unsupported versions;
+- a transport other than `network` or `nixstasis`;
+- a Nixstasis port outside 1–65535;
 - malformed or out-of-range durations;
 - an incomplete committed document.
+
+After the overlay is merged, an enabled Nixstasis policy also rejects an empty `api_url` or `frp_server_addr`.
 
 A TOML syntax error reports the input filename and preserves the native parser's line and column context. A schema error
 reports the input filename and canonical field path. Validation completes during Nix evaluation, before an artifact
@@ -111,8 +162,8 @@ derivation builds.
 
 ## Canonical Effective Form
 
-The evaluator renders effective values in a deterministic order with lowercase booleans, one blank line before the
-watchdog section, and one final newline:
+The evaluator renders effective values in a deterministic order with lowercase booleans, one blank line before each
+section, and one final newline:
 
 ```toml
 version = 1
@@ -122,6 +173,15 @@ enable_hardware = false
 backend = "external"
 runtime_timeout = "30s"
 reboot_timeout = "10min"
+
+[provisioning]
+bootstrap_transport = "network"
+
+[nixstasis]
+enable = false
+api_url = ""
+frp_server_addr = ""
+frp_server_port = 7000
 ```
 
 ## Immutable Policy and Provenance

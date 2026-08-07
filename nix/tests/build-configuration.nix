@@ -17,6 +17,15 @@ let
     backend = "external"
     runtime_timeout = "30s"
     reboot_timeout = "10min"
+
+    [provisioning]
+    bootstrap_transport = "network"
+
+    [nixstasis]
+    enable = false
+    api_url = ""
+    frp_server_addr = ""
+    frp_server_port = 7000
   '';
   evaluate =
     args:
@@ -37,6 +46,28 @@ let
       runtime_timeout = "45s"
     '';
   };
+  fleet = evaluate {
+    overlayName = "build.fleet.toml";
+    overlayText = ''
+      [provisioning]
+      bootstrap_transport = "nixstasis"
+
+      [nixstasis]
+      enable = true
+      api_url = "https://nixstasis.example.test"
+      frp_server_addr = "frps.example.test"
+      frp_server_port = 7001
+    '';
+  };
+  networkWithNixstasis = evaluate {
+    overlayName = "build.nixstasis.toml";
+    overlayText = ''
+      [nixstasis]
+      enable = true
+      api_url = "https://nixstasis.example.test"
+      frp_server_addr = "frps.example.test"
+    '';
+  };
   expectedCanonical = builtins.concatStringsSep "\n" [
     "version = 1"
     ""
@@ -45,6 +76,15 @@ let
     ''backend = "external"''
     ''runtime_timeout = "30s"''
     ''reboot_timeout = "10min"''
+    ""
+    "[provisioning]"
+    ''bootstrap_transport = "network"''
+    ""
+    "[nixstasis]"
+    "enable = false"
+    ''api_url = ""''
+    ''frp_server_addr = ""''
+    "frp_server_port = 7000"
     ""
   ];
   expectedOverrideCanonical = builtins.concatStringsSep "\n" [
@@ -55,6 +95,34 @@ let
     ''backend = "internal"''
     ''runtime_timeout = "45s"''
     ''reboot_timeout = "10min"''
+    ""
+    "[provisioning]"
+    ''bootstrap_transport = "network"''
+    ""
+    "[nixstasis]"
+    "enable = false"
+    ''api_url = ""''
+    ''frp_server_addr = ""''
+    "frp_server_port = 7000"
+    ""
+  ];
+  expectedFleetCanonical = builtins.concatStringsSep "\n" [
+    "version = 1"
+    ""
+    "[watchdog]"
+    "enable_hardware = false"
+    ''backend = "external"''
+    ''runtime_timeout = "30s"''
+    ''reboot_timeout = "10min"''
+    ""
+    "[provisioning]"
+    ''bootstrap_transport = "nixstasis"''
+    ""
+    "[nixstasis]"
+    "enable = true"
+    ''api_url = "https://nixstasis.example.test"''
+    ''frp_server_addr = "frps.example.test"''
+    "frp_server_port = 7001"
     ""
   ];
   expectedMetadata = canonicalTOML: localOverride: ''
@@ -79,6 +147,8 @@ let
     };
   committedSystem = (evalSystem defaults).config;
   overriddenSystem = (evalSystem overridden).config;
+  fleetSystem = (evalSystem fleet).config;
+  networkWithNixstasisSystem = (evalSystem networkWithNixstasis).config;
   effective = self.lib.effectiveBuildConfiguration;
   imagePackage = self.packages.aarch64-linux.image;
   raucBundlePackage = self.packages.aarch64-linux.rauc-bundle;
@@ -119,6 +189,11 @@ pkgs.runCommand "build-configuration-check" { } ''
   test ${builtins.toJSON (defaults.watchdog.backend == "external")} = true
   test ${builtins.toJSON (defaults.watchdog.runtimeTimeout == "30s")} = true
   test ${builtins.toJSON (defaults.watchdog.rebootTimeout == "10min")} = true
+  test ${builtins.toJSON (defaults.provisioning.bootstrapTransport == "network")} = true
+  test ${builtins.toJSON (!defaults.nixstasis.enable)} = true
+  test ${builtins.toJSON (defaults.nixstasis.apiUrl == "")} = true
+  test ${builtins.toJSON (defaults.nixstasis.frpServerAddr == "")} = true
+  test ${builtins.toJSON (defaults.nixstasis.frpServerPort == 7000)} = true
   test ${builtins.toJSON (!defaults.localOverride)} = true
   test ${builtins.toJSON (defaults.canonicalTOML == expectedCanonical)} = true
   test ${
@@ -139,6 +214,8 @@ pkgs.runCommand "build-configuration-check" { } ''
   test ${builtins.toJSON (overridden.watchdog.backend == "internal")} = true
   test ${builtins.toJSON (overridden.watchdog.runtimeTimeout == "45s")} = true
   test ${builtins.toJSON (overridden.watchdog.rebootTimeout == "10min")} = true
+  test ${builtins.toJSON (overridden.provisioning.bootstrapTransport == "network")} = true
+  test ${builtins.toJSON (!overridden.nixstasis.enable)} = true
   test ${builtins.toJSON overridden.localOverride} = true
   test ${builtins.toJSON (overridden.canonicalTOML == expectedOverrideCanonical)} = true
   test ${
@@ -154,9 +231,23 @@ pkgs.runCommand "build-configuration-check" { } ''
   } = true
   test ${builtins.toJSON (overridden.artifactSuffix == "-dev")} = true
 
+  test ${builtins.toJSON (fleet.provisioning.bootstrapTransport == "nixstasis")} = true
+  test ${builtins.toJSON fleet.nixstasis.enable} = true
+  test ${builtins.toJSON (fleet.nixstasis.apiUrl == "https://nixstasis.example.test")} = true
+  test ${builtins.toJSON (fleet.nixstasis.frpServerAddr == "frps.example.test")} = true
+  test ${builtins.toJSON (fleet.nixstasis.frpServerPort == 7001)} = true
+  test ${builtins.toJSON (fleet.canonicalTOML == expectedFleetCanonical)} = true
+  test ${builtins.toJSON fleet.localOverride} = true
+  test ${builtins.toJSON (networkWithNixstasis.provisioning.bootstrapTransport == "network")} = true
+  test ${builtins.toJSON networkWithNixstasis.nixstasis.enable} = true
+
   # Effective policy maps to immutable NixOS options and audit files.
   test ${builtins.toJSON (!committedSystem.atomixos.watchdog.enableHardware)} = true
   test ${builtins.toJSON (committedSystem.atomixos.watchdog.backend == "external")} = true
+  test ${
+    builtins.toJSON (committedSystem.atomixos.provisioning.bootstrapTransport == "network")
+  } = true
+  test ${builtins.toJSON (!committedSystem.atomixos.nixstasis.enable)} = true
   test ${builtins.toJSON (committedSystem.atomixos.watchdog.runtimeWatchdogSec == "30s")} = true
   test ${builtins.toJSON (committedSystem.atomixos.watchdog.rebootWatchdogSec == "10min")} = true
   test ${
@@ -169,6 +260,19 @@ pkgs.runCommand "build-configuration-check" { } ''
   } = true
   test ${builtins.toJSON overriddenSystem.atomixos.watchdog.enableHardware} = true
   test ${builtins.toJSON (overriddenSystem.atomixos.watchdog.backend == "internal")} = true
+  test ${builtins.toJSON (fleetSystem.atomixos.provisioning.bootstrapTransport == "nixstasis")} = true
+  test ${builtins.toJSON fleetSystem.atomixos.nixstasis.enable} = true
+  test ${
+    builtins.toJSON (fleetSystem.atomixos.nixstasis.apiUrl == "https://nixstasis.example.test")
+  } = true
+  test ${
+    builtins.toJSON (fleetSystem.atomixos.nixstasis.frp.serverAddr == "frps.example.test")
+  } = true
+  test ${builtins.toJSON (fleetSystem.atomixos.nixstasis.frp.serverPort == 7001)} = true
+  test ${
+    builtins.toJSON (networkWithNixstasisSystem.atomixos.provisioning.bootstrapTransport == "network")
+  } = true
+  test ${builtins.toJSON networkWithNixstasisSystem.atomixos.nixstasis.enable} = true
   test ${builtins.toJSON (overriddenSystem.atomixos.watchdog.runtimeWatchdogSec == "45s")} = true
   test ${
     builtins.toJSON (overriddenSystem.systemd.settings.Manager.RuntimeWatchdogSec == "45s")
@@ -220,6 +324,72 @@ pkgs.runCommand "build-configuration-check" { } ''
   test ${builtins.toJSON (overlayFails ''
     [watchdog]
     extra = true
+  '')} = true
+  test ${builtins.toJSON (overlayFails ''
+    [provisioning]
+    extra = true
+  '')} = true
+  test ${builtins.toJSON (overlayFails ''
+    [nixstasis]
+    extra = true
+  '')} = true
+  test ${builtins.toJSON (overlayFails ''
+    [provisioning]
+    bootstrap_transport = "lan"
+  '')} = true
+  test ${builtins.toJSON (overlayFails ''
+    [provisioning]
+    bootstrap_transport = true
+  '')} = true
+  test ${builtins.toJSON (overlayFails ''
+    [nixstasis]
+    frp_server_port = 0
+  '')} = true
+  test ${builtins.toJSON (overlayFails ''
+    [nixstasis]
+    frp_server_port = 65536
+  '')} = true
+  test ${
+    builtins.toJSON (
+      !(overlayFails ''
+        [nixstasis]
+        frp_server_port = 1
+      '')
+    )
+  } = true
+  test ${
+    builtins.toJSON (
+      !(overlayFails ''
+        [nixstasis]
+        frp_server_port = 65535
+      '')
+    )
+  } = true
+  test ${builtins.toJSON (overlayFails ''
+    [nixstasis]
+    frp_server_port = "7000"
+  '')} = true
+  test ${builtins.toJSON (overlayFails ''
+    [nixstasis]
+    enable = "yes"
+  '')} = true
+  test ${builtins.toJSON (overlayFails ''
+    [nixstasis]
+    api_url = 7
+  '')} = true
+  test ${builtins.toJSON (overlayFails ''
+    [nixstasis]
+    frp_server_addr = 7
+  '')} = true
+  test ${builtins.toJSON (overlayFails ''
+    [nixstasis]
+    enable = true
+  '')} = true
+  test ${builtins.toJSON (overlayFails ''
+    [nixstasis]
+    enable = true
+    api_url = ""
+    frp_server_addr = "frps.example.test"
   '')} = true
   test ${builtins.toJSON (overlayFails ''
     [watchdog]

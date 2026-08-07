@@ -5,3 +5,12 @@ enable_hardware = false
 backend = "external"
 runtime_timeout = "30s"
 reboot_timeout = "10min"
+
+[provisioning]
+bootstrap_transport = "network"
+
+[nixstasis]
+enable = false
+api_url = ""
+frp_server_addr = ""
+frp_server_port = 7000

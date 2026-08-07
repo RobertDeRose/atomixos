@@ -4,12 +4,21 @@ let
   allowedTopLevel = [
     "version"
     "watchdog"
+    "provisioning"
+    "nixstasis"
   ];
   allowedWatchdog = [
     "enable_hardware"
     "backend"
     "runtime_timeout"
     "reboot_timeout"
+  ];
+  allowedProvisioning = [ "bootstrap_transport" ];
+  allowedNixstasis = [
+    "enable"
+    "api_url"
+    "frp_server_addr"
+    "frp_server_port"
   ];
 
   unknownFieldErrors =
@@ -122,6 +131,115 @@ let
       ++ runtimeErrors
       ++ rebootErrors;
 
+  validateProvisioning =
+    {
+      name,
+      kind,
+      value,
+    }:
+    if !builtins.isAttrs value then
+      [ "${name}: provisioning: expected a table" ]
+    else
+      let
+        requiredErrors = lib.optionals (kind == "base") (
+          lib.concatMap (requiredFieldError name "provisioning." value) allowedProvisioning
+        );
+        transportErrors =
+          if !(builtins.hasAttr "bootstrap_transport" value) then
+            [ ]
+          else if !builtins.isString value.bootstrap_transport then
+            [ "${name}: provisioning.bootstrap_transport: expected \"network\" or \"nixstasis\"" ]
+          else
+            lib.optional (
+              !(builtins.elem value.bootstrap_transport [
+                "network"
+                "nixstasis"
+              ])
+            ) "${name}: provisioning.bootstrap_transport: expected \"network\" or \"nixstasis\"";
+      in
+      unknownFieldErrors name "provisioning." allowedProvisioning value
+      ++ requiredErrors
+      ++ transportErrors;
+
+  validatePort =
+    name: field: value:
+    if !builtins.isInt value then
+      [ "${name}: nixstasis.${field}: expected an integer between 1 and 65535" ]
+    else
+      lib.optional (
+        value < 1 || value > 65535
+      ) "${name}: nixstasis.${field}: expected an integer between 1 and 65535";
+
+  validateNixstasis =
+    {
+      name,
+      kind,
+      value,
+    }:
+    if !builtins.isAttrs value then
+      [ "${name}: nixstasis: expected a table" ]
+    else
+      let
+        requiredErrors = lib.optionals (kind == "base") (
+          lib.concatMap (requiredFieldError name "nixstasis." value) allowedNixstasis
+        );
+        enableErrors =
+          if !(builtins.hasAttr "enable" value) then
+            [ ]
+          else
+            lib.optional (!(builtins.isBool value.enable)) "${name}: nixstasis.enable: expected a boolean";
+        apiUrlErrors =
+          if !(builtins.hasAttr "api_url" value) then
+            [ ]
+          else
+            lib.optional (!(builtins.isString value.api_url)) "${name}: nixstasis.api_url: expected a string";
+        serverAddrErrors =
+          if !(builtins.hasAttr "frp_server_addr" value) then
+            [ ]
+          else
+            lib.optional (
+              !(builtins.isString value.frp_server_addr)
+            ) "${name}: nixstasis.frp_server_addr: expected a string";
+        serverPortErrors =
+          if !(builtins.hasAttr "frp_server_port" value) then
+            [ ]
+          else
+            validatePort name "frp_server_port" value.frp_server_port;
+      in
+      unknownFieldErrors name "nixstasis." allowedNixstasis value
+      ++ requiredErrors
+      ++ enableErrors
+      ++ apiUrlErrors
+      ++ serverAddrErrors
+      ++ serverPortErrors;
+
+  enabledNixstasisErrors =
+    name: document:
+    if !builtins.isAttrs document then
+      [ ]
+    else if !(builtins.hasAttr "nixstasis" document) then
+      [ ]
+    else if !builtins.isAttrs document.nixstasis then
+      [ ]
+    else if !(builtins.hasAttr "enable" document.nixstasis) then
+      [ ]
+    else if !(builtins.isBool document.nixstasis.enable) || !document.nixstasis.enable then
+      [ ]
+    else
+      let
+        apiUrlErrors = lib.optional (
+          !(builtins.hasAttr "api_url" document.nixstasis)
+          || !(builtins.isString document.nixstasis.api_url)
+          || document.nixstasis.api_url == ""
+        ) "${name}: nixstasis.api_url: required when Nixstasis is enabled";
+        serverAddrErrors = lib.optional (
+          !(builtins.hasAttr "frp_server_addr" document.nixstasis)
+          || !(builtins.isString document.nixstasis.frp_server_addr)
+          || document.nixstasis.frp_server_addr == ""
+        ) "${name}: nixstasis.frp_server_addr: required when Nixstasis is enabled";
+      in
+      apiUrlErrors ++ serverAddrErrors;
+
   validationErrors =
     {
       name,
@@ -150,8 +268,26 @@ let
             inherit name kind;
             value = document.watchdog;
           });
+        provisioningRequired = kind == "base" && !(builtins.hasAttr "provisioning" document);
+        provisioningErrors =
+          lib.optional provisioningRequired "${name}: provisioning: required table is missing"
+          ++ lib.optionals (builtins.hasAttr "provisioning" document) (validateProvisioning {
+            inherit name kind;
+            value = document.provisioning;
+          });
+        nixstasisRequired = kind == "base" && !(builtins.hasAttr "nixstasis" document);
+        nixstasisErrors =
+          lib.optional nixstasisRequired "${name}: nixstasis: required table is missing"
+          ++ lib.optionals (builtins.hasAttr "nixstasis" document) (validateNixstasis {
+            inherit name kind;
+            value = document.nixstasis;
+          });
       in
-      unknownFieldErrors name "" allowedTopLevel document ++ versionErrors ++ watchdogErrors;
+      unknownFieldErrors name "" allowedTopLevel document
+      ++ versionErrors
+      ++ watchdogErrors
+      ++ provisioningErrors
+      ++ nixstasisErrors;
 
   parseTOML = name: text: builtins.addErrorContext "while parsing ${name}" (builtins.fromTOML text);
 
@@ -165,6 +301,15 @@ let
       ''backend = "${document.watchdog.backend}"''
       ''runtime_timeout = "${document.watchdog.runtime_timeout}"''
       ''reboot_timeout = "${document.watchdog.reboot_timeout}"''
+      ""
+      "[provisioning]"
+      "bootstrap_transport = ${builtins.toJSON document.provisioning.bootstrap_transport}"
+      ""
+      "[nixstasis]"
+      "enable = ${if document.nixstasis.enable then "true" else "false"}"
+      "api_url = ${builtins.toJSON document.nixstasis.api_url}"
+      "frp_server_addr = ${builtins.toJSON document.nixstasis.frp_server_addr}"
+      "frp_server_port = ${toString document.nixstasis.frp_server_port}"
       ""
     ];
 in
@@ -181,6 +326,8 @@ in
     let
       baseDocument = parseTOML baseName baseText;
       overlayDocument = if overlayText == null then { } else parseTOML overlayName overlayText;
+      effectiveDocument = lib.recursiveUpdate baseDocument overlayDocument;
+      effectiveName = if overlayText == null then baseName else overlayName;
       errors =
         validationErrors {
           name = baseName;
@@ -191,13 +338,13 @@ in
           name = overlayName;
           kind = "overlay";
           document = overlayDocument;
-        });
+        })
+        ++ enabledNixstasisErrors effectiveName effectiveDocument;
     in
     if errors != [ ] then
       throw "invalid build configuration:\n- ${builtins.concatStringsSep "\n- " errors}"
     else
       let
-        effectiveDocument = lib.recursiveUpdate baseDocument overlayDocument;
         canonicalTOML = renderCanonical effectiveDocument;
         localOverride = overlayText != null;
         policySHA256 = builtins.hashString "sha256" canonicalTOML;
@@ -223,6 +370,15 @@ in
           backend = effectiveDocument.watchdog.backend;
           runtimeTimeout = effectiveDocument.watchdog.runtime_timeout;
           rebootTimeout = effectiveDocument.watchdog.reboot_timeout;
+        };
+        provisioning = {
+          bootstrapTransport = effectiveDocument.provisioning.bootstrap_transport;
+        };
+        nixstasis = {
+          enable = effectiveDocument.nixstasis.enable;
+          apiUrl = effectiveDocument.nixstasis.api_url;
+          frpServerAddr = effectiveDocument.nixstasis.frp_server_addr;
+          frpServerPort = effectiveDocument.nixstasis.frp_server_port;
         };
       };
 }
