@@ -17,6 +17,12 @@
 }:
 
 let
+  bootstrapTransport = lib.attrByPath [
+    "atomixos"
+    "provisioning"
+    "bootstrapTransport"
+  ] "network" config;
+  bootstrapListenAddress = if bootstrapTransport == "nixstasis" then "127.0.0.1" else "0.0.0.0";
   firstBootScript = pkgs.writeShellScript "first-boot" (builtins.readFile ../scripts/first-boot.sh);
   applyUsersScript = pkgs.writeShellScript "apply-users" ''
     set -euo pipefail
@@ -83,6 +89,7 @@ let
   firstBootEnv = {
     ATOMIXOS_RAUC_ENABLE = if config.atomixos.rauc.enable then "1" else "0";
     ATOMIXOS_APPLY_USERS_SCRIPT = "${applyUsersScript}";
+    ATOMIXOS_BOOTSTRAP_TRANSPORT = bootstrapTransport;
   };
 in
 {
@@ -316,7 +323,7 @@ in
     unitConfig.RequiresMountsFor = [ "/data" ];
 
     socketConfig = {
-      ListenStream = "0.0.0.0:8080";
+      ListenStream = "${bootstrapListenAddress}:8080";
       FreeBind = true;
       Accept = false;
     };

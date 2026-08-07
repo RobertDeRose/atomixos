@@ -9,6 +9,11 @@
 
 let
   cfg = config.atonic.firewall;
+  bootstrapTransport = lib.attrByPath [
+    "atomixos"
+    "provisioning"
+    "bootstrapTransport"
+  ] "network" config;
 
   sshWanToggle = pkgs.writeShellScript "ssh-wan-toggle" (
     builtins.readFile ../scripts/ssh-wan-toggle.sh
@@ -131,7 +136,7 @@ in
       };
     };
 
-    systemd.services.bootstrap-wan-toggle = {
+    systemd.services.bootstrap-wan-toggle = lib.mkIf (bootstrapTransport == "network") {
       description = "Toggle first-boot bootstrap API access on WAN";
       after = [
         "data.mount"

@@ -77,8 +77,10 @@ The `kernel-security` VM check verifies the stripped kernel exposes the BPF LSM 
 sandboxing. It also rejects unsupported-BPF, MTD-probe, boot-storage, and hung-task-sysctl startup diagnostics.
 
 The `build-configuration` check covers strict schema parsing, merge behavior, timeout bounds, canonical bytes,
-provenance, NixOS option mapping, and artifact sidecar inputs. The `build-config-workflow` check uses an isolated fake
-Nix command to cover automatic fixed-path overrides, warning/transport behavior, the included task matrix, Lima command
+provenance, NixOS option mapping, artifact sidecar inputs, and the network-versus-fleet bootstrap transport boundary.
+It proves that network mode retains the WAN listener policy while fleet mode renders the loopback socket, omits the WAN
+bootstrap service, and suppresses the LAN socket rebind. The `build-config-workflow` check uses an isolated fake Nix
+command to cover automatic fixed-path overrides, warning/transport behavior, the included task matrix, Lima command
 execution, validation ordering, and retained-link preservation.
 
 Direct flake checks use committed policy. To test a local overlay, create `build.dev.toml` and run `mise run check`; the
@@ -108,8 +110,8 @@ Additional flake-only checks:
 | `build-config-workflow`       | 0     | Local override wrapper, task matrix, Lima behavior, and atomic retained links                             |
 | `watchdog-missing-device`     | 1     | Enabled policy without hardware boots, preserves RAUC state, and emits an actionable warning              |
 | `kernel-security`             | 1     | BPF LSM/BTF support is active and unsupported hardware/sysctl startup diagnostics are absent              |
-| `first-boot-provision`        | 1     | Provisioning import, validation, apply, auth, and rollback behavior                                       |
-| `first-boot-source-discovery` | 1     | Boot/USB/bootstrap source precedence and first-boot marker behavior                                       |
+| `first-boot-provision`        | 1     | Provisioning import, validation, apply, auth, rollback, and LAN transport behavior                        |
+| `first-boot-source-discovery` | 1     | Boot/USB/bootstrap source precedence, marker behavior, and fleet rebind suppression                       |
 | `initrd-fresh-flash-marker`   | 1     | Initrd repartitioning creates slot B/data and persists the fresh-flash marker                             |
 | `forensics-podman-log-path`   | 1     | Podman journald output reaches the persistent `/data/logs` path                                           |
 | `forensics-rsyslog-path`      | 1     | Buffered rsyslog output is written to persistent `/data/logs`                                             |
