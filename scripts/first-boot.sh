@@ -17,6 +17,7 @@ INITRD_MARKER="${ATOMIXOS_INITRD_MARKER:-/etc/atomixos/fresh-flash}"
 BOOT_CONFIG_PATH="${ATOMIXOS_BOOT_CONFIG_PATH:-/boot/config.toml}"
 APP_RUNTIME_QUADLET_DIR="${ATOMIXOS_ROOTLESS_QUADLET_DIR:-/var/lib/appsvc/.config/containers/systemd}"
 RAUC_ENABLED="${ATOMIXOS_RAUC_ENABLE:-1}"
+BOOTSTRAP_TRANSPORT="${ATOMIXOS_BOOTSTRAP_TRANSPORT:-network}"
 LAN_SETTINGS_FILE="$CONFIG_ROOT/lan-settings.json"
 APPLY_USERS_SCRIPT="${ATOMIXOS_APPLY_USERS_SCRIPT:-./scripts/apply-users.py}"
 
@@ -275,7 +276,7 @@ fi
 log "Writing first-boot sentinel: $SENTINEL"
 date -Iseconds >"$SENTINEL"
 
-if command -v systemctl >/dev/null 2>&1; then
+if command -v systemctl >/dev/null 2>&1 && [ "$BOOTSTRAP_TRANSPORT" = "network" ]; then
 	systemctl restart bootstrap-wan-toggle.service >/dev/null 2>&1 || true
 	if command -v systemd-run >/dev/null 2>&1; then
 		systemd-run \

@@ -23,6 +23,7 @@ BOOTSTRAP_SOCKET_OVERRIDE = Path(
         "/run/systemd/system/atomixos-bootstrap.socket.d/50-lan-bind.conf",
     )
 )
+BOOTSTRAP_TRANSPORT = os.environ.get("ATOMIXOS_BOOTSTRAP_TRANSPORT", "network")
 NETWORK_FILE = Path(
     os.environ.get(
         "ATOMIXOS_LAN_NETWORK_FILE",
@@ -636,7 +637,8 @@ def main() -> int:
     if chrony_changed:
         run_command(["systemctl", "try-restart", "chronyd.service"])
 
-    apply_bootstrap_socket_rebind(gateway_ip)
+    if BOOTSTRAP_TRANSPORT == "network":
+        apply_bootstrap_socket_rebind(gateway_ip)
 
     return 0
 

@@ -1,11 +1,18 @@
 # LAN gateway services: DHCP server (dnsmasq) and NTP server (chrony).
 # The Rock64 acts as DHCP and NTP server for isolated LAN devices.
 {
+  config,
+  lib,
   pkgs,
   ...
 }:
 
 let
+  bootstrapTransport = lib.attrByPath [
+    "atomixos"
+    "provisioning"
+    "bootstrapTransport"
+  ] "network" config;
   lanGatewayApply = pkgs.runCommand "lan-gateway-apply" { } ''
     mkdir -p "$out/bin"
     install -m0755 ${../scripts/lan-gateway-apply.py} "$out/bin/lan-gateway-apply"
@@ -104,13 +111,16 @@ in
       pkgs.systemd
     ];
 
+    environment = {
+      ATOMIXOS_BOOTSTRAP_TRANSPORT = bootstrapTransport;
+    };
     serviceConfig = {
       Type = "oneshot";
       ExecStart = "${lanGatewayApply}/bin/lan-gateway-apply";
     };
   };
 
-  systemd.services.atomixos-bootstrap-rebind = {
+  systemd.services.atomixos-bootstrap-rebind = lib.mkIf (bootstrapTransport == "network") {
     description = "Rebind bootstrap API socket to provisioned LAN address";
     after = [
       "atomixos-config-recover.service"

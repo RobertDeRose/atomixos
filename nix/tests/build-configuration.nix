@@ -273,6 +273,46 @@ pkgs.runCommand "build-configuration-check" { } ''
     builtins.toJSON (networkWithNixstasisSystem.atomixos.provisioning.bootstrapTransport == "network")
   } = true
   test ${builtins.toJSON networkWithNixstasisSystem.atomixos.nixstasis.enable} = true
+  test ${
+    builtins.toJSON (
+      committedSystem.systemd.sockets.atomixos-bootstrap.socketConfig.ListenStream == "0.0.0.0:8080"
+    )
+  } = true
+  test ${
+    builtins.toJSON (
+      fleetSystem.systemd.sockets.atomixos-bootstrap.socketConfig.ListenStream == "127.0.0.1:8080"
+    )
+  } = true
+  test ${builtins.toJSON (builtins.hasAttr "bootstrap-wan-toggle" committedSystem.systemd.services)} = true
+  test ${
+    builtins.toJSON (!(builtins.hasAttr "bootstrap-wan-toggle" fleetSystem.systemd.services))
+  } = true
+  test ${builtins.toJSON (builtins.hasAttr "atomixos-bootstrap-rebind" committedSystem.systemd.services)} = true
+  test ${
+    builtins.toJSON (!(builtins.hasAttr "atomixos-bootstrap-rebind" fleetSystem.systemd.services))
+  } = true
+  test ${
+    builtins.toJSON (
+      committedSystem.systemd.services.lan-gateway-apply.environment.ATOMIXOS_BOOTSTRAP_TRANSPORT
+      == "network"
+    )
+  } = true
+  test ${
+    builtins.toJSON (
+      fleetSystem.systemd.services.lan-gateway-apply.environment.ATOMIXOS_BOOTSTRAP_TRANSPORT
+      == "nixstasis"
+    )
+  } = true
+  test ${
+    builtins.toJSON (
+      committedSystem.systemd.services.first-boot.environment.ATOMIXOS_BOOTSTRAP_TRANSPORT == "network"
+    )
+  } = true
+  test ${
+    builtins.toJSON (
+      fleetSystem.systemd.services.first-boot.environment.ATOMIXOS_BOOTSTRAP_TRANSPORT == "nixstasis"
+    )
+  } = true
   test ${builtins.toJSON (overriddenSystem.atomixos.watchdog.runtimeWatchdogSec == "45s")} = true
   test ${
     builtins.toJSON (overriddenSystem.systemd.settings.Manager.RuntimeWatchdogSec == "45s")
