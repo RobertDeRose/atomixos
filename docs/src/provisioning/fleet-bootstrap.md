@@ -29,15 +29,18 @@ or FRP credentials. Standalone and development images retain the default `bootst
    `/data/nixstasis`.
 3. Approve the device in Nixstasis.
 4. Request remote access for the device. Approval and remote access are separate gates.
-5. Nixstasis selects the AtomixOS bootstrap route profile. The client uses the existing FRPS connection and HTTP-vhost
-   path, forwarding plain HTTP to the local `127.0.0.1:8080` provisioning service and presenting `Host: localhost` to
-   that service.
-6. Submit the initial complete config through the existing programmatic `POST /api/config` endpoint. The request is
-   staged, validated, promoted, activated, health-checked, and rolled back using the normal provisioning pipeline.
-7. Withdraw remote access after the initial job succeeds. The client stops FRPC.
+5. The Nixstasis server-side delivery action selects the `atomixos-bootstrap` route profile. The client uses the
+   existing FRPS connection and HTTP-vhost path, forwarding plain HTTP to the local `127.0.0.1:8080` provisioning
+   service and presenting `Host: localhost` to that service.
+6. The server action submits the initial complete config through the existing programmatic `POST /api/config` endpoint
+   and polls the returned job. The request is staged, validated, promoted, activated, health-checked, and rolled back
+   using the normal provisioning pipeline.
+7. The server action withdraws remote access after the initial job succeeds. The client stops FRPC.
 
 The local API is not reachable on WAN or LAN in this mode. The browser-only Boot UI and its bootstrap CSRF token are not
-the fleet transport; use the server-side/programmatic API path.
+the fleet transport; the Nixstasis server-side action uses the programmatic API path. This delivery action is tracked in
+Nixstasis as `nixstasis-4gg`; the client route-profile/Host-rewrite dependencies are
+`nixstasis-255` and `nixstasis-fss`.
 
 ## Recovery and Failure
 

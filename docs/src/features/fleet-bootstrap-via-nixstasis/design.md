@@ -22,9 +22,10 @@ first be accepted into the Nixstasis fleet, then receive a short-lived remote-ac
 server-provided initial configuration. Standalone, personal, and development images must retain the existing
 network-bootstrap behavior.
 
-The Nixstasis client remains immutable base-system code in the root squashfs. AtomixOS consumes a forthcoming
-server-directed, bounded FRP route-profile capability from the Nixstasis repository (`nixstasis-255`); it does not
-implement a second Nixstasis protocol or a direct server-to-root mutation path.
+The Nixstasis client remains immutable base-system code in the root squashfs. AtomixOS consumes the released,
+server-directed, bounded FRP route-profile capability from `nixstasis-255`, the bounded Host rewrite follow-up
+`nixstasis-fss`, and the server-side delivery action `nixstasis-4gg`; it does not implement a second Nixstasis protocol
+or a direct server-to-root mutation path.
 
 ## Goals
 
@@ -48,8 +49,9 @@ implement a second Nixstasis protocol or a direct server-to-root mutation path.
 - Replacing or extending the AtomixOS provisioning API.
 - Adding a Nixstasis command that writes `/data/config` directly or bypasses the provisioning worker.
 - Allowing arbitrary FRPC TOML or unrestricted server-selected local targets in AtomixOS.
-- Implementing Nixstasis server approval, remote-access UI, FRP route-profile protocol, or Caddy deployment in this
-  repository; those remain Nixstasis ownership, tracked by `nixstasis-255`.
+- Implementing Nixstasis server approval, remote-access UI, FRP route-profile protocol, Host rewrite, or Caddy
+  deployment in this repository; those remain Nixstasis ownership, tracked by `nixstasis-255`, `nixstasis-fss`, and
+  `nixstasis-4gg`.
 - Exposing the first-boot Boot UI as a general remote management interface. Fleet delivery uses the existing
   programmatic `/api/config` route; the browser-only `/apply` CSRF flow remains local UI behavior.
 - Ongoing fleet orchestration or post-provision re-apply authorization. The initial server-provided configuration is the
@@ -93,9 +95,9 @@ frp_server_addr = "frps.example.invalid"
 frp_server_port = 7000
 ```
 
-The evaluator requires `nixstasis.enable = true`, a non-empty API URL, and a non-empty FRP server address when
-`bootstrap_transport = "nixstasis"`. Enabling Nixstasis while retaining `bootstrap_transport = "network"` remains
-valid and does not alter the provisioning listener.
+Whenever `nixstasis.enable = true`, the evaluator requires a non-empty API URL and non-empty FRP server address,
+independent of the selected provisioning transport. Enabling Nixstasis while retaining
+`bootstrap_transport = "network"` is valid and does not alter the provisioning listener.
 
 Fleet first boot proceeds as follows:
 
@@ -103,9 +105,11 @@ Fleet first boot proceeds as follows:
 2. The immutable Nixstasis client registers using its device identity and waits for approval without blocking local
    boot or recovery.
 3. After approval, the client persists the issued identity and polls heartbeats.
-4. When Nixstasis issues `remote_access_token` plus the named bootstrap route profile, the client starts FRPC.
-5. The Nixstasis server/operator uses the existing FRP HTTP path to submit the canonical config file or bundle to
-   `POST /api/config`. The local route sees `Host: localhost`; no new API credential or mutation path is introduced.
+4. When Nixstasis issues `remote_access_token` plus the named `atomixos-bootstrap` route profile, the client starts
+   FRPC. The released route-profile client capability plus `nixstasis-fss` provide the plain HTTP loopback route and
+   local `Host: localhost` rewrite.
+5. The Nixstasis server-side delivery action tracked by `nixstasis-4gg` uses the existing FRP HTTP path to submit the
+   canonical config file or bundle to `POST /api/config`. No new AtomixOS API credential or mutation path is introduced.
 6. AtomixOS validates, stages, promotes, activates, and health-checks the same desired state as every other complete
    config submission.
 7. Nixstasis withdraws the one-time remote-access grant. The client stops FRPC. The AtomixOS API remains loopback-only
@@ -119,15 +123,15 @@ Fleet first boot proceeds as follows:
   addition to existing fields; unknown fields fail closed.
 - `bootstrap_transport` accepts exactly `network` and `nixstasis`.
 - The committed default remains `network`; all existing network-bootstrap tests and behavior continue to work.
-- `nixstasis` transport requires Nixstasis to be enabled and requires non-empty non-secret `api_url` and
-  `frp_server_addr`; `frp_server_port` remains a validated port with default `7000`.
+- When `nixstasis.enable` is true, the policy requires non-empty non-secret `api_url` and `frp_server_addr`,
+  regardless of transport; `frp_server_port` remains a validated port with default `7000`.
 - Effective build configuration maps to NixOS options without parsing TOML in runtime modules.
 - The AtomixOS bootstrap socket listens on `0.0.0.0:8080` for `network` transport and `127.0.0.1:8080` for `nixstasis`
   transport.
 - Fleet mode never installs the first-boot WAN nftables rule for TCP port 8080.
 - Fleet mode never rebinds the bootstrap socket to the provisioned LAN gateway address.
-- The Nixstasis module renders the upstream route-profile capability for a named `atomixos-bootstrap-api` profile with
-  a plain HTTP local target at `127.0.0.1:8080` and local host-header rewrite to `localhost`.
+- The Nixstasis module consumes the upstream route-profile capability for the named `atomixos-bootstrap` profile with
+  a plain HTTP local target at `127.0.0.1:8080` and, after `nixstasis-fss`, a local host-header rewrite to `localhost`.
 - The route profile uses the existing FRPS connection and HTTP-vhost ingress; no new device listener or FRPS port is
   required.
 - Existing `remote_access_token` start/stop behavior remains the authorization gate, and token withdrawal stops the
@@ -179,10 +183,10 @@ Its browser-origin checks accept a local rewritten `Host`; the fleet route is in
 programmatic path rather than a remote Boot UI path.
 
 The Nixstasis client is already packaged into the immutable AtomixOS base and stores identity/runtime state under
-`/data/nixstasis`. Its current FRP template uses a static HTTPS `http2https` target at `127.0.0.1:443`, while FRP
-session startup is gated by `remote_access_token`. The external Nixstasis task `nixstasis-255` adds the bounded,
-server-directed route-profile capability needed to select a plain HTTP loopback target without changing AtomixOS's
-provisioning protocol.
+`/data/nixstasis`. The released Nixstasis route-profile capability selects the built-in `atomixos-bootstrap` profile,
+which renders a plain HTTP target at `127.0.0.1:8080`; `nixstasis-fss` adds the local Host rewrite needed by the
+existing bootstrap security check. FRP session startup remains gated by `remote_access_token`. The server-side bundle
+action is tracked separately by `nixstasis-4gg`.
 
 ## Proposed Design
 
@@ -200,10 +204,10 @@ The canonical renderer emits the new sections in a fixed order. The effective re
 The Nixstasis route profile is a fixed AtomixOS capability, not a user-provided arbitrary FRPC document:
 
 ```text
-profile: atomixos-bootstrap-api
+profile: atomixos-bootstrap
 proxy kind: plain HTTP
 local target: 127.0.0.1:8080
-local Host rewrite: localhost
+local Host rewrite: localhost (provided by nixstasis-fss)
 ```
 
 The upstream Nixstasis route-profile contract owns the heartbeat wire representation, profile validation, FRPC
@@ -220,8 +224,8 @@ address at evaluation time:
 
 The firewall module conditionally installs the pending-promotion WAN rule only for `network`. The LAN gateway apply
 path and runtime rebind service become no-ops for `nixstasis`; they continue to generate the existing LAN drop-in for
-`network`. The provisioned firewall helper does not add a reachable fleet listener, and its reserved bootstrap-port
-requirements are conditional on the selected transport.
+`network`. The loopback socket, rather than a transport-specific provisioned-firewall rule, is the fleet reachability
+boundary.
 
 First-boot discovery still waits for valid provisioning when no boot/USB seed exists. In fleet mode, the Nixstasis
 client's approved FRP route is the transport that can reach the existing loopback service. No new wait loop or direct
@@ -231,14 +235,15 @@ filesystem handoff is added.
 
 The Nixstasis server remains responsible for inventory approval and remote-access authorization. Device approval alone
 only produces the normal runtime identity; the separate heartbeat remote-access response is required before FRPC starts.
-The server must select the `atomixos-bootstrap-api` profile for the initial upload and withdraw the lease after the
-promotion result is known.
+The server-side delivery action tracked by `nixstasis-4gg` selects the `atomixos-bootstrap` profile and withdraws the
+lease after the promotion result is known.
 
-The server submits the existing complete config artifact to `/api/config`. The network service receives it through the
-loopback FRP route, stages it as usual, and delegates privileged promotion to the existing root worker. The first-boot
-exception is scoped by the existing unprovisioned-state guard; no Nixstasis credential is written into `/data/config`.
+That server action submits the existing complete config artifact to `/api/config`. The network service receives it
+through the loopback FRP route, stages it as usual, and delegates privileged promotion to the existing root worker. The
+first-boot exception is scoped by the existing unprovisioned-state guard; no Nixstasis credential is written into
+`/data/config`.
 
-The route profile rewrites the local host header to `localhost`, allowing the existing bootstrap host validation to
+The `nixstasis-fss` route-profile rewrite presents `Host: localhost`, allowing the existing bootstrap host validation to
 remain narrow. The feature documents the fleet uploader as programmatic; browser-origin/CSRF behavior remains owned by
 the local Boot UI and is not weakened for remote proxy traffic.
 
@@ -306,16 +311,17 @@ image/operator uses an explicit supported seed path; it does not silently widen 
 
 ## Documentation Impact
 
-| Documentation concern      | Exact page                                                 | Create or update        | Planned change                                                                                        | Owning Beads task    |
-|----------------------------|------------------------------------------------------------|-------------------------|-------------------------------------------------------------------------------------------------------|----------------------|
-| Architecture               | `docs/src/architecture/overwatch-enrollment.md`            | Update                  | Document approval, remote-access lease, FRP route profile, and existing provisioning API flow         | `atomixos-mol-bzo.4` |
-| Architecture               | `docs/src/runtime-boundaries.md`                           | Update                  | Document build-selected network versus loopback fleet exposure and state ownership                    | `atomixos-mol-bzo.4` |
-| Usage / Operations         | `docs/src/provisioning/fleet-bootstrap.md`                 | Create                  | Explain fleet image policy, enrollment prerequisites, initial bundle upload, recovery, and withdrawal | `atomixos-mol-bzo.4` |
-| Reference                  | `docs/src/reference/build-configuration.md`                | Update                  | Add provisioning and Nixstasis fields, assertions, canonical rendering, and non-secret boundary       | `atomixos-mol-bzo.1` |
-| Development                | `docs/src/testing.md`                                      | Update                  | Add focused fleet policy, socket, firewall, and mock enrollment validation                            | `atomixos-mol-bzo.3` |
-| Navigation                 | `docs/src/SUMMARY.md`                                      | Update                  | Register the new fleet-bootstrap operations page and feature design                                   | `atomixos-mol-bzo.4` |
-| Roadmap                    | `docs/src/planned-features.md`                             | Update                  | Add the planned fleet bootstrap feature and Nixstasis dependency                                      | `atomixos-mol-bzo.4` |
-| Implemented Feature Record | `docs/src/features/fleet-bootstrap-via-nixstasis/index.md` | Create during close-out | Record delivery, validation, and external Nixstasis dependency evidence                               | lifecycle close-out  |
+| Documentation concern      | Exact page                                                                        | Create or update        | Planned change                                                                                        | Owning Beads task    |
+|----------------------------|-----------------------------------------------------------------------------------|-------------------------|-------------------------------------------------------------------------------------------------------|----------------------|
+| Architecture               | `docs/src/architecture/overwatch-enrollment.md`                                   | Update                  | Document approval, remote-access lease, FRP route profile, and existing provisioning API flow         | `atomixos-mol-bzo.4` |
+| Architecture               | `docs/src/runtime-boundaries.md`                                                  | Update                  | Document build-selected network versus loopback fleet exposure and state ownership                    | `atomixos-mol-bzo.4` |
+| Usage / Operations         | `docs/src/provisioning/fleet-bootstrap.md`                                        | Create                  | Explain fleet image policy, enrollment prerequisites, initial bundle upload, recovery, and withdrawal | `atomixos-mol-bzo.4` |
+| Reference                  | `docs/src/reference/build-configuration.md`                                       | Update                  | Add provisioning and Nixstasis fields, assertions, canonical rendering, and non-secret boundary       | `atomixos-mol-bzo.1` |
+| Development                | `docs/src/testing.md`                                                             | Update                  | Add focused fleet policy, socket, firewall, and mock enrollment validation                            | `atomixos-mol-bzo.3` |
+| Navigation                 | `docs/src/SUMMARY.md`                                                             | Update                  | Register the new fleet-bootstrap operations page and feature design                                   | `atomixos-mol-bzo.4` |
+| Roadmap                    | `docs/src/planned-features.md`                                                    | Update                  | Add the planned fleet bootstrap feature and Nixstasis dependency                                      | `atomixos-mol-bzo.4` |
+| Implemented Feature Record | `docs/src/features/fleet-bootstrap-via-nixstasis/index.md`                        | Create during close-out | Record delivery, validation, and external Nixstasis dependency evidence                               | lifecycle close-out  |
+| Implemented Feature Index  | `docs/src/features/index.md` and the implemented section in `docs/src/SUMMARY.md` | Update during close-out | Index the delivered feature record with the repository's implemented-feature navigation               | lifecycle close-out  |
 
 ## Validation Strategy
 
@@ -327,29 +333,35 @@ image/operator uses an explicit supported seed path; it does not silently widen 
   install a WAN 8080 rule.
 - Extend first-boot/LAN-gateway checks to prove network mode rebinds to the configured LAN address while fleet mode
   remains loopback-only after config promotion.
-- Add a fleet VM scenario with a mock Nixstasis API and bounded FRP client/profile fixture. Verify registration,
-  remote-access profile selection, loopback API reachability, complete `/api/config` job application, token withdrawal,
-  and absence of credential leakage. Full public FRPS/Caddy transport remains a separate integration check.
-- Run the existing provisioning Python suite, focused Nix checks, documentation checks, and the repository-standard
-  validation after review fixes stabilize.
-- Record the external Nixstasis `nixstasis-255` implementation/revision used by the integration test and release build.
+- Add the `fleet-bootstrap` VM check with a mock Nixstasis API and bounded FRP client/profile fixture. Verify
+  registration, `atomixos-bootstrap` profile selection, loopback API reachability, complete `/api/config` job
+  application, token withdrawal, and absence of credential leakage. Full public FRPS/Caddy transport remains a separate
+  integration check.
+- Run `nix build .#checks.aarch64-darwin.build-configuration --no-link`,
+  `nix build .#checks.aarch64-darwin.firewall --no-link`,
+  `nix build .#checks.aarch64-darwin.fleet-bootstrap --no-link`, and the matching `aarch64-linux` checks when the
+  builder is available. Run `uv run scripts/check-docs.py` and `mdbook build docs` for documentation changes.
+- Run the existing provisioning Python suite and repository-standard validation after review fixes stabilize.
+- Record the external Nixstasis revisions/tasks `nixstasis-255`, `nixstasis-fss`, and `nixstasis-4gg` used by the
+  integration test and release build.
 
 ## Implementation Decomposition
 
 1. Extend and validate the strict build configuration, map effective policy to NixOS options, and update the build
    configuration reference.
-2. Apply the transport policy to the bootstrap socket, WAN firewall toggle, LAN rebind path, and reserved port rules;
-   keep network behavior unchanged and document the tests.
+2. Apply the transport policy to the bootstrap socket, WAN firewall toggle, and LAN rebind path; keep network
+   behavior unchanged and document the tests.
 3. Consume the released Nixstasis route-profile capability, render the named plain-HTTP loopback profile, and add the
    mock enrollment/FRP integration scenario.
 4. Reconcile architecture, operations, testing, navigation, and roadmap documentation.
 
 ## Dependencies and Parallelism
 
-The feature depends on the Nixstasis repository task `nixstasis-255` and a pinned client revision that implements the
-versioned route-profile contract. Build-policy work can be reviewed independently. Runtime transport work depends on
-the new build-policy option. Nixstasis integration and fleet VM validation depend on both the policy mapping and the
-upstream route-profile package. Documentation reconciliation follows the stable behavior and test evidence.
+The feature depends on the delivered Nixstasis route-profile contract `nixstasis-255`, the Host rewrite follow-up
+`nixstasis-fss`, and the server-side bundle delivery action `nixstasis-4gg`. Build-policy work can be reviewed
+independently. Runtime transport work depends on the new build-policy option. Nixstasis integration and fleet VM
+validation depend on the policy mapping and the pinned upstream route-profile package. Documentation reconciliation
+follows the stable behavior and test evidence.
 
 ## Rollout and Migration
 
@@ -360,7 +372,8 @@ and a planned re-enrollment/recovery procedure; runtime `config.toml` cannot cha
 
 ## Risks and Tradeoffs
 
-- **Upstream dependency timing:** fleet integration cannot be released before `nixstasis-255` is implemented and pinned.
+- **Upstream dependency timing:** fleet integration cannot be released before `nixstasis-fss` and `nixstasis-4gg` are
+  implemented, documented, and pinned alongside the delivered `nixstasis-255` route-profile contract.
 - **Initial fleet outage:** an unapproved or offline device cannot receive its server bundle; local recovery remains
   possible but the image does not silently open a network listener.
 - **FRP route exposure:** the route is authorized by the Nixstasis remote-access lease and external server policy;
@@ -389,8 +402,9 @@ and a planned re-enrollment/recovery procedure; runtime `config.toml` cannot cha
 
 ## Open Questions
 
-None required for implementation. The upstream Nixstasis route-profile wire format is owned and versioned by
-`nixstasis-255`; AtomixOS consumes its published contract rather than choosing a duplicate representation.
+None required for implementation once the external Nixstasis tasks `nixstasis-fss` and `nixstasis-4gg` are available.
+The route-profile wire format is owned and versioned by `nixstasis-255`; AtomixOS consumes the published contract
+rather than choosing a duplicate representation.
 
 ## Deferred Decisions
 
@@ -414,13 +428,17 @@ None required for implementation. The upstream Nixstasis route-profile wire form
   explicit independent policy; Nixstasis can be enabled while preserving network bootstrap.
 - **What is the fleet trust sequence?** Device approval first, separate `remote_access_token` second, existing API
   upload third, server withdrawal after successful initial promotion.
+- **Who owns server-side bundle delivery?** Nixstasis task `nixstasis-4gg` owns the approved-device action that selects
+  `atomixos-bootstrap`, submits `/api/config`, polls the job, and withdraws the lease; AtomixOS owns only the local
+  transport and existing provisioning pipeline.
 
 ### Assumptions
 
-- Nixstasis `nixstasis-255` delivers a backward-compatible, versioned named route-profile contract and a plain HTTP
-  route with local host-header rewrite.
+- Nixstasis `nixstasis-255` delivers the backward-compatible, versioned `atomixos-bootstrap` route-profile contract;
+  `nixstasis-fss` adds the local host-header rewrite.
+- Nixstasis `nixstasis-4gg` delivers the approved-device server-side bundle action and job polling contract.
 - Nixstasis/Caddy external authorization remains the server-side operator boundary for the FRP HTTP route.
-- The server-side uploader can submit `/api/config` without browser `Origin`/`Referer` headers through the rewritten
+- The server-side uploader submits `/api/config` without browser `Origin`/`Referer` headers through the rewritten
   loopback route.
 - Public Nixstasis and FRPS endpoint values are acceptable immutable build inputs and contain no credentials.
 
@@ -432,6 +450,8 @@ None required for implementation. The upstream Nixstasis route-profile wire form
 - The route configuration was narrowed from arbitrary plugin data to named build-declared profiles, with future typed
   expansion explicitly deferred.
 - Nixstasis enablement and provisioning transport were separated into independent build policy fields.
+- The actual upstream profile name was reconciled to `atomixos-bootstrap`; Host rewriting and server-side delivery are
+  explicit Nixstasis dependencies.
 
 ### Source Material
 
@@ -451,7 +471,7 @@ None required for implementation. The upstream Nixstasis route-profile wire form
 - `/Users/DeRoseR/workspace/personal/nixstasis/packages/client/internal/frp/manager.go`
 - `/Users/DeRoseR/workspace/personal/nixstasis/packages/client/internal/transport/client.go`
 - `/Users/DeRoseR/workspace/personal/nixstasis/deploy/compose/caddy/Caddyfile`
-- External task `nixstasis-255`
+- External tasks `nixstasis-255`, `nixstasis-fss`, and `nixstasis-4gg`
 - Skill version evidence:
 
   <!--

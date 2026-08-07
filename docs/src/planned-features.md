@@ -304,7 +304,8 @@ this page remains the human-readable roadmap.
   - Bind the fleet bootstrap API to loopback and suppress pending WAN/LAN rebind exposure
   - Consume the upstream bounded route-profile capability tracked by Nixstasis `nixstasis-255`
   - Preserve existing staging, validation, activation, rollback, bundle, and SSH-signature contracts
-- Dependencies: `nixstasis-255` and the existing `build-configuration`, `nixstasis-client`, and `provisioning-api-service`
+- Dependencies: delivered Nixstasis route profiles `nixstasis-255`, Host rewriting `nixstasis-fss`, server-side bundle
+  delivery `nixstasis-4gg`, and the existing `build-configuration`, `nixstasis-client`, and `provisioning-api-service`
   foundations
 - Suggested validation: strict build-policy evaluator tests, socket/firewall NixOS checks, mock enrollment/route-profile
   VM coverage, and documentation/link validation
