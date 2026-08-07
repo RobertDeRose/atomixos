@@ -290,6 +290,25 @@ this page remains the human-readable roadmap.
 - Delivered in: `modules/nixstasis.nix`, `nix/tests/nixstasis-client.nix`, and
   `docs/src/features/nixstasis-client/`
 
+### Fleet Bootstrap via Nixstasis (`fleet-bootstrap-via-nixstasis`)
+
+- Status: planned; Beads root `atomixos-mol-efd`
+- Design: [Fleet Bootstrap via Nixstasis](./features/fleet-bootstrap-via-nixstasis/design.md)
+- Overview: Add an explicit build-time fleet transport that keeps the existing provisioning API on loopback until the
+  device is approved by Nixstasis and receives a short-lived remote-access lease. The server selects a bounded plain
+  HTTP FRP route to `127.0.0.1:8080` and submits the existing complete config/bundle pipeline; no new AtomixOS
+  provisioning command or direct `/data` mutation path is added.
+- Requirements:
+  - Keep `bootstrap_transport = "network"` as the standalone/personal/development default
+  - Require explicit `[provisioning]` and `[nixstasis]` policy for fleet images
+  - Bind the fleet bootstrap API to loopback and suppress pending WAN/LAN rebind exposure
+  - Consume the upstream bounded route-profile capability tracked by Nixstasis `nixstasis-255`
+  - Preserve existing staging, validation, activation, rollback, bundle, and SSH-signature contracts
+- Dependencies: `nixstasis-255` and the existing `build-configuration`, `nixstasis-client`, and `provisioning-api-service`
+  foundations
+- Suggested validation: strict build-policy evaluator tests, socket/firewall NixOS checks, mock enrollment/route-profile
+  VM coverage, and documentation/link validation
+
 ### RAUC Production Keyring Policy (`rauc-production-keyring-policy`)
 
 - Status: planned
