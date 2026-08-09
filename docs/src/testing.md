@@ -51,6 +51,8 @@ mise run e2e:rauc-slots --lima
 ```sh
 nix build .#checks.aarch64-darwin.nixstasis-client --no-link
 nix build .#checks.aarch64-linux.nixstasis-client --no-link
+nix build .#checks.aarch64-darwin.fleet-bootstrap --no-link
+nix build .#checks.aarch64-linux.fleet-bootstrap --no-link
 nix build .#checks.aarch64-darwin.watchdog-module --no-link
 nix build .#checks.aarch64-linux.watchdog-module --no-link
 nix build .#checks.aarch64-darwin.build-configuration --no-link
@@ -67,6 +69,15 @@ The `nixstasis-client` VM check boots AtomixOS with a mock Nixstasis API. It
 validates registration, `/data/nixstasis` identity reuse across a registration
 service restart, heartbeat polling, a successful mock FRP transient unit, and
 that stopping the mock API does not stop local recovery targets.
+
+The `fleet-bootstrap` VM check uses the released Nixstasis client route-profile
+capability with a mock approval/heartbeat API. It verifies the fleet image's
+loopback-only `127.0.0.1:8080` socket, server selection of the named
+`atomixos-bootstrap` profile, the plain-HTTP route and `Host: localhost` rewrite,
+FRP token withdrawal, and the absence of the token from rendered configuration,
+systemd environment output, and journal logs. The test covers the local
+transport/launch boundary; the Nixstasis server-side bundle delivery action and
+public FRPS/Caddy path remain external integration responsibilities.
 
 The `watchdog-module` check verifies hardware watchdog enforcement remains off
 by default and renders the configured systemd manager watchdog settings only when
@@ -105,6 +116,7 @@ Additional flake-only checks:
 | Test                          | Nodes | What it validates                                                                                         |
 |-------------------------------|-------|-----------------------------------------------------------------------------------------------------------|
 | `nixstasis-client`            | 1     | Nixstasis registration, identity reuse, polling, FRP launch-boundary, and post-enrollment API outage path |
+| `fleet-bootstrap`             | 1     | Loopback fleet socket, named AtomixOS route profile, Host rewrite, withdrawal, and token secrecy          |
 | `watchdog-module`             | 0     | Watchdog option defaults and opt-in systemd manager settings                                              |
 | `build-configuration`         | 0     | Schema, canonical policy, provenance, module mapping, and sidecar inputs                                  |
 | `build-config-workflow`       | 0     | Local override wrapper, task matrix, Lima behavior, and atomic retained links                             |

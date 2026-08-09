@@ -3,7 +3,7 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
-    nixstasis.url = "github:RobertDeRose/nixstasis/87ba02cef40cad33932e29f340988a3c1dccb4fb";
+    nixstasis.url = "github:RobertDeRose/nixstasis/6afcb7641b3cd4ed3db467df26b1b8ffc780f863";
   };
 
   outputs =
@@ -365,6 +365,7 @@
             first-boot-source-discovery = import ./nix/tests/first-boot-source-discovery.nix netTestArgs;
             nixstasis-module = import ./nix/tests/nixstasis-module.nix netTestArgs;
             nixstasis-client = import ./nix/tests/nixstasis-client.nix netTestArgs;
+            fleet-bootstrap = import ./nix/tests/fleet-bootstrap.nix netTestArgs;
             watchdog-module = import ./nix/tests/watchdog-module.nix netTestArgs;
             watchdog-missing-device = import ./nix/tests/watchdog-missing-device.nix netTestArgs;
             forensics-podman-log-path = import ./nix/tests/forensics-podman-log-path.nix netTestArgs;
@@ -421,6 +422,7 @@
             first-boot-source-discovery = import ./nix/tests/first-boot-source-discovery.nix darwinNetTestArgs;
             nixstasis-module = import ./nix/tests/nixstasis-module.nix darwinNetTestArgs;
             nixstasis-client = import ./nix/tests/nixstasis-client.nix darwinNetTestArgs;
+            fleet-bootstrap = import ./nix/tests/fleet-bootstrap.nix darwinNetTestArgs;
             watchdog-module = import ./nix/tests/watchdog-module.nix darwinNetTestArgs;
             watchdog-missing-device = import ./nix/tests/watchdog-missing-device.nix darwinNetTestArgs;
             forensics-podman-log-path = import ./nix/tests/forensics-podman-log-path.nix darwinNetTestArgs;
