@@ -22,7 +22,10 @@ network-facing behavior: before initial provisioning, the bootstrap API is reach
 `POST /api/config` for complete `config.toml` files or supported config bundles. The opt-in `nixstasis` transport binds
 that same API only to `127.0.0.1:8080`; it does not install the pending WAN 8080 firewall service or rebind the socket to
 the provisioned LAN gateway. The approved Nixstasis route is the only fleet bootstrap transport, and no network
-fallback is added.
+fallback is added. Device approval and the separate `remote_access_token` lease are both required before FRPC starts.
+The server-side delivery action selects the named `atomixos-bootstrap` profile and sends the initial complete artifact
+through the existing asynchronous `POST /api/config` job pipeline. It records a terminal result before withdrawing the
+lease; an indeterminate result is retained for explicit reconciliation rather than retried.
 
 The production service is socket-activated: `atomixos-bootstrap.socket` owns the build-selected listen address, while
 `atomixos-bootstrap.service` only consumes the inherited systemd socket file descriptor. First-boot Boot UI submissions
