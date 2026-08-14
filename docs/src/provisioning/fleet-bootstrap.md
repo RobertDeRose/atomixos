@@ -35,12 +35,19 @@ or FRP credentials. Standalone and development images retain the default `bootst
 6. The server action submits the initial complete config through the existing programmatic `POST /api/config` endpoint
    and polls the returned job. The request is staged, validated, promoted, activated, health-checked, and rolled back
    using the normal provisioning pipeline.
-7. The server action withdraws remote access after the initial job succeeds. The client stops FRPC.
+7. The server action records the terminal provisioning result before withdrawing the remote-access lease. Successful and
+   failed terminal results withdraw access; an indeterminate result retains the lease for explicit reconciliation or
+   withdrawal. The client stops FRPC after withdrawal.
 
 The local API is not reachable on WAN or LAN in this mode. The browser-only Boot UI and its bootstrap CSRF token are not
 the fleet transport; the Nixstasis server-side action uses the programmatic API path. This delivery action is tracked in
 Nixstasis as `nixstasis-4gg`; the client route-profile/Host-rewrite dependencies are
 `nixstasis-255` and `nixstasis-fss`.
+
+The server action sends the exact bounded `application/octet-stream` artifact bytes, expects `202 Accepted` with a
+relative `/api/jobs/<job_id>` location, and polls that job resource. It retries only documented `409 Conflict`
+admission responses. An ambiguous upload or polling result is not reposted, and the route lease remains available for
+reconciliation until a terminal result, explicit withdrawal, or expiry is recorded.
 
 ## Recovery and Failure
 
@@ -61,5 +68,5 @@ Before releasing a fleet image, verify:
 - `ss -ltn` shows the bootstrap service only on `127.0.0.1:8080`;
 - no pending WAN bootstrap rule is installed;
 - Nixstasis approval and remote-access lease are both required before FRPC starts;
-- the server can submit and poll the existing provisioning job;
-- the remote-access lease is withdrawn after successful promotion.
+- the server can submit and poll the existing provisioning job without reposting an ambiguous request;
+- a terminal provisioning result is recorded before the remote-access lease is withdrawn.

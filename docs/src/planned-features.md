@@ -55,9 +55,9 @@ this page remains the human-readable roadmap.
   operator authentication
 - Provisioned re-apply requires SSH signature authentication; `/api/validate` also
   requires SSH authentication
-- Bootstrap exposure is WAN/LAN before initial provisioning and LAN-only after
-  successful provisioning; runtime socket rebinding must use `/run/systemd/system`
-  drop-ins because the rootfs is read-only
+- Network bootstrap exposure is WAN/LAN before initial provisioning and LAN-only after
+  successful provisioning; fleet bootstrap exposure is loopback-only throughout. Runtime
+  socket rebinding must use `/run/systemd/system` drop-ins because the rootfs is read-only
 - `quadlet-runtime.json` tracks all rendered units (containers, networks, volumes) with
   mode (rootful/rootless) for sync-quadlet
 - Network and volume Quadlet units are always rootful
@@ -105,9 +105,10 @@ this page remains the human-readable roadmap.
   browser form submission. After provisioning, unauthenticated mutation routes are
   unavailable and re-apply requires SSH signatures.
 - **Bootstrap exposure lifecycle**: Resolved by keeping WAN bootstrap exposure
-  only until initial provisioning completes, then rebinding the bootstrap socket
-  to LAN through runtime systemd drop-ins and preserving WAN exposure while an
-  initial promotion marker is pending.
+  only for the default network transport until initial provisioning completes,
+  then rebinding that socket to LAN through runtime systemd drop-ins. Fleet
+  transport is loopback-only from first boot and never installs the WAN rule or
+  LAN rebind.
 - **User shell configuration**: Resolved by supporting
   `[users.<name>].shell = "bash" | "sh" | "zsh"`. Admin users still default to
   zsh and system users default to bash when no override is set.
@@ -292,23 +293,25 @@ this page remains the human-readable roadmap.
 
 ### Fleet Bootstrap via Nixstasis (`fleet-bootstrap-via-nixstasis`)
 
-- Status: planned; Beads root `atomixos-mol-efd`
+- Status: completed; Beads root `atomixos-mol-efd`
 - Design: [Fleet Bootstrap via Nixstasis](./features/fleet-bootstrap-via-nixstasis/design.md)
-- Overview: Add an explicit build-time fleet transport that keeps the existing provisioning API on loopback until the
-  device is approved by Nixstasis and receives a short-lived remote-access lease. The server selects a bounded plain
-  HTTP FRP route to `127.0.0.1:8080` and submits the existing complete config/bundle pipeline; no new AtomixOS
-  provisioning command or direct `/data` mutation path is added.
-- Requirements:
-  - Keep `bootstrap_transport = "network"` as the standalone/personal/development default
-  - Require explicit `[provisioning]` and `[nixstasis]` policy for fleet images
-  - Bind the fleet bootstrap API to loopback and suppress pending WAN/LAN rebind exposure
-  - Consume the upstream bounded route-profile capability tracked by Nixstasis `nixstasis-255`
-  - Preserve existing staging, validation, activation, rollback, bundle, and SSH-signature contracts
-- Dependencies: delivered Nixstasis route profiles `nixstasis-255`, Host rewriting `nixstasis-fss`, server-side bundle
-  delivery `nixstasis-4gg`, and the existing `build-configuration`, `nixstasis-client`, and `provisioning-api-service`
-  foundations
-- Suggested validation: strict build-policy evaluator tests, socket/firewall NixOS checks, mock enrollment/route-profile
-  VM coverage, and documentation/link validation
+- Overview: Adds an explicit build-time fleet transport that keeps the existing provisioning API on loopback until the
+  device is approved by Nixstasis and receives a separate remote-access lease. The server selects a bounded plain HTTP
+  FRP route to `127.0.0.1:8080`, rewrites `Host` to `localhost`, and submits the existing complete config/bundle
+  pipeline; no new AtomixOS provisioning command or direct `/data` mutation path is added.
+- Delivered behavior:
+  - `bootstrap_transport = "network"` remains the standalone/personal/development default.
+  - Explicit `[provisioning]` and `[nixstasis]` policy selects fleet mode without embedding credentials.
+  - Fleet mode binds the bootstrap API to loopback and suppresses pending WAN/LAN rebind exposure.
+  - The named `atomixos-bootstrap` profile and fixed Host rewrite are consumed from Nixstasis tasks `nixstasis-255`,
+    `nixstasis-fss`, and `nixstasis-4gg`.
+  - Approval, remote-access lease, asynchronous `/api/config` job polling, terminal-result recording, withdrawal,
+    staging, validation, activation, rollback, bundle, and SSH-signature contracts remain explicit.
+- Validation: evaluator and socket/firewall checks, the mock enrollment/route-profile VM check, both Linux and Darwin
+  Nixstasis client/fleet builds, and documentation/link validation. Exact build logs are recorded in the implementation
+  task `atomixos-mol-bzo.3`.
+- Close-out record: the delivered feature record and implemented-feature index are added by the feature close-out
+  lifecycle after the implementation coordinator and documentation gates close.
 
 ### RAUC Production Keyring Policy (`rauc-production-keyring-policy`)
 
