@@ -20,5 +20,6 @@ remains in [Planned features](../planned-features.md) and Beads.
 - [Config Reapply Improvements](config-reapply-improvements/index.md)
 - [Build Configuration](build-configuration/index.md)
 - [Watchdog Enforcement](watchdog-enforcement/index.md)
+- [Fleet Bootstrap via Nixstasis](fleet-bootstrap-via-nixstasis/index.md)
 
 <!-- END IMPLEMENTED FEATURES -->

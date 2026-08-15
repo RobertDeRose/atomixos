@@ -85,6 +85,7 @@
   - [Watchdog Enforcement](./features/watchdog-enforcement/index.md)
   - [Config Reapply Improvements](./features/config-reapply-improvements/index.md)
   - [Build Configuration](./features/build-configuration/index.md)
+  - [Fleet Bootstrap via Nixstasis](./features/fleet-bootstrap-via-nixstasis/index.md)
   <!-- END IMPLEMENTED FEATURES -->
 
 # Reference
