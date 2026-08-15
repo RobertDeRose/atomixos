@@ -310,8 +310,8 @@ this page remains the human-readable roadmap.
 - Validation: evaluator and socket/firewall checks, the mock enrollment/route-profile VM check, both Linux and Darwin
   Nixstasis client/fleet builds, and documentation/link validation. Exact build logs are recorded in the implementation
   task `atomixos-mol-bzo.3`.
-- Close-out record: the delivered feature record and implemented-feature index are added by the feature close-out
-  lifecycle after the implementation coordinator and documentation gates close.
+- Implemented record: [Fleet Bootstrap via Nixstasis delivery](./features/fleet-bootstrap-via-nixstasis/index.md)
+- Delivery state: ready for the explicit PR, merge, or ready action after close-out reviews.
 
 ### RAUC Production Keyring Policy (`rauc-production-keyring-policy`)
 
