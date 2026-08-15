@@ -71,12 +71,19 @@ AtomixOS repository.
 - Focused Nix evaluation, `nixfmt`, Ruff, shellcheck, actionlint, rumdl, tombi, typos,
   whitespace, and documentation checks
 
-The four exact VM build logs are:
+The final validation boundary was the clean feature commit
+`ae0c7b23ca2e7887bca58d0f48484c382d04b338`. The audit-only interaction commit
+`b9fe98d` contains the selected Beads rows and no implementation paths. Exact logs are:
 
-- `/tmp/atomixos-fleet-bzo3-nixstasis-client-darwin-final-v2.log`
-- `/tmp/atomixos-fleet-bzo3-fleet-bootstrap-darwin-final-v3.log`
-- `/tmp/atomixos-fleet-bzo3-nixstasis-client-linux-final.log`
-- `/tmp/atomixos-fleet-bzo3-fleet-bootstrap-linux-final.log`
+- `/tmp/atomixos-fleet-close-build-config-darwin-final-v6.log`
+- `/tmp/atomixos-fleet-close-fleet-bootstrap-darwin-final-v8.log`
+- `/tmp/atomixos-fleet-close-nixstasis-client-darwin-final-v5.log`
+- `/tmp/atomixos-fleet-close-nixstasis-client-linux-final-v5.log`
+- `/tmp/atomixos-fleet-close-fleet-bootstrap-linux-final-v5.log`
+
+The build-configuration check passed with an explicit environment diagnostic: the nested
+`nix-instantiate` assertion is skipped only when the builder's nested Nix daemon resets its
+connection. The direct fleet-policy rejection evaluator and derivation evaluation passed.
 
 ## Design Reconciliation
 
@@ -128,8 +135,18 @@ The four exact VM build logs are:
 
 ## Audit Trail
 
-- Implementation: `f9b26acb3641fb11d67620a0ef2fd1589231db48`
-- Documentation reconciliation: `e01027e8563e927988483f736c279188f3c475bf`
+- Canonical Beads root: `atomixos-mol-efd` (Fleet Bootstrap via Nixstasis).
+- Lifecycle lineage: design `atomixos-mol-am3`; specification reconciliation
+  `atomixos-mol-pdn`; implementation coordinator `atomixos-mol-bzo`; documentation
+  reconciliation `atomixos-mol-ism`; validation `atomixos-mol-4fy`; delivery
+  `atomixos-mol-5ew`.
+- Close-review lineage: implementation integrity
+  `atomixos-mol-efd-implementation-integrity`; delivery integrity
+  `atomixos-mol-efd-delivery-integrity`.
+- Implementation boundary: `ae0c7b23ca2e7887bca58d0f48484c382d04b338`.
+- Documentation reconciliation: `e4a71ab`.
+- Interaction audit: `b9fe98d` (selected fleet-lineage rows only).
+- Historical implementation: `f9b26acb3641fb11d67620a0ef2fd1589231db48`.
 - Nixstasis revisions: `nixstasis-255` at
   `a0f230ab107c38995d5cd074dc3277708ae2cfba`, `nixstasis-fss` at
   `9e195c96e05cd42b420ee1331fd81a9d8f1cbc8e`, and `nixstasis-4gg` at
@@ -140,4 +157,7 @@ The four exact VM build logs are:
   `atomixos-mol-bzo`, documentation gate `atomixos-mol-ism`, validation gate
   `atomixos-mol-4fy`, and the close-out review gates.
 - Review-topology migration evidence: `a4049f5f5a043da363825ac5d6bd6d0e46a1f337`.
+- External Nixstasis lineage is explicit: `nixstasis-255` supplies the client pin,
+  `nixstasis-fss` owns Host rewriting, `nixstasis-4gg` owns server delivery, and the
+  follow-ups `nixstasis-04t` and `nixstasis-5do` are recorded as closed external work.
 - Delivery remains pending an explicit PR, merge, or ready action.
