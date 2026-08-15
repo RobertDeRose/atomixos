@@ -45,8 +45,10 @@ route-profile, Host-rewrite, and server-delivery ownership remains with Nixstasi
 A fleet image must be built with the reviewed Nixstasis API URL and FRP server address and
 must be approved by the Nixstasis server before its initial bundle can be delivered. If
 Nixstasis is unavailable, the device remains locally recoverable but cannot complete
-server-side bootstrap until enrollment and remote access resume. Public FRPS/Caddy
-end-to-end validation remains an external integration/release check.
+server-side bootstrap until enrollment and remote access resume. The Nixstasis server
+delivery task `nixstasis-4gg` owns the existing FRPS/Caddy HTTP path; public deployment
+validation remains its external release/integration check and is not run in this
+AtomixOS repository.
 
 ## Reference and Contracts
 
@@ -97,8 +99,12 @@ The four exact VM build logs are:
 
 ### Deferred Work
 
-- Public FRPS/Caddy end-to-end validation remains outside this AtomixOS feature.
-- Nixstasis follow-ups `nixstasis-04t` and `nixstasis-5do` remain separately tracked.
+- Public FRPS/Caddy deployment validation remains outside this AtomixOS feature and is
+  owned by the Nixstasis server-delivery task `nixstasis-4gg` (closed at
+  `6afcb7641b3cd4ed3db467df26b1b8ffc780f863`).
+- Nixstasis follow-up `nixstasis-04t` closed at
+  `361b1837cd60d9993681c6bd6c9643c3673cc971`; `nixstasis-5do` closed at
+  `1f0b0a0c7e85bd152852845c26b40ab6e6455976`.
 - Pull-request or merge delivery has not yet been selected.
 
 ### Rejected or Removed Scope
@@ -130,5 +136,8 @@ The four exact VM build logs are:
   `6afcb7641b3cd4ed3db467df26b1b8ffc780f863`
 - Implementation review: approved after resolving F-001 and F-002.
 - Documentation review: approved with no findings.
+- Canonical Beads root `atomixos-mol-efd` owns the closed implementation coordinator
+  `atomixos-mol-bzo`, documentation gate `atomixos-mol-ism`, validation gate
+  `atomixos-mol-4fy`, and the close-out review gates.
 - Review-topology migration evidence: `a4049f5f5a043da363825ac5d6bd6d0e46a1f337`.
 - Delivery remains pending an explicit PR, merge, or ready action.

@@ -87,7 +87,9 @@ let
     set -eu
 
     config=/run/nixstasis/frpc.toml
+    upload=/data/fleet-bootstrap-test-config.toml
     test -s "$config"
+    test -s "$upload"
     test -n "''${FRPS_AUTH_TOKEN:-}"
     ${pkgs.gnugrep}/bin/grep -F 'type = "http"' "$config"
     ${pkgs.gnugrep}/bin/grep -F 'subdomain = "fleet-test-provisioning"' "$config"
@@ -101,10 +103,63 @@ let
 
     ${pkgs.curl}/bin/curl -fsS -X POST http://127.0.0.1:4000/mock/frpc --data-binary started >/dev/null
 
+    upload_response=$(${pkgs.curl}/bin/curl -fsS -H 'Host: localhost' -H 'Content-Type: application/octet-stream' --data-binary @"$upload" http://127.0.0.1:8080/api/config)
+    printf '%s' "$upload_response" > /data/fleet-bootstrap-upload-response.json
+    job_url=$(${pkgs.jq}/bin/jq -r .job_url /data/fleet-bootstrap-upload-response.json)
+    for _ in $(${pkgs.coreutils}/bin/seq 1 120); do
+      ${pkgs.curl}/bin/curl -fsS "http://127.0.0.1:8080$job_url" > /data/fleet-bootstrap-upload-job.json
+      state=$(${pkgs.jq}/bin/jq -r .state /data/fleet-bootstrap-upload-job.json)
+      if [ "$state" = succeeded ]; then
+        : > /data/fleet-bootstrap-upload-succeeded
+        break
+      fi
+      if [ "$state" = failed ]; then
+        ${pkgs.coreutils}/bin/cat /data/fleet-bootstrap-upload-job.json >&2
+        exit 1
+      fi
+      ${pkgs.coreutils}/bin/sleep 1
+    done
+    test -e /tmp/nixstasis-fleet/upload-succeeded
+
     while true; do
       ${pkgs.coreutils}/bin/sleep 1
     done
   '';
+  testConfig = pkgs.writeText "fleet-bootstrap-test-config.toml" ''
+    version = 1
+
+    [users.fleetadmin]
+    isAdmin = true
+    ssh_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKey fleetadmin@example"
+
+    [activation]
+    required = ["fleet-test"]
+
+    [containers.container.fleet-test]
+    privileged = true
+
+    [containers.container.fleet-test.Container]
+    Image = "fleet-bootstrap-test:latest"
+
+    [containers.container.fleet-test.Install]
+    WantedBy = ["multi-user.target"]
+  '';
+  testImage = pkgs.dockerTools.buildImage {
+    name = "fleet-bootstrap-test";
+    tag = "latest";
+    copyToRoot = pkgs.buildEnv {
+      name = "fleet-bootstrap-test-root";
+      paths = [ pkgs.busybox ];
+      pathsToLink = [ "/bin" ];
+    };
+    config = {
+      Cmd = [
+        "/bin/sh"
+        "-c"
+        "sleep 3600"
+      ];
+    };
+  };
 in
 nixos-lib.runTest {
   name = "fleet-bootstrap";
@@ -190,10 +245,15 @@ nixos-lib.runTest {
     gateway.succeed("! systemctl is-active --quiet nixstasis-frpc.service")
     gateway.fail("test -e /tmp/nixstasis-fleet/frpc.started")
 
+    gateway.copy_from_host("${testConfig}", "/data/fleet-bootstrap-test-config.toml")
+    gateway.copy_from_host("${testImage}", "/tmp/fleet-bootstrap-test.tar.gz")
+    gateway.succeed("podman load -i /tmp/fleet-bootstrap-test.tar.gz")
     gateway.succeed("touch /tmp/nixstasis-fleet/grant")
     gateway.wait_until_succeeds("test -s /tmp/nixstasis-fleet/profile", timeout=120)
     gateway.wait_until_succeeds("test -s /tmp/nixstasis-fleet/frpc.started", timeout=120)
     gateway.wait_until_succeeds("systemctl is-active --quiet nixstasis-frpc.service", timeout=120)
+    gateway.wait_until_succeeds("test -e /data/fleet-bootstrap-upload-succeeded", timeout=600)
+    gateway.succeed("grep -F 'version = 1' /data/config/config.toml")
 
     gateway.succeed("test \"$(cat /tmp/nixstasis-fleet/profile)\" = 'atomixos-bootstrap:1'")
     gateway.succeed("grep -F 'type = \"http\"' /run/nixstasis/frpc.toml")

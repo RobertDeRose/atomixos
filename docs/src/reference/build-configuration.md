@@ -76,12 +76,14 @@ frp_server_port = 7000
 
 ## Provisioning Transport and Nixstasis
 
-`provisioning.bootstrap_transport` is independent from `nixstasis.enable`:
+`provisioning.bootstrap_transport` is an explicit policy. Selecting `nixstasis` requires
+`nixstasis.enable = true`; enabling Nixstasis while retaining `network` is valid and does
+not change the provisioning listener:
 
 - `network` keeps the existing network bootstrap exposure and is the committed default.
 - `nixstasis` selects the fleet loopback transport; the runtime listener and firewall behavior are owned by the fleet
   implementation.
-- Enabling Nixstasis while retaining `network` is valid and does not change the provisioning listener.
+- A fleet policy without the Nixstasis client enabled fails closed during evaluation.
 
 The evaluator maps the effective fields to typed NixOS options without runtime TOML parsing:
 

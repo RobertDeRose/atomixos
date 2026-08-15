@@ -95,8 +95,9 @@ frp_server_addr = "frps.example.invalid"
 frp_server_port = 7000
 ```
 
-Whenever `nixstasis.enable = true`, the evaluator requires a non-empty API URL and non-empty FRP server address,
-independent of the selected provisioning transport. Enabling Nixstasis while retaining
+Selecting `bootstrap_transport = "nixstasis"` requires `nixstasis.enable = true`; the evaluator rejects a fleet
+transport without the client and tunnel enabled. Whenever `nixstasis.enable = true`, it also requires a non-empty API
+URL and non-empty FRP server address. Enabling Nixstasis while retaining
 `bootstrap_transport = "network"` is valid and does not alter the provisioning listener.
 
 Fleet first boot proceeds as follows:
@@ -123,8 +124,9 @@ Fleet first boot proceeds as follows:
   addition to existing fields; unknown fields fail closed.
 - `bootstrap_transport` accepts exactly `network` and `nixstasis`.
 - The committed default remains `network`; all existing network-bootstrap tests and behavior continue to work.
-- When `nixstasis.enable` is true, the policy requires non-empty non-secret `api_url` and `frp_server_addr`,
-  regardless of transport; `frp_server_port` remains a validated port with default `7000`.
+- When `bootstrap_transport` is `nixstasis`, `nixstasis.enable` must be true; when Nixstasis is enabled, the policy
+  requires non-empty non-secret `api_url` and `frp_server_addr`, regardless of transport; `frp_server_port` remains a
+  validated port with default `7000`.
 - Effective build configuration maps to NixOS options without parsing TOML in runtime modules.
 - The AtomixOS bootstrap socket listens on `0.0.0.0:8080` for `network` transport and `127.0.0.1:8080` for `nixstasis`
   transport.
