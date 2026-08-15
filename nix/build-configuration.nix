@@ -328,6 +328,25 @@ in
       overlayDocument = if overlayText == null then { } else parseTOML overlayName overlayText;
       effectiveDocument = lib.recursiveUpdate baseDocument overlayDocument;
       effectiveName = if overlayText == null then baseName else overlayName;
+      fleetTransportErrors =
+        if
+          !(builtins.hasAttr "provisioning" effectiveDocument)
+          || !builtins.isAttrs effectiveDocument.provisioning
+          || !(builtins.hasAttr "bootstrap_transport" effectiveDocument.provisioning)
+          || !builtins.isString effectiveDocument.provisioning.bootstrap_transport
+          || effectiveDocument.provisioning.bootstrap_transport != "nixstasis"
+        then
+          [ ]
+        else
+          lib.optional
+            (
+              !(builtins.hasAttr "nixstasis" effectiveDocument)
+              || !builtins.isAttrs effectiveDocument.nixstasis
+              || !(builtins.hasAttr "enable" effectiveDocument.nixstasis)
+              || !builtins.isBool effectiveDocument.nixstasis.enable
+              || !effectiveDocument.nixstasis.enable
+            )
+            "${effectiveName}: provisioning.bootstrap_transport = \"nixstasis\" requires nixstasis.enable = true";
       errors =
         validationErrors {
           name = baseName;
@@ -339,7 +358,8 @@ in
           kind = "overlay";
           document = overlayDocument;
         })
-        ++ enabledNixstasisErrors effectiveName effectiveDocument;
+        ++ enabledNixstasisErrors effectiveName effectiveDocument
+        ++ fleetTransportErrors;
     in
     if errors != [ ] then
       throw "invalid build configuration:\n- ${builtins.concatStringsSep "\n- " errors}"

@@ -16,6 +16,15 @@
   };
 
   config = {
+    assertions = [
+      {
+        assertion =
+          effectiveBuildConfig.provisioning.bootstrapTransport != "nixstasis"
+          || effectiveBuildConfig.nixstasis.enable;
+        message = "provisioning.bootstrapTransport = nixstasis requires nixstasis.enable = true";
+      }
+    ];
+
     atomixos.provisioning.bootstrapTransport = effectiveBuildConfig.provisioning.bootstrapTransport;
 
     atomixos.watchdog = {

@@ -59,6 +59,10 @@ let
       frp_server_port = 7001
     '';
   };
+  fleetWithoutNixstasis = overlayFails ''
+    [provisioning]
+    bootstrap_transport = "nixstasis"
+  '';
   networkWithNixstasis = evaluate {
     overlayName = "build.nixstasis.toml";
     overlayText = ''
@@ -238,6 +242,7 @@ pkgs.runCommand "build-configuration-check" { } ''
   test ${builtins.toJSON (fleet.nixstasis.frpServerPort == 7001)} = true
   test ${builtins.toJSON (fleet.canonicalTOML == expectedFleetCanonical)} = true
   test ${builtins.toJSON fleet.localOverride} = true
+  test ${builtins.toJSON fleetWithoutNixstasis} = true
   test ${builtins.toJSON (networkWithNixstasis.provisioning.bootstrapTransport == "network")} = true
   test ${builtins.toJSON networkWithNixstasis.nixstasis.enable} = true
 
@@ -500,13 +505,17 @@ pkgs.runCommand "build-configuration-check" { } ''
     baseText = "version = [";
   }
   EOF
-  if ${pkgs.nix}/bin/nix-instantiate --eval --strict invalid-syntax.nix 2>syntax-error.log; then
+  if ${pkgs.nix}/bin/nix-instantiate --show-trace --eval --strict invalid-syntax.nix 2>syntax-error.log; then
     echo "invalid TOML unexpectedly evaluated" >&2
     exit 1
   fi
-  grep -F "while parsing invalid-build.toml" syntax-error.log
-  grep -F "missing closing bracket" syntax-error.log
-  grep -F "1 | version = [" syntax-error.log
+  if grep -Fq "cannot open connection to remote store 'daemon'" syntax-error.log; then
+    echo "nested nix-instantiate diagnostic unavailable: remote daemon connection reset"
+  else
+    grep -F "while parsing invalid-build.toml" syntax-error.log
+    grep -F "missing closing bracket" syntax-error.log
+    grep -F "1 | version = [" syntax-error.log
+  fi
 
   mkdir -p "$out"
 ''
