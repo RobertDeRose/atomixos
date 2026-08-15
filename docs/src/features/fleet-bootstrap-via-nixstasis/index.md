@@ -3,9 +3,9 @@
 ## Delivery Summary
 
 - Beads feature root: `atomixos-mol-efd`
-- Status: ready for delivery
+- Status: delivered
 - Pull request: not created
-- Merge commit: not merged
+- Merge commit: `9e16215fae12788df6a4f1a2816c77cdf58c337e` (fast-forward into `dev`)
 - Design record: [design.md](design.md)
 
 ## Delivered Capability
@@ -160,4 +160,4 @@ connection. The direct fleet-policy rejection evaluator and derivation evaluatio
 - External Nixstasis lineage is explicit: `nixstasis-255` supplies the client pin,
   `nixstasis-fss` owns Host rewriting, `nixstasis-4gg` owns server delivery, and the
   follow-ups `nixstasis-04t` and `nixstasis-5do` are recorded as closed external work.
-- Delivery remains pending an explicit PR, merge, or ready action.
+- Delivery completed by fast-forward merge into `dev`; no pull request was created.
