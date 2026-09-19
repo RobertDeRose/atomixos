@@ -1,5 +1,6 @@
 """Tests for atomixos_provision.config module."""
 
+import json
 from pathlib import Path
 
 import pytest
@@ -9,6 +10,7 @@ from atomixos_provision.config import (
     load_config,
     load_firewall_inbound,
     load_host_network_settings,
+    load_lan_defaults,
     load_lan_settings,
     load_network_interfaces,
     load_network_settings,
@@ -80,6 +82,33 @@ Image = "docker.io/library/alpine:latest"
 
 
 # --- Validation Helper Tests ---
+
+
+def test_load_lan_defaults_from_explicit_path(tmp_path: Path):
+    defaults = {
+        "gateway_cidr": "192.0.2.1/24",
+        "gateway_ip": "192.0.2.1",
+        "subnet_cidr": "192.0.2.0/24",
+        "netmask": "255.255.255.0",
+        "dhcp_start": "192.0.2.10",
+        "dhcp_end": "192.0.2.254",
+        "domain": "example",
+        "gateway_aliases": ["gateway"],
+        "hostname_pattern": "node-{mac}",
+        "ntp_servers": ["time.example.com"],
+    }
+    path = tmp_path / "lan.json"
+    path.write_text(json.dumps(defaults))
+
+    assert load_lan_defaults(path) == defaults
+
+
+def test_load_lan_defaults_rejects_incomplete_contract(tmp_path: Path):
+    path = tmp_path / "lan.json"
+    path.write_text('{"gateway_ip": "192.0.2.1"}')
+
+    with pytest.raises(ProvisionError, match="invalid LAN defaults contract"):
+        load_lan_defaults(path)
 
 
 class TestRequireMapping:

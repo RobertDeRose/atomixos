@@ -8,6 +8,13 @@
 }:
 
 let
+  lanDefaults = builtins.fromJSON (builtins.readFile ../defaults/lan.json);
+  gatewayHosts = builtins.concatStringsSep " " (
+    [ lanDefaults.gateway_ip ] ++ lanDefaults.gateway_aliases
+  );
+  ntpServers = builtins.concatStringsSep "\n" (
+    map (server: "server ${server} iburst") lanDefaults.ntp_servers
+  );
   bootstrapTransport = lib.attrByPath [
     "atomixos"
     "provisioning"
@@ -68,15 +75,15 @@ in
 
   environment.etc."systemd/network/20-lan.network.d/50-atomixos.conf".text = ''
     [Network]
-    Address=172.20.30.1/24
+    Address=${lanDefaults.gateway_cidr}
   '';
 
   environment.etc."dnsmasq.d/atomixos-lan.conf".text = ''
-    dhcp-range=172.20.30.10,172.20.30.254,255.255.255.0,24h
-    dhcp-option=3,172.20.30.1
-    dhcp-option=6,172.20.30.1
-    dhcp-option=42,172.20.30.1
-    domain=local
+    dhcp-range=${lanDefaults.dhcp_start},${lanDefaults.dhcp_end},${lanDefaults.netmask},24h
+    dhcp-option=3,${lanDefaults.gateway_ip}
+    dhcp-option=6,${lanDefaults.gateway_ip}
+    dhcp-option=42,${lanDefaults.gateway_ip}
+    domain=${lanDefaults.domain}
     expand-hosts
     addn-hosts=/etc/atomixos/dnsmasq-hosts
     local=/local/
@@ -84,14 +91,20 @@ in
   '';
 
   environment.etc."atomixos/dnsmasq-hosts".text = ''
-    172.20.30.1 atomixos atomixos.local
+    ${gatewayHosts} ${
+      builtins.concatStringsSep " " (
+        map (alias: "${alias}.${lanDefaults.domain}") lanDefaults.gateway_aliases
+      )
+    }
   '';
 
   environment.etc."atomixos/chrony-lan.conf".text = ''
     # Managed at runtime by lan-gateway-apply.
-    server time.cloudflare.com iburst
-    allow 172.20.30.0/24
+    ${ntpServers}
+    allow ${lanDefaults.subnet_cidr}
   '';
+
+  environment.etc."atomixos/lan-defaults.json".source = ../defaults/lan.json;
 
   systemd.services.lan-gateway-apply = {
     description = "Apply provisioned LAN gateway settings";

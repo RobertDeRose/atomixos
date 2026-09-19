@@ -12,7 +12,7 @@ CONFIG_ROOT="${ATOMIXOS_CONFIG_ROOT:-/data/config}"
 CONFIG_TOML="$CONFIG_ROOT/config.toml"
 PROMOTION_MARKER="$CONFIG_ROOT.atomixos-promotion-pending"
 QUADLET_ACTIVE_DIR="${ATOMIXOS_QUADLET_ACTIVE_DIR:-/etc/containers/systemd}"
-BOOTSTRAP_HOST="${ATOMIXOS_BOOTSTRAP_HOST:-172.20.30.1}"
+LAN_DEFAULTS_FILE="${ATOMIXOS_LAN_DEFAULTS_FILE:-/etc/atomixos/lan-defaults.json}"
 INITRD_MARKER="${ATOMIXOS_INITRD_MARKER:-/etc/atomixos/fresh-flash}"
 BOOT_CONFIG_PATH="${ATOMIXOS_BOOT_CONFIG_PATH:-/boot/config.toml}"
 APP_RUNTIME_QUADLET_DIR="${ATOMIXOS_ROOTLESS_QUADLET_DIR:-/var/lib/appsvc/.config/containers/systemd}"
@@ -22,8 +22,14 @@ LAN_SETTINGS_FILE="$CONFIG_ROOT/lan-settings.json"
 APPLY_USERS_SCRIPT="${ATOMIXOS_APPLY_USERS_SCRIPT:-./scripts/apply-users.py}"
 
 read_bootstrap_host() {
+	local default_host
+	if [ -n "${ATOMIXOS_BOOTSTRAP_HOST:-}" ]; then
+		default_host="$ATOMIXOS_BOOTSTRAP_HOST"
+	else
+		default_host="$(jq -er '.gateway_ip | select(type == "string" and length > 0)' "$LAN_DEFAULTS_FILE")"
+	fi
 	if [ ! -f "$LAN_SETTINGS_FILE" ]; then
-		printf '%s\n' "$BOOTSTRAP_HOST"
+		printf '%s\n' "$default_host"
 		return 0
 	fi
 
@@ -33,7 +39,7 @@ read_bootstrap_host() {
 			type == "string"
 			and test("^(25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})(\\.(25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})){3}$")
 		)
-	' "$LAN_SETTINGS_FILE" 2>/dev/null || printf '%s\n' "$BOOTSTRAP_HOST"
+	' "$LAN_SETTINGS_FILE" 2>/dev/null || printf '%s\n' "$default_host"
 }
 
 has_required_units() {

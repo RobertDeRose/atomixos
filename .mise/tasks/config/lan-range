@@ -8,7 +8,7 @@ set -euo pipefail
 
 ROOT_DIR="$(git rev-parse --show-toplevel)"
 
-LAN_GATEWAY_NIX="$ROOT_DIR/modules/lan-gateway.nix"
+LAN_DEFAULTS_JSON="$ROOT_DIR/defaults/lan.json"
 
 GATEWAY_CIDR="${usage_gateway_cidr:-172.20.30.1/24}"
 DHCP_START="${usage_dhcp_start:-172.20.30.10}"
@@ -61,33 +61,23 @@ for ip in "$DHCP_START" "$DHCP_END"; do
 	fi
 done
 
-python3 - <<'PY' "$LAN_GATEWAY_NIX" "$GATEWAY_CIDR" "$GATEWAY_IP" "$DHCP_START" "$DHCP_END" "$NETMASK" "$SUBNET_CIDR"
+python3 - "$LAN_DEFAULTS_JSON" "$GATEWAY_CIDR" "$GATEWAY_IP" "$DHCP_START" "$DHCP_END" "$NETMASK" "$SUBNET_CIDR" <<'PY'
+import json
 import pathlib
-import re
 import sys
 
-lan_gateway, gateway_cidr, gateway_ip, dhcp_start, dhcp_end, netmask, subnet_cidr = sys.argv[1:]
-
-def replace_file(path: str, patterns: list[tuple[str, str]]) -> None:
-    p = pathlib.Path(path)
-    text = p.read_text()
-    original = text
-    for pattern, repl in patterns:
-        text, count = re.subn(pattern, repl, text, flags=re.MULTILINE)
-        if count == 0:
-            raise SystemExit(f"ERROR: pattern not found in {path}: {pattern}")
-    if text != original:
-        p.write_text(text)
-
-replace_file(lan_gateway, [
-    (r'Address=[0-9.]+/[0-9]+', f'Address={gateway_cidr}'),
-    (r'dhcp-range=[0-9.]+,[0-9.]+,[0-9.]+,24h', f'dhcp-range={dhcp_start},{dhcp_end},{netmask},24h'),
-    (r'dhcp-option=3,[0-9.]+', f'dhcp-option=3,{gateway_ip}'),
-    (r'dhcp-option=6,[0-9.]+', f'dhcp-option=6,{gateway_ip}'),
-    (r'dhcp-option=42,[0-9.]+', f'dhcp-option=42,{gateway_ip}'),
-    (r'[0-9.]+ atomixos atomixos\.local', f'{gateway_ip} atomixos atomixos.local'),
-    (r'allow\s+[0-9.]+/[0-9]+', f'allow {subnet_cidr}'),
-])
+defaults_path, gateway_cidr, gateway_ip, dhcp_start, dhcp_end, netmask, subnet_cidr = sys.argv[1:]
+path = pathlib.Path(defaults_path)
+defaults = json.loads(path.read_text())
+defaults.update({
+    "gateway_cidr": gateway_cidr,
+    "gateway_ip": gateway_ip,
+    "subnet_cidr": subnet_cidr,
+    "netmask": netmask,
+    "dhcp_start": dhcp_start,
+    "dhcp_end": dhcp_end,
+})
+path.write_text(json.dumps(defaults, indent=2) + "\n")
 
 PY
 
@@ -97,7 +87,7 @@ echo "  subnet:     $SUBNET_CIDR"
 echo "  dhcp range: $DHCP_START - $DHCP_END"
 echo ""
 echo "Updated files:"
-echo "  modules/lan-gateway.nix"
+echo "  defaults/lan.json"
 echo ""
 echo "Next steps:"
 echo "  mise run check"

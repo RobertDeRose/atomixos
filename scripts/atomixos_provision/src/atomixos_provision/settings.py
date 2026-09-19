@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from atomixos_provision.bundle import MAX_SOURCE_BYTES
+from atomixos_provision.config import DEFAULT_LAN_GATEWAY_IP
 
 __all__ = ["AppSettings"]
 
@@ -27,7 +28,7 @@ class AppSettings:
         default_factory=lambda: Path(os.environ.get("ATOMIXOS_CONFIG_ROOT", "/data/config"))
     )
     host: str = field(
-        default_factory=lambda: os.environ.get("ATOMIXOS_BOOTSTRAP_HOST", "172.20.30.1")
+        default_factory=lambda: os.environ.get("ATOMIXOS_BOOTSTRAP_HOST", DEFAULT_LAN_GATEWAY_IP)
     )
     port: int = field(default_factory=lambda: _env_int("ATOMIXOS_BOOTSTRAP_PORT", 8080))
     max_source_bytes: int = MAX_SOURCE_BYTES

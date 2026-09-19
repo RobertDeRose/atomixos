@@ -1,5 +1,10 @@
 # Build Configuration
 
+Built-in LAN fallback values are owned by `defaults/lan.json`. NixOS modules,
+the provisioning service, and boot-time health scripts consume this same
+contract. Use `mise run config:lan-range --gateway-cidr ... --dhcp-start ...
+--dhcp-end ...` to update it; do not edit generated consumers independently.
+
 AtomixOS build policy uses a strict versioned TOML schema. Build configuration is non-secret input fixed into artifacts;
 it is separate from mutable runtime provisioning in `config.toml`.
 

@@ -1,0 +1,12 @@
+{
+  "gateway_cidr": "172.20.30.1/24",
+  "gateway_ip": "172.20.30.1",
+  "subnet_cidr": "172.20.30.0/24",
+  "netmask": "255.255.255.0",
+  "dhcp_start": "172.20.30.10",
+  "dhcp_end": "172.20.30.254",
+  "domain": "local",
+  "gateway_aliases": ["atomixos"],
+  "hostname_pattern": "",
+  "ntp_servers": ["time.cloudflare.com"]
+}

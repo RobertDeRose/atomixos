@@ -10,23 +10,62 @@ from typing import Any
 from urllib.parse import urlsplit
 
 __all__ = [
+    "DEFAULT_LAN_GATEWAY_IP",
     "ProvisionError",
     "load_config",
     "load_config_schema",
+    "load_lan_defaults",
     "validate_against_schema",
 ]
 
 # --- Constants ---
 
 SCHEMA_ENV = "ATOMIXOS_CONFIG_SCHEMA"
+LAN_DEFAULTS_ENV = "ATOMIXOS_LAN_DEFAULTS_FILE"
 
-DEFAULT_LAN_GATEWAY_CIDR = "172.20.30.1/24"
-DEFAULT_LAN_DHCP_START = "172.20.30.10"
-DEFAULT_LAN_DHCP_END = "172.20.30.254"
-DEFAULT_LAN_DOMAIN = "local"
-DEFAULT_LAN_GATEWAY_ALIASES = ["atomixos"]
-DEFAULT_LAN_HOSTNAME_PATTERN = ""
-DEFAULT_NTP_SERVERS = ["time.cloudflare.com"]
+
+def load_lan_defaults(path: Path | None = None) -> dict[str, Any]:
+    """Load the repository-owned fallback LAN contract."""
+    candidates: list[Path] = []
+    if path is not None:
+        candidates.append(path)
+    elif env_path := os.environ.get(LAN_DEFAULTS_ENV):
+        candidates.append(Path(env_path))
+
+    package_path = Path(__file__).resolve()
+    repository_root = package_path.parent.parent.parent.parent.parent
+    candidates.extend(
+        [
+            repository_root / "share" / "atomixos" / "lan-defaults.json",
+            repository_root / "defaults" / "lan.json",
+        ]
+    )
+    for candidate in candidates:
+        if not candidate.is_file():
+            continue
+        try:
+            value = json.loads(candidate.read_text())
+        except (json.JSONDecodeError, OSError) as exc:
+            raise provision_error(f"invalid LAN defaults in {candidate}: {exc}") from exc
+        required = {
+            "gateway_cidr",
+            "gateway_ip",
+            "subnet_cidr",
+            "netmask",
+            "dhcp_start",
+            "dhcp_end",
+            "domain",
+            "gateway_aliases",
+            "hostname_pattern",
+            "ntp_servers",
+        }
+        if not isinstance(value, dict) or set(value) != required:
+            raise provision_error(f"invalid LAN defaults contract in {candidate}")
+        return value
+    searched = ", ".join(str(candidate) for candidate in candidates)
+    raise provision_error(f"unable to find LAN defaults (checked: {searched})")
+
+
 SUPPORTED_INTERFACE_RE = re.compile(r"eth[0-9]+")
 
 RESERVED_USERNAMES = frozenset(
@@ -66,6 +105,17 @@ class ProvisionError(RuntimeError):
 
 def provision_error(message: str) -> ProvisionError:
     return ProvisionError(message)
+
+
+_LAN_DEFAULTS = load_lan_defaults()
+DEFAULT_LAN_GATEWAY_CIDR = str(_LAN_DEFAULTS["gateway_cidr"])
+DEFAULT_LAN_GATEWAY_IP = str(_LAN_DEFAULTS["gateway_ip"])
+DEFAULT_LAN_DHCP_START = str(_LAN_DEFAULTS["dhcp_start"])
+DEFAULT_LAN_DHCP_END = str(_LAN_DEFAULTS["dhcp_end"])
+DEFAULT_LAN_DOMAIN = str(_LAN_DEFAULTS["domain"])
+DEFAULT_LAN_GATEWAY_ALIASES = list(_LAN_DEFAULTS["gateway_aliases"])
+DEFAULT_LAN_HOSTNAME_PATTERN = str(_LAN_DEFAULTS["hostname_pattern"])
+DEFAULT_NTP_SERVERS = list(_LAN_DEFAULTS["ntp_servers"])
 
 
 # --- Schema Loading ---

@@ -10,6 +10,9 @@ from pathlib import Path
 
 
 CONFIG_FILE = Path(os.environ.get("ATOMIXOS_LAN_SETTINGS_FILE", "/data/config/lan-settings.json"))
+LAN_DEFAULTS_FILE = Path(
+    os.environ.get("ATOMIXOS_LAN_DEFAULTS_FILE", "/etc/atomixos/lan-defaults.json")
+)
 HOST_NETWORK_FILE = Path(
     os.environ.get("ATOMIXOS_HOST_NETWORK_FILE", "/data/config/host-network.json")
 )
@@ -50,8 +53,30 @@ REQUIRED_STRING_FIELDS = (
     "domain",
 )
 DNS_LABEL_PATTERN = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
-DEFAULT_NTP_SERVERS = ["time.cloudflare.com"]
 HOST_INTERFACE_RE = re.compile(r"^eth[0-9]+$")
+
+
+def load_default_ntp_servers() -> list[str]:
+    candidates = [LAN_DEFAULTS_FILE, Path(__file__).resolve().parent.parent / "defaults" / "lan.json"]
+    for candidate in candidates:
+        if not candidate.is_file():
+            continue
+        try:
+            payload = json.loads(candidate.read_text())
+            servers = payload["ntp_servers"]
+        except (json.JSONDecodeError, KeyError, OSError, TypeError) as exc:
+            msg = f"invalid LAN defaults in {candidate}: {exc}"
+            raise ValueError(msg) from exc
+        if not isinstance(servers, list) or not all(isinstance(server, str) for server in servers):
+            msg = f"invalid ntp_servers in {candidate}"
+            raise ValueError(msg)
+        return servers
+    searched = ", ".join(str(candidate) for candidate in candidates)
+    msg = f"unable to find LAN defaults (checked: {searched})"
+    raise ValueError(msg)
+
+
+DEFAULT_NTP_SERVERS = load_default_ntp_servers()
 
 
 def replace_file(path: Path, content: str) -> bool:

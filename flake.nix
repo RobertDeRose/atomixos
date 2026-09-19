@@ -384,6 +384,7 @@
             device-tree-overlay = import ./nix/tests/device-tree-overlay.nix netTestArgs;
             build-config-workflow = import ./nix/tests/build-config-workflow.nix netTestArgs;
             build-configuration = import ./nix/tests/build-configuration.nix netTestArgs;
+            lan-defaults = import ./nix/tests/lan-defaults.nix netTestArgs;
             nixstasis-module = import ./nix/tests/nixstasis-module.nix netTestArgs;
             watchdog-module = import ./nix/tests/watchdog-module.nix netTestArgs;
           };
@@ -406,6 +407,7 @@
           darwinTests = {
             build-config-workflow = import ./nix/tests/build-config-workflow.nix darwinNetTestArgs;
             build-configuration = import ./nix/tests/build-configuration.nix darwinNetTestArgs;
+            lan-defaults = import ./nix/tests/lan-defaults.nix darwinNetTestArgs;
             rauc-slots = import ./nix/tests/rauc-slots.nix darwinRaucTestArgs;
             rauc-update = import ./nix/tests/rauc-update.nix darwinRaucTestArgs;
             rauc-rollback = import ./nix/tests/rauc-rollback.nix darwinRaucTestArgs;

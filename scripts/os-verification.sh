@@ -10,13 +10,14 @@ CHECK_INTERVAL="${ATOMIXOS_VERIFICATION_CHECK_INTERVAL:-5}"
 HEALTH_REQUIRED_FILE="/data/config/health-required.json"
 LAN_SETTINGS_FILE="/data/config/lan-settings.json"
 RUNTIME_METADATA_FILE="/data/config/quadlet-runtime.json"
+LAN_DEFAULTS_FILE="${ATOMIXOS_LAN_DEFAULTS_FILE:-/etc/atomixos/lan-defaults.json}"
 APP_RUNTIME_USER="${ATOMIXOS_APP_RUNTIME_USER:-appsvc}"
 
 log() { echo "[os-verification] $*" >&2; }
 
 read_gateway_ip() {
 	if [ ! -f "$LAN_SETTINGS_FILE" ]; then
-		printf '%s\n' '172.20.30.1'
+		jq -er '.gateway_ip | select(type == "string" and length > 0)' "$LAN_DEFAULTS_FILE"
 		return 0
 	fi
 	jq -er '
@@ -25,7 +26,7 @@ read_gateway_ip() {
 			type == "string"
 			and test("^(25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})(\\.(25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})){3}$")
 		)
-	' "$LAN_SETTINGS_FILE" 2>/dev/null || printf '%s\n' '172.20.30.1'
+	' "$LAN_SETTINGS_FILE" 2>/dev/null || jq -er '.gateway_ip' "$LAN_DEFAULTS_FILE"
 }
 
 read_required_units() {

@@ -7,6 +7,9 @@ mise.toml                          Tool versions, build tasks, hooks
 build.toml                         Committed immutable build policy
 build.dev.toml                     Ignored local build-policy overlay, when present
 
+defaults/
+  lan.json                         Shared fallback LAN gateway, DHCP, DNS, and NTP contract
+
 modules/
   base.nix                         Shared NixOS config (systemd, ssh, auth, closure opts)
   build-configuration.nix          Effective build-policy mapping and immutable audit files
