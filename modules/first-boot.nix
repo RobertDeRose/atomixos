@@ -54,6 +54,7 @@ let
     build-system = [ pkgs.python3Packages.hatchling ];
     dependencies = [
       pkgs.python3Packages.click
+      pkgs.python3Packages.jsonschema
       pkgs.python3Packages.litestar
       pkgs.python3Packages.uvicorn
     ];

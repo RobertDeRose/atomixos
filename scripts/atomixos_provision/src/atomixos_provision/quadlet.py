@@ -6,7 +6,6 @@ from typing import Any
 
 from atomixos_provision.config import (
     provision_error,
-    require_allowed_keys,
     require_bool,
     require_mapping,
     require_string,
@@ -169,12 +168,7 @@ def render_containers(
     for container_name, raw_sections in container_table.items():
         validate_name(container_name)
         container_path = f"container.{container_name}"
-        sections = require_allowed_keys(
-            raw_sections,
-            container_path,
-            {"privileged", "Unit", "Container", "Install"},
-            {"privileged", "Container"},
-        )
+        sections = require_mapping(raw_sections, container_path)
         privileged = require_bool(sections.get("privileged"), f"{container_path}.privileged")
         container_directives = normalize_directives(
             require_mapping(sections.get("Container"), f"{container_path}.Container"),
@@ -259,7 +253,7 @@ def render_networks(
     for network_name, raw_sections in network_table.items():
         validate_name(network_name)
         network_path = f"network.{network_name}"
-        sections = require_allowed_keys(raw_sections, network_path, {"Network"}, {"Network"})
+        sections = require_mapping(raw_sections, network_path)
         network_directives = normalize_directives(
             require_mapping(sections.get("Network"), f"{network_path}.Network"),
             f"{network_path}.Network",
@@ -292,7 +286,7 @@ def render_volumes(
     for volume_name, raw_sections in volume_table.items():
         validate_name(volume_name)
         volume_path = f"volume.{volume_name}"
-        sections = require_allowed_keys(raw_sections, volume_path, {"Volume"}, {"Volume"})
+        sections = require_mapping(raw_sections, volume_path)
         volume_directives = normalize_directives(
             require_mapping(sections.get("Volume"), f"{volume_path}.Volume"),
             f"{volume_path}.Volume",
@@ -327,7 +321,7 @@ def render_builds(
     for build_name, raw_sections in build_table.items():
         validate_name(build_name)
         build_path = f"build.{build_name}"
-        sections = require_allowed_keys(raw_sections, build_path, {"Build"}, {"Build"})
+        sections = require_mapping(raw_sections, build_path)
         build_directives = normalize_directives(
             require_mapping(sections.get("Build"), f"{build_path}.Build"),
             f"{build_path}.Build",

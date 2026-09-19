@@ -133,7 +133,8 @@ DNS/search values for that interface. Absence means no static gateway is rendere
 The top-level IPv4 default gateway applies to `eth0`; use an interface-specific IPv4 gateway for other Ethernet
 interfaces. `eth1` must remain static because it is the LAN gateway.
 The machine-readable schema is committed at
-`schemas/config.schema.json` and the import path validates against it before semantic checks.
+`schemas/config.schema.json` and the import path validates against it with the maintained Draft 2020-12 `jsonschema`
+validator before applying semantic normalization and cross-field policy checks.
 
 `[activation]` controls candidate activation and health-check behavior. `required` lists provisioned Quadlet services that
 must become active. Optional `timeout_seconds`, `settle_seconds`, `restart`, and `allow_degraded` values render into

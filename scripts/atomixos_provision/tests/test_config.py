@@ -15,7 +15,6 @@ from atomixos_provision.config import (
     load_network_interfaces,
     load_network_settings,
     load_users,
-    require_allowed_keys,
     require_bool,
     require_dns_name,
     require_dns_search_domains,
@@ -118,20 +117,6 @@ class TestRequireMapping:
     def test_invalid(self):
         with pytest.raises(ProvisionError, match="expected table at test"):
             require_mapping("not a dict", "test")
-
-
-class TestRequireAllowedKeys:
-    def test_valid(self):
-        result = require_allowed_keys({"a": 1}, "t", {"a", "b"})
-        assert result == {"a": 1}
-
-    def test_unexpected_key(self):
-        with pytest.raises(ProvisionError, match="unsupported keys"):
-            require_allowed_keys({"a": 1, "c": 2}, "t", {"a", "b"})
-
-    def test_missing_required(self):
-        with pytest.raises(ProvisionError, match="missing required keys"):
-            require_allowed_keys({"a": 1}, "t", {"a", "b"}, {"a", "b"})
 
 
 class TestRequireString:
@@ -480,10 +465,6 @@ class TestLoadHostNetworkSettings:
         ):
             load_host_network_settings({"dns_search_domains": ["bad/domain"]})
 
-    def test_rejects_unknown_network_key(self):
-        with pytest.raises(ProvisionError, match="unsupported keys at network: bad"):
-            load_host_network_settings({"bad": True})
-
 
 class TestLoadNetworkInterfaces:
     def test_dhcp_interface(self):
@@ -530,12 +511,6 @@ class TestLoadNetworkInterfaces:
         ):
             load_network_interfaces({"eth1": {"mode": "static", "address": "not-a-cidr"}})
 
-    def test_rejects_unknown_interface_key(self):
-        with pytest.raises(
-            ProvisionError, match=r"unsupported keys at network\.interfaces\.eth0: mtu"
-        ):
-            load_network_interfaces({"eth0": {"mode": "dhcp", "mtu": 1500}})
-
     def test_rejects_empty_gateway_sentinel(self):
         with pytest.raises(ProvisionError, match="expected non-empty string"):
             load_network_interfaces(
@@ -574,6 +549,21 @@ class TestValidateAgainstSchema:
         schema = {"type": "object", "required": ["a"]}
         with pytest.raises(ProvisionError, match="missing required keys"):
             validate_against_schema({}, schema, "t", schema)
+
+    def test_additional_properties(self):
+        schema = {
+            "type": "object",
+            "properties": {"known": {"type": "string"}},
+            "additionalProperties": False,
+        }
+        with pytest.raises(ProvisionError, match="unsupported keys at t: unknown"):
+            validate_against_schema({"unknown": True}, schema, "t", schema)
+
+    def test_draft_2020_12_keyword(self):
+        schema = {"$schema": "https://json-schema.org/draft/2020-12/schema", "const": "ok"}
+        validate_against_schema("ok", schema, "t", schema)
+        with pytest.raises(ProvisionError, match="schema validation failed"):
+            validate_against_schema("not-ok", schema, "t", schema)
 
 
 # --- Integration: load_config ---
@@ -757,5 +747,5 @@ privileged = false
 Image = "alpine"
 """
         )
-        with pytest.raises(ProvisionError, match="version must be integer 1"):
+        with pytest.raises(ProvisionError, match=r"unexpected value at config\.version: 2"):
             load_config(config)

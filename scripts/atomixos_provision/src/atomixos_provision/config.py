@@ -9,6 +9,9 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
+from jsonschema import Draft202012Validator
+from jsonschema.exceptions import SchemaError, best_match
+
 __all__ = [
     "DEFAULT_LAN_GATEWAY_IP",
     "ProvisionError",
@@ -155,133 +158,53 @@ def load_config_schema() -> dict[str, Any]:
 # --- Schema Validation Engine ---
 
 
-def resolve_schema_ref(schema: dict, ref: str) -> dict:
-    """Resolve a JSON Schema $ref pointer."""
-    if not ref.startswith("#/"):
-        message = f"unsupported schema ref: {ref}"
-        raise provision_error(message)
-
-    target: Any = schema
-    for part in ref[2:].split("/"):
-        if not isinstance(target, dict) or part not in target:
-            message = f"unresolvable schema ref: {ref}"
-            raise provision_error(message)
-        target = target[part]
-    return target
+def _schema_error_path(path: str, segments: list[Any]) -> str:
+    rendered = path
+    for segment in segments:
+        rendered += f"[{segment}]" if isinstance(segment, int) else f".{segment}"
+    return rendered
 
 
-def validate_schema_property_name(name: str, schema: dict, path: str) -> None:
-    """Validate a property name against a propertyNames schema."""
-    expected_type = schema.get("type")
-    if expected_type == "string" and not isinstance(name, str):
-        msg = f"expected string property name at {path}"
-        raise provision_error(msg)
-    pattern = schema.get("pattern")
-    if pattern and not re.fullmatch(pattern, name):
-        msg = f"invalid property name at {path}: {name!r}"
-        raise provision_error(msg)
+def _schema_error_message(error, path: str) -> str:
+    location = _schema_error_path(path, list(error.absolute_path))
+    if error.validator == "type":
+        expected = error.validator_value
+        names = ", ".join(expected) if isinstance(expected, list) else str(expected)
+        return f"expected {names} at {location}"
+    if error.validator == "enum":
+        return f"unexpected value at {location}: {error.instance!r}"
+    if error.validator == "required":
+        missing = sorted(set(error.validator_value) - set(error.instance))
+        return f"missing required keys at {location}: {', '.join(missing)}"
+    if error.validator == "additionalProperties" and isinstance(error.instance, dict):
+        allowed = set(error.schema.get("properties", {}))
+        unexpected = sorted(set(error.instance) - allowed)
+        return f"unsupported keys at {location}: {', '.join(unexpected)}"
+    if error.validator == "minLength":
+        return f"expected non-empty string at {location}"
+    if error.validator == "minItems":
+        return f"expected at least {error.validator_value} items at {location}"
+    if error.validator == "minProperties":
+        return f"expected at least {error.validator_value} keys at {location}"
+    if error.validator == "minimum":
+        return f"expected integer >= {error.validator_value} at {location}"
+    if error.validator == "maximum":
+        return f"expected integer <= {error.validator_value} at {location}"
+    if error.validator in {"anyOf", "oneOf"}:
+        return f"value at {location} does not match any allowed schema"
+    return f"schema validation failed at {location}: {error.message}"
 
 
 def validate_against_schema(value: Any, schema: dict, path: str, root_schema: dict) -> None:
-    """Recursively validate a value against a JSON Schema subset."""
-    if "$ref" in schema:
-        validate_against_schema(
-            value, resolve_schema_ref(root_schema, schema["$ref"]), path, root_schema
-        )
-        return
-
-    if "anyOf" in schema:
-        for option in schema["anyOf"]:
-            try:
-                validate_against_schema(value, option, path, root_schema)
-                return
-            except ProvisionError:
-                continue
-        msg = f"value at {path} does not match any allowed schema"
-        raise provision_error(msg)
-
-    expected_type = schema.get("type")
-    if expected_type is not None:
-        allowed_types = expected_type if isinstance(expected_type, list) else [expected_type]
-        type_checks: dict[str, Any] = {
-            "object": lambda v: isinstance(v, dict),
-            "array": lambda v: isinstance(v, list),
-            "string": lambda v: isinstance(v, str),
-            "integer": lambda v: isinstance(v, int) and not isinstance(v, bool),
-            "boolean": lambda v: isinstance(v, bool),
-        }
-        matches_type = any(
-            check(value) for allowed in allowed_types if (check := type_checks.get(allowed))
-        )
-        if not matches_type:
-            names = ", ".join(allowed_types)
-            msg = f"expected {names} at {path}"
-            raise provision_error(msg)
-
-    if "enum" in schema and value not in schema["enum"]:
-        msg = f"unexpected value at {path}: {value!r}"
-        raise provision_error(msg)
-
-    if isinstance(value, dict):
-        _validate_dict_schema(value, schema, path, root_schema)
-
-    if isinstance(value, list):
-        min_items = schema.get("minItems")
-        if min_items is not None and len(value) < min_items:
-            msg = f"expected at least {min_items} items at {path}"
-            raise provision_error(msg)
-        item_schema = schema.get("items")
-        if item_schema is not None:
-            for idx, item in enumerate(value):
-                validate_against_schema(item, item_schema, f"{path}[{idx}]", root_schema)
-
-    if isinstance(value, str):
-        min_length = schema.get("minLength")
-        if min_length is not None and len(value) < min_length:
-            msg = f"expected non-empty string at {path}"
-            raise provision_error(msg)
-
-    if isinstance(value, int) and not isinstance(value, bool):
-        minimum = schema.get("minimum")
-        maximum = schema.get("maximum")
-        if minimum is not None and value < minimum:
-            msg = f"expected integer >= {minimum} at {path}"
-            raise provision_error(msg)
-        if maximum is not None and value > maximum:
-            msg = f"expected integer <= {maximum} at {path}"
-            raise provision_error(msg)
-
-
-def _validate_dict_schema(value: dict, schema: dict, path: str, root_schema: dict) -> None:
-    """Validate dict-specific schema constraints."""
-    min_properties = schema.get("minProperties")
-    if min_properties is not None and len(value) < min_properties:
-        msg = f"expected at least {min_properties} keys at {path}"
-        raise provision_error(msg)
-
-    required = set(schema.get("required", []))
-    missing = required - set(value)
-    if missing:
-        keys = ", ".join(sorted(missing))
-        msg = f"missing required keys at {path}: {keys}"
-        raise provision_error(msg)
-
-    property_names = schema.get("propertyNames")
-    if property_names is not None:
-        for key in value:
-            validate_schema_property_name(key, property_names, path)
-
-    properties = schema.get("properties", {})
-    additional = schema.get("additionalProperties", True)
-    for key, item in value.items():
-        item_path = f"{path}.{key}"
-        if key in properties:
-            validate_against_schema(item, properties[key], item_path, root_schema)
-        elif additional is False:
-            msg = f"unsupported keys at {path}: {key}"
-            raise provision_error(msg)
-        elif isinstance(additional, dict):
-            validate_against_schema(item, additional, item_path, root_schema)
+    """Validate a value with the committed Draft 2020-12 JSON Schema."""
+    try:
+        Draft202012Validator.check_schema(root_schema)
+        validator = Draft202012Validator(root_schema).evolve(schema=schema)
+    except SchemaError as exc:
+        raise provision_error(f"invalid config schema: {exc.message}") from exc
+    error = best_match(validator.iter_errors(value))
+    if error is not None:
+        raise provision_error(_schema_error_message(error, path))
 
 
 # --- Typed Validation Helpers ---
@@ -322,30 +245,6 @@ def require_mapping(value: Any, path: str) -> dict:
         message = f"expected table at {path}"
         raise provision_error(message)
     return value
-
-
-def require_allowed_keys(
-    value: Any,
-    path: str,
-    allowed: set[str],
-    required: set[str] | None = None,
-) -> dict:
-    """Require value is a dict with only allowed keys and all required keys present."""
-    table = require_mapping(value, path)
-    unexpected = set(table) - allowed
-    if unexpected:
-        keys = ", ".join(sorted(unexpected))
-        message = f"unsupported keys at {path}: {keys}"
-        raise provision_error(message)
-
-    if required is not None:
-        missing = required - set(table)
-        if missing:
-            keys = ", ".join(sorted(missing))
-            message = f"missing required keys at {path}: {keys}"
-            raise provision_error(message)
-
-    return table
 
 
 def require_string(value: Any, path: str) -> str:
@@ -579,18 +478,7 @@ def load_lan_settings(lan_value: Any, path: str = "lan") -> dict[str, Any]:
     if lan_value is None:
         lan_value = {}
 
-    lan = require_allowed_keys(
-        lan_value,
-        path,
-        {
-            "gateway_cidr",
-            "dhcp_start",
-            "dhcp_end",
-            "domain",
-            "hostname_pattern",
-            "gateway_aliases",
-        },
-    )
+    lan = require_mapping(lan_value, path)
 
     gateway = require_ipv4_interface(
         lan.get("gateway_cidr", DEFAULT_LAN_GATEWAY_CIDR), f"{path}.gateway_cidr"
@@ -667,7 +555,7 @@ def load_users(users_value: Any) -> tuple[dict[str, dict], list[str]]:
 
     for username, raw_user in users.items():
         validate_username(username)
-        user = require_allowed_keys(raw_user, f"users.{username}", {"isAdmin", "ssh_key", "shell"})
+        user = require_mapping(raw_user, f"users.{username}")
         is_admin = require_bool(user.get("isAdmin", False), f"users.{username}.isAdmin")
         ssh_key_raw = user.get("ssh_key", "")
         if not isinstance(ssh_key_raw, str):
@@ -702,34 +590,9 @@ def load_network_settings(network_value: Any) -> dict[str, Any]:
     """Parse and validate the [network] section, returning LAN settings dict."""
     if network_value is None:
         network_value = {}
-    network = require_allowed_keys(
-        network_value,
-        "network",
-        {
-            "dns_servers",
-            "dns_search_domains",
-            "default_gateway",
-            "interfaces",
-            "dnsmasq",
-            "ntp",
-            "firewall",
-        },
-    )
+    network = require_mapping(network_value, "network")
     dnsmasq = network.get("dnsmasq", {})
-    dnsmasq_settings = require_allowed_keys(
-        dnsmasq,
-        "network.dnsmasq",
-        {
-            "enable",
-            "interface",
-            "gateway_cidr",
-            "dhcp_start",
-            "dhcp_end",
-            "domain",
-            "hostname_pattern",
-            "gateway_aliases",
-        },
-    )
+    dnsmasq_settings = require_mapping(dnsmasq, "network.dnsmasq")
 
     if "enable" in dnsmasq_settings and not require_bool(
         dnsmasq_settings["enable"], "network.dnsmasq.enable"
@@ -766,7 +629,7 @@ def load_network_settings(network_value: Any) -> dict[str, Any]:
         lan_input["gateway_cidr"] = str(eth1_gateway)
 
     lan_settings = load_lan_settings(lan_input, "network.dnsmasq")
-    ntp = require_allowed_keys(network.get("ntp", {}), "network.ntp", {"servers"})
+    ntp = require_mapping(network.get("ntp", {}), "network.ntp")
     lan_settings["ntp_servers"] = require_ntp_server_list(
         ntp.get("servers", DEFAULT_NTP_SERVERS), "network.ntp.servers"
     )
@@ -777,19 +640,7 @@ def load_host_network_settings(network_value: Any) -> dict[str, Any]:
     """Parse and validate host resolver, route, and interface settings."""
     if network_value is None:
         network_value = {}
-    network = require_allowed_keys(
-        network_value,
-        "network",
-        {
-            "dns_servers",
-            "dns_search_domains",
-            "default_gateway",
-            "interfaces",
-            "dnsmasq",
-            "ntp",
-            "firewall",
-        },
-    )
+    network = require_mapping(network_value, "network")
     result = {
         "dns_servers": require_ip_address_list(network["dns_servers"], "network.dns_servers")
         if "dns_servers" in network
@@ -817,12 +668,7 @@ def load_network_interfaces(interfaces_value: Any) -> dict[str, dict[str, Any]]:
     for name, raw_interface in interfaces.items():
         validate_interface_name(name)
         path = f"network.interfaces.{name}"
-        interface = require_allowed_keys(
-            raw_interface,
-            path,
-            {"mode", "address", "gateway", "dns_servers", "dns_search_domains"},
-            {"mode"},
-        )
+        interface = require_mapping(raw_interface, path)
         mode = require_string(interface["mode"], f"{path}.mode")
         if mode not in {"dhcp", "static"}:
             message = f"{path}.mode must be one of: dhcp, static"
@@ -862,28 +708,16 @@ def load_firewall_inbound(network_value: Any) -> dict[str, dict[str, list[int]]]
     """Parse and validate the [network.firewall.inbound] section."""
     if network_value is None:
         network_value = {}
-    network = require_allowed_keys(
-        network_value,
-        "network",
-        {
-            "dns_servers",
-            "dns_search_domains",
-            "default_gateway",
-            "interfaces",
-            "dnsmasq",
-            "ntp",
-            "firewall",
-        },
-    )
+    network = require_mapping(network_value, "network")
     firewall = network.get("firewall", {})
-    firewall = require_allowed_keys(firewall, "network.firewall", {"inbound"})
+    firewall = require_mapping(firewall, "network.firewall")
     inbound_value = firewall.get("inbound", {})
-    inbound = require_allowed_keys(inbound_value, "network.firewall.inbound", {"wan", "lan"})
+    inbound = require_mapping(inbound_value, "network.firewall.inbound")
 
     def normalize_firewall_scope(scope_value: Any, scope_path: str) -> dict[str, list[int]]:
         if scope_value is None:
             return {}
-        scope = require_allowed_keys(scope_value, scope_path, {"tcp", "udp"})
+        scope = require_mapping(scope_value, scope_path)
         normalized: dict[str, list[int]] = {}
         if "tcp" in scope:
             tcp_ports = require_port_list(scope.get("tcp"), f"{scope_path}.tcp")
@@ -911,12 +745,7 @@ def load_firewall_inbound(network_value: Any) -> dict[str, dict[str, list[int]]]
 
 def load_activation_policy(activation_value: Any, known_units: set[str]) -> dict[str, Any]:
     """Parse and validate activation policy."""
-    activation = require_allowed_keys(
-        activation_value,
-        "activation",
-        {"required", "timeout_seconds", "settle_seconds", "restart", "allow_degraded", "strategy"},
-        {"required"},
-    )
+    activation = require_mapping(activation_value, "activation")
     required_units = require_string_list(activation.get("required"), "activation.required")
     restart = require_optional_string_list(activation.get("restart"), "activation.restart")
     allow_degraded = require_optional_string_list(
@@ -983,20 +812,9 @@ def load_config(
         message = f"invalid TOML in {config_path}: {exc}"
         raise provision_error(message) from exc
 
-    root = require_allowed_keys(
-        data,
-        "config",
-        {"version", "users", "network", "activation", "os_upgrade", "containers"},
-        {"version", "users", "activation", "containers"},
-    )
-
-    version = root.get("version")
-    if not isinstance(version, int) or isinstance(version, bool) or version != 1:
-        message = "version must be integer 1"
-        raise provision_error(message)
-
     schema = config_schema if config_schema is not None else load_config_schema()
     validate_against_schema(data, schema, "config", schema)
+    root = data
 
     users, ssh_keys = load_users(root.get("users"))
     firewall_inbound = load_firewall_inbound(root.get("network"))
@@ -1006,19 +824,12 @@ def load_config(
 
     os_upgrade_settings = None
     if root.get("os_upgrade") is not None:
-        os_upgrade = require_allowed_keys(
-            root.get("os_upgrade"), "os_upgrade", {"server_url"}, {"server_url"}
-        )
+        os_upgrade = require_mapping(root.get("os_upgrade"), "os_upgrade")
         os_upgrade_settings = {
             "server_url": require_https_url(os_upgrade.get("server_url"), "os_upgrade.server_url")
         }
 
-    containers = require_allowed_keys(
-        root.get("containers"),
-        "containers",
-        {"container", "network", "volume", "build"},
-        {"container"},
-    )
+    containers = require_mapping(root.get("containers"), "containers")
     container_table = require_mapping(containers.get("container"), "containers.container")
     activation_policy = load_activation_policy(root.get("activation"), set(container_table))
     required_units = activation_policy["required"]

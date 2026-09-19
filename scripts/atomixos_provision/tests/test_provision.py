@@ -14,6 +14,8 @@ from atomixos_provision.provision import (
     locked_export_config_bytes,
     provisioning_lock,
     stage_config_operation,
+    validate_config_bytes,
+    validate_config_from_path,
     write_imported_state,
 )
 from atomixos_provision.staging import (
@@ -50,6 +52,22 @@ class ProgressRecorder:
 
     def set_stage(self, name, detail=None, **fields):
         self.stages.append((name, detail, fields))
+
+
+async def test_path_and_bytes_validation_report_the_same_schema_error(tmp_path):
+    payload = BASE_PARTIAL_CONFIG.replace(
+        "version = 1\n", "version = 1\nunexpected = true\n"
+    ).encode()
+    config_path = tmp_path / "config.toml"
+    config_path.write_bytes(payload)
+
+    with pytest.raises(ProvisionError) as path_error:
+        validate_config_from_path(config_path, tmp_path / "active")
+    with pytest.raises(ProvisionError) as bytes_error:
+        await validate_config_bytes(payload, "config.toml", tmp_path / "active")
+
+    assert str(path_error.value) == str(bytes_error.value)
+    assert str(path_error.value) == "unsupported keys at config: unexpected"
 
 
 def test_provisioning_lock_blocks_nested_exclusive_lock(tmp_path):

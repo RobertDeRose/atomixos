@@ -23,6 +23,7 @@ let
     build-system = [ python3.pkgs.hatchling ];
     dependencies = [
       python3.pkgs.click
+      python3.pkgs.jsonschema
       python3.pkgs.litestar
       python3.pkgs.uvicorn
     ];
