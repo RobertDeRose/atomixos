@@ -12,8 +12,8 @@ Start here when working in this repository.
 
 - Use Conventional Commits.
 - Follow the Conventional Commits 1.0.0 shape: `<type>[optional scope]: <description>`.
-- The repo-local `hk` `commit-msg` hook enforces the conventional format and line-length limits configured in
-  `package.json`.
+- The repo-local `hk` `commit-msg` hook enforces the conventional format and line-length limits defined in `hk.pkl`.
+- `mise.toml` is the sole installation authority for the pinned `commitlint` CLI used by that hook.
 
 ### Supported Scopes
 

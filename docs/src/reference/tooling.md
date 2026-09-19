@@ -49,6 +49,9 @@ canonical `Beads:` footer; the other commit validators still inspect the unfilte
 documentation, release, style, and test commits are omitted from `cog changelog`. Breaking changes render as plain
 Markdown.
 
+`mise.toml` and `mise.lock` are the only installation authority for `commitlint`; `mise install --locked` installs the
+pinned CLI used by hk. No `npm install` or `npm ci` step is part of local or CI validation.
+
 The generated `cog.toml` initially accepts any syntactically valid scope. To constrain scopes, add a `scopes = ["..."]`
 allowlist, document each stable subsystem in README when present or on this page otherwise, and update `AGENTS.md` so
 agents apply the same taxonomy. Run `cog check` after changing the allowlist.

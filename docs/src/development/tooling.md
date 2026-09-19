@@ -29,6 +29,9 @@ to preview the concise user-facing changelog. The hk policy uses native built-in
 hk's file locking coordinates independent steps. No dependency chain serializes unrelated checks. Go projects retain two
 output-sensitive edges: `gofumpt` follows `goimports`, then fix-only module tidy observes the final imports.
 
+Mise installs the pinned `commitlint` CLI directly from `mise.toml` and `mise.lock`; the repository has no separate npm
+install step or root Node package manifest.
+
 No recognized language profile is active; only the universal tooling baseline runs.
 
 ## GitHub validation
