@@ -3,23 +3,16 @@
 {
   stdenv,
   rauc,
-  dosfstools,
-  mtools,
   squashfsTools,
   buildConfiguration,
   nixosConfig,
   squashfsImage,
-  bootScript,
+  bootPartition,
   signingCert,
   signingKeyPath,
 }:
 
 let
-  # Extract kernel and the overlaid DTB package from the NixOS configuration
-  kernel = nixosConfig.boot.kernelPackages.kernel;
-  deviceTree = nixosConfig.hardware.deviceTree.package;
-  initrd = nixosConfig.system.build.initialRamdisk;
-  dtbPath = "rockchip/rk3328-rock64.dtb";
   version = nixosConfig.system.nixos.version;
   bundleName = "rock64${buildConfiguration.artifactSuffix}.raucb";
 
@@ -30,12 +23,8 @@ let
     dontBuild = true;
     installPhase = ''
       substitute $src $out \
-        --replace-fail "@kernel@" "${kernel}" \
-        --replace-fail "@deviceTree@" "${deviceTree}" \
-        --replace-fail "@initrd@" "${initrd}" \
-        --replace-fail "@dtbPath@" "${dtbPath}" \
         --replace-fail "@squashfs@" "${squashfsImage}" \
-        --replace-fail "@bootScript@" "${bootScript}" \
+        --replace-fail "@bootPartition@" "${bootPartition}" \
         --replace-fail "@signingCert@" "${signingCert}" \
         --replace-fail "@signingKey@" "${signingKeyPath}" \
         --replace-fail "@version@" "${version}"
@@ -49,8 +38,6 @@ stdenv.mkDerivation {
 
   nativeBuildInputs = [
     rauc
-    dosfstools
-    mtools
     squashfsTools # mksquashfs — required by rauc bundle
   ];
 

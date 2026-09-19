@@ -35,6 +35,7 @@ from macOS when a linux-builder is available (the alias points to the same `aarc
 | `packages.aarch64-linux.uboot`           | Custom Rock64 U-Boot package providing the bootloader artifacts   |
 | `packages.aarch64-linux.uboot-env-tools` | `fw_printenv` / `fw_setenv` binaries used with the Rock64 SPI env |
 | `packages.aarch64-linux.image`           | Flashable eMMC disk image (U-Boot + boot-a + rootfs-a, ~1.2 GB)   |
+| `packages.aarch64-linux.boot-partition`  | Shared boot-slot vfat used by image and RAUC bundle builds         |
 
 ## Apps
 

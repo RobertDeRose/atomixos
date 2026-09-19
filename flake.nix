@@ -47,6 +47,7 @@
         overlayName = "build.dev.toml";
         overlayText = if buildDevConfigPath == "" then null else builtins.readFile buildDevConfigPath;
       };
+      partitionLayout = import ./nix/partition-layout.nix;
 
       developmentMode = builtins.getEnv "DEVELOPMENT" == "1";
 
@@ -139,7 +140,7 @@
       # Maximum squashfs image size (1 GB)
       # NixOS + Podman + systemd baseline is ~450-500 MB compressed.
       # 1 GB provides headroom for future additions.
-      maxSquashfsSize = 1024 * 1024 * 1024;
+      maxSquashfsSize = partitionLayout.rootfs.sizeMiB * 1024 * 1024;
 
       bundleTestVmModule =
         { lib, pkgs, ... }:
@@ -285,6 +286,13 @@
           inherit maxSquashfsSize;
         };
 
+        # Shared boot-slot filesystem consumed by factory and update artifacts.
+        boot-partition = pkgs.callPackage ./nix/boot-partition.nix {
+          nixosConfig = rock64Config;
+          bootScript = self.packages.${system}.boot-script;
+          inherit partitionLayout;
+        };
+
         # Signed RAUC bundle (multi-slot: boot + rootfs)
         # Uses development signing keys by default (committed to repo).
         # For production: override signingCert/signingKeyPath with production keys.
@@ -292,7 +300,7 @@
           buildConfiguration = effectiveBuildConfig;
           nixosConfig = rock64Config;
           squashfsImage = self.packages.${system}.squashfs;
-          bootScript = self.packages.${system}.boot-script;
+          bootPartition = self.packages.${system}.boot-partition;
           signingCert = ./certs/dev.signing.cert.pem;
           signingKeyPath = ./certs/dev.signing.key.pem;
         };
@@ -311,8 +319,9 @@
           buildConfiguration = effectiveBuildConfig;
           nixosConfig = rock64Config;
           squashfsImage = self.packages.${system}.squashfs;
-          bootScript = self.packages.${system}.boot-script;
+          bootPartition = self.packages.${system}.boot-partition;
           ubootRock64 = self.packages.${system}.uboot;
+          inherit partitionLayout;
         };
       };
 
@@ -385,6 +394,7 @@
             build-config-workflow = import ./nix/tests/build-config-workflow.nix netTestArgs;
             build-configuration = import ./nix/tests/build-configuration.nix netTestArgs;
             lan-defaults = import ./nix/tests/lan-defaults.nix netTestArgs;
+            partition-layout = import ./nix/tests/partition-layout.nix netTestArgs;
             nixstasis-module = import ./nix/tests/nixstasis-module.nix netTestArgs;
             watchdog-module = import ./nix/tests/watchdog-module.nix netTestArgs;
           };
@@ -408,6 +418,7 @@
             build-config-workflow = import ./nix/tests/build-config-workflow.nix darwinNetTestArgs;
             build-configuration = import ./nix/tests/build-configuration.nix darwinNetTestArgs;
             lan-defaults = import ./nix/tests/lan-defaults.nix darwinNetTestArgs;
+            partition-layout = import ./nix/tests/partition-layout.nix darwinNetTestArgs;
             rauc-slots = import ./nix/tests/rauc-slots.nix darwinRaucTestArgs;
             rauc-update = import ./nix/tests/rauc-update.nix darwinRaucTestArgs;
             rauc-rollback = import ./nix/tests/rauc-rollback.nix darwinRaucTestArgs;

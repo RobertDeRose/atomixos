@@ -29,16 +29,12 @@ Builds a signed RAUC bundle (`.raucb`).
 
 | Input                            | Description                                            |
 |----------------------------------|--------------------------------------------------------|
-| `@kernel@`                       | Kernel package (contains `Image`)                      |
-| `@deviceTree@`                   | Device-tree package, including applied overlays        |
-| `@initrd@`                       | Initrd package (contains `initrd`)                     |
-| `@dtbPath@`                      | Relative DTB path (e.g., `rockchip/rk3328-rock64.dtb`) |
+| `@bootPartition@`                | Shared boot-slot filesystem derivation                 |
 | `@squashfs@`                     | Squashfs image directory                               |
-| `@bootScript@`                   | Compiled U-Boot script (`boot.scr`)                    |
 | `@signingCert@` / `@signingKey@` | RAUC signing credentials                               |
 | `@version@`                      | Bundle version string                                  |
 
-**Steps:** Create 128 MB vfat with kernel + initrd + DTB + boot.scr (mtools), generate manifest, sign with `rauc bundle`.
+**Steps:** Copy the shared `boot.vfat`, generate the manifest, and sign with `rauc bundle`.
 
 ### build-image.sh
 
@@ -48,16 +44,14 @@ Assembles the flashable disk image.
 
 | Input                       | Description                 |
 |-----------------------------|-----------------------------|
-| `@kernel@`, `@initrd@`      | Kernel and initrd artifacts |
-| `@deviceTree@`, `@dtbPath@` | Selected overlaid DTB       |
+| `@bootPartition@`           | Shared boot-slot filesystem |
 | `@squashfs@`                | Squashfs image              |
-| `@bootScript@`              | Compiled boot.scr           |
 | `@uboot@`                   | U-Boot package              |
 | `@imageName@`               | Output filename             |
 
-**Steps:** Create sparse image, write U-Boot at raw offsets, create GPT with slot A partitions (`boot-a`, `rootfs-a`),
-create the slot A vfat boot partition with mtools, and write squashfs to `rootfs-a`. Slot B and `/data` are created by
-initrd `systemd-repart` on first boot.
+**Steps:** Create a sparse image, write U-Boot at raw offsets, create the GPT from the shared partition layout, copy the
+shared boot-slot filesystem to `boot-a`, and write squashfs to `rootfs-a`. Slot B and `/data` are created by initrd
+`systemd-repart` on first boot.
 
 ---
 

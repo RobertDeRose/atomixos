@@ -1,11 +1,8 @@
 #!/usr/bin/env bash
 # Build a flashable disk image for the Rock64 eMMC.
 # Called from the Nix derivation — variables are substituted by Nix:
-#   @kernel@       — path to kernel package (contains Image)
-#   @deviceTree@   — path to overlaid device-tree directory
-#   @dtbPath@      — relative DTB path (e.g. rockchip/rk3328-rock64.dtb)
+#   @bootPartition@ — path to the shared boot partition image
 #   @squashfs@     — path to squashfs image directory (contains rootfs.squashfs)
-#   @bootScript@   — path to boot-script directory (contains boot.scr)
 #   @out@          — Nix output path
 # shellcheck disable=SC2154  # Variables are injected by Nix substitute
 set -euo pipefail
@@ -25,16 +22,16 @@ set -euo pipefail
 # NOTE: The first partition MUST start at or after 16 MiB to avoid overwriting
 # u-boot.itb which is written at sector 16384 (byte offset 8 MiB, ~9 MiB end).
 
-XBOOTLDR_TYPE_GUID=BC13C2FF-59E6-4262-A352-B275FD6F7172
-ROOT_ARM64_TYPE_GUID=B921B045-1DF0-41C3-AF44-4C6F280D3FAE
+XBOOTLDR_TYPE_GUID=@bootTypeGuid@
+ROOT_ARM64_TYPE_GUID=@rootfsTypeGuid@
 
-BOOT_A_START_MIB=16
-BOOT_A_SIZE_MIB=128
-ROOTFS_A_START_MIB=144
-ROOTFS_A_SIZE_MIB=1024
+BOOT_A_START_MIB=@bootStartMiB@
+BOOT_A_SIZE_MIB=@bootSizeMiB@
+ROOTFS_A_START_MIB=@rootfsStartMiB@
+ROOTFS_A_SIZE_MIB=@rootfsSizeMiB@
 
 # Total image size: end of rootfs-a plus slack for the backup GPT header/table.
-GPT_TAIL_SLACK_MIB=2
+GPT_TAIL_SLACK_MIB=@gptTailSlackMiB@
 IMAGE_SIZE_MIB=$((ROOTFS_A_START_MIB + ROOTFS_A_SIZE_MIB + GPT_TAIL_SLACK_MIB))
 
 log() { echo "[build-image] $*"; }
@@ -61,28 +58,13 @@ log "Creating GPT partition table..."
 sfdisk "$IMAGE" <<EOF
 label: gpt
 
-start=${BOOT_A_START_MIB}MiB, size=${BOOT_A_SIZE_MIB}MiB, type=${XBOOTLDR_TYPE_GUID}, name="boot-a"
-start=${ROOTFS_A_START_MIB}MiB, size=${ROOTFS_A_SIZE_MIB}MiB, type=${ROOT_ARM64_TYPE_GUID}, name="rootfs-a"
+start=${BOOT_A_START_MIB}MiB, size=${BOOT_A_SIZE_MIB}MiB, type=${XBOOTLDR_TYPE_GUID}, name="@bootLabelA@"
+start=${ROOTFS_A_START_MIB}MiB, size=${ROOTFS_A_SIZE_MIB}MiB, type=${ROOT_ARM64_TYPE_GUID}, name="@rootfsLabelA@"
 EOF
 
-# ── Create boot slot A (vfat with kernel + DTB + boot.scr) ────────────────────
-
-log "Creating boot slot A vfat image..."
-BOOT_VFAT=$(mktemp)
-dd if=/dev/zero of="$BOOT_VFAT" bs=1M count="${BOOT_A_SIZE_MIB}" status=none
-mkfs.vfat -n "BOOT-A" "$BOOT_VFAT"
-
-# Copy kernel, DTB, and boot script using mtools (no mount required)
-mmd -i "$BOOT_VFAT" ::dtbs
-mmd -i "$BOOT_VFAT" ::dtbs/rockchip
-mcopy -i "$BOOT_VFAT" "@kernel@/Image" ::Image
-mcopy -i "$BOOT_VFAT" "@initrd@/initrd" ::initrd
-mcopy -i "$BOOT_VFAT" "@deviceTree@/@dtbPath@" "::dtbs/rockchip/rk3328-rock64.dtb"
-mcopy -i "$BOOT_VFAT" "@bootScript@/boot.scr" ::boot.scr
-
 # Write boot vfat into the image at the correct offset
-dd if="$BOOT_VFAT" of="$IMAGE" bs=1M seek="${BOOT_A_START_MIB}" conv=notrunc status=none
-rm -f "$BOOT_VFAT"
+log "Writing shared boot filesystem to boot slot A..."
+dd if="@bootPartition@/boot.vfat" of="$IMAGE" bs=1M seek="${BOOT_A_START_MIB}" conv=notrunc status=none
 
 # ── Write squashfs to rootfs slot A ──────────────────────────────────────────
 
@@ -101,8 +83,8 @@ log ""
 log "Partition layout:"
 log "  boot-a   (vfat, ${BOOT_A_SIZE_MIB} MiB)  — kernel + DTB + boot.scr"
 log "  rootfs-a (${ROOTFS_A_SIZE_MIB} MiB)       — squashfs deployed"
-log "  boot-b   (vfat, 128 MiB)                  — created on first boot by initrd systemd-repart"
-log "  rootfs-b (1024 MiB)                       — created on first boot by initrd systemd-repart"
+log "  @bootLabelB@   (vfat, ${BOOT_A_SIZE_MIB} MiB)  — created on first boot by initrd systemd-repart"
+log "  @rootfsLabelB@ (${ROOTFS_A_SIZE_MIB} MiB)       — created on first boot by initrd systemd-repart"
 log "  data     — created on first boot by initrd systemd-repart"
 log ""
 log "Flash with: dd if=$IMAGE of=/dev/mmcblkN bs=4M status=progress"

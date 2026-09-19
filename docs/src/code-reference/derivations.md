@@ -1,6 +1,6 @@
 # Nix Derivations
 
-The `nix/` directory contains four derivations that produce the build artifacts. Each is called from `flake.nix` via
+The `nix/` directory contains five derivations that produce the build artifacts. Each is called from `flake.nix` via
 `pkgs.callPackage`.
 
 ## Build Pipeline
@@ -9,13 +9,15 @@ The `nix/` directory contains four derivations that produce the build artifacts.
 flowchart LR
     SQUASHFS["squashfs.nix"] --> ROOTFS["rootfs.squashfs"]
     BOOTSCRIPT["boot-script.nix"] --> BOOTSCR["boot.scr"]
+    BOOTSCR --> BOOTPARTITION["boot-partition.nix"]
+    BOOTPARTITION --> BOOTVFAT["boot.vfat"]
 
     ROOTFS --> IMAGE["image.nix"]
-    BOOTSCR --> IMAGE
+    BOOTVFAT --> IMAGE
     IMAGE --> IMGOUT["flashable .img"]
 
     ROOTFS --> RAUCBUNDLE["rauc-bundle.nix"]
-    BOOTSCR --> RAUCBUNDLE
+    BOOTVFAT --> RAUCBUNDLE
     RAUCBUNDLE --> BUNDLEOUT["signed .raucb for OTA"]
 ```
 
@@ -58,6 +60,17 @@ flowchart LR
 
 ---
 
+## boot-partition.nix
+
+**Purpose**: Builds the vfat boot-slot filesystem once for both factory images and RAUC bundles.
+
+It copies the kernel `Image`, initrd, overlaid Rock64 DTB, and compiled `boot.scr` into a filesystem sized by
+`nix/partition-layout.nix`.
+
+**Output:** `$out/boot.vfat`
+
+---
+
 ## rauc-bundle.nix
 
 **Purpose**: Builds a signed RAUC bundle containing boot (kernel + initrd + DTB + boot.scr) and rootfs (squashfs) images.
@@ -65,15 +78,15 @@ flowchart LR
 **Function signature:**
 
 ```nix
-{ stdenv, rauc, dosfstools, mtools, squashfsTools,
-  nixosConfig, squashfsImage, bootScript, signingCert, signingKeyPath, caCert }:
+{ stdenv, rauc, squashfsTools, nixosConfig, squashfsImage,
+  bootPartition, signingCert, signingKeyPath }:
 ```
 
 | Parameter        | Source                         | Description                      |
 |------------------|--------------------------------|----------------------------------|
 | `nixosConfig`    | `rock64System.config`          | Provides kernel/initrd/DTB paths |
 | `squashfsImage`  | `packages.squashfs`            | The squashfs derivation output   |
-| `bootScript`     | `packages.boot-script`         | Compiled `boot.scr`              |
+| `bootPartition`  | `packages.boot-partition`      | Shared boot-slot filesystem      |
 | `signingCert`    | `./certs/dev.signing.cert.pem` | RAUC signing certificate         |
 | `signingKeyPath` | `./certs/dev.signing.key.pem`  | RAUC signing private key         |
 | `caCert`         | `./certs/dev.ca.cert.pem`      | CA certificate for verification  |
@@ -82,11 +95,10 @@ flowchart LR
 
 **Build steps:**
 
-1. Create a 128 MB vfat image (`boot.vfat`)
-2. Copy kernel `Image`, `initrd`, DTB, and `boot.scr` into it using mtools
-3. Copy `rootfs.squashfs` into the bundle directory
-4. Generate `manifest.raucm` with `compatible=rock64` and image definitions
-5. Sign and package with `rauc bundle`
+1. Copy the shared `boot.vfat` into the bundle directory
+2. Copy `rootfs.squashfs` into the bundle directory
+3. Generate `manifest.raucm` with `compatible=rock64` and image definitions
+4. Sign and package with `rauc bundle`
 
 **Output:** `$out/rock64.raucb`
 
@@ -139,8 +151,8 @@ mkimage -C none -A arm64 -T script -d boot.cmd boot.scr
 **Function signature:**
 
 ```nix
-{ stdenv, dosfstools, mtools, util-linux,
-  ubootRock64, nixosConfig, squashfsImage, bootScript }:
+{ stdenv, util-linux, ubootRock64, nixosConfig,
+  squashfsImage, bootPartition, partitionLayout }:
 ```
 
 | Parameter       | Source                 | Description                  |
@@ -148,7 +160,8 @@ mkimage -C none -A arm64 -T script -d boot.cmd boot.scr
 | `ubootRock64`   | nixpkgs                | U-Boot package for Rock64    |
 | `nixosConfig`   | `rock64System.config`  | Provides kernel, initrd, DTB |
 | `squashfsImage` | `packages.squashfs`    | Squashfs derivation          |
-| `bootScript`    | `packages.boot-script` | Compiled boot.scr            |
+| `bootPartition` | `packages.boot-partition` | Shared boot-slot filesystem |
+| `partitionLayout` | `nix/partition-layout.nix` | Shared labels, GUIDs, offsets, and sizes |
 
 **Delegates to:** `scripts/build-image.sh`
 

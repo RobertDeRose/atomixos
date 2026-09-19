@@ -29,6 +29,8 @@ modules/
 
 nix/
   build-configuration.nix          Strict parser, merge, validation, and canonical renderer
+  partition-layout.nix             Shared partition labels, GUIDs, offsets, and sizes
+  boot-partition.nix               Shared boot-slot vfat derivation
   squashfs.nix                     Squashfs image derivation (closureInfo + mksquashfs)
   rauc-bundle.nix                  Multi-slot RAUC bundle derivation
   boot-script.nix                  U-Boot boot.scr compilation

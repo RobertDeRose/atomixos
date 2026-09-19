@@ -4,22 +4,16 @@
 # partitions.
 {
   stdenv,
-  dosfstools,
-  f2fs-tools,
-  mtools,
   util-linux,
   ubootRock64,
   buildConfiguration,
   nixosConfig,
   squashfsImage,
-  bootScript,
+  bootPartition,
+  partitionLayout,
 }:
 
 let
-  kernel = nixosConfig.boot.kernelPackages.kernel;
-  deviceTree = nixosConfig.hardware.deviceTree.package;
-  initrd = nixosConfig.system.build.initialRamdisk;
-  dtbPath = "rockchip/rk3328-rock64.dtb";
   nixosVersion = nixosConfig.system.nixos.version;
   nixosSeries =
     let
@@ -35,14 +29,21 @@ let
     dontBuild = true;
     installPhase = ''
       substitute $src $out \
-        --replace-fail "@kernel@" "${kernel}" \
-        --replace-fail "@deviceTree@" "${deviceTree}" \
-        --replace-fail "@initrd@" "${initrd}" \
-        --replace-fail "@dtbPath@" "${dtbPath}" \
         --replace-fail "@squashfs@" "${squashfsImage}" \
-        --replace-fail "@bootScript@" "${bootScript}" \
+        --replace-fail "@bootPartition@" "${bootPartition}" \
         --replace-fail "@uboot@" "${ubootRock64}" \
-        --replace-fail "@imageName@" "${imageName}"
+        --replace-fail "@imageName@" "${imageName}" \
+        --replace-fail "@bootStartMiB@" "${toString partitionLayout.boot.startMiB}" \
+        --replace-fail "@bootSizeMiB@" "${toString partitionLayout.boot.sizeMiB}" \
+        --replace-fail "@bootTypeGuid@" "${partitionLayout.boot.typeGuid}" \
+        --replace-fail "@bootLabelA@" "${partitionLayout.boot.labels.a}" \
+        --replace-fail "@rootfsStartMiB@" "${toString partitionLayout.rootfs.startMiB}" \
+        --replace-fail "@rootfsSizeMiB@" "${toString partitionLayout.rootfs.sizeMiB}" \
+        --replace-fail "@rootfsTypeGuid@" "${partitionLayout.rootfs.typeGuid}" \
+        --replace-fail "@rootfsLabelA@" "${partitionLayout.rootfs.labels.a}" \
+        --replace-fail "@bootLabelB@" "${partitionLayout.boot.labels.b}" \
+        --replace-fail "@rootfsLabelB@" "${partitionLayout.rootfs.labels.b}" \
+        --replace-fail "@gptTailSlackMiB@" "${toString partitionLayout.gptTailSlackMiB}"
       chmod +x $out
     '';
   };
@@ -52,9 +53,6 @@ stdenv.mkDerivation {
   version = "0.1.0";
 
   nativeBuildInputs = [
-    dosfstools
-    f2fs-tools
-    mtools
     util-linux # sfdisk
   ];
 

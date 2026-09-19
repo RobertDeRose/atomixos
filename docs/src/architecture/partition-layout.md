@@ -4,6 +4,9 @@ The Rock64's 16 GB eMMC uses a fixed A/B partition layout with raw U-Boot at the
 partition at the end. The flash image carries slot A only; initrd `systemd-repart` creates slot B and `/data` on first
 boot.
 
+`nix/partition-layout.nix` is the machine-readable authority for partition labels, type GUIDs, offsets, and sizes.
+Factory-image assembly, initrd repartitioning, and the squashfs size guard all consume that same value set.
+
 General host and application logging stays tmpfs-first during runtime and is
 forwarded through an `rsyslog` RAM queue before buffered appends land in
 `/data/logs`.

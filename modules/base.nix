@@ -14,6 +14,7 @@ let
   atomixosCodeNameLower = lib.toLower atomixosCodeName;
   nixosCodeName = config.system.nixos.codeName;
   nixosCodeNameLower = lib.toLower nixosCodeName;
+  partitionLayout = import ../nix/partition-layout.nix;
 in
 {
   options.atomixos.serialRootDebug.enable = lib.mkOption {
@@ -503,39 +504,39 @@ in
     # Declare the slot-A partitions too so the later slot-B entries become the
     # second xbootldr/root-arm64 partitions instead of matching p1/p2.
     systemd.repart.partitions."10-boot-a" = {
-      Type = "xbootldr";
-      Label = "boot-a";
-      SizeMinBytes = "128M";
-      SizeMaxBytes = "128M";
+      Type = partitionLayout.boot.type;
+      Label = partitionLayout.boot.labels.a;
+      SizeMinBytes = "${toString partitionLayout.boot.sizeMiB}M";
+      SizeMaxBytes = "${toString partitionLayout.boot.sizeMiB}M";
     };
 
     systemd.repart.partitions."20-rootfs-a" = {
-      Type = "root-arm64";
-      Label = "rootfs-a";
-      SizeMinBytes = "1024M";
-      SizeMaxBytes = "1024M";
+      Type = partitionLayout.rootfs.type;
+      Label = partitionLayout.rootfs.labels.a;
+      SizeMinBytes = "${toString partitionLayout.rootfs.sizeMiB}M";
+      SizeMaxBytes = "${toString partitionLayout.rootfs.sizeMiB}M";
     };
 
     systemd.repart.partitions."30-boot-b" = {
-      Type = "xbootldr";
-      Label = "boot-b";
+      Type = partitionLayout.boot.type;
+      Label = partitionLayout.boot.labels.b;
       Format = "vfat";
-      SizeMinBytes = "128M";
-      SizeMaxBytes = "128M";
+      SizeMinBytes = "${toString partitionLayout.boot.sizeMiB}M";
+      SizeMaxBytes = "${toString partitionLayout.boot.sizeMiB}M";
     };
 
     systemd.repart.partitions."40-rootfs-b" = {
-      Type = "root-arm64";
-      Label = "rootfs-b";
-      SizeMinBytes = "1024M";
-      SizeMaxBytes = "1024M";
+      Type = partitionLayout.rootfs.type;
+      Label = partitionLayout.rootfs.labels.b;
+      SizeMinBytes = "${toString partitionLayout.rootfs.sizeMiB}M";
+      SizeMaxBytes = "${toString partitionLayout.rootfs.sizeMiB}M";
     };
 
     systemd.repart.partitions."50-data" = {
-      Type = "linux-generic";
-      Label = "data";
+      Type = partitionLayout.data.type;
+      Label = partitionLayout.data.label;
       Format = "f2fs";
-      SizeMinBytes = "64M";
+      SizeMinBytes = "${toString partitionLayout.data.minSizeMiB}M";
       MakeDirectories = [
         "/config"
         "/config/quadlet"
