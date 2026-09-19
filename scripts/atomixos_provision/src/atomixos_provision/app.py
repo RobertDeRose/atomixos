@@ -13,6 +13,7 @@ from atomixos_provision.deps import (
     provide_config_service,
     provide_job_manager,
     provide_nonce_store,
+    provide_provision_coordinator,
     provide_settings,
 )
 from atomixos_provision.domain.auth.controller import nonce
@@ -30,6 +31,8 @@ from atomixos_provision.domain.config.controller import (
     submit_config,
     validate_config,
 )
+from atomixos_provision.domain.config.coordinator import ProvisionCoordinator
+from atomixos_provision.domain.config.service import ConfigService
 from atomixos_provision.domain.jobs.controller import get_job
 from atomixos_provision.domain.system.controller import health
 from atomixos_provision.jobs import JobManager, StagedJobManager
@@ -68,6 +71,7 @@ def create_app(
             else JobManager()
         )
     signer_state = SignerState((config_root / "admin-signers").exists())
+    provision_coordinator = ProvisionCoordinator(ConfigService(config_root), job_manager)
 
     app = Litestar(
         route_handlers=[
@@ -93,6 +97,7 @@ def create_app(
                 "config_root": config_root,
                 "nonce_store": nonce_store,
                 "job_manager": job_manager,
+                "provision_coordinator": provision_coordinator,
                 "signer_state": signer_state,
                 "settings": settings,
                 "bootstrap_token": secrets.token_urlsafe(32),
@@ -104,6 +109,9 @@ def create_app(
             "config_service": Provide(provide_config_service, sync_to_thread=False),
             "nonce_store": Provide(provide_nonce_store, sync_to_thread=False),
             "job_manager": Provide(provide_job_manager, sync_to_thread=False),
+            "provision_coordinator": Provide(
+                provide_provision_coordinator, sync_to_thread=False
+            ),
         },
         request_max_body_size=settings.max_source_bytes,
     )

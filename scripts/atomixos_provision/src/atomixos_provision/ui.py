@@ -23,6 +23,7 @@ from litestar.response import Response, ServerSentEvent
 
 from atomixos_provision.bootstrap_security import enforce_bootstrap_browser_origin
 from atomixos_provision.config import ProvisionError
+from atomixos_provision.domain.config.coordinator import ProvisionCoordinator
 from atomixos_provision.jobs import Job, JobManager
 
 __all__ = ["ui_routes"]
@@ -454,10 +455,7 @@ def _asset_path(filename: str) -> Path | None:
 @post("/apply", guards=[_require_unprovisioned], include_in_schema=False)
 async def apply_form(request: Request, state: State) -> Response[str]:
     """POST /apply — multipart form upload -> async provision job fragment."""
-    from atomixos_provision.provision import apply_config_bytes
-
-    config_root: Path = state.config_root
-    job_manager: JobManager = state.job_manager
+    provision_coordinator: ProvisionCoordinator = state.provision_coordinator
     enforce_bootstrap_browser_origin(request)
     form = await request.form()
     is_htmx_request = _is_htmx_request(request)
@@ -493,36 +491,18 @@ async def apply_form(request: Request, state: State) -> Response[str]:
             boot_ui_jobs.add(job_id)
             _remember_boot_ui_job(job_id)
 
-    is_staged_manager = hasattr(job_manager, "submit_staged")
-    if is_staged_manager:
-        from atomixos_provision.provision import stage_config_bytes
-
-        async def stage_work(job):
-            remember_boot_ui_job(job.id)
-            return await asyncio.to_thread(
-                stage_config_bytes,
-                job.id,
-                payload,
-                filename,
-                config_root,
-                allow_reapply=False,
-                progress=job,
-            )
-
-        job = await job_manager.submit_staged(stage_work)
-    else:
-        async def provision_work(job):
-            return await apply_config_bytes(payload, filename, config_root, job, allow_reapply=False)
-
-        job = await job_manager.submit(provision_work)
+    submission = await provision_coordinator.submit_bytes(
+        payload,
+        filename,
+        allow_reapply=False,
+        on_started=remember_boot_ui_job,
+    )
+    job = submission.job
     if job is None:
-        message = (
-            "The provision queue is full."
-            if is_staged_manager
-            else "A provision job is already running."
-        )
         return Response(
-            _html_page_fragment(f"<p>{message}</p>", "status-failed"),
+            _html_page_fragment(
+                f"<p>{submission.conflict_message.capitalize()}.</p>", "status-failed"
+            ),
             status_code=409,
             media_type="text/html",
         )
@@ -530,8 +510,7 @@ async def apply_form(request: Request, state: State) -> Response[str]:
     remember_boot_ui_job(job.id)
 
     should_wait_for_terminal_page = (
-        hasattr(job_manager, "submit_staged")
-        or config_file is not None
+        submission.waits_for_privileged_worker or config_file is not None
     )
     if should_wait_for_terminal_page:
         for _ in range(40):

@@ -11,6 +11,7 @@ from enum import StrEnum
 from typing import Any
 
 from atomixos_provision.config import ProvisionError
+from atomixos_provision.staging import interpret_staged_result, staged_timeout_state
 
 __all__ = ["Job", "JobManager", "JobState", "StagedJobManager"]
 
@@ -252,39 +253,21 @@ class StagedJobManager(JobManager):
         self,
         work: Callable[[Job], Coroutine[Any, Any, None]],
     ) -> Job | None:
-        job = Job(id=str(uuid.uuid4()))
-        async with self._lock:
-            self._evict_old_jobs()
-            from atomixos_provision.provision import _runtime_paths
-            from atomixos_provision.staging import reserve_staged_job_slot
-
-            try:
-                if not reserve_staged_job_slot(_runtime_paths(), job.id, self._max_pending):
-                    return None
-            except Exception as exc:
-                with job._lock:
-                    job.state = JobState.FAILED
-                    job.error = str(exc)
-                    job.completed_at = time.monotonic()
-                self._jobs[job.id] = job
-                return job
-            self._jobs[job.id] = job
-        try:
-            return await self._stage_and_monitor(job, work)
-        except Exception as exc:
-            from atomixos_provision.provision import StagedQueueBusyError
-
-            if isinstance(exc, StagedQueueBusyError):
-                async with self._lock:
-                    self._jobs.pop(job.id, None)
-                return None
-            return job
+        return await self._submit_staged(work, exclusive=False)
 
     async def submit_staged_exclusive(
         self,
         work: Callable[[Job], Coroutine[Any, Any, None]],
     ) -> Job | None:
         """Submit a staged job while holding admission closed until staging completes."""
+        return await self._submit_staged(work, exclusive=True)
+
+    async def _submit_staged(
+        self,
+        work: Callable[[Job], Coroutine[Any, Any, None]],
+        *,
+        exclusive: bool,
+    ) -> Job | None:
         job = Job(id=str(uuid.uuid4()))
         async with self._lock:
             self._evict_old_jobs()
@@ -302,15 +285,30 @@ class StagedJobManager(JobManager):
                 self._jobs[job.id] = job
                 return job
             self._jobs[job.id] = job
-            try:
-                return await self._stage_and_monitor(job, work)
-            except Exception as exc:
-                from atomixos_provision.provision import StagedQueueBusyError
+            if exclusive:
+                return await self._stage_with_busy_translation(job, work, lock_held=True)
+        return await self._stage_with_busy_translation(job, work, lock_held=False)
 
-                if isinstance(exc, StagedQueueBusyError):
+    async def _stage_with_busy_translation(
+        self,
+        job: Job,
+        work: Callable[[Job], Coroutine[Any, Any, None]],
+        *,
+        lock_held: bool,
+    ) -> Job | None:
+        try:
+            return await self._stage_and_monitor(job, work)
+        except Exception as exc:
+            from atomixos_provision.provision import StagedQueueBusyError
+
+            if isinstance(exc, StagedQueueBusyError):
+                if lock_held:
                     self._jobs.pop(job.id, None)
-                    return None
-                return job
+                else:
+                    async with self._lock:
+                        self._jobs.pop(job.id, None)
+                return None
+            return job
 
     def get(self, job_id: str) -> Job | None:
         try:
@@ -449,21 +447,17 @@ class StagedJobManager(JobManager):
         if result is None:
             return False
         with job._lock:
-            status = result.get("status")
+            outcome = interpret_staged_result(result)
             job.completed_at = job.completed_at or time.monotonic()
-            if status == "succeeded":
-                payload = result.get("result")
+            if outcome.succeeded:
                 job.state = JobState.SUCCEEDED
-                job.result = payload if isinstance(payload, dict) else {}
+                job.result = outcome.payload
                 job.error = None
                 job.stage = "completed"
             else:
                 job.state = JobState.FAILED
-                error = result.get("error")
-                job.error = error if isinstance(error, str) else "failed"
-                rollback_status = result.get("rollback_status")
-                if isinstance(rollback_status, str):
-                    job.rollback_status = rollback_status
+                job.error = outcome.error
+                job.rollback_status = outcome.rollback_status
                 job.stage = "failed"
         return True
 
@@ -522,18 +516,8 @@ class StagedJobManager(JobManager):
     def _handle_staged_timeout(self, job: Job) -> str:
         try:
             from atomixos_provision.provision import _runtime_paths
-            from atomixos_provision.staging import (
-                staged_job_presence,
-                staged_job_waiting_for_turn,
-                try_abandon_queued_job,
-            )
 
-            paths = _runtime_paths()
-            if staged_job_waiting_for_turn(paths, job.id):
-                return "active"
-            if try_abandon_queued_job(paths, job.id):
-                return "abandoned"
-            return staged_job_presence(paths, job.id)
+            return staged_timeout_state(_runtime_paths(), job.id)
         except ProvisionError:
             raise
         except Exception as exc:

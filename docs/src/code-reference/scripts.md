@@ -176,7 +176,8 @@ Litestar provisioning service package used by first boot and re-apply flows.
 2. `settings.py` loads environment-backed service settings
 3. `deps.py` provides Litestar dependency providers
 4. `domain/*/controller.py` contains API route handlers grouped by domain
-5. `domain/config/service.py` exposes the config apply/validate facade
+5. `domain/config/coordinator.py` owns direct-versus-staged submission and admission policy
+6. `domain/config/service.py` exposes the config apply/validate facade
 6. `schemas.py` defines typed API response shapes
 7. `exceptions.py` maps domain errors to API response bodies
 8. `provision.py`, `bundle.py`, `quadlet.py`, and `activation.py` implement the safe apply pipeline

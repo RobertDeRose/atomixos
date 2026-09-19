@@ -52,13 +52,13 @@ from atomixos_provision.staging import (
     ensure_runtime_layout,
     finalize_abandoned_active_jobs,
     has_staged_jobs,
+    interpret_staged_result,
     publish_ready_marker,
     read_result,
     runtime_paths,
     sha256_file,
-    staged_job_presence,
+    staged_timeout_state,
     tree_manifest,
-    try_abandon_queued_job,
     validate_job_id,
     validate_relative_path,
     verify_staged_job,
@@ -474,26 +474,24 @@ def _wait_for_staged_result(
         result = read_result(paths, job_id)
         if result is not None:
             return _staged_result_payload_or_raise(result)
-        presence = staged_job_presence(paths, job_id)
-        if presence == "queued" and try_abandon_queued_job(paths, job_id):
+        timeout_state = staged_timeout_state(paths, job_id)
+        if timeout_state == "active":
+            deadline = time.monotonic() + STAGED_RESULT_TIMEOUT_SECONDS
+            continue
+        if timeout_state == "abandoned":
             raise ProvisionError("timed out waiting for privileged apply worker")
-        if presence == "missing":
+        if timeout_state == "missing":
             raise ProvisionError("privileged apply worker did not publish a result")
         raise ProvisionError("timed out waiting for privileged apply worker")
 
 
 def _staged_result_payload_or_raise(result: dict[str, Any]) -> dict[str, Any]:
-    status = result.get("status")
-    if status == "succeeded":
-        payload = result.get("result")
-        if not isinstance(payload, dict):
-            raise ProvisionError("staged apply result missing result payload")
-        return payload
-    message = result.get("error") if isinstance(result.get("error"), str) else "failed"
-    error = ProvisionError(message)
-    rollback_status = result.get("rollback_status")
-    if isinstance(rollback_status, str):
-        error.rollback_status = rollback_status  # type: ignore[attr-defined]
+    outcome = interpret_staged_result(result)
+    if outcome.succeeded:
+        return outcome.payload
+    error = ProvisionError(outcome.error or "failed")
+    if outcome.rollback_status is not None:
+        error.rollback_status = outcome.rollback_status  # type: ignore[attr-defined]
     raise error
 
 

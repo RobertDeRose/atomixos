@@ -22,6 +22,7 @@ from atomixos_provision.staging import (
     ensure_runtime_layout,
     finalize_abandoned_active_jobs,
     has_staged_jobs,
+    interpret_staged_result,
     publish_ready_marker,
     read_json,
     read_result,
@@ -31,6 +32,7 @@ from atomixos_provision.staging import (
     runtime_paths,
     staged_job_presence,
     staged_job_waiting_for_turn,
+    staged_timeout_state,
     try_abandon_queued_job,
     validate_job_id,
     verify_staged_job,
@@ -40,6 +42,24 @@ from atomixos_provision.staging import (
 VALID_ED25519_KEY = (
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw"
 )
+
+
+def test_interpret_staged_result_normalizes_success_and_failure():
+    succeeded = interpret_staged_result({"status": "succeeded", "result": {"warnings": []}})
+    failed = interpret_staged_result(
+        {"status": "failed", "error": "activation failed", "rollback_status": "completed"}
+    )
+
+    assert succeeded.succeeded is True
+    assert succeeded.payload == {"warnings": []}
+    assert failed.succeeded is False
+    assert failed.error == "activation failed"
+    assert failed.rollback_status == "completed"
+
+
+def test_interpret_staged_result_rejects_invalid_success_payload():
+    with pytest.raises(ProvisionError, match="missing result payload"):
+        interpret_staged_result({"status": "succeeded"})
 
 
 def _valid_config(image: str = "docker.io/library/alpine:latest") -> bytes:
@@ -213,6 +233,19 @@ def test_claim_next_job_waits_for_lower_sequence_reservation(tmp_path):
 
     assert claim_next_job(paths) is None
     assert staged_job_waiting_for_turn(paths, "job-2") is True
+
+
+def test_staged_timeout_state_distinguishes_claimed_and_waiting_jobs(tmp_path):
+    paths = runtime_paths(tmp_path / "run")
+    ensure_runtime_layout(paths, for_worker=True)
+    (paths.active / "job-1").mkdir()
+    assert reserve_staged_job_slot(paths, "job-2", 2) is True
+    (paths.queue / "job-2").mkdir()
+    publish_ready_marker(paths, "job-2")
+
+    assert staged_timeout_state(paths, "job-1") == "claimed"
+    assert staged_timeout_state(paths, "job-2") == "active"
+
 
 def test_claim_next_job_expires_stale_lower_sequence_reservation(tmp_path, monkeypatch):
     monkeypatch.setattr("atomixos_provision.staging.STAGED_RESERVATION_TTL_SECONDS", 60)

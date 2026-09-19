@@ -63,6 +63,16 @@ class ClaimedJob:
     path: Path
 
 
+@dataclass(frozen=True)
+class StagedResult:
+    """Normalized result published by the privileged worker."""
+
+    succeeded: bool
+    payload: dict[str, Any]
+    error: str | None
+    rollback_status: str | None
+
+
 def runtime_paths(root: Path) -> RuntimePaths:
     return RuntimePaths(root.resolve(strict=False))
 
@@ -649,6 +659,23 @@ def read_result(paths: RuntimePaths, job_id: str) -> dict[str, Any] | None:
     return result
 
 
+def interpret_staged_result(result: dict[str, Any]) -> StagedResult:
+    """Validate and normalize a privileged worker result for every caller."""
+    status = result.get("status")
+    rollback_status = result.get("rollback_status")
+    normalized_rollback = rollback_status if isinstance(rollback_status, str) else None
+    if status == "succeeded":
+        payload = result.get("result")
+        if not isinstance(payload, dict):
+            raise ProvisionError("staged apply result missing result payload")
+        return StagedResult(True, payload, None, normalized_rollback)
+    if status == "failed":
+        error = result.get("error")
+        message = error if isinstance(error, str) else "failed"
+        return StagedResult(False, {}, message, normalized_rollback)
+    raise ProvisionError("staged apply result has invalid status")
+
+
 def can_abandon_queued_job(paths: RuntimePaths, job_id: str) -> bool:
     """Return true if a timed-out job has not been claimed by the root worker."""
     validate_job_id(job_id)
@@ -661,6 +688,18 @@ def staged_job_presence(paths: RuntimePaths, job_id: str) -> str:
     validate_job_id(job_id)
     with queue_operation_lock(paths):
         return _job_presence_locked(paths, job_id)
+
+
+def staged_timeout_state(paths: RuntimePaths, job_id: str) -> str:
+    """Resolve timeout handling without racing a queued job's worker claim."""
+    presence = staged_job_presence(paths, job_id)
+    if presence == "active":
+        return "claimed"
+    if staged_job_waiting_for_turn(paths, job_id):
+        return "active"
+    if try_abandon_queued_job(paths, job_id):
+        return "abandoned"
+    return staged_job_presence(paths, job_id)
 
 
 def abandon_queued_job(paths: RuntimePaths, job_id: str) -> None:
