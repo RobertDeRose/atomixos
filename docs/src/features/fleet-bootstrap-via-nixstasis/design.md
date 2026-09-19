@@ -172,7 +172,7 @@ Fleet first boot proceeds as follows:
 ## Existing Context
 
 `build.toml` is a strict version-1 immutable policy currently consumed only by the watchdog module. Its evaluator,
-canonical renderer, local overlay wrapper, metadata, and artifact sidecars are in `nix/build-configuration.nix` and
+canonical renderer, local overlay wrapper, metadata, and artifact sidecars are in `nix/build-policy.nix` and
 `modules/build-configuration.nix`.
 
 `modules/first-boot.nix` owns `atomixos-bootstrap.socket` and currently listens on `0.0.0.0:8080`. The network firewall
@@ -461,7 +461,7 @@ rather than choosing a duplicate representation.
 - `modules/firewall.nix`
 - `modules/lan-gateway.nix`
 - `modules/nixstasis.nix`
-- `nix/build-configuration.nix`
+- `nix/build-policy.nix`
 - `scripts/first-boot.sh`
 - `scripts/lan-gateway-apply.py`
 - `scripts/provisioned-firewall-inbound.py`

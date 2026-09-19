@@ -6,7 +6,7 @@
 }:
 
 let
-  evaluator = import ../build-configuration.nix {
+  evaluator = import ../build-policy.nix {
     lib = self.inputs.nixpkgs.lib;
   };
   baseText = ''
@@ -164,27 +164,6 @@ let
       overlayName = "build.dev.toml";
       overlayText = text;
     };
-  validationErrors =
-    kind: document:
-    evaluator.validationErrors {
-      name = if kind == "base" then "build.toml" else "build.dev.toml";
-      inherit kind document;
-    };
-  schemaDiagnostic = builtins.elem "build.dev.toml: watchdog.extra: unknown field" (
-    validationErrors "overlay" {
-      watchdog.extra = true;
-    }
-  );
-  typeDiagnostic = builtins.elem "build.toml: watchdog.enable_hardware: expected a boolean" (
-    validationErrors "base" {
-      version = 1;
-      watchdog = {
-        enable_hardware = "yes";
-        runtime_timeout = "30s";
-        reboot_timeout = "10min";
-      };
-    }
-  );
 in
 pkgs.runCommand "build-configuration-check" { } ''
   set -euo pipefail
@@ -440,8 +419,9 @@ pkgs.runCommand "build-configuration-check" { } ''
     [watchdog]
     enable_hardware = "yes"
   '')} = true
-  test ${builtins.toJSON schemaDiagnostic} = true
-  test ${builtins.toJSON typeDiagnostic} = true
+  test ${builtins.toJSON (overlayFails ''
+    version = "1"
+  '')} = true
   test ${builtins.toJSON (overlayFails ''
     [watchdog]
     backend = "sidecar"
@@ -496,7 +476,7 @@ pkgs.runCommand "build-configuration-check" { } ''
   # Native TOML parser diagnostics retain the input filename and location context.
   cat > invalid-syntax.nix <<'EOF'
   let
-    evaluator = import ${../build-configuration.nix} {
+    evaluator = import ${../build-policy.nix} {
       lib = import ${self.inputs.nixpkgs}/lib;
     };
   in
@@ -509,8 +489,9 @@ pkgs.runCommand "build-configuration-check" { } ''
     echo "invalid TOML unexpectedly evaluated" >&2
     exit 1
   fi
-  if grep -Fq "cannot open connection to remote store 'daemon'" syntax-error.log; then
-    echo "nested nix-instantiate diagnostic unavailable: remote daemon connection reset"
+  if grep -Fq "cannot open connection to remote store 'daemon'" syntax-error.log \
+    || grep -Fq 'creating directory "/nix/var/nix/profiles": Permission denied' syntax-error.log; then
+    echo "nested nix-instantiate diagnostic unavailable in the remote sandbox"
   else
     grep -F "while parsing invalid-build.toml" syntax-error.log
     grep -F "missing closing bracket" syntax-error.log

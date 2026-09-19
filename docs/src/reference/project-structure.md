@@ -28,7 +28,7 @@ modules/
   openvpn.nix                      OpenVPN recovery tunnel
 
 nix/
-  build-configuration.nix          Strict parser, merge, validation, and canonical renderer
+  build-policy.nix                 Typed policy, merge, assertions, and canonical renderer
   partition-layout.nix             Shared partition labels, GUIDs, offsets, and sizes
   boot-partition.nix               Shared boot-slot vfat derivation
   squashfs.nix                     Squashfs image derivation (closureInfo + mksquashfs)

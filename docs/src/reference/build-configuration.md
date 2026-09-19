@@ -5,8 +5,10 @@ the provisioning service, and boot-time health scripts consume this same
 contract. Use `mise run config:lan-range --gateway-cidr ... --dhcp-start ...
 --dhcp-end ...` to update it; do not edit generated consumers independently.
 
-AtomixOS build policy uses a strict versioned TOML schema. Build configuration is non-secret input fixed into artifacts;
-it is separate from mutable runtime provisioning in `config.toml`.
+AtomixOS build policy uses a strict versioned TOML schema. The evaluator recursively merges the parsed base and local
+overlay, then passes the result through one typed Nix module. That module owns field types, ranges, and cross-field
+assertions; canonical artifacts and consumer values are derived only from its evaluated policy. Build configuration is
+non-secret input fixed into artifacts; it is separate from mutable runtime provisioning in `config.toml`.
 
 ## Version 1 Schema
 
@@ -90,7 +92,8 @@ not change the provisioning listener:
   implementation.
 - A fleet policy without the Nixstasis client enabled fails closed during evaluation.
 
-The evaluator maps the effective fields to typed NixOS options without runtime TOML parsing:
+The evaluator maps the typed effective policy to NixOS options without runtime TOML parsing or repeating build-policy
+assertions in downstream adapter modules:
 
 - `provisioning.bootstrap_transport` → `atomixos.provisioning.bootstrapTransport`.
 - `nixstasis.enable` → `atomixos.nixstasis.enable`.

@@ -37,7 +37,7 @@
         overlays = [ embeddedOverlay ];
       };
 
-      buildConfigurationEvaluator = import ./nix/build-configuration.nix {
+      buildConfigurationEvaluator = import ./nix/build-policy.nix {
         lib = nixpkgs.lib;
       };
       buildDevConfigPath = builtins.getEnv "ATOMIXOS_BUILD_DEV_CONFIG";
