@@ -799,9 +799,14 @@ def provisioning_forwarding_url(parsed: dict[str, Any]) -> str | None:
     return f"http://{gateway_ip}:8080"
 
 
+def _uses_network_bootstrap() -> bool:
+    """Return whether provisioning uses the network bootstrap transport."""
+    return os.environ.get("ATOMIXOS_BOOTSTRAP_TRANSPORT", "network") == "network"
+
+
 def schedule_bootstrap_rebind(parsed: dict[str, Any]) -> None:
     """Restart bootstrap socket after apply has completed."""
-    if provisioning_forwarding_url(parsed) is None:
+    if not _uses_network_bootstrap() or provisioning_forwarding_url(parsed) is None:
         return
     try:
         subprocess.run(
@@ -829,6 +834,8 @@ def schedule_bootstrap_rebind(parsed: dict[str, Any]) -> None:
 
 def reconcile_bootstrap_wan() -> None:
     """Best-effort reconciliation of first-boot WAN bootstrap firewall state."""
+    if not _uses_network_bootstrap():
+        return
     try:
         subprocess.run(
             ["systemctl", "restart", "bootstrap-wan-toggle.service"],

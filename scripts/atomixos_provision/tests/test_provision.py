@@ -70,6 +70,34 @@ async def test_path_and_bytes_validation_report_the_same_schema_error(tmp_path):
     assert str(path_error.value) == "unsupported keys at config: unexpected"
 
 
+def test_reconcile_bootstrap_wan_skips_fleet_transport(monkeypatch):
+    """Verify that reconcile bootstrap wan skips fleet transport."""
+    from atomixos_provision import provision
+
+    monkeypatch.setenv("ATOMIXOS_BOOTSTRAP_TRANSPORT", "nixstasis")
+    monkeypatch.setattr(
+        provision.subprocess,
+        "run",
+        lambda *_args, **_kwargs: pytest.fail("fleet transport must not reconcile WAN access"),
+    )
+
+    provision.reconcile_bootstrap_wan()
+
+
+def test_schedule_bootstrap_rebind_skips_fleet_transport(monkeypatch):
+    """Verify that schedule bootstrap rebind skips fleet transport."""
+    from atomixos_provision import provision
+
+    monkeypatch.setenv("ATOMIXOS_BOOTSTRAP_TRANSPORT", "nixstasis")
+    monkeypatch.setattr(
+        provision.subprocess,
+        "run",
+        lambda *_args, **_kwargs: pytest.fail("fleet transport must not schedule socket rebind"),
+    )
+
+    provision.schedule_bootstrap_rebind({"lan_settings": {"gateway_ip": "10.44.0.1"}})
+
+
 def test_provisioning_lock_blocks_nested_exclusive_lock(tmp_path):
     config_root = tmp_path / "config"
 

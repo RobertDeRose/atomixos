@@ -176,6 +176,8 @@ in
       provisionCli
     ];
 
+    environment.ATOMIXOS_BOOTSTRAP_TRANSPORT = bootstrapTransport;
+
     serviceConfig = {
       Type = "oneshot";
       ExecStart = provisionApplyScript;
