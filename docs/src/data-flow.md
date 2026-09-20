@@ -54,23 +54,27 @@ submitted source, renders a complete candidate in tmpfs, writes a manifest with
 relative paths, ownership expectations, modes, sizes, and SHA-256 hashes, then
 publishes a ready marker from the same live reservation that assigned its FIFO
 sequence. A root `atomixos-provision-apply.service` worker claims
-ready jobs, verifies the staged tree, re-renders the verified staged
-`config.toml` into `/data/config-candidate/`, and then uses the existing atomic
-promotion flow:
+ready jobs, verifies the staged tree and authorization, reconstructs the signed
+operation, renders canonical state into `/data/config-candidate/`, and then uses
+the existing atomic promotion flow:
 
 1. Rename active `/data/config` to `/data/config-rollback`.
 2. Rename candidate to `/data/config`.
 3. Run activation services synchronously (user apply, Quadlet sync, LAN/host network apply, firewall), then apply
    `/data/config/activation-policy.json` timing, restart, and health-check policy.
-4. On success, clean up `/data/config-rollback`.
+4. On success, mark the apply receipt `committed`, then clean up
+   `/data/config-rollback`.
 5. On failure, restore `/data/config-rollback` to `/data/config` and re-activate with the restored activation policy.
 
-Before promotion, the worker writes a root-only apply receipt into the durable
-candidate. The receipt binds the staged job ID and source digest to its success
-payload. The worker removes the claimed job only after terminal result JSON is
-written. If the worker stops between promotion and result publication, its
-finalizer first recovers the promotion state, then uses the active receipt and
-claimed manifest to publish the authoritative success or failure result.
+Before promotion, the worker writes a root-only `promoted` apply receipt into
+the durable candidate. The receipt binds the staged job ID and source digest to
+its eventual success payload but does not yet prove success. After activation
+and health checks pass, the worker atomically rewrites the receipt as
+`committed` before removing rollback state. The worker removes the claimed job
+only after terminal result JSON is written. If the worker stops between
+promotion and result publication, its finalizer rolls back a promoted re-apply,
+discards a promoted initial apply, or preserves a committed apply, then compares
+the receipt with the claimed manifest to publish the authoritative result.
 
 `POST /api/config` is asynchronous for programmatic clients. It returns a typed response with `job_id`, `state`, and
 `job_url`; the `Location` header points to the same job resource. The job records provisioning steps, service

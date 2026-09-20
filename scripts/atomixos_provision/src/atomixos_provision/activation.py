@@ -6,6 +6,7 @@ import pwd
 import shutil
 import subprocess
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
 
@@ -675,7 +676,10 @@ def run_activation_sequence(
 
 
 def complete_reapply(
-    config_root: Path, progress: ProgressReporter | None = None
+    config_root: Path,
+    progress: ProgressReporter | None = None,
+    *,
+    before_commit: Callable[[], None] | None = None,
 ) -> tuple[bool, list[str], str]:
     """Run activation + health checks, rolling back on failure.
 
@@ -706,6 +710,8 @@ def complete_reapply(
                     "failed",
                 )
         return False, failures, "completed" if restored else "skipped"
+    if before_commit is not None:
+        before_commit()
     if progress:
         progress.set_stage("cleanup", "removing rollback state")
     cleanup_rollback(config_root)

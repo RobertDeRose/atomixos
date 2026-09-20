@@ -46,7 +46,8 @@ The root `atomixos-provision-apply.service` claims queued jobs, verifies manifes
 hashes, and expected entries, then re-renders the verified staged `config.toml` into `/data/config-candidate`. It runs
 the existing promotion, activation, rollback, and recovery protocol. Root-written `/data/config` state is
 group-readable by `atomixos-provision` so the unprivileged API can authenticate and export approved state, except for
-the owner-only apply receipt that binds a committed job and source digest to its result. Bundle `files/` payloads are
+the owner-only apply receipt that binds a job and source digest to its transaction phase and result. Only its
+`committed` phase proves success. Bundle `files/` payloads are
 owned by `appsvc`, group-readable by `atomixos-provision`, and installed as read-only files and directories. They are
 preserved through a no-symlink snapshot path. Export is allowlisted to
 `config.toml` and `files/`, returns a deterministic `config-bundle.tar.gz` under the provisioning lock, and excludes
@@ -56,8 +57,9 @@ provisioning, authentication, and Boot UI guards, while missing signer state fai
 
 Runtime result files under `/run/atomixos-provision/results` are root-writable and group-readable only. Claim and queued-job
 abandonment share `/run/atomixos-provision/queue.lock`. The worker retains active jobs until terminal result publication.
-Its finalizer recovers the config root and matches the owner-only apply receipt against the claimed manifest before
-recording authoritative success or failure for a job left by an interrupted worker. Result polling may abandon only an
+Its finalizer discards an interrupted initial promotion, rolls back an interrupted re-apply, or finishes cleanup for a
+committed apply. It then matches the owner-only receipt against the claimed manifest before recording authoritative
+success or failure. Result polling may abandon only an
 unclaimed queued job; a claimed job remains nonterminal until the worker or its
 finalizer publishes the authoritative result.
 

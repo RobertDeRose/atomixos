@@ -60,7 +60,9 @@ root-controlled re-rendering, serialized promotion/activation, result handoff, r
 ### Intentional Changes
 
 Hardening reviews refined snapshot verification, queue ordering, result recovery, ownership checks, and systemd sandbox
-settings while preserving the staged-worker architecture.
+settings while preserving the staged-worker architecture. Apply receipts now
+distinguish incomplete promotion from activation-backed commit so interruption
+recovery cannot publish premature success.
 
 ### Deferred Work
 

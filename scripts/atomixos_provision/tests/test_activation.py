@@ -395,6 +395,27 @@ class TestReportRuntimeDeployStart:
 
 
 class TestCompleteReapply:
+    """Group tests for CompleteReapply."""
+
+    def test_records_commit_before_removing_rollback_state(self, tmp_path, monkeypatch):
+        """Verify that records commit before removing rollback state."""
+        events = []
+        monkeypatch.setattr(
+            "atomixos_provision.activation.run_activation_sequence",
+            lambda _root, _progress=None: [],
+        )
+        monkeypatch.setattr(
+            "atomixos_provision.activation.cleanup_rollback",
+            lambda _root: events.append("cleanup"),
+        )
+
+        result = complete_reapply(
+            tmp_path / "config", before_commit=lambda: events.append("commit")
+        )
+
+        assert result == (True, [], "skipped")
+        assert events == ["commit", "cleanup"]
+
     def test_reports_deploy_status_before_required_health_checks(self, tmp_path, monkeypatch):
         config_root = tmp_path / "config"
         config_root.mkdir()

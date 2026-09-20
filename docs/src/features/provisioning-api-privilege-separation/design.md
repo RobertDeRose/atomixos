@@ -217,8 +217,11 @@ so the API cannot mark a job failed while the root worker is claiming it. Only
 one apply mutates `/data` at a time under `/run/atomixos-provision/config.lock`.
 Before promotion, the worker adds a root-only
 `/data/config/.atomixos-apply-receipt.json` to the durable candidate. The receipt
-binds the job ID and source digest to the successful result payload. It is
-generated runtime control state and is not included in config bundle exports.
+binds the job ID and source digest to the eventual result payload. Its initial
+`promoted` phase records an incomplete transaction. The worker changes it to
+`committed` only after activation and health checks pass and before removing
+rollback state. It is generated runtime control state and is not included in
+config bundle exports.
 
 ### Staging Manifest
 
@@ -287,7 +290,8 @@ rename the tmpfs candidate directly into `/data/config`. The worker should:
 5. Promote `/data/config-candidate` to `/data/config` using the existing
    crash-safe promotion and rollback protocol within `/data`.
 6. Run activation and health checks.
-7. Roll back on activation failure.
+7. Mark the receipt `committed` before removing rollback state, or roll back on
+   activation failure.
 8. Write `/run/atomixos-provision/results/<job-id>.json` as `0640 root:atomixos-provision`.
    Result JSON is versioned and includes `version`, `job_id`, `completed_at`,
    and `status` (`succeeded` or `failed`). Successful results include a
@@ -320,9 +324,9 @@ The design uses systemd as the privilege boundary:
   - writes durable candidate state under `/data`
   - promotes, activates, rolls back, and writes result JSON
   - retains the claimed job until terminal result publication succeeds
-  - runs a stop-post finalizer that recovers the config root and compares the
-    active receipt with the claimed manifest before publishing success or
-    failure for an interrupted job
+  - runs a stop-post finalizer that resolves the receipt phase, restores or
+    discards incomplete promotions, and compares only committed receipts with
+    claimed manifests before publishing success for an interrupted job
 
 The API can poll result files and expose the same `/api/jobs/{id}` contract. If
 the API service restarts, it can reconstruct terminal job state from result JSON

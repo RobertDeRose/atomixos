@@ -30,6 +30,7 @@ from atomixos_provision.activation import (
     discard_initial_config,
     promotion_marker_path,
     recover_config_root,
+    rollback_root_path,
 )
 from atomixos_provision.auth import (
     build_allowed_signers,
@@ -55,9 +56,10 @@ from atomixos_provision.staging import (
     DEFAULT_MAX_STAGED_JOBS,
     DEFAULT_RUNTIME_ROOT,
     MANIFEST_VERSION,
+    ApplyReceiptPhase,
     ClaimedJob,
-    CommittedStagedResult,
     RuntimePaths,
+    StagedApplyReceipt,
     StagedTimeoutState,
     claim_next_job,
     cleanup_claimed_job,
@@ -120,7 +122,7 @@ ACTIVATION_POLICY_FILENAME = "activation-policy.json"
 OS_UPGRADE_FILENAME = "os-upgrade.json"
 HEALTH_REQUIRED_FILENAME = "health-required.json"
 APPLY_RECEIPT_FILENAME = ".atomixos-apply-receipt.json"
-APPLY_RECEIPT_VERSION = 1
+APPLY_RECEIPT_VERSION = 2
 APP_RUNTIME_USER = "appsvc"
 ROOTLESS_NETWORK_NAME = "pasta"
 PROVISION_SERVICE_USER = "atomixos-provision"
@@ -1495,6 +1497,7 @@ def _write_apply_receipt(
     candidate_root: Path,
     manifest: dict[str, Any],
     result: dict[str, Any],
+    phase: ApplyReceiptPhase,
 ) -> None:
     job_id = validate_job_id(manifest.get("job_id", ""))
     source_sha256 = manifest.get("source_sha256")
@@ -1507,12 +1510,13 @@ def _write_apply_receipt(
             "job_id": job_id,
             "source_sha256": source_sha256,
             "result": result,
+            "phase": phase,
         },
         mode=0o600,
     )
 
 
-def _read_apply_receipt(config_root: Path) -> CommittedStagedResult | None:
+def _read_apply_receipt(config_root: Path) -> StagedApplyReceipt | None:
     receipt_path = config_root / APPLY_RECEIPT_FILENAME
     try:
         receipt_stat = receipt_path.lstat()
@@ -1532,7 +1536,11 @@ def _read_apply_receipt(config_root: Path) -> CommittedStagedResult | None:
     result = receipt.get("result")
     if not isinstance(result, dict):
         raise ProvisionError(f"apply receipt has invalid result: {receipt_path}")
-    return CommittedStagedResult(job_id, source_sha256, result)
+    try:
+        phase = ApplyReceiptPhase(receipt.get("phase"))
+    except ValueError as exc:
+        raise ProvisionError(f"apply receipt has invalid phase: {receipt_path}") from exc
+    return StagedApplyReceipt(job_id, source_sha256, result, phase)
 
 
 def _is_sha256(value: Any) -> bool:
@@ -1544,15 +1552,33 @@ def _is_sha256(value: Any) -> bool:
 
 
 def _committed_result_for_manifest(
-    receipt: CommittedStagedResult | None,
+    receipt: StagedApplyReceipt | None,
     job_id: str,
     manifest: dict[str, Any] | None,
 ) -> dict[str, Any] | None:
-    if receipt is None or manifest is None:
+    if receipt is None or receipt.phase is not ApplyReceiptPhase.COMMITTED or manifest is None:
         return None
     if receipt.job_id != job_id or receipt.source_sha256 != manifest.get("source_sha256"):
         return None
     return receipt.result
+
+
+def _recover_interrupted_staged_apply(config_root: Path) -> StagedApplyReceipt | None:
+    """Resolve durable promotion state before publishing an interrupted result."""
+    receipt = _read_apply_receipt(config_root)
+    if receipt is not None and receipt.phase is ApplyReceiptPhase.COMMITTED:
+        cleanup_rollback(config_root)
+        return receipt
+    if (
+        receipt is not None
+        and receipt.phase is ApplyReceiptPhase.PROMOTED
+        and not rollback_root_path(config_root).exists()
+    ):
+        discard_initial_config(config_root)
+        reconcile_bootstrap_wan()
+        return None
+    recover_config_root(config_root)
+    return _read_apply_receipt(config_root)
 
 
 def _promote_pre_rendered_candidate_sync(
@@ -1587,12 +1613,18 @@ def _promote_pre_rendered_candidate_sync(
             )
         else:
             _write_first_config_marker(durable_candidate)
-        _write_apply_receipt(durable_candidate, manifest, result)
+        _write_apply_receipt(durable_candidate, manifest, result, ApplyReceiptPhase.PROMOTED)
         _grant_service_read_access(durable_candidate)
         if progress:
             progress.set_stage("promote", "swapping active config root")
         atomic_promote(config_root, durable_candidate)
-        success, failures, rollback_status = complete_reapply(config_root, progress)
+        success, failures, rollback_status = complete_reapply(
+            config_root,
+            progress,
+            before_commit=lambda: _write_apply_receipt(
+                config_root, manifest, result, ApplyReceiptPhase.COMMITTED
+            ),
+        )
         if not success:
             error_msg = f"activation failed: {', '.join(failures)}"
             exc = ProvisionError(error_msg)
@@ -1607,11 +1639,17 @@ def _promote_pre_rendered_candidate_sync(
         progress.set_stage("promote", "activating initial config root")
     _write_first_config_marker(durable_candidate)
     result = _staged_success_result(manifest, is_reapply=False)
-    _write_apply_receipt(durable_candidate, manifest, result)
+    _write_apply_receipt(durable_candidate, manifest, result, ApplyReceiptPhase.PROMOTED)
     _grant_service_read_access(durable_candidate)
     atomic_promote_initial(config_root, durable_candidate)
     if os.environ.get(BOOTSTRAP_ACTIVATION_ENV):
-        success, failures, rollback_status = complete_reapply(config_root, progress)
+        success, failures, rollback_status = complete_reapply(
+            config_root,
+            progress,
+            before_commit=lambda: _write_apply_receipt(
+                config_root, manifest, result, ApplyReceiptPhase.COMMITTED
+            ),
+        )
         if not success:
             error_msg = f"activation failed: {', '.join(failures)}"
             exc = ProvisionError(error_msg)
@@ -1622,7 +1660,8 @@ def _promote_pre_rendered_candidate_sync(
                 reconcile_bootstrap_wan()
                 exc.rollback_status = "discarded"  # type: ignore[attr-defined]
             raise exc
-    elif os.environ.get("ATOMIXOS_KEEP_INITIAL_PROMOTION_PENDING") != "1":
+    else:
+        _write_apply_receipt(config_root, manifest, result, ApplyReceiptPhase.COMMITTED)
         cleanup_rollback(config_root)
     reconcile_bootstrap_wan()
     if progress:
@@ -1678,8 +1717,7 @@ def apply_staged_job(config_root: Path, runtime_root: Path | None = None) -> dic
             except Exception as exc:
                 try:
                     with provisioning_lock(config_root):
-                        recover_config_root(config_root)
-                        receipt = _read_apply_receipt(config_root)
+                        receipt = _recover_interrupted_staged_apply(config_root)
                     committed_result = _committed_result_for_manifest(
                         receipt, claimed.job_id, manifest
                     )
@@ -1724,8 +1762,7 @@ def finalize_staged_jobs(
     require_worker_for_data_config(config_root, "finalize staged jobs")
     paths = runtime_paths(runtime_root or _runtime_paths().root)
     with provisioning_lock(config_root):
-        recover_config_root(config_root)
-        receipt = _read_apply_receipt(config_root)
+        receipt = _recover_interrupted_staged_apply(config_root)
         return finalize_abandoned_active_jobs(
             paths,
             reason or "privileged apply worker stopped before writing a result",

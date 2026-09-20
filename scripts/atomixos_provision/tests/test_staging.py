@@ -87,6 +87,16 @@ Image = "{image}"
 """.encode()
 
 
+def _complete_staged_apply(root, _progress=None, *, before_commit=None):
+    """Handle complete staged apply."""
+    from atomixos_provision.activation import cleanup_rollback
+
+    if before_commit is not None:
+        before_commit()
+    cleanup_rollback(root)
+    return True, [], "skipped"
+
+
 def test_staged_job_reservations_count_toward_queue_bound(tmp_path, monkeypatch):
     runtime_root = tmp_path / "run"
     monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(runtime_root))
@@ -773,7 +783,7 @@ def test_apply_staged_job_promotes_candidate_and_writes_result(tmp_path, monkeyp
     )
     monkeypatch.setattr(
         "atomixos_provision.provision.complete_reapply",
-        lambda _root, _progress=None: (True, [], "skipped"),
+        _complete_staged_apply,
     )
     monkeypatch.setattr("atomixos_provision.provision.reconcile_bootstrap_wan", lambda: None)
 
@@ -786,6 +796,8 @@ def test_apply_staged_job_promotes_candidate_and_writes_result(tmp_path, monkeyp
     assert (config_root / ".first-config").read_text() == "ok\n"
     receipt_path = config_root / ".atomixos-apply-receipt.json"
     receipt = json.loads(receipt_path.read_text())
+    assert receipt["version"] == 2
+    assert receipt["phase"] == "committed"
     assert receipt["job_id"] == "job-1"
     assert receipt["result"] == result
     assert receipt_path.stat().st_mode & 0o777 == 0o600
@@ -810,7 +822,7 @@ def test_worker_rejects_manifest_reapply_flag_without_authorization(tmp_path, mo
     )
     monkeypatch.setattr(
         "atomixos_provision.provision.complete_reapply",
-        lambda _root, _progress=None: (True, [], "skipped"),
+        _complete_staged_apply,
     )
     monkeypatch.setattr("atomixos_provision.provision.reconcile_bootstrap_wan", lambda: None)
     monkeypatch.setattr(
@@ -858,7 +870,7 @@ def test_worker_renders_from_signed_request_not_staged_candidate(tmp_path, monke
     )
     monkeypatch.setattr(
         "atomixos_provision.provision.complete_reapply",
-        lambda _root, _progress=None: (True, [], "skipped"),
+        _complete_staged_apply,
     )
     monkeypatch.setattr("atomixos_provision.provision.reconcile_bootstrap_wan", lambda: None)
     monkeypatch.setattr(
@@ -918,13 +930,7 @@ def test_worker_rejects_replayed_staged_authorization_nonce(tmp_path, monkeypatc
         "atomixos_provision.config.load_config_schema",
         lambda: {"type": "object", "additionalProperties": True},
     )
-    from atomixos_provision import provision
-
-    def complete_reapply(root, _progress=None):
-        provision.cleanup_rollback(root)
-        return True, [], "skipped"
-
-    monkeypatch.setattr("atomixos_provision.provision.complete_reapply", complete_reapply)
+    monkeypatch.setattr("atomixos_provision.provision.complete_reapply", _complete_staged_apply)
     monkeypatch.setattr("atomixos_provision.provision.reconcile_bootstrap_wan", lambda: None)
     monkeypatch.setattr(
         "atomixos_provision.provision._claimed_job_is_locally_trusted",
@@ -982,7 +988,7 @@ def test_finalize_staged_jobs_recovers_committed_result_after_result_write_failu
     )
     monkeypatch.setattr(
         "atomixos_provision.provision.complete_reapply",
-        lambda _root, _progress=None: (True, [], "skipped"),
+        _complete_staged_apply,
     )
     monkeypatch.setattr("atomixos_provision.provision.reconcile_bootstrap_wan", lambda: None)
 
@@ -1011,6 +1017,84 @@ def test_finalize_staged_jobs_recovers_committed_result_after_result_write_failu
     assert result["status"] == "succeeded"
     assert result["result"]["reapply"] is False
     assert not (runtime_root / "active" / "job-1").exists()
+
+
+def test_finalize_staged_jobs_discards_interrupted_initial_promotion(tmp_path, monkeypatch):
+    """Verify that finalize staged jobs discards interrupted initial promotion."""
+    runtime_root = tmp_path / "run"
+    config_root = tmp_path / "config"
+    _force_staging(monkeypatch)
+    monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(runtime_root))
+    monkeypatch.setenv("ATOMIXOS_BOOTSTRAP_ACTIVATION", "/tmp/fake-activation")
+    monkeypatch.setattr(
+        "atomixos_provision.provision.validate_config_root", lambda root, **_: root
+    )
+    monkeypatch.setattr("atomixos_provision.provision.os.chown", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        "atomixos_provision.config.load_config_schema",
+        lambda: {"type": "object", "additionalProperties": True},
+    )
+    monkeypatch.setattr("atomixos_provision.provision.reconcile_bootstrap_wan", lambda: None)
+
+    def interrupt_activation(_root, _progress=None, *, before_commit=None):
+        """Interrupt activation to exercise recovery."""
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr("atomixos_provision.provision.complete_reapply", interrupt_activation)
+    stage_config_bytes("job-1", _valid_config(), "config.toml", config_root)
+
+    with pytest.raises(KeyboardInterrupt):
+        apply_staged_job(config_root, runtime_root)
+
+    receipt = json.loads((config_root / ".atomixos-apply-receipt.json").read_text())
+    assert receipt["phase"] == "promoted"
+    assert finalize_staged_jobs(config_root, runtime_root, "worker stopped") == 1
+
+    result = read_result(runtime_paths(runtime_root), "job-1")
+    assert result is not None
+    assert result["status"] == "failed"
+    assert not config_root.exists()
+    assert not (tmp_path / "config.atomixos-promotion-pending").exists()
+
+
+def test_finalize_staged_jobs_keeps_initial_config_committed_before_cleanup(tmp_path, monkeypatch):
+    """Verify that finalize staged jobs keeps initial config committed before cleanup."""
+    runtime_root = tmp_path / "run"
+    config_root = tmp_path / "config"
+    _force_staging(monkeypatch)
+    monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(runtime_root))
+    monkeypatch.setenv("ATOMIXOS_BOOTSTRAP_ACTIVATION", "/tmp/fake-activation")
+    monkeypatch.setattr(
+        "atomixos_provision.provision.validate_config_root", lambda root, **_: root
+    )
+    monkeypatch.setattr("atomixos_provision.provision.os.chown", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        "atomixos_provision.config.load_config_schema",
+        lambda: {"type": "object", "additionalProperties": True},
+    )
+    monkeypatch.setattr("atomixos_provision.provision.reconcile_bootstrap_wan", lambda: None)
+
+    def interrupt_cleanup(_root, _progress=None, *, before_commit=None):
+        """Interrupt cleanup to exercise recovery."""
+        assert before_commit is not None
+        before_commit()
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr("atomixos_provision.provision.complete_reapply", interrupt_cleanup)
+    stage_config_bytes("job-1", _valid_config(), "config.toml", config_root)
+
+    with pytest.raises(KeyboardInterrupt):
+        apply_staged_job(config_root, runtime_root)
+
+    receipt = json.loads((config_root / ".atomixos-apply-receipt.json").read_text())
+    assert receipt["phase"] == "committed"
+    assert finalize_staged_jobs(config_root, runtime_root, "worker stopped") == 1
+
+    result = read_result(runtime_paths(runtime_root), "job-1")
+    assert result is not None
+    assert result["status"] == "succeeded"
+    assert config_root.exists()
+    assert not (tmp_path / "config.atomixos-promotion-pending").exists()
 
 
 def test_failed_result_write_keeps_claim_for_finalizer(tmp_path, monkeypatch):
@@ -1074,14 +1158,15 @@ def test_finalize_staged_jobs_rolls_back_uncommitted_reapply(tmp_path, monkeypat
     monkeypatch.setattr("atomixos_provision.provision.reconcile_bootstrap_wan", lambda: None)
     monkeypatch.setattr(
         "atomixos_provision.provision.complete_reapply",
-        lambda _root, _progress=None: (True, [], "skipped"),
+        _complete_staged_apply,
     )
 
     stage_config_bytes("job-1", _valid_config(), "config.toml", config_root)
     apply_staged_job(config_root, runtime_root)
     original_config = (config_root / "config.toml").read_bytes()
 
-    def interrupt_activation(_root, _progress=None):
+    def interrupt_activation(_root, _progress=None, *, before_commit=None):
+        """Interrupt activation to exercise recovery."""
         raise KeyboardInterrupt
 
     monkeypatch.setattr("atomixos_provision.provision.complete_reapply", interrupt_activation)
@@ -1215,7 +1300,7 @@ def test_apply_staged_job_rerenders_derived_state_from_config(tmp_path, monkeypa
     )
     monkeypatch.setattr(
         "atomixos_provision.provision.complete_reapply",
-        lambda _root, _progress=None: (True, [], "skipped"),
+        _complete_staged_apply,
     )
     monkeypatch.setattr("atomixos_provision.provision.reconcile_bootstrap_wan", lambda: None)
 
@@ -1252,7 +1337,7 @@ def test_staged_snapshot_preserves_nested_directory_modes(tmp_path, monkeypatch)
     )
     monkeypatch.setattr(
         "atomixos_provision.provision.complete_reapply",
-        lambda _root, _progress=None: (True, [], "skipped"),
+        _complete_staged_apply,
     )
     monkeypatch.setattr("atomixos_provision.provision.reconcile_bootstrap_wan", lambda: None)
 
@@ -1280,7 +1365,7 @@ def test_staged_snapshot_reapplies_directory_modes_after_file_copy(tmp_path, mon
     )
     monkeypatch.setattr(
         "atomixos_provision.provision.complete_reapply",
-        lambda _root, _progress=None: (True, [], "skipped"),
+        _complete_staged_apply,
     )
     monkeypatch.setattr("atomixos_provision.provision.reconcile_bootstrap_wan", lambda: None)
 
@@ -1323,7 +1408,7 @@ def test_staged_snapshot_normalizes_special_directory_mode_bits(tmp_path, monkey
     )
     monkeypatch.setattr(
         "atomixos_provision.provision.complete_reapply",
-        lambda _root, _progress=None: (True, [], "skipped"),
+        _complete_staged_apply,
     )
     monkeypatch.setattr("atomixos_provision.provision.reconcile_bootstrap_wan", lambda: None)
 
@@ -1361,7 +1446,7 @@ def test_apply_staged_job_promotes_verified_snapshot_not_mutated_active_tree(
     )
     monkeypatch.setattr(
         "atomixos_provision.provision.complete_reapply",
-        lambda _root, _progress=None: (True, [], "skipped"),
+        _complete_staged_apply,
     )
     monkeypatch.setattr("atomixos_provision.provision.reconcile_bootstrap_wan", lambda: None)
 
@@ -1402,7 +1487,7 @@ async def test_apply_staged_partial_renders_against_current_config(tmp_path, mon
     )
     monkeypatch.setattr(
         "atomixos_provision.provision.complete_reapply",
-        lambda _root, _progress=None: (True, [], "skipped"),
+        _complete_staged_apply,
     )
     monkeypatch.setattr("atomixos_provision.provision.reconcile_bootstrap_wan", lambda: None)
 
@@ -1447,7 +1532,7 @@ async def test_apply_staged_partial_rejects_tampered_candidate_config(tmp_path, 
     )
     monkeypatch.setattr(
         "atomixos_provision.provision.complete_reapply",
-        lambda _root, _progress=None: (True, [], "skipped"),
+        _complete_staged_apply,
     )
     monkeypatch.setattr("atomixos_provision.provision.reconcile_bootstrap_wan", lambda: None)
 

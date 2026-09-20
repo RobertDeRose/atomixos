@@ -876,6 +876,12 @@ Volume = "${{FILES_DIR}}/app/settings.json:/settings.json:ro"
 async def test_staged_partial_apply_preserves_bundle_files(tmp_path, monkeypatch):
     from atomixos_provision import provision
 
+    def complete_staged_apply(root, _progress=None, *, before_commit=None):
+        """Handle complete staged apply."""
+        if before_commit is not None:
+            before_commit()
+        return True, [], "skipped"
+
     monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
     monkeypatch.setenv("ATOMIXOS_ALLOW_UNSAFE_CONFIG_ROOT", "1")
     monkeypatch.setattr(
@@ -884,7 +890,7 @@ async def test_staged_partial_apply_preserves_bundle_files(tmp_path, monkeypatch
     )
     monkeypatch.setattr(
         "atomixos_provision.provision.complete_reapply",
-        lambda _root, _progress=None: (True, [], "skipped"),
+        complete_staged_apply,
     )
     monkeypatch.setattr("atomixos_provision.provision.reconcile_bootstrap_wan", lambda: None)
     monkeypatch.setattr("atomixos_provision.bundle.APP_RUNTIME_USER", "nobody")

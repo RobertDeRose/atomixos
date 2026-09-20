@@ -80,13 +80,21 @@ class StagedResult:
     rollback_status: str | None
 
 
+class ApplyReceiptPhase(StrEnum):
+    """Durable phase of a staged config promotion."""
+
+    PROMOTED = "promoted"
+    COMMITTED = "committed"
+
+
 @dataclass(frozen=True)
-class CommittedStagedResult:
-    """Durable evidence that a staged job became the active config."""
+class StagedApplyReceipt:
+    """Durable staged-apply state used for interrupted-worker recovery."""
 
     job_id: str
     source_sha256: str
     result: dict[str, Any]
+    phase: ApplyReceiptPhase
 
 
 class StagedTimeoutState(StrEnum):
@@ -684,7 +692,7 @@ def write_result(paths: RuntimePaths, job_id: str, payload: dict[str, Any]) -> P
 def finalize_abandoned_active_jobs(
     paths: RuntimePaths,
     reason: str,
-    committed: CommittedStagedResult | None = None,
+    receipt: StagedApplyReceipt | None = None,
 ) -> int:
     """Write terminal results for jobs left by an interrupted worker."""
     ensure_runtime_layout(paths, for_worker=True)
@@ -700,8 +708,8 @@ def finalize_abandoned_active_jobs(
                 continue
             job_id = validate_job_id(active_path.name)
             if read_result(paths, job_id) is None:
-                if _active_job_matches_commit(active_path, job_id, committed):
-                    payload = {"status": "succeeded", "result": committed.result}
+                if _active_job_matches_commit(active_path, job_id, receipt):
+                    payload = {"status": "succeeded", "result": receipt.result}
                 else:
                     payload = {"status": "failed", "error": reason}
                 write_result(paths, job_id, payload)
@@ -714,17 +722,20 @@ def finalize_abandoned_active_jobs(
 def _active_job_matches_commit(
     active_path: Path,
     job_id: str,
-    committed: CommittedStagedResult | None,
+    receipt: StagedApplyReceipt | None,
 ) -> bool:
-    if committed is None or committed.job_id != job_id:
+    if (
+        receipt is None
+        or receipt.phase is not ApplyReceiptPhase.COMMITTED
+        or receipt.job_id != job_id
+    ):
         return False
     try:
         manifest = read_json(active_path / "manifest.json")
     except (OSError, ProvisionError):
         return False
     return (
-        manifest.get("job_id") == job_id
-        and manifest.get("source_sha256") == committed.source_sha256
+        manifest.get("job_id") == job_id and manifest.get("source_sha256") == receipt.source_sha256
     )
 
 
