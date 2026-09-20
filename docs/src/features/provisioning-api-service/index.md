@@ -12,7 +12,9 @@
   `3a6bf5152db2ae2128c7eb9ad94801f062e2d92d`, `f61953d939fcc8efb865524b42713be5c7391e7d`,
   `0a82f208e3b247e168a49323e82ea0d8ab5aaa3b`, `7c01d8d94e4e18f0db92d9c49ebcff25ca33f055`, and
   `6bcf58585cc11757aaaf75538c468fbff464b1d3`; pinned formatting was finalized in
-  `92fc15567ba6a129e4595b331dd562bd5044e5a9`
+  `92fc15567ba6a129e4595b331dd562bd5044e5a9`. Close-out fixes were completed in
+  `06356ed4ac0bdc5e5850c5323f33d377974ee790`, `6d8fe7ee8d9e8d517bec6912c2c158a55f7fe721`, and
+  `b81a38054198ea6e4263e8bd27d5d3ad3d219bee`.
 
 ## Delivered Capability
 
@@ -64,7 +66,7 @@ under `/run/atomixos-provision`. Operators can validate, import, export, and rea
   Linux-setgid-specific assertions explicitly skipped. Those exact permission assertions require a Linux package pytest
   run; the current target VM suite exercises staged provisioning without duplicating them.
 - The exact aarch64 `first-boot-provision` and `first-boot-source-discovery` checks passed on the restored builder.
-- A serialized repository-wide Nix gate passed at `92fc15567ba6a129e4595b331dd562bd5044e5a9`, including provisioning,
+- A serialized repository-wide Nix gate passed at `b81a38054198ea6e4263e8bd27d5d3ad3d219bee`, including provisioning,
   fleet bootstrap, RAUC confirmation, rollback, networking, security, watchdog, and forensics VM checks.
 - The aarch64 squashfs build produced a 418.5 MB result against the 1 GiB budget.
 - Each discovered implementation regression received a focused check and an independent review before commit.
@@ -109,5 +111,7 @@ generated runtime state or signer material remain intentionally excluded.
 
 Specification reconciliation completed in `3dbec928ef18d91f17401edb4a6f9cccc3e3dd73`. The completion commits listed above
 closed bundle, admission, error, packaging, fleet-transport, target-fixture, and formatting gaps. Exact aarch64 checks,
-the serialized repository Nix gate, and the closure-budget build passed before final close-out review. Beads preserves
-task-level findings, review results, validation commands, and artifact paths under the feature root.
+the serialized repository Nix gate, and the closure-budget build passed before delivery. Final close-out review also
+verified event-loop responsiveness, server-schema error semantics, the delivered route/layout documentation, and the
+platform-specific package-test boundary. Beads preserves task-level findings, review results, validation commands, and
+artifact paths under the feature root.
