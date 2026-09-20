@@ -16,7 +16,7 @@ set -euo pipefail
 # Slot B and /data are created by initrd systemd-repart on first boot,
 # using the remaining eMMC space.
 #
-# Boot partitions use linux-generic type, and rootfs uses the Linux root
+# Boot partitions use the xbootldr type, and rootfs uses the Linux root
 # aarch64 type.
 #
 # NOTE: The first partition MUST start at or after 16 MiB to avoid overwriting
