@@ -60,7 +60,9 @@ under `/run/atomixos-provision`. Operators can validate, import, export, and rea
 ## Validation Evidence
 
 - Provisioning package tests cover authentication, typed responses, queue admission, state recovery, bundle safety,
-  deterministic export, and complete import/export round trips.
+  deterministic export, and complete import/export round trips. The unfiltered macOS run passes with the two
+  Linux-setgid-specific assertions explicitly skipped. Those exact permission assertions require a Linux package pytest
+  run; the current target VM suite exercises staged provisioning without duplicating them.
 - The exact aarch64 `first-boot-provision` and `first-boot-source-discovery` checks passed on the restored builder.
 - A serialized repository-wide Nix gate passed at `92fc15567ba6a129e4595b331dd562bd5044e5a9`, including provisioning,
   fleet bootstrap, RAUC confirmation, rollback, networking, security, watchdog, and forensics VM checks.

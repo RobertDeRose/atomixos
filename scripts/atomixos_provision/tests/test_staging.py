@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+import sys
 
 import pytest
 
@@ -595,6 +596,10 @@ def test_finalize_abandoned_active_jobs_marks_claimed_job_failed(tmp_path, monke
     assert result["error"] == "worker stopped"
 
 
+@pytest.mark.skipif(
+    sys.platform == "darwin",
+    reason="macOS filesystems do not preserve Linux setgid directory mode bits",
+)
 def test_runtime_layout_keeps_results_read_only_for_service_group(tmp_path):
     paths = runtime_paths(tmp_path / "run")
 
@@ -915,6 +920,10 @@ def test_staged_snapshot_reapplies_directory_modes_after_file_copy(tmp_path, mon
     assert oct((config_root / "quadlet").stat().st_mode & 0o7777) == "0o755"
 
 
+@pytest.mark.skipif(
+    sys.platform == "darwin",
+    reason="macOS filesystems do not preserve Linux setgid directory mode bits",
+)
 def test_staged_snapshot_normalizes_special_directory_mode_bits(tmp_path, monkeypatch):
     runtime_root = tmp_path / "run"
     config_root = tmp_path / "config"

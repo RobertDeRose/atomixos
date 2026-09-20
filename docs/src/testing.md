@@ -23,6 +23,12 @@ These tests cover the Litestar API, SSH-signature auth helpers, config parsing,
 bundle import, Quadlet rendering/sync, activation, job tracking, and service
 foundation modules.
 
+On macOS, pytest explicitly skips the two staging assertions that require Linux
+setgid directory-mode semantics. Those exact assertions run only when the package
+pytest suite is executed on Linux; the current target VM suite exercises staged
+provisioning but does not duplicate the mode-bit assertions. All other package
+tests run unfiltered on macOS.
+
 ### All tests
 
 ```sh
