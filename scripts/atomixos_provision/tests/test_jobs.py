@@ -529,6 +529,83 @@ class TestStagedJobManager:
         await mgr._task
 
     @pytest.mark.asyncio
+    async def test_post_publish_refresh_failure_keeps_job_queued_and_monitored(self, monkeypatch):
+        """Verify that post publish refresh failure keeps job queued and monitored."""
+        mgr = StagedJobManager()
+        refreshes = 0
+        monitored = []
+
+        def refresh(_job):
+            """Refresh the test reservation."""
+            nonlocal refreshes
+            refreshes += 1
+            if refreshes == 2:
+                raise PermissionError("permission denied")
+
+        monkeypatch.setattr(mgr, "_refresh_reservation", refresh)
+        monkeypatch.setattr(
+            mgr,
+            "_release_reservation",
+            lambda _job: pytest.fail("published jobs must not release their reservation"),
+        )
+        monkeypatch.setattr(
+            mgr, "_start_monitor_if_possible", lambda job: monitored.append(job.id)
+        )
+
+        async def work(_job):
+            """Run the staged test work."""
+            return None
+
+        job = Job(id="job-1")
+        result = await mgr._stage_and_monitor(job, work)
+
+        assert result is job
+        assert job.state == JobState.RUNNING
+        assert job.stage == "queued"
+        assert job.error is None
+        assert monitored == [job.id]
+        assert job.events[-1]["message"] == (
+            "waiting for privileged apply worker; "
+            "post-publication reservation maintenance failed: permission denied"
+        )
+
+    @pytest.mark.asyncio
+    async def test_post_publish_heartbeat_failure_keeps_job_queued_and_monitored(
+        self, monkeypatch
+    ):
+        """Verify that post publish heartbeat failure keeps job queued and monitored."""
+        mgr = StagedJobManager()
+        monitored = []
+
+        async def fail_heartbeat(_job):
+            """Raise the simulated heartbeat failure."""
+            await asyncio.sleep(0)
+            raise PermissionError("heartbeat failed")
+
+        async def work(_job):
+            """Run the staged test work."""
+            await asyncio.sleep(0)
+
+        monkeypatch.setattr(mgr, "_heartbeat_reservation", fail_heartbeat)
+        monkeypatch.setattr(mgr, "_refresh_reservation", lambda _job: None)
+        monkeypatch.setattr(
+            mgr, "_start_monitor_if_possible", lambda job: monitored.append(job.id)
+        )
+
+        job = Job(id="job-1")
+        result = await mgr._stage_and_monitor(job, work)
+
+        assert result is job
+        assert job.state == JobState.RUNNING
+        assert job.stage == "queued"
+        assert job.error is None
+        assert monitored == [job.id]
+        assert job.events[-1]["message"] == (
+            "waiting for privileged apply worker; "
+            "post-publication reservation maintenance failed: heartbeat failed"
+        )
+
+    @pytest.mark.asyncio
     async def test_staged_submit_heartbeats_reservation_while_staging(self, monkeypatch, tmp_path):
         """Verify that staged submit heartbeats reservation while staging."""
         monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))

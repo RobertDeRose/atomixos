@@ -5,7 +5,6 @@ import threading
 import time
 import uuid
 from collections.abc import Callable, Coroutine
-from contextlib import suppress
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
@@ -348,13 +347,22 @@ class StagedJobManager(JobManager):
                 await work_task
             staged = True
             heartbeat_task.cancel()
-            with suppress(asyncio.CancelledError):
+            maintenance_errors: list[BaseException] = []
+            try:
                 await heartbeat_task
+            except asyncio.CancelledError:
+                pass
+            except Exception as exc:
+                maintenance_errors.append(exc)
             heartbeat_task = None
-            self._refresh_reservation(job)
-            job.set_stage("queued", "waiting for privileged apply worker")
+            try:
+                self._refresh_reservation(job)
+            except Exception as exc:
+                maintenance_errors.append(exc)
+            self._mark_queued(job, maintenance_errors)
         except asyncio.CancelledError:
             if staged:
+                maintenance_errors = []
                 if heartbeat_task is not None:
                     heartbeat_task.cancel()
                     try:
@@ -362,15 +370,13 @@ class StagedJobManager(JobManager):
                     except asyncio.CancelledError:
                         pass
                     except Exception as exc:
-                        self._mark_failed(job, exc)
-                        raise
+                        maintenance_errors.append(exc)
                     heartbeat_task = None
                 try:
                     self._refresh_reservation(job)
                 except Exception as exc:
-                    self._mark_failed(job, exc)
-                    raise
-                job.set_stage("queued", "waiting for privileged apply worker")
+                    maintenance_errors.append(exc)
+                self._mark_queued(job, maintenance_errors)
                 self._start_monitor_if_possible(job)
                 return job
             try:
@@ -381,6 +387,10 @@ class StagedJobManager(JobManager):
             self._mark_failed(job, "staged job manager task was cancelled")
             raise
         except Exception as original_error:
+            if staged:
+                self._mark_queued(job, [original_error])
+                self._start_monitor_if_possible(job)
+                return job
             failure: BaseException = original_error
             try:
                 self._release_reservation(job)
@@ -403,6 +413,16 @@ class StagedJobManager(JobManager):
                     self._mark_failed(job, exc)
         self._start_monitor_if_possible(job)
         return job
+
+    @staticmethod
+    def _mark_queued(job: Job, maintenance_errors: list[BaseException]) -> None:
+        """Publish queued state for a staged job."""
+        detail = "waiting for privileged apply worker"
+        if maintenance_errors:
+            detail += "; post-publication reservation maintenance failed: " + "; ".join(
+                str(error) for error in maintenance_errors
+            )
+        job.set_stage("queued", detail)
 
     @staticmethod
     def _mark_failed(job: Job, error: BaseException | str) -> None:
