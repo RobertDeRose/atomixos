@@ -7,6 +7,7 @@ import sys
 
 import pytest
 
+from atomixos_provision.apply_transaction import finalize_abandoned_active_jobs
 from atomixos_provision.auth import current_boot_id
 from atomixos_provision.config import ProvisionError
 from atomixos_provision.provision import (
@@ -25,7 +26,6 @@ from atomixos_provision.staging import (
     cleanup_claimed_job,
     count_staged_jobs,
     ensure_runtime_layout,
-    finalize_abandoned_active_jobs,
     has_staged_jobs,
     interpret_staged_result,
     publish_ready_marker,

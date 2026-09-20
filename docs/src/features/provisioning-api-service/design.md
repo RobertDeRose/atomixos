@@ -248,6 +248,7 @@ scripts/atomixos_provision/
 │       ├── schemas.py             # Typed API request and response models
 │       ├── partial_config.py      # Typed desired-state operations
 │       ├── staging.py             # Unprivileged queue and manifest boundary
+│       ├── apply_transaction.py   # Durable apply phases, recovery, and finalization
 │       ├── state.py               # Provisioning-state predicates
 │       ├── provision.py           # Candidate, promotion, activation, and rollback orchestration
 │       ├── activation.py          # Service activation, health checks, and rollback
@@ -338,6 +339,12 @@ write a manifest containing relative paths, owners, modes, sizes, and SHA-256
 hashes. A root-owned path/oneshot worker verifies that manifest and owns promotion,
 activation, rollback, recovery, and result publication. The API cannot directly
 replace `/data/config` or runtime systemd/Quadlet state.
+
+The worker records each staged apply through one transaction component. That
+component alone owns the durable `promoted` and `committed` receipt phases,
+interrupted-promotion recovery, and publication of terminal results for abandoned
+active jobs. Provisioning orchestration requests those transitions but does not
+interpret or reproduce their recovery rules.
 
 First-boot seed discovery and the compatibility CLI remain trusted maintenance
 exceptions: `first-boot.sh` may invoke the privileged import path for local seeds,

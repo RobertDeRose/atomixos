@@ -44,7 +44,8 @@ and remains outside config export.
 The service preserves `config.toml` as the desired-state authority and reuses validation, rendering, candidate
 promotion, activation, health checking, and rollback for every mutation path. The network-facing process remains
 unprivileged; the root worker alone performs durable promotion and activation. Systemd socket activation and the
-existing first-boot and SSH-signature trust boundaries remain intact.
+existing first-boot and SSH-signature trust boundaries remain intact. A single staged-apply transaction component owns
+durable receipt phases, interrupted-promotion recovery, and abandoned-job result finalization.
 
 ## Operational Impact
 

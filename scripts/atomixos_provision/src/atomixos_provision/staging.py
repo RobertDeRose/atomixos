@@ -80,23 +80,6 @@ class StagedResult:
     rollback_status: str | None
 
 
-class ApplyReceiptPhase(StrEnum):
-    """Durable phase of a staged config promotion."""
-
-    PROMOTED = "promoted"
-    COMMITTED = "committed"
-
-
-@dataclass(frozen=True)
-class StagedApplyReceipt:
-    """Durable staged-apply state used for interrupted-worker recovery."""
-
-    job_id: str
-    source_sha256: str
-    result: dict[str, Any]
-    phase: ApplyReceiptPhase
-
-
 class StagedTimeoutState(StrEnum):
     """Queue state used when a staged-result reconciliation interval expires."""
 
@@ -470,7 +453,7 @@ def _cleanup_stale_reservations_locked(paths: RuntimePaths) -> None:
                 job_id = validate_job_id(reserve_path.name.removesuffix(".reserve"))
             except ProvisionError:
                 job_id = None
-            _remove_staged_path(reserve_path)
+            remove_staged_path(reserve_path)
             if job_id is not None:
                 _remove_unpublished_job_locked(paths, job_id)
             removed = True
@@ -480,7 +463,7 @@ def _cleanup_stale_reservations_locked(paths: RuntimePaths) -> None:
                 job_id = validate_job_id(reserve_path.name.removesuffix(".reserve"))
             except ProvisionError:
                 job_id = None
-            _remove_staged_path(reserve_path)
+            remove_staged_path(reserve_path)
             if job_id is not None:
                 _remove_unpublished_job_locked(paths, job_id)
             removed = True
@@ -492,9 +475,9 @@ def _remove_unpublished_job_locked(paths: RuntimePaths, job_id: str) -> None:
     """Remove incomplete unpublished state while holding the queue lock."""
     if (paths.queue / f"{job_id}.ready").exists() or _is_plain_directory(paths.active / job_id):
         return
-    _remove_staged_path(paths.queue / job_id)
+    remove_staged_path(paths.queue / job_id)
     for staging_path in paths.queue.glob(f".{job_id}.staging.*"):
-        _remove_staged_path(staging_path)
+        remove_staged_path(staging_path)
 
 
 def _ready_sequence_for_job_locked(paths: RuntimePaths, job_id: str) -> int | None:
@@ -521,7 +504,7 @@ def _has_lower_sequence_reservation_locked(paths: RuntimePaths, sequence: int) -
                 else _reservation_sort_key(control_path)[0]
             )
         except ProvisionError:
-            _remove_staged_path(control_path)
+            remove_staged_path(control_path)
             fsync_directory(paths.queue)
             continue
         if control_sequence < sequence:
@@ -562,7 +545,7 @@ def _claim_next_job_locked(paths: RuntimePaths) -> ClaimedJob | None:
             validate_job_id(ready_path.name.removesuffix(".ready"))
             ready_markers.append((sort_key, ready_path))
         except ProvisionError:
-            _remove_staged_path(ready_path)
+            remove_staged_path(ready_path)
             fsync_directory(paths.queue)
     for sort_key, ready_path in sorted(ready_markers):
         sequence, _name = sort_key
@@ -573,10 +556,10 @@ def _claim_next_job_locked(paths: RuntimePaths) -> ClaimedJob | None:
         try:
             queued_stat = queued_path.lstat()
         except FileNotFoundError:
-            _remove_staged_path(ready_path)
+            remove_staged_path(ready_path)
             continue
         if stat.S_ISLNK(queued_stat.st_mode) or not stat.S_ISDIR(queued_stat.st_mode):
-            _remove_staged_path(ready_path)
+            remove_staged_path(ready_path)
             continue
         active_path = paths.active / job_id
         try:
@@ -586,7 +569,7 @@ def _claim_next_job_locked(paths: RuntimePaths) -> ClaimedJob | None:
         active_stat = active_path.lstat()
         if stat.S_ISLNK(active_stat.st_mode) or not stat.S_ISDIR(active_stat.st_mode):
             raise ProvisionError(f"claimed staged job is not a directory: {active_path}")
-        _remove_staged_path(ready_path)
+        remove_staged_path(ready_path)
         fsync_directory(paths.queue)
         fsync_directory(paths.active)
         return ClaimedJob(job_id, active_path)
@@ -689,56 +672,6 @@ def write_result(paths: RuntimePaths, job_id: str, payload: dict[str, Any]) -> P
     return path
 
 
-def finalize_abandoned_active_jobs(
-    paths: RuntimePaths,
-    reason: str,
-    receipt: StagedApplyReceipt | None = None,
-) -> int:
-    """Write terminal results for jobs left by an interrupted worker."""
-    ensure_runtime_layout(paths, for_worker=True)
-    finalized = 0
-    with queue_operation_lock(paths):
-        for active_path in sorted(paths.active.iterdir()):
-            try:
-                active_stat = active_path.lstat()
-            except FileNotFoundError:
-                continue
-            if stat.S_ISLNK(active_stat.st_mode) or not stat.S_ISDIR(active_stat.st_mode):
-                _remove_staged_path(active_path)
-                continue
-            job_id = validate_job_id(active_path.name)
-            if read_result(paths, job_id) is None:
-                if _active_job_matches_commit(active_path, job_id, receipt):
-                    payload = {"status": "succeeded", "result": receipt.result}
-                else:
-                    payload = {"status": "failed", "error": reason}
-                write_result(paths, job_id, payload)
-            shutil.rmtree(active_path, ignore_errors=True)
-            finalized += 1
-        fsync_directory(paths.active)
-    return finalized
-
-
-def _active_job_matches_commit(
-    active_path: Path,
-    job_id: str,
-    receipt: StagedApplyReceipt | None,
-) -> bool:
-    if (
-        receipt is None
-        or receipt.phase is not ApplyReceiptPhase.COMMITTED
-        or receipt.job_id != job_id
-    ):
-        return False
-    try:
-        manifest = read_json(active_path / "manifest.json")
-    except (OSError, ProvisionError):
-        return False
-    return (
-        manifest.get("job_id") == job_id and manifest.get("source_sha256") == receipt.source_sha256
-    )
-
-
 def read_result(paths: RuntimePaths, job_id: str) -> dict[str, Any] | None:
     validate_job_id(job_id)
     path = paths.results / f"{job_id}.json"
@@ -829,7 +762,7 @@ def try_abandon_queued_job(paths: RuntimePaths, job_id: str) -> bool:
             return False
         queued_path = paths.queue / job_id
         ready_path = paths.queue / f"{job_id}.ready"
-        _remove_staged_path(ready_path)
+        remove_staged_path(ready_path)
         shutil.rmtree(queued_path, ignore_errors=True)
         fsync_directory(paths.queue)
         return True
@@ -874,7 +807,8 @@ def cleanup_claimed_job(job: ClaimedJob) -> None:
     shutil.rmtree(job.path, ignore_errors=True)
 
 
-def _remove_staged_path(path: Path) -> None:
+def remove_staged_path(path: Path) -> None:
+    """Remove a staged path without following symlinks."""
     try:
         path_stat = path.lstat()
     except FileNotFoundError:
