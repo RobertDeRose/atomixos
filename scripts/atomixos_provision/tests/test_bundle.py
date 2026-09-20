@@ -125,6 +125,10 @@ class TestCopyBundleFiles:
             lambda _name: type("Pw", (), {"pw_uid": 1000, "pw_gid": 1000})(),
         )
         monkeypatch.setattr(
+            "atomixos_provision.bundle.grp.getgrnam",
+            lambda _name: type("Gr", (), {"gr_gid": 2000})(),
+        )
+        monkeypatch.setattr(
             "atomixos_provision.bundle.os.chown",
             lambda path, uid, gid, **_kwargs: chowns.append((str(path), uid, gid)),
         )
@@ -145,17 +149,19 @@ class TestCopyBundleFiles:
 
         assert (config_root / "files" / "cert.pem").read_text() == "CERT"
         assert (config_root / "files" / "subdir" / "key.pem").read_text() == "KEY"
-        assert (config_root / "files" / "cert.pem").stat().st_mode & 0o777 == 0o600
-        assert (config_root / "files" / "subdir" / "key.pem").stat().st_mode & 0o777 == 0o600
+        assert (config_root / "files").stat().st_mode & 0o777 == 0o550
+        assert (config_root / "files" / "subdir").stat().st_mode & 0o777 == 0o550
+        assert (config_root / "files" / "cert.pem").stat().st_mode & 0o777 == 0o440
+        assert (config_root / "files" / "subdir" / "key.pem").stat().st_mode & 0o777 == 0o440
         assert any(
             path.endswith("/files/cert.pem")
             for path, uid, gid in chowns
-            if (uid, gid) == (1000, 1000)
+            if (uid, gid) == (1000, 2000)
         )
         assert any(
             path.endswith("/files/subdir/key.pem")
             for path, uid, gid in chowns
-            if (uid, gid) == (1000, 1000)
+            if (uid, gid) == (1000, 2000)
         )
 
     def test_rejects_symlink_source_entries(self, tmp_path, monkeypatch):
@@ -193,7 +199,7 @@ class TestCopyBundleFiles:
         copy_bundle_files(source, config_root)
 
         assert (config_root / "files").is_dir()
-        assert (config_root / "files").stat().st_mode & 0o777 == 0o700
+        assert (config_root / "files").stat().st_mode & 0o777 == 0o550
 
     def test_none_source(self, tmp_path):
         config_root = tmp_path / "config"
@@ -331,6 +337,31 @@ class TestExportBundle:
         monkeypatch.setattr("atomixos_provision.bundle.MAX_SOURCE_BYTES", 1)
         with pytest.raises(ProvisionError, match="export exceeds"):
             export_bundle_bytes(tmp_path)
+
+    def test_rejects_member_limit_while_snapshotting(self, tmp_path, monkeypatch):
+        """Verify that rejects member limit while snapshotting."""
+        import atomixos_provision.bundle as bundle_module
+
+        (tmp_path / "config.toml").write_bytes(b"version = 1\n")
+        (tmp_path / "files").mkdir()
+        (tmp_path / "files" / "a.txt").write_text("a\n")
+        (tmp_path / "files" / "b.txt").write_text("b\n")
+        copied_members = 0
+        copyfileobj = bundle_module.shutil.copyfileobj
+
+        def counting_copyfileobj(*args, **kwargs):
+            """Copy a file while counting exported archive members."""
+            nonlocal copied_members
+            copied_members += 1
+            return copyfileobj(*args, **kwargs)
+
+        monkeypatch.setattr(bundle_module, "MAX_BUNDLE_MEMBERS", 3)
+        monkeypatch.setattr(bundle_module.shutil, "copyfileobj", counting_copyfileobj)
+
+        with pytest.raises(ProvisionError, match="member limit"):
+            export_bundle_bytes(tmp_path)
+
+        assert copied_members == 1
 
 
 class TestPrepareSourcePath:

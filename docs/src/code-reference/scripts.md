@@ -200,6 +200,12 @@ The `atomixos-provision` CLI also exposes these maintenance commands:
 | `check-health CONFIG_ROOT`                            | Check required provisioned services                     |
 | `complete-initial CONFIG_ROOT`                        | Finish initial promotion after first-boot checks        |
 
+Bundle export is an authenticated API operation at `GET /api/config/export`, not a CLI command. The exported bundle
+contains desired configuration and bundle-managed files. Those files are installed read-only by default, but a trusted
+integrator may deliberately grant a workload write access; later exports then contain the changed bytes. Mutable
+application data should normally live in Podman volumes; use Podman tooling for its backup, restore, or transfer outside
+AtomixOS provisioning ownership.
+
 ### ssh-wan-toggle.sh
 
 **Location:** `scripts/ssh-wan-toggle.sh`

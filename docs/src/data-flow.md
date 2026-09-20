@@ -89,9 +89,14 @@ returns a deterministic `config-bundle.tar.gz` (`application/gzip`) accepted by
 the same importer. Generated JSON, Quadlet output, markers, signer material, and
 other `/data/config` state are excluded. Missing `files/` is omitted; an existing
 empty directory is represented as an empty `files` archive entry. Archive members
-are relative regular files or directories and remain bounded by the import size,
-member, and count limits, so exporting and importing the bundle preserves the
-canonical config and managed-file contents without exposing runtime credentials.
+are relative regular files or directories and remain bounded during snapshotting by
+the import size, member, and count limits, so exporting and importing the bundle
+preserves the canonical config and bundle-managed file contents without exposing
+runtime credentials. Trusted workloads may change a deliberately writable managed
+mount, in which case later config exports contain the changed bytes. Mutable
+application data should normally live in Podman volumes and is not part of the
+bundle; its export and restore use Podman tooling outside AtomixOS provisioning
+ownership.
 
 ## Managed Users Flow
 

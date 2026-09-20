@@ -823,6 +823,10 @@ async def test_apply_config_transform_preserves_bundle_files(tmp_path, monkeypat
         lambda _root, _progress=None: (True, [], False),
     )
     monkeypatch.setattr("atomixos_provision.bundle.APP_RUNTIME_USER", "nobody")
+    monkeypatch.setattr(
+        "atomixos_provision.bundle.grp.getgrnam",
+        lambda _name: type("Gr", (), {"gr_gid": 2000})(),
+    )
     monkeypatch.setattr("atomixos_provision.bundle.os.chown", lambda *_args, **_kwargs: None)
 
     config_root = tmp_path / "config"
@@ -881,6 +885,10 @@ async def test_staged_partial_apply_preserves_bundle_files(tmp_path, monkeypatch
     )
     monkeypatch.setattr("atomixos_provision.provision.reconcile_bootstrap_wan", lambda: None)
     monkeypatch.setattr("atomixos_provision.bundle.APP_RUNTIME_USER", "nobody")
+    monkeypatch.setattr(
+        "atomixos_provision.bundle.grp.getgrnam",
+        lambda _name: type("Gr", (), {"gr_gid": 2000})(),
+    )
     monkeypatch.setattr("atomixos_provision.bundle.os.chown", lambda *_args, **_kwargs: None)
     monkeypatch.setattr("atomixos_provision.provision.os.chown", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
@@ -1158,7 +1166,8 @@ def test_write_imported_state_grants_service_read_access_when_root(tmp_path, mon
     assert (config_root / "config.toml").stat().st_mode & 0o040
 
 
-def test_write_imported_state_does_not_grant_service_group_to_bundle_files(tmp_path, monkeypatch):
+def test_write_imported_state_grants_bundle_files_read_only_service_access(tmp_path, monkeypatch):
+    """Verify that write imported state grants bundle files read only service access."""
     from atomixos_provision import provision
 
     config_path = tmp_path / "config.toml"
@@ -1184,6 +1193,10 @@ def test_write_imported_state_does_not_grant_service_group_to_bundle_files(tmp_p
         lambda _name: type("Pw", (), {"pw_uid": 1000, "pw_gid": 1000})(),
     )
     monkeypatch.setattr(
+        "atomixos_provision.bundle.grp.getgrnam",
+        lambda _name: type("Gr", (), {"gr_gid": 2000})(),
+    )
+    monkeypatch.setattr(
         provision.os,
         "chown",
         lambda path, uid, gid, **_kwargs: calls.append((path, uid, gid)),
@@ -1195,8 +1208,10 @@ def test_write_imported_state_does_not_grant_service_group_to_bundle_files(tmp_p
 
     write_imported_state(parsed, config_path, files_path, config_root)
 
-    assert (config_root / "files", -1, 1000) not in calls
-    assert (config_root / "files" / "app.txt", -1, 1000) not in calls
+    assert (config_root / "files", 1000, 2000) in calls
+    assert any(path.name == "app.txt" and (uid, gid) == (1000, 2000) for path, uid, gid in calls)
+    assert (config_root / "files").stat().st_mode & 0o777 == 0o550
+    assert (config_root / "files" / "app.txt").stat().st_mode & 0o777 == 0o440
 
 
 def test_direct_initial_import_grants_service_read_access(tmp_path, monkeypatch):

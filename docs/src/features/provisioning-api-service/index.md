@@ -34,7 +34,10 @@ or development roots retain a one-active-job guard. Clients receive typed job an
 for progress and completion.
 
 Bundle export downloads `config-bundle.tar.gz`, which can be validated and imported through the existing CLI. Fleet
-bootstrap keeps ownership of its transport and does not invoke the local network-source reconciliation path.
+bootstrap keeps ownership of its transport and does not invoke the local network-source reconciliation path. Managed
+files are installed read-only by default, while trusted integrators retain full Podman configuration control and receive
+an advisory warning for writable `${FILES_DIR}` mounts. Mutable application data should normally live in Podman volumes
+and remains outside config export.
 
 ## Design Integration
 
@@ -46,8 +49,10 @@ existing first-boot and SSH-signature trust boundaries remain intact.
 ## Operational Impact
 
 Desired state and managed payloads remain under `/data/config`; transient queue, active-job, and result state lives
-under `/run/atomixos-provision`. Operators can validate, import, export, and reapply bundles with the
-`first-boot-provision` command. The squashfs result is 418.5 MB, below the 1 GiB closure budget.
+under `/run/atomixos-provision`. Operators can validate, import, and reapply bundles with the
+`first-boot-provision` command; authenticated export is provided by `GET /api/config/export`. Podman volume backup,
+restore, and transfer remain operator-managed through Podman tooling. The squashfs result is 418.5 MB, below the 1 GiB
+closure budget.
 
 ## Reference and Contracts
 
@@ -93,7 +98,7 @@ Podman operation stream. It does not change the delivered job-state or service-s
 ### Rejected or Removed Scope
 
 A database, Redis-backed queue, fleet orchestration, default credentials, arbitrary patch semantics, and export of
-generated runtime state or signer material remain intentionally excluded.
+generated runtime state, Podman volume data, or signer material remain intentionally excluded.
 
 ## Documentation Updated
 

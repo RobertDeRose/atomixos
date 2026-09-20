@@ -415,7 +415,16 @@ nixos-lib.runTest {
         # Set up a provisioned config root with known admin key
         gateway.succeed("rm -rf /tmp/auth-root && mkdir -p /tmp/auth-root")
         gateway.succeed("ssh-keygen -t ed25519 -N \"\" -f /tmp/auth-test-key -q")
-        gateway.succeed("first-boot-provision import /tmp/config.toml /tmp/auth-root")
+        gateway.succeed("first-boot-provision import /tmp/config.tar.gz /tmp/auth-root")
+
+        # Managed bundle files are installed read-only by default. The application
+        # runtime owns them, while the unprivileged API can read them for export.
+        gateway.succeed("test \"$(stat -c '%U:%G:%a' /tmp/auth-root/files)\" = 'appsvc:atomixos-provision:550'")
+        gateway.succeed("test \"$(stat -c '%U:%G:%a' /tmp/auth-root/files/app/config.yaml)\" = 'appsvc:atomixos-provision:440'")
+        gateway.succeed("runuser -u appsvc -- test -r /tmp/auth-root/files/app/config.yaml")
+        gateway.succeed("runuser -u appsvc -- test ! -w /tmp/auth-root/files/app/config.yaml")
+        gateway.succeed("runuser -u atomixos-provision -- test -r /tmp/auth-root/files/app/config.yaml")
+        gateway.succeed("runuser -u atomixos-provision -- test ! -w /tmp/auth-root/files/app/config.yaml")
 
         # Overwrite admin authorized key with our test key
         gateway.succeed("cat /tmp/auth-test-key.pub > /tmp/auth-root/admin-signers")
@@ -466,13 +475,21 @@ nixos-lib.runTest {
         gateway.succeed("grep '9.9.9.9' /tmp/auth-root/config.toml")
         gateway.succeed("cat /tmp/auth-test-key.pub > /tmp/auth-root/admin-signers")
 
+        # Restart as the production API identity to prove export can read the
+        # complete managed tree without root privileges.
+        gateway.succeed("kill $(cat /tmp/auth-bootstrap.pid)")
+        gateway.succeed("while ss -tln | grep ':18081'; do sleep 0.2; done")
+        gateway.succeed("runuser -u atomixos-provision -- env PATH=/tmp/auth-bin:/run/current-system/sw/bin ATOMIXOS_ALLOW_UNSAFE_CONFIG_ROOT=1 first-boot-provision serve /tmp/auth-root --host 127.0.0.1 --port 18081 >/tmp/auth-bootstrap.log 2>&1 & echo $! >/tmp/auth-bootstrap.pid")
+        gateway.wait_until_succeeds("ss -tln | grep ':18081'", timeout=30)
         gateway.succeed("curl -fsS http://127.0.0.1:18081/api/nonce > /tmp/partial-export-nonce.json")
         gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nnonce = json.loads(Path('/tmp/partial-export-nonce.json').read_text())['nonce']\nPath('/tmp/partial-export-nonce.txt').write_text(nonce)\nPath('/tmp/empty-body').write_bytes(bytes())\nPY")
         gateway.succeed("/tmp/sign-reapply /tmp/partial-export-nonce.txt /api/config/export /tmp/empty-body /tmp/auth-test-key /tmp/partial-export-signature-b64.txt")
         gateway.succeed("curl -fsS -H \"X-AtomixOS-Nonce: $(cat /tmp/partial-export-nonce.txt)\" -H \"X-AtomixOS-Signature: $(cat /tmp/partial-export-signature-b64.txt)\" http://127.0.0.1:18081/api/config/export > /tmp/partial-export.tar.gz")
         gateway.succeed("tar -xOf /tmp/partial-export.tar.gz config.toml > /tmp/partial-export.toml")
+        gateway.succeed("tar -xOf /tmp/partial-export.tar.gz files/app/config.yaml > /tmp/partial-export-managed.yaml")
         gateway.succeed("grep -F '[users.alice]' /tmp/partial-export.toml")
         gateway.succeed("grep '9.9.9.9' /tmp/partial-export.toml")
+        gateway.succeed("grep -F 'hello: world' /tmp/partial-export-managed.yaml")
 
         # Signature is bound to the submitted payload digest.
         gateway.succeed("curl -fsS http://127.0.0.1:18081/api/nonce > /tmp/auth-tamper-nonce-response.json")

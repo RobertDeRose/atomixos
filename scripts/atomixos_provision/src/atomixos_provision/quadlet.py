@@ -146,6 +146,47 @@ def render_section(section_name: str, directives: dict[str, list], config_root: 
     return lines
 
 
+def managed_file_mount_warning(directive: str, value: str, path: str) -> str | None:
+    """Warn when managed bundle files may be changed by a container."""
+    if FILES_DIR_TOKEN not in value:
+        return None
+
+    if directive == "Volume":
+        parts = value.rsplit(":", 1)
+        volume_options = set(parts[1].split(",")) if len(parts) == 2 else set()
+        read_only = "ro" in volume_options and not {"rw", "U"}.intersection(volume_options)
+    else:
+        mount_options: dict[str, str] = {}
+        flags: set[str] = set()
+        for option in value.split(","):
+            key, separator, raw_value = option.partition("=")
+            normalized_key = key.strip().lower()
+            if separator:
+                mount_options[normalized_key] = raw_value.strip().lower()
+            else:
+                flags.add(normalized_key)
+        read_only = (
+            "ro" in flags
+            or "readonly" in flags
+            or mount_options.get("ro") == "true"
+            or mount_options.get("readonly") == "true"
+        ) and not (
+            {"rw", "readwrite", "u", "chown"}.intersection(flags)
+            or mount_options.get("rw") == "true"
+            or mount_options.get("readwrite") == "true"
+            or mount_options.get("u") == "true"
+            or mount_options.get("chown") == "true"
+        )
+
+    if read_only:
+        return None
+    return (
+        f"{path} uses {FILES_DIR_TOKEN} without a clearly read-only mount; "
+        "managed bundle files are included in config export, so use a Podman volume "
+        "for mutable runtime data"
+    )
+
+
 # --- Main Render Functions ---
 
 
@@ -180,6 +221,14 @@ def render_containers(
             message = f"{container_path}.Container.Image must be a single string value"
             raise provision_error(message)
         require_string(image_values[0], f"{container_path}.Container.Image")
+        for directive in ("Volume", "Mount"):
+            for idx, value in enumerate(container_directives.get(directive, [])):
+                mount_path = f"{container_path}.Container.{directive}[{idx}]"
+                warning = managed_file_mount_warning(
+                    directive, require_string(value, mount_path), mount_path
+                )
+                if warning is not None:
+                    warnings.append(warning)
 
         if privileged:
             if "Network" in container_directives and container_directives["Network"] != ["host"]:

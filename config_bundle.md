@@ -560,8 +560,9 @@ The schema should not currently encode Traefik-specific redirect behavior.
 
 ## Generic Files Mounting
 
-Application-specific files are carried under `files/` and may be mounted by
-containers wherever needed.
+Application-specific files are carried under `files/` as bundle-managed
+deployment inputs. AtomixOS installs them read-only by default, while trusted
+integrators may mount them with the access mode their Podman workload requires.
 
 Examples:
 
@@ -571,7 +572,11 @@ Examples:
 - templated config files
 
 This avoids hard-coding application-specific configuration structure into
-`config.toml`.
+`config.toml`. A writable `Volume` or `Mount` using `${FILES_DIR}` is accepted
+for trusted integrations, but produces an advisory warning because changes are
+included in later config exports. Mutable application data should normally use
+a Podman volume. Operators use Podman tooling to back up, restore, or transfer
+volume data outside AtomixOS ownership.
 
 ## Path Token Preprocessing
 
@@ -606,6 +611,8 @@ The importer should validate:
 - `containers.container` exists and defines at least one container
 - each container defines `privileged`
 - each container defines `[Container]` with `Image`
+- container `Volume` and `Mount` values using `${FILES_DIR}` are rendered as
+  requested; mounts without a clear read-only option produce an advisory warning
 - `activation.required` names correspond to declared containers
 - bundle layout is valid when importing archives
 - bundle top level is limited to `config.toml` and optional `files/`

@@ -44,12 +44,13 @@ and a manifest with relative paths, modes, sizes, and SHA-256 hashes, then publi
 `atomixos-provision-apply.service` claims queued jobs, verifies manifest paths, owners, modes, symlinks, hashes, and
 expected entries, re-renders the verified staged `config.toml` into `/data/config-candidate`, and runs the existing
 promotion, activation, rollback, and recovery protocol. Root-written `/data/config` state is group-readable by
-`atomixos-provision` so the unprivileged API can authenticate and export approved state; bundle `files/` payloads remain
-owned by the application runtime user and are preserved through a no-symlink snapshot path. Export is allowlisted to
+`atomixos-provision` so the unprivileged API can authenticate and export approved state. Bundle `files/` payloads are
+owned by `appsvc`, group-readable by `atomixos-provision`, and installed as read-only files and directories. They are
+preserved through a no-symlink snapshot path. Export is allowlisted to
 `config.toml` and `files/`, returns a deterministic `config-bundle.tar.gz` under the provisioning lock, and excludes
-generated runtime state. Initial promotion also writes `/data/config/.first-config`; the shared provisioning predicate
-treats that marker or a valid `config.toml` as the compatibility signal across provisioning, authentication, and Boot UI
-guards, while missing signer state fails closed.
+generated runtime state and Podman volume contents. Initial promotion also writes `/data/config/.first-config`; the
+shared provisioning predicate treats that marker or a valid `config.toml` as the compatibility signal across
+provisioning, authentication, and Boot UI guards, while missing signer state fails closed.
 
 Runtime result files under `/run/atomixos-provision/results` are root-writable and group-readable only. Claim and queued-job
 abandonment share `/run/atomixos-provision/queue.lock`, and the root worker finalizer records failed results for claimed
@@ -251,4 +252,13 @@ Rootful containers require `privileged = true` and are forced onto `Network=host
 user, are forced onto `Network=pasta`, and non-loopback `PublishPort` binds are rewritten to `127.0.0.1`.
 
 Bundle imports may include `files/`; Quadlet values may reference `${CONFIG_DIR}` and `${FILES_DIR}` to bind files from
-`/data/config/` without embedding host-specific absolute paths in the seed.
+`/data/config/` without embedding host-specific absolute paths in the seed. Managed inputs are installed read-only by
+default. A trusted integrator may request writable `Volume`, `Mount`, or `PodmanArgs` behavior; AtomixOS preserves that
+Quadlet configuration and warns when a `${FILES_DIR}` mount is not clearly read-only. Writable application state should
+normally use Podman named volumes. Operators who need to back up, restore, or transfer that runtime data should use
+Podman tooling; that lifecycle is outside this feature and AtomixOS provisioning ownership.
+
+An authorized post-provisioning signer is a device administrator. A signed configuration may intentionally define
+rootful or rootless workloads and use arbitrary supported Quadlet and Podman options, including privileged container
+behavior. Authentication controls who may exercise that authority; renderer validation enforces structural correctness
+and platform invariants rather than imposing workload policy on a trusted integrator.

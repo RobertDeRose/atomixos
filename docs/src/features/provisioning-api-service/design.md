@@ -39,12 +39,17 @@ uses the staged unprivileged API plus root-owned worker boundary.
 - The portable bundle is a compressed tar archive with top-level `config.toml` and optional `files/` entries.
 - `GET /api/config/export` returns a complete `config-bundle.tar.gz` containing the canonical `config.toml` and every
   managed payload under `/data/config/files/`; it does not expose generated JSON, Quadlet output, markers, signer
-  material, or other runtime state.
+  material, Podman volume contents, or other runtime state.
 - The exported archive must be accepted by the existing bundle importer and preserve regular-file contents and the
-  managed-file ownership/mode policy after import. Archive members must be deterministic, relative, regular files or
-  directories, and bounded by the existing upload/member/decompressed-size limits.
+  managed-file ownership/mode policy after import. Managed `files/` are installed read-only by default for the `appsvc`
+  owner and `atomixos-provision` reader group. A trusted integrator may deliberately grant a workload write access; the
+  renderer warns but does not reject that Podman configuration, and later exports contain the resulting file bytes.
+  Archive members must be deterministic, relative, regular files or directories, and bounded during snapshotting by
+  the existing upload/member/decompressed-size limits.
 - Export reads a consistent active snapshot under the provisioning lock. Bundle export and import round-trip tests are
   required before the feature is delivered.
+- Mutable application data belongs in Podman volumes. Its backup, restore, and export use Podman tooling and remain
+  outside this feature and AtomixOS provisioning ownership.
 
 ## Existing Context
 
@@ -65,7 +70,14 @@ layout and flows remain below.
 The design preserves one `config.toml` authority, immutable rootfs, mutable `/data/config`, systemd activation, SSH
 signatures, first-boot exceptions, bounded admission, root-owned promotion, and rollback. The unprivileged service may
 parse, validate, render, stage, and export approved state; only the root worker may promote `/data/config`, activate
-runtime services, or publish privileged results. It avoids SQL, Redis, auto-discovery, and fleet concerns.
+runtime services, or publish privileged results. Managed `files/` are read-only by default without limiting what an
+authenticated integrator may deploy through Podman. Writable application state should normally live in Podman volumes.
+It avoids SQL, Redis, auto-discovery, and fleet concerns.
+
+An authorized post-provisioning signer is therefore device-administrator-equivalent: signed configuration may define
+rootful or rootless workloads and arbitrary supported Quadlet or Podman options. Authentication limits who holds that
+authority, while rendering validates correctness and required platform invariants rather than restricting trusted
+integrator workload policy.
 
 The original foundation has delivered follow-up capabilities for privilege separation, live schema, typed partial routes,
 config reapply, and the HTMX Boot UI. This design records their current contracts and links their standalone feature
@@ -151,7 +163,7 @@ application at `/Users/DeRoseR/workspace/personal/litestar-fullstack`.
 1. Keep `config.toml` and complete compressed-tar config bundles as the canonical
    import/export format for first boot, backups, restore, and cloning deployments.
    A bundle contains only `config.toml` and managed `files/` payloads; generated
-   runtime outputs and credentials are not exported.
+   runtime outputs, Podman volume data, and credentials are not exported.
 2. Treat the running provisioning service as the canonical control plane for future
    dynamic changes.
 3. Ensure every mutation path uses the same state machine:
@@ -182,6 +194,8 @@ application at `/Users/DeRoseR/workspace/personal/litestar-fullstack`.
 - Multi-device orchestration.
 - Arbitrary partial or JSON-patch semantics; delivered typed partial routes remain
   bounded to the documented resource operations and are not a second state store.
+- Backing up, restoring, or exporting mutable application data in Podman volumes;
+  operators use Podman tooling for that data outside AtomixOS provisioning ownership.
 - Replacing the delivered privilege-separation, live-schema, typed-partial, config-
   reapply, or HTMX follow-up contracts; their records remain the authoritative
   delivery history.
@@ -370,8 +384,9 @@ model. Any future partial API must include these reconciliation points:
 4. **Export bookend**: Under the provisioning lock, export the active desired state
    as a deterministic compressed tar bundle containing canonical `config.toml` and
    managed `files/` payloads. Exclude generated JSON, Quadlet output, markers,
-   signer material, and other runtime state so backups and deployment cloning remain
-   equivalent to API-managed state without leaking platform credentials.
+   signer material, Podman volume contents, and other runtime state so config backup
+   and deployment cloning remain equivalent to API-managed state without leaking
+   platform credentials or claiming ownership of application data.
 5. **Drift bookend**: Treat files under `/data/config/` as derived from the active
    desired state. If a future API detects derived-state drift, it should report it
    and re-render through the normal candidate pipeline rather than patching files in
@@ -531,7 +546,10 @@ Every partial mutation must run the same safety pipeline as full config import:
 Partial APIs must not directly mutate files under `/data/config/quadlet/`, sync
 systemd/Quadlet search paths, or edit runtime systemd state. Complete bundle
 import/export round-trip tests now ensure API-managed state can always be backed up
-or cloned as a config bundle. Drift
+or cloned as a config bundle. Managed `files/` are installed read-only by default,
+but trusted configurations may mount them writable and later exports then capture
+their current bytes. Mutable runtime data should normally remain in Podman volumes
+and is not part of this reconciliation contract. Drift
 detection should report differences between normalized desired state and rendered
 files under `/data/config/`, but drift reports are read-only and must not repair
 state outside the safe apply pipeline.
@@ -625,6 +643,11 @@ Explicitly avoid adding these until there is a concrete need:
   `config.toml`/bundle contract. Mitigate with complete import/export round-trip
   tests and by making normalized desired state plus managed `files/` the source for
   both API patches and exports.
+- **Managed/runtime data confusion**: Applications could write mutable data into
+  managed `files/` and expect config export to act as a runtime backup. Mitigate with
+  read-only defaults, advisory warnings for writable `${FILES_DIR}` mounts, and
+  documentation that directs mutable state and its lifecycle to Podman volumes and
+  Podman tooling without restricting trusted integrator configurations.
 - **Privilege-boundary drift**: A future route could read or mutate an allowlisted
   path incorrectly. Mitigate with root-worker manifest verification, export path
   allowlisting, no-symlink tests, and one shared provisioning predicate.
@@ -659,6 +682,10 @@ Explicitly avoid adding these until there is a concrete need:
 - `GET /api/config/export` returns an authenticated compressed tar bundle containing
   canonical `config.toml` and managed `files/` payloads, and the result imports
   successfully into a clean config root with equivalent managed-file contents.
+- Managed `files/` are installed read-only for `appsvc` and the unprivileged API;
+  trusted Podman configurations may deliberately make a mount writable and receive
+  an advisory warning. Mutable application data is normally kept in Podman volumes
+  and excluded from config export.
 - Package tests cover archive path/type/size safety, deterministic export contents,
   missing/empty managed files, authentication, and full import/export round trips.
 - Existing NixOS VM integration coverage passes with fixtures aligned to the delivered bundle and LAN-defaults

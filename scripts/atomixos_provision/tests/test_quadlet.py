@@ -145,6 +145,134 @@ class TestRenderContainers:
         with pytest.raises(ProvisionError, match="Image must be a single string"):
             render_containers(table, Path("/data/config"))
 
+    def test_managed_file_mount_warns_without_read_only_option(self):
+        """Verify that managed file mount warns without read only option."""
+        table = {
+            "app": {
+                "privileged": False,
+                "Container": {
+                    "Image": "alpine:latest",
+                    "Volume": "${FILES_DIR}/config.yaml:/app/config.yaml",
+                },
+            }
+        }
+
+        rendered, _runtime, warnings = render_containers(table, Path("/data/config"))
+
+        assert (
+            "Volume=/data/config/files/config.yaml:/app/config.yaml" in rendered["app.container"]
+        )
+        assert len(warnings) == 1
+        assert "use a Podman volume for mutable runtime data" in warnings[0]
+
+    @pytest.mark.parametrize("mutating_option", ["rw", "U"])
+    def test_managed_file_mount_warns_about_mutating_options(self, mutating_option):
+        """Verify that managed file mount warns about mutating options."""
+        table = {
+            "app": {
+                "privileged": False,
+                "Container": {
+                    "Image": "alpine:latest",
+                    "Volume": f"${{FILES_DIR}}/config.yaml:/app/config.yaml:ro,{mutating_option}",
+                },
+            }
+        }
+
+        rendered, _runtime, warnings = render_containers(table, Path("/data/config"))
+
+        assert (
+            f"Volume=/data/config/files/config.yaml:/app/config.yaml:ro,{mutating_option}"
+            in rendered["app.container"]
+        )
+        assert len(warnings) == 1
+        assert "included in config export" in warnings[0]
+
+    def test_managed_file_mount_accepts_read_only_option(self):
+        """Verify that managed file mount accepts read only option."""
+        table = {
+            "app": {
+                "privileged": False,
+                "Container": {
+                    "Image": "alpine:latest",
+                    "Volume": "${FILES_DIR}/config.yaml:/app/config.yaml:ro,Z",
+                },
+            }
+        }
+
+        rendered, _runtime, warnings = render_containers(table, Path("/data/config"))
+
+        assert (
+            "Volume=/data/config/files/config.yaml:/app/config.yaml:ro,Z"
+            in rendered["app.container"]
+        )
+        assert warnings == []
+
+    def test_managed_file_structured_mount_warns_but_remains_supported(self):
+        """Verify that managed file structured mount warns but remains supported."""
+        table = {
+            "app": {
+                "privileged": True,
+                "Container": {
+                    "Image": "alpine:latest",
+                    "Mount": "type=bind,source=${FILES_DIR}/config.yaml,target=/app/config.yaml",
+                    "PodmanArgs": ["--pid=host", "--privileged"],
+                },
+            }
+        }
+
+        rendered, runtime, warnings = render_containers(table, Path("/data/config"))
+
+        unit = rendered["app.container"]
+        assert (
+            "Mount=type=bind,source=/data/config/files/config.yaml,target=/app/config.yaml" in unit
+        )
+        assert "PodmanArgs=--pid=host" in unit
+        assert "PodmanArgs=--privileged" in unit
+        assert runtime[0]["mode"] == "rootful"
+        assert len(warnings) == 1
+        assert "use a Podman volume for mutable runtime data" in warnings[0]
+
+    @pytest.mark.parametrize("read_only", ["ro", "readonly", "ro=true", "readonly=true"])
+    def test_managed_file_structured_mount_accepts_read_only_options(self, read_only):
+        """Verify that managed file structured mount accepts read only options."""
+        table = {
+            "app": {
+                "privileged": False,
+                "Container": {
+                    "Image": "alpine:latest",
+                    "Mount": (
+                        "type=bind,source=${FILES_DIR}/config.yaml,"
+                        f"target=/app/config.yaml,{read_only}"
+                    ),
+                },
+            }
+        }
+
+        _rendered, _runtime, warnings = render_containers(table, Path("/data/config"))
+
+        assert warnings == []
+
+    @pytest.mark.parametrize("mutating_option", ["rw", "readwrite", "U", "chown"])
+    def test_managed_file_structured_mount_warns_about_mutating_flags(self, mutating_option):
+        """Verify that managed file structured mount warns about mutating flags."""
+        table = {
+            "app": {
+                "privileged": False,
+                "Container": {
+                    "Image": "alpine:latest",
+                    "Mount": (
+                        "type=bind,source=${FILES_DIR}/config.yaml,"
+                        f"target=/app/config.yaml,ro,{mutating_option}"
+                    ),
+                },
+            }
+        }
+
+        rendered, _runtime, warnings = render_containers(table, Path("/data/config"))
+
+        assert f",ro,{mutating_option}" in rendered["app.container"]
+        assert len(warnings) == 1
+
 
 class TestRenderNetworks:
     def test_basic(self):

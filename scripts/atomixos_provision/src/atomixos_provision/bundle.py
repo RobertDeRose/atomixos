@@ -1,5 +1,6 @@
 """Bundle import/export, tar extraction, and managed-file placement."""
 
+import grp
 import gzip
 import io
 import os
@@ -15,6 +16,7 @@ from pathlib import Path
 from atomixos_provision.config import provision_error
 
 APP_RUNTIME_USER = "appsvc"
+PROVISION_READER_GROUP = "atomixos-provision"
 
 __all__ = [
     "copy_bundle_files",
@@ -86,18 +88,22 @@ def _snapshot_files_source(
     *,
     max_file_bytes: int | None = None,
     max_total_bytes: int | None = None,
+    max_members: int | None = None,
 ) -> int:
     """Snapshot managed files for deterministic export."""
     root_fd = _open_dir_no_follow(files_source)
     total_bytes = [0]
+    member_count = [0]
     try:
         return _snapshot_dir(
             root_fd,
             files_source,
             destination,
             total_bytes=total_bytes,
+            member_count=member_count,
             max_file_bytes=max_file_bytes,
             max_total_bytes=max_total_bytes,
+            max_members=max_members,
         )
     finally:
         os.close(root_fd)
@@ -109,8 +115,10 @@ def _snapshot_dir(
     destination: Path,
     *,
     total_bytes: list[int],
+    member_count: list[int],
     max_file_bytes: int | None,
     max_total_bytes: int | None,
+    max_members: int | None,
 ) -> int:
     """Copy an export directory into the bounded snapshot."""
     destination.mkdir(parents=True, exist_ok=True)
@@ -118,6 +126,9 @@ def _snapshot_dir(
     for name in sorted(os.listdir(source_fd)):
         if name in {"", ".", ".."}:
             raise provision_error(f"invalid bundle files entry: {name!r}")
+        member_count[0] += 1
+        if max_members is not None and member_count[0] > max_members:
+            raise provision_error(f"bundle exceeds {MAX_BUNDLE_MEMBERS} member limit")
         child_path = source_path / name
         try:
             child_stat = os.stat(name, dir_fd=source_fd, follow_symlinks=False)
@@ -144,8 +155,10 @@ def _snapshot_dir(
                     child_path,
                     target_path,
                     total_bytes=total_bytes,
+                    member_count=member_count,
                     max_file_bytes=max_file_bytes,
                     max_total_bytes=max_total_bytes,
+                    max_members=max_members,
                 )
             finally:
                 os.close(child_fd)
@@ -320,6 +333,8 @@ def export_bundle_bytes(config_root: Path) -> bytes:
         raise provision_error(f"cannot inspect managed bundle files: {files_path}") from exc
     if stat.S_ISLNK(files_stat.st_mode) or not stat.S_ISDIR(files_stat.st_mode):
         raise provision_error(f"bundle files entry must be a directory: {files_path}")
+    if MAX_BUNDLE_MEMBERS < 2:
+        raise provision_error(f"bundle exceeds {MAX_BUNDLE_MEMBERS} member limit")
 
     with tempfile.TemporaryDirectory(prefix=".atomixos-export-") as temporary:
         snapshot = Path(temporary) / "files"
@@ -328,6 +343,7 @@ def export_bundle_bytes(config_root: Path) -> bytes:
             snapshot,
             max_file_bytes=MAX_BUNDLE_MEMBER_BYTES,
             max_total_bytes=MAX_DECOMPRESSED_BYTES - len(config_bytes),
+            max_members=MAX_BUNDLE_MEMBERS - 2,
         )
         return _build_export_tar(config_bytes, snapshot)
 
@@ -497,16 +513,21 @@ def _remove_bundle_files_target(target: Path) -> None:
     target.unlink()
 
 
-def _grant_app_runtime_ownership(path: Path, uid: int, gid: int) -> None:
-    for current in [path, *path.rglob("*")]:
+def _grant_managed_file_access(path: Path, app_uid: int, reader_gid: int) -> None:
+    """Install managed payloads read-only for appsvc and the provisioning API."""
+    # Keep the staging root owned and writable by the installer until it is
+    # renamed. This is required by platforms that reject renaming a read-only
+    # source directory. Descendants receive their final access before exposure.
+    path.chmod(0o750)
+    for current in path.rglob("*"):
         current_stat = current.lstat()
         if stat.S_ISLNK(current_stat.st_mode):
             raise provision_error(f"bundle files entry must not be a symlink: {current}")
-        os.chown(current, uid, gid, follow_symlinks=False)
+        os.chown(current, app_uid, reader_gid, follow_symlinks=False)
         if stat.S_ISDIR(current_stat.st_mode):
-            current.chmod(0o700)
+            current.chmod(0o550)
         elif stat.S_ISREG(current_stat.st_mode):
-            current.chmod(0o600)
+            current.chmod(0o440)
         else:
             raise provision_error(f"bundle files entry must be a regular file: {current}")
 
@@ -635,9 +656,12 @@ def copy_bundle_files(files_source: Path | None, config_root: Path) -> None:
     try:
         app_user = pwd.getpwnam(APP_RUNTIME_USER)
         app_uid = app_user.pw_uid
-        app_gid = app_user.pw_gid
+        reader_gid = grp.getgrnam(PROVISION_READER_GROUP).gr_gid
     except KeyError as exc:
-        message = f"runtime user not found for bundle files: {APP_RUNTIME_USER}"
+        message = (
+            "managed-file identity not found: "
+            f"user={APP_RUNTIME_USER}, group={PROVISION_READER_GROUP}"
+        )
         raise provision_error(message) from exc
     config_root.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=".atomixos-files-", dir=config_root) as staging_dir:
@@ -645,9 +669,11 @@ def copy_bundle_files(files_source: Path | None, config_root: Path) -> None:
         staging_root.chmod(0o700)
         staging_target = staging_root / "files"
         _snapshot_files_source(files_source, staging_target)
-        _grant_app_runtime_ownership(staging_target, app_uid, app_gid)
+        _grant_managed_file_access(staging_target, app_uid, reader_gid)
         _remove_bundle_files_target(target)
         os.replace(staging_target, target)
+        target.chmod(0o550)
+        os.chown(target, app_uid, reader_gid, follow_symlinks=False)
 
 
 def stage_bundle_files(files_source: Path | None, destination: Path) -> None:
