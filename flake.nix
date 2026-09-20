@@ -393,6 +393,7 @@
             device-tree-overlay = import ./nix/tests/device-tree-overlay.nix netTestArgs;
             build-config-workflow = import ./nix/tests/build-config-workflow.nix netTestArgs;
             build-configuration = import ./nix/tests/build-configuration.nix netTestArgs;
+            e2e-launcher = import ./nix/tests/e2e-launcher.nix netTestArgs;
             lan-defaults = import ./nix/tests/lan-defaults.nix netTestArgs;
             partition-layout = import ./nix/tests/partition-layout.nix netTestArgs;
             nixstasis-module = import ./nix/tests/nixstasis-module.nix netTestArgs;
@@ -417,6 +418,7 @@
           darwinTests = {
             build-config-workflow = import ./nix/tests/build-config-workflow.nix darwinNetTestArgs;
             build-configuration = import ./nix/tests/build-configuration.nix darwinNetTestArgs;
+            e2e-launcher = import ./nix/tests/e2e-launcher.nix darwinNetTestArgs;
             lan-defaults = import ./nix/tests/lan-defaults.nix darwinNetTestArgs;
             partition-layout = import ./nix/tests/partition-layout.nix darwinNetTestArgs;
             rauc-slots = import ./nix/tests/rauc-slots.nix darwinRaucTestArgs;

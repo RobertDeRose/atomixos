@@ -179,7 +179,8 @@ mise run build -- --lima --vm my-builder
 The core `mise run e2e` suite runs 9 NixOS VM integration tests for the RAUC lifecycle and network behavior. The flake
 also exposes additional provisioning and forensics checks directly under `checks.*`. Tests run on both Linux (TCG
 software emulation) and macOS (Apple Virtualization Framework). The mise task wrappers auto-detect the platform and
-select the correct flake output (`aarch64-linux` or `aarch64-darwin`).
+select the correct flake output (`aarch64-linux` or `aarch64-darwin`) through the shared
+`scripts/run-e2e-check.sh` launcher.
 
 ### Run all tests
 

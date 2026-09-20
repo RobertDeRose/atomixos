@@ -205,6 +205,16 @@ Runtime SSH-on-WAN toggle (remove and re-add rule).
 
 ---
 
+### run-e2e-check.sh
+
+**Location:** `scripts/run-e2e-check.sh`
+
+Shared launcher for the named E2E tasks. It validates its check and description arguments, selects the host check
+namespace, optionally enters Lima, runs the check or interactive driver, filters known SQLite lock noise, and reports a
+consistent result. Files under `.mise/tasks/e2e/` retain the public task metadata and delegate execution here.
+
+---
+
 ## mise Task Scripts
 
 These are the `.mise/tasks/` scripts invoked via `mise run`.

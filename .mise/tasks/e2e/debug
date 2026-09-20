@@ -6,69 +6,26 @@
 #USAGE flag "--vm <name>" help="Lima VM instance name" default="default"
 set -euo pipefail
 
-cmd=()
-if [ "${usage_lima:-false}" = "true" ]; then
-	if ! command -v limactl >/dev/null 2>&1; then
-		echo "ERROR: limactl not found. Install Lima: https://lima-vm.io/"
-		exit 1
-	fi
-	limactl start "${usage_vm}" 2>/dev/null || true
-	cmd+=(limactl shell "${usage_vm}" --)
-fi
-
-ARCH="aarch64-linux"
-if [ "${usage_lima:-false}" != "true" ] && [[ "$(uname -s)" == "Darwin" ]]; then
-	ARCH="aarch64-darwin"
-fi
-
-TEST_NAME="${usage_test:-slots}"
-
-# Map short names to flake check attributes
-case "$TEST_NAME" in
-	slots)      CHECK="rauc-slots" ;;
-	update)     CHECK="rauc-update" ;;
-	rollback)   CHECK="rauc-rollback" ;;
-	confirm)    CHECK="rauc-confirm" ;;
-	power-loss) CHECK="rauc-power-loss" ;;
-	watchdog)   CHECK="rauc-watchdog" ;;
-	firewall)   CHECK="firewall" ;;
-	net-iso)    CHECK="network-isolation" ;;
-	ssh-toggle) CHECK="ssh-wan-toggle" ;;
-	*)
-		echo "Unknown test: $TEST_NAME"
-		echo "Available: slots, update, rollback, confirm, power-loss, watchdog, firewall, net-iso, ssh-toggle"
-		exit 1
-		;;
+case "${usage_test:-slots}" in
+slots) check_name=rauc-slots ;;
+update) check_name=rauc-update ;;
+rollback) check_name=rauc-rollback ;;
+confirm) check_name=rauc-confirm ;;
+power-loss) check_name=rauc-power-loss ;;
+watchdog) check_name=rauc-watchdog ;;
+firewall) check_name=firewall ;;
+net-iso) check_name=network-isolation ;;
+ssh-toggle) check_name=ssh-wan-toggle ;;
+*)
+	echo "Unknown test: ${usage_test}" >&2
+	echo "Available: slots, update, rollback, confirm, power-loss, watchdog, firewall, net-iso, ssh-toggle" >&2
+	exit 1
+	;;
 esac
 
-echo "Building interactive test driver for: $CHECK ($ARCH)"
-echo ""
-
-"${cmd[@]}" nix build ".#checks.${ARCH}.${CHECK}.driverInteractive" -o "result-e2e-${CHECK}"
-
-DRIVER="./result-e2e-${CHECK}/bin/nixos-test-driver"
-
-if [ ! -x "$DRIVER" ]; then
-	echo "ERROR: Test driver not found at $DRIVER"
-	exit 1
+args=(--interactive)
+if [[ "${usage_keep:-false}" == true ]]; then
+	args+=(--keep)
 fi
-
-ARGS=(--interactive)
-if [ "${usage_keep:-false}" = "true" ]; then
-	ARGS+=(--keep-vm-state)
-fi
-
-echo ""
-echo "Starting interactive test driver..."
-echo ""
-echo "  Available commands in the Python REPL:"
-echo "    gateway.start()                # boot the VM"
-echo "    gateway.wait_for_unit(\"multi-user.target\")"
-echo "    gateway.succeed(\"rauc status\") # run a command"
-echo "    gateway.shell_interact()       # drop into a root shell"
-echo "    gateway.screenshot(\"name\")     # save a screenshot"
-echo ""
-echo "  Press Ctrl+D to exit the REPL and shut down the VM."
-echo ""
-
-exec "$DRIVER" "${ARGS[@]}"
+exec ./scripts/run-e2e-check.sh "${args[@]}" "$check_name" \
+	"Launches the selected NixOS VM test driver for interactive debugging"

@@ -5,6 +5,10 @@ security, and rollback behavior. Additional provisioning, management-client, and
 directly under the flake `checks.*` outputs. Tests run on both Linux (TCG software emulation) and macOS (Apple
 Virtualization Framework).
 
+Every individual task is a thin wrapper over `scripts/run-e2e-check.sh`. The helper validates the check name and
+description, selects the host architecture, enters Lima when requested, invokes Nix, filters the known SQLite
+contention noise, and reports the result consistently. The interactive debug task uses the same launcher.
+
 ## Running Tests
 
 ### Provisioning package
@@ -59,6 +63,8 @@ nix build .#checks.aarch64-darwin.build-configuration --no-link
 nix build .#checks.aarch64-linux.build-configuration --no-link
 nix build .#checks.aarch64-darwin.build-config-workflow --no-link
 nix build .#checks.aarch64-linux.build-config-workflow --no-link
+nix build .#checks.aarch64-darwin.e2e-launcher --no-link
+nix build .#checks.aarch64-linux.e2e-launcher --no-link
 nix build .#checks.aarch64-darwin.watchdog-missing-device --no-link
 nix build .#checks.aarch64-linux.watchdog-missing-device --no-link
 nix build .#checks.aarch64-darwin.kernel-security --no-link

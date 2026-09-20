@@ -55,6 +55,7 @@ nix/
 
 scripts/
   nix-with-build-config.sh         Fixed-path local override wrapper for Nix commands
+  run-e2e-check.sh                 Shared E2E architecture, Lima, and Nix launcher
   build.sh                         Preflighted atomic retained-artifact build
   build-squashfs.sh                Squashfs build template (Nix derivation)
   build-rauc-bundle.sh             RAUC bundle build template (Nix derivation)
