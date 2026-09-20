@@ -11,6 +11,7 @@ assert pkgs.lib.hasInfix "Address=${defaults.gateway_cidr}" lanNetwork;
 assert pkgs.lib.hasInfix
   "dhcp-range=${defaults.dhcp_start},${defaults.dhcp_end},${defaults.netmask},24h"
   dnsmasq;
+assert pkgs.lib.hasInfix "local=/${defaults.domain}/" dnsmasq;
 assert pkgs.lib.hasInfix "allow ${defaults.subnet_cidr}" chrony;
 pkgs.runCommandNoCC "lan-defaults-contract" { } ''
   cmp ${systemConfig.environment.etc."atomixos/lan-defaults.json".source} ${../../defaults/lan.json}

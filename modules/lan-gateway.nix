@@ -86,7 +86,7 @@ in
     domain=${lanDefaults.domain}
     expand-hosts
     addn-hosts=/etc/atomixos/dnsmasq-hosts
-    local=/local/
+    local=/${lanDefaults.domain}/
     log-dhcp
   '';
 
