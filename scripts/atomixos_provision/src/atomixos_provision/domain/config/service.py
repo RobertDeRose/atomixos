@@ -32,6 +32,7 @@ class ConfigService:
         filename: str,
         progress: Job,
         allow_reapply: bool = True,
+        authorization: dict[str, str] | None = None,
     ) -> None:
         """Stage raw configuration bytes for worker application."""
         from atomixos_provision.provision import stage_reserved_config_bytes
@@ -44,6 +45,7 @@ class ConfigService:
             self.config_root,
             allow_reapply=allow_reapply,
             progress=progress,
+            authorization=authorization,
         )
 
     async def validate_bytes(self, body: bytes, filename: str) -> dict[str, Any]:
@@ -70,11 +72,20 @@ class ConfigService:
         self,
         operation: dict[str, Any],
         progress: Job,
+        request_payload: bytes | None = None,
+        authorization: dict[str, str] | None = None,
     ) -> None:
         """Stage a typed partial operation for worker application."""
         from atomixos_provision.provision import stage_reserved_config_operation
 
-        await stage_reserved_config_operation(progress.id, operation, self.config_root, progress)
+        await stage_reserved_config_operation(
+            progress.id,
+            operation,
+            self.config_root,
+            progress,
+            request_payload,
+            authorization,
+        )
 
     async def put_user(self, name: str, payload: dict[str, Any], progress: Job | None = None):
         return await self.apply_partial(

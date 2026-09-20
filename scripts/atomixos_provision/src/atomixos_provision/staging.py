@@ -58,6 +58,11 @@ class RuntimePaths:
     def queue_sequence(self) -> Path:
         return self.queue / ".sequence"
 
+    @property
+    def used_nonces(self) -> Path:
+        """Return the directory containing consumed authorization nonces."""
+        return self.root / "used-nonces"
+
 
 @dataclass(frozen=True)
 class ClaimedJob:
@@ -165,6 +170,28 @@ def sha256_file(path: Path) -> str:
 
 def sha256_bytes(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
+
+
+def consume_authorization_nonce(paths: RuntimePaths, nonce: str) -> None:
+    """Consume a boot-scoped authorization nonce in root-owned runtime state."""
+    from atomixos_provision.auth import nonce_matches_current_boot
+
+    if not nonce_matches_current_boot(nonce):
+        raise ProvisionError("staged authorization nonce is not valid for this boot")
+    paths.used_nonces.mkdir(parents=True, exist_ok=True, mode=0o700)
+    paths.used_nonces.chmod(0o700)
+    marker = paths.used_nonces / hashlib.sha256(nonce.encode()).hexdigest()
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_CLOEXEC", 0)
+    try:
+        fd = os.open(marker, flags, 0o600)
+    except FileExistsError as exc:
+        raise ProvisionError("staged authorization nonce was already consumed") from exc
+    try:
+        os.write(fd, b"used\n")
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    fsync_directory(paths.used_nonces)
 
 
 def tree_manifest(root: Path) -> list[dict[str, Any]]:
@@ -627,6 +654,9 @@ def verify_staged_job(
         _verify_tree(job.path / "bundle-files", bundle_entries, expected_uid, expected_gid)
     elif (job.path / "bundle-files").exists():
         raise ProvisionError("staged job has unexpected bundle-files directory")
+    request = manifest.get("request")
+    if request is not None:
+        _verify_staged_request(job.path, request, expected_uid, expected_gid)
     return manifest
 
 
@@ -859,6 +889,8 @@ def _verify_job_top_level(job_path: Path, manifest: dict[str, Any]) -> None:
     allowed = {"manifest.json", "candidate"}
     if manifest.get("bundle_files") or manifest.get("bundle_files_present") is True:
         allowed.add("bundle-files")
+    if manifest.get("request") is not None:
+        allowed.add("request.bin")
     actual = {child.name for child in job_path.iterdir()}
     unexpected = actual - allowed
     if unexpected:
@@ -872,6 +904,35 @@ def _verify_job_top_level(job_path: Path, manifest: dict[str, Any]) -> None:
     )
     if not (job_path / "candidate").is_dir():
         raise ProvisionError("staged job missing candidate directory")
+
+
+def _verify_staged_request(
+    job_path: Path,
+    request: Any,
+    expected_uid: int,
+    expected_gid: int,
+) -> None:
+    """Verify staged request metadata and payload bounds."""
+    if not isinstance(request, dict):
+        raise ProvisionError("staged request metadata must be an object")
+    request_path = job_path / "request.bin"
+    _verify_path_metadata(request_path, expected_uid, expected_gid)
+    try:
+        request_stat = request_path.lstat()
+    except OSError as exc:
+        raise ProvisionError(f"cannot stat staged request: {request_path}") from exc
+    if not stat.S_ISREG(request_stat.st_mode):
+        raise ProvisionError(f"staged request must be a regular file: {request_path}")
+    size = request.get("size")
+    digest = request.get("sha256")
+    if not isinstance(size, int) or isinstance(size, bool) or size < 0:
+        raise ProvisionError("staged request size must be a non-negative integer")
+    if request_stat.st_size != size:
+        raise ProvisionError("staged request size changed")
+    if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
+        raise ProvisionError("staged request hash is invalid")
+    if sha256_file(request_path) != digest:
+        raise ProvisionError("staged request hash changed")
 
 
 def _verify_tree(root: Path, expected_entries: Any, expected_uid: int, expected_gid: int) -> None:

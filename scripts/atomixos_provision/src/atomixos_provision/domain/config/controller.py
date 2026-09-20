@@ -291,7 +291,10 @@ async def submit_config(
     filename = _sanitize_filename(request.headers.get("x-config-filename", "config.toml"))
 
     submission = await provision_coordinator.submit_bytes(
-        body, filename, allow_reapply=allow_reapply
+        body,
+        filename,
+        allow_reapply=allow_reapply,
+        authorization=_request_authorization(request),
     )
     job = submission.job
     if job is None:
@@ -341,11 +344,13 @@ async def export_config(config_service: ConfigService) -> Response[bytes]:
 async def put_partial_user(
     name: str,
     data: dict[str, Any],
+    request: Request,
     provision_coordinator: ProvisionCoordinator,
 ) -> Response[SubmitConfigResponseBody]:
     return await _submit_partial_operation(
         provision_coordinator,
         {"op": "put_user", "name": name, "payload": dict(data)},
+        request,
     )
 
 
@@ -361,10 +366,11 @@ async def put_partial_user(
 )
 async def delete_partial_user(
     name: str,
+    request: Request,
     provision_coordinator: ProvisionCoordinator,
 ) -> Response[SubmitConfigResponseBody]:
     return await _submit_partial_operation(
-        provision_coordinator, {"op": "delete_user", "name": name}
+        provision_coordinator, {"op": "delete_user", "name": name}, request
     )
 
 
@@ -380,10 +386,13 @@ async def delete_partial_user(
 )
 async def patch_partial_network(
     data: dict[str, Any],
+    request: Request,
     provision_coordinator: ProvisionCoordinator,
 ) -> Response[SubmitConfigResponseBody]:
     return await _submit_partial_operation(
-        provision_coordinator, {"op": "patch_network", "payload": dict(data)}
+        provision_coordinator,
+        {"op": "patch_network", "payload": dict(data)},
+        request,
     )
 
 
@@ -400,11 +409,13 @@ async def patch_partial_network(
 async def put_container(
     name: str,
     data: dict[str, Any],
+    request: Request,
     provision_coordinator: ProvisionCoordinator,
 ) -> Response[SubmitConfigResponseBody]:
     return await _submit_partial_operation(
         provision_coordinator,
         {"op": "put_resource", "table": "container", "name": name, "payload": dict(data)},
+        request,
     )
 
 
@@ -419,11 +430,12 @@ async def put_container(
     tags=["config"],
 )
 async def delete_container(
-    name: str, provision_coordinator: ProvisionCoordinator
+    name: str, request: Request, provision_coordinator: ProvisionCoordinator
 ) -> Response[SubmitConfigResponseBody]:
     return await _submit_partial_operation(
         provision_coordinator,
         {"op": "delete_resource", "table": "container", "name": name},
+        request,
     )
 
 
@@ -440,11 +452,13 @@ async def delete_container(
 async def put_container_network(
     name: str,
     data: dict[str, Any],
+    request: Request,
     provision_coordinator: ProvisionCoordinator,
 ) -> Response[SubmitConfigResponseBody]:
     return await _submit_partial_operation(
         provision_coordinator,
         {"op": "put_resource", "table": "network", "name": name, "payload": dict(data)},
+        request,
     )
 
 
@@ -459,11 +473,12 @@ async def put_container_network(
     tags=["config"],
 )
 async def delete_container_network(
-    name: str, provision_coordinator: ProvisionCoordinator
+    name: str, request: Request, provision_coordinator: ProvisionCoordinator
 ) -> Response[SubmitConfigResponseBody]:
     return await _submit_partial_operation(
         provision_coordinator,
         {"op": "delete_resource", "table": "network", "name": name},
+        request,
     )
 
 
@@ -480,11 +495,13 @@ async def delete_container_network(
 async def put_container_volume(
     name: str,
     data: dict[str, Any],
+    request: Request,
     provision_coordinator: ProvisionCoordinator,
 ) -> Response[SubmitConfigResponseBody]:
     return await _submit_partial_operation(
         provision_coordinator,
         {"op": "put_resource", "table": "volume", "name": name, "payload": dict(data)},
+        request,
     )
 
 
@@ -499,19 +516,26 @@ async def put_container_volume(
     tags=["config"],
 )
 async def delete_container_volume(
-    name: str, provision_coordinator: ProvisionCoordinator
+    name: str, request: Request, provision_coordinator: ProvisionCoordinator
 ) -> Response[SubmitConfigResponseBody]:
     return await _submit_partial_operation(
         provision_coordinator,
         {"op": "delete_resource", "table": "volume", "name": name},
+        request,
     )
 
 
 async def _submit_partial_operation(
     provision_coordinator: ProvisionCoordinator,
     operation: dict[str, Any],
+    request: Request,
 ) -> Response[SubmitConfigResponseBody]:
-    submission = await provision_coordinator.submit_partial(operation)
+    """Submit a typed partial operation and return its job response."""
+    submission = await provision_coordinator.submit_partial(
+        operation,
+        request_payload=await request.body(),
+        authorization=_request_authorization(request),
+    )
     job = submission.job
     if job is None:
         return api_error_response(ConflictError(submission.conflict_message))
@@ -521,6 +545,17 @@ async def _submit_partial_operation(
         headers={"Location": job_url},
         status_code=202,
     )
+
+
+def _request_authorization(request: Request) -> dict[str, str] | None:
+    """Return verified worker authorization metadata from request scope."""
+    value = request.scope.get("atomixos_authorization")
+    if not isinstance(value, dict):
+        return None
+    fields = ("nonce", "signature", "method", "path")
+    if not all(isinstance(value.get(key), str) for key in fields):
+        return None
+    return {key: value[key] for key in fields}
 
 
 @post(

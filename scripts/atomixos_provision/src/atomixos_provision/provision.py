@@ -1,6 +1,7 @@
 """First-boot and re-apply provision orchestration."""
 
 import asyncio
+import base64
 import contextlib
 import errno
 import fcntl
@@ -16,6 +17,7 @@ import time
 import uuid
 from pathlib import Path
 from typing import Any, Protocol
+from urllib.parse import unquote
 
 from atomixos_provision.activation import (
     BOOTSTRAP_ACTIVATION_ENV,
@@ -28,6 +30,11 @@ from atomixos_provision.activation import (
     discard_initial_config,
     promotion_marker_path,
     recover_config_root,
+)
+from atomixos_provision.auth import (
+    build_allowed_signers,
+    reapply_signature_message,
+    verify_ssh_signature,
 )
 from atomixos_provision.bundle import (
     copy_bundle_files,
@@ -46,6 +53,7 @@ from atomixos_provision.quadlet import (
 )
 from atomixos_provision.staging import (
     DEFAULT_MAX_STAGED_JOBS,
+    DEFAULT_RUNTIME_ROOT,
     MANIFEST_VERSION,
     ClaimedJob,
     CommittedStagedResult,
@@ -53,6 +61,7 @@ from atomixos_provision.staging import (
     StagedTimeoutState,
     claim_next_job,
     cleanup_claimed_job,
+    consume_authorization_nonce,
     ensure_runtime_layout,
     finalize_abandoned_active_jobs,
     has_staged_jobs,
@@ -63,6 +72,7 @@ from atomixos_provision.staging import (
     release_staged_job_slot,
     reserve_staged_job_slot,
     runtime_paths,
+    sha256_bytes,
     sha256_file,
     staged_timeout_state,
     tree_manifest,
@@ -341,6 +351,27 @@ def _manifest_for_staged_candidate(
     }
 
 
+def _stage_request_evidence(
+    staging_path: Path,
+    manifest: dict[str, Any],
+    payload: bytes,
+    filename: str,
+    authorization: dict[str, str] | None,
+) -> None:
+    """Persist signed request evidence for privileged worker verification."""
+    request_path = staging_path / "request.bin"
+    request_path.write_bytes(payload)
+    request_path.chmod(0o600)
+    request: dict[str, Any] = {
+        "filename": filename,
+        "size": len(payload),
+        "sha256": sha256_bytes(payload),
+    }
+    if authorization is not None:
+        request["authorization"] = dict(authorization)
+    manifest["request"] = request
+
+
 def _progress_job_id(progress: ProgressReporter | None) -> str:
     job_id = getattr(progress, "id", None)
     return str(job_id) if isinstance(job_id, str) and job_id else str(uuid.uuid4())
@@ -365,6 +396,8 @@ def _stage_prepared_sync(
     operation: str = "full-apply",
     progress: ProgressReporter | None = None,
     wait_for_result: bool = True,
+    request_payload: bytes | None = None,
+    authorization: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     job_id = validate_job_id(job_id)
     config_root = validate_config_root(config_root)
@@ -416,6 +449,14 @@ def _stage_prepared_sync(
             is_reapply=is_reapply,
             preserve_bundle_files=preserve_bundle_files,
         )
+        if request_payload is not None:
+            _stage_request_evidence(
+                staging_path,
+                manifest,
+                request_payload,
+                filename,
+                authorization,
+            )
         write_json_atomic(staging_path / "manifest.json", manifest)
         os.replace(staging_path, job_path)
         publish_ready_marker(paths, job_id)
@@ -470,6 +511,7 @@ def stage_reserved_config_bytes(
     *,
     allow_reapply: bool = True,
     progress: ProgressReporter | None = None,
+    authorization: dict[str, str] | None = None,
 ) -> None:
     if progress:
         progress.set_stage("prepare", f"unpacking {filename}")
@@ -485,6 +527,8 @@ def stage_reserved_config_bytes(
             allow_reapply=allow_reapply,
             progress=progress,
             wait_for_result=False,
+            request_payload=payload,
+            authorization=authorization,
         )
     finally:
         tmpdir.cleanup()
@@ -498,6 +542,7 @@ def stage_config_bytes(
     *,
     allow_reapply: bool = True,
     progress: ProgressReporter | None = None,
+    authorization: dict[str, str] | None = None,
 ) -> None:
     """Reserve capacity and stage bytes outside the API job manager."""
     paths = _runtime_paths()
@@ -510,6 +555,7 @@ def stage_config_bytes(
             config_root,
             allow_reapply=allow_reapply,
             progress=progress,
+            authorization=authorization,
         )
     except Exception:
         release_staged_job_slot(paths, job_id)
@@ -570,6 +616,8 @@ def _stage_config_operation_sync(
     operation: dict[str, Any],
     config_root: Path,
     progress: ProgressReporter | None = None,
+    request_payload: bytes | None = None,
+    authorization: dict[str, str] | None = None,
 ) -> None:
     config_root = validate_config_root(config_root)
     paths = _runtime_paths()
@@ -598,6 +646,8 @@ def _stage_config_operation_sync(
             operation="partial-apply",
             progress=progress,
             wait_for_result=False,
+            request_payload=request_payload,
+            authorization=authorization,
         )
     finally:
         tmpdir.cleanup()
@@ -1079,6 +1129,16 @@ def _copy_staged_job_snapshot(
     bundle_entries = manifest.get("bundle_files", [])
     if bundle_entries or manifest.get("bundle_files_present") is True:
         _copy_staged_manifest_tree(source, destination, "bundle-files", bundle_entries)
+    request = manifest.get("request")
+    if isinstance(request, dict):
+        expected_size = request.get("size")
+        if not isinstance(expected_size, int) or isinstance(expected_size, bool):
+            raise ProvisionError("staged request size must be an integer")
+        _copy_staged_file_from_path(
+            source / "request.bin",
+            destination / "request.bin",
+            expected_size,
+        )
 
 
 def _validate_staged_snapshot_manifest(
@@ -1091,6 +1151,8 @@ def _validate_staged_snapshot_manifest(
     allowed = {"manifest.json", "candidate"}
     if manifest.get("bundle_files") or manifest.get("bundle_files_present") is True:
         allowed.add("bundle-files")
+    if manifest.get("request") is not None:
+        allowed.add("request.bin")
     actual = {child.name for child in source.iterdir()}
     unexpected = actual - allowed
     if unexpected:
@@ -1108,50 +1170,203 @@ def _manifest_nonnegative_int(manifest: dict[str, Any], key: str) -> int:
     return value
 
 
+def _read_staged_request(snapshot: Path, manifest: dict[str, Any]) -> bytes | None:
+    """Read exact request bytes from a staged worker snapshot."""
+    request = manifest.get("request")
+    if request is None:
+        return None
+    if not isinstance(request, dict):
+        raise ProvisionError("staged request metadata must be an object")
+    return (snapshot / "request.bin").read_bytes()
+
+
+def _verify_staged_authorization(
+    snapshot: Path,
+    config_root: Path,
+    manifest: dict[str, Any],
+    paths: RuntimePaths,
+    *,
+    locally_trusted: bool,
+) -> tuple[bytes | None, dict[str, str] | None]:
+    """Verify and consume authorization for a staged request."""
+    request_payload = _read_staged_request(snapshot, manifest)
+    request = manifest.get("request")
+    authorization = request.get("authorization") if isinstance(request, dict) else None
+    is_reapply = _is_provisioned_config_root(config_root)
+
+    if not is_reapply:
+        if authorization is not None:
+            raise ProvisionError("initial provisioning must not carry re-apply authorization")
+        return request_payload, None
+    if locally_trusted:
+        return request_payload, None
+    if request_payload is None or not isinstance(authorization, dict):
+        raise ProvisionError("re-apply requires worker-verifiable authorization")
+
+    fields = ("nonce", "signature", "method", "path")
+    if not all(isinstance(authorization.get(field), str) for field in fields):
+        raise ProvisionError("staged authorization metadata is invalid")
+    normalized = {field: str(authorization[field]) for field in fields}
+    allowed_path = build_allowed_signers(config_root)
+    if allowed_path is None:
+        raise ProvisionError("re-apply authorization has no active admin signers")
+    try:
+        try:
+            signature = base64.b64decode(normalized["signature"], validate=True)
+        except ValueError as exc:
+            raise ProvisionError("staged authorization signature encoding is invalid") from exc
+        message = reapply_signature_message(
+            normalized["nonce"],
+            normalized["method"],
+            normalized["path"],
+            request_payload,
+        )
+        if not verify_ssh_signature(message, signature, allowed_path):
+            raise ProvisionError("staged request signature verification failed")
+    finally:
+        allowed_path.unlink(missing_ok=True)
+    consume_authorization_nonce(paths, normalized["nonce"])
+    return request_payload, normalized
+
+
+def _request_operation(authorization: dict[str, str], payload: bytes) -> dict[str, Any] | None:
+    """Derive the typed operation from verified request bytes."""
+    method = authorization["method"]
+    path = authorization["path"]
+    if method == "POST" and path == "/api/config":
+        return None
+
+    try:
+        body = json.loads(payload.decode("utf-8")) if payload.strip() else {}
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ProvisionError("signed partial request body must be a JSON object") from exc
+    if not isinstance(body, dict):
+        raise ProvisionError("signed partial request body must be a JSON object")
+    if method == "PATCH" and path == "/api/config/network":
+        return {"op": "patch_network", "payload": body}
+
+    prefixes = {
+        "/api/config/users/": ("user", None),
+        "/api/config/containers/": ("resource", "container"),
+        "/api/config/container-networks/": ("resource", "network"),
+        "/api/config/container-volumes/": ("resource", "volume"),
+    }
+    for prefix, (kind, table) in prefixes.items():
+        if not path.startswith(prefix):
+            continue
+        name = unquote(path.removeprefix(prefix))
+        if not name or "/" in name:
+            break
+        if kind == "user":
+            if method == "PUT":
+                return {"op": "put_user", "name": name, "payload": body}
+            if method == "DELETE" and not body:
+                return {"op": "delete_user", "name": name}
+        else:
+            if method == "PUT":
+                return {
+                    "op": "put_resource",
+                    "table": table,
+                    "name": name,
+                    "payload": body,
+                }
+            if method == "DELETE" and not body:
+                return {"op": "delete_resource", "table": table, "name": name}
+        break
+    raise ProvisionError("signed request does not map to a supported provisioning operation")
+
+
 def _render_verified_staged_candidate_sync(
     snapshot: Path,
     config_root: Path,
     manifest: dict[str, Any],
+    paths: RuntimePaths,
+    locally_trusted: bool,
     progress: ProgressReporter | None = None,
 ) -> dict[str, Any]:
-    source_config = snapshot / "candidate" / "config.toml"
-    expected_digest = manifest.get("source_sha256")
-    if not isinstance(expected_digest, str) or expected_digest != sha256_file(source_config):
-        raise ProvisionError("staged source config hash changed")
-    parsed = load_config(source_config)
-    allow_reapply = _manifest_bool(manifest, "allow_reapply", default=True)
-    preserve_bundle_files = _manifest_bool(manifest, "preserve_bundle_files", default=False)
-    candidate_root = snapshot / "candidate-rendered"
-    bundle_root = snapshot / "bundle-files"
-    warnings = write_imported_state(
-        parsed, source_config, None, candidate_root, config_root, progress
-    )
-    if _is_provisioned_config_root(config_root):
-        carry_forward_managed_state(config_root, candidate_root)
-    rendered_manifest = {
-        **manifest,
-        **_manifest_for_staged_candidate(
-            job_id=str(manifest["job_id"]),
-            config_path=source_config,
-            candidate_root=candidate_root,
-            bundle_root=bundle_root,
-            parsed=parsed,
-            warnings=warnings,
-            filename="config.toml",
-            source_digest=sha256_file(source_config),
-            allow_reapply=allow_reapply,
-            operation=str(manifest.get("operation", "full-apply")),
-            is_reapply=_is_provisioned_config_root(config_root),
-            preserve_bundle_files=preserve_bundle_files,
-        ),
-    }
-    return _promote_pre_rendered_candidate_sync(
-        candidate_root,
-        bundle_root,
+    """Render a configuration candidate from verified staged inputs."""
+    recover_config_root(config_root)
+    request_payload, authorization = _verify_staged_authorization(
+        snapshot,
         config_root,
-        rendered_manifest,
-        progress,
+        manifest,
+        paths,
+        locally_trusted=locally_trusted,
     )
+    if request_payload is None or authorization is None:
+        source_config = snapshot / "candidate" / "config.toml"
+        bundle_root: Path | None = snapshot / "bundle-files"
+        preserve_bundle_files = _manifest_bool(manifest, "preserve_bundle_files", default=False)
+        operation = str(manifest.get("operation", "full-apply"))
+        source_tmpdir = None
+    else:
+        operation_payload = _request_operation(authorization, request_payload)
+        if operation_payload is None:
+            request = manifest["request"]
+            filename = request.get("filename")
+            if not isinstance(filename, str) or not filename:
+                raise ProvisionError("staged request filename is invalid")
+            source_tmpdir, source_config, bundle_root = prepare_source_bytes(
+                request_payload, filename
+            )
+            preserve_bundle_files = False
+            operation = "full-apply"
+        else:
+            from atomixos_provision.partial_config import (
+                apply_operation,
+                canonical_config_bytes,
+                load_current_config,
+            )
+
+            candidate = canonical_config_bytes(
+                apply_operation(load_current_config(config_root), operation_payload)
+            )
+            source_tmpdir, source_config, _ = prepare_source_bytes(candidate, "config.toml")
+            bundle_root = None
+            preserve_bundle_files = (config_root / "files").exists()
+            operation = "partial-apply"
+
+    try:
+        expected_digest = manifest.get("source_sha256")
+        if authorization is None and (
+            not isinstance(expected_digest, str) or expected_digest != sha256_file(source_config)
+        ):
+            raise ProvisionError("staged source config hash changed")
+        parsed = load_config(source_config)
+        candidate_root = snapshot / "candidate-rendered"
+        warnings = write_imported_state(
+            parsed, source_config, None, candidate_root, config_root, progress
+        )
+        if _is_provisioned_config_root(config_root):
+            carry_forward_managed_state(config_root, candidate_root)
+        bundle_manifest_root = bundle_root or (snapshot / "missing-bundle-files")
+        rendered_manifest = {
+            **manifest,
+            **_manifest_for_staged_candidate(
+                job_id=str(manifest["job_id"]),
+                config_path=source_config,
+                candidate_root=candidate_root,
+                bundle_root=bundle_manifest_root,
+                parsed=parsed,
+                warnings=warnings,
+                filename="config.toml",
+                source_digest=sha256_file(source_config),
+                allow_reapply=locally_trusted or authorization is not None,
+                operation=operation,
+                is_reapply=_is_provisioned_config_root(config_root),
+                preserve_bundle_files=preserve_bundle_files,
+            ),
+        }
+        return _promote_pre_rendered_candidate_sync(
+            candidate_root,
+            bundle_root,
+            config_root,
+            rendered_manifest,
+            progress,
+        )
+    finally:
+        if source_tmpdir is not None:
+            source_tmpdir.cleanup()
 
 
 def _manifest_bool(manifest: dict[str, Any], key: str, *, default: bool) -> bool:
@@ -1415,6 +1630,17 @@ def _promote_pre_rendered_candidate_sync(
     return result
 
 
+def _claimed_job_is_locally_trusted(job: ClaimedJob, paths: RuntimePaths) -> bool:
+    """Recognize root-created maintenance jobs without trusting manifest data."""
+    try:
+        owner_uid = job.path.lstat().st_uid
+    except OSError as exc:
+        raise ProvisionError(f"cannot inspect claimed staged job: {job.path}") from exc
+    if paths.root == DEFAULT_RUNTIME_ROOT:
+        return owner_uid == 0
+    return owner_uid == os.geteuid()
+
+
 def apply_staged_job(config_root: Path, runtime_root: Path | None = None) -> dict[str, Any] | None:
     """Claim and apply one staged provisioning job as the root worker."""
     config_root = validate_config_root(config_root, allow_unsafe_env=False)
@@ -1429,6 +1655,7 @@ def apply_staged_job(config_root: Path, runtime_root: Path | None = None) -> dic
             return None
         terminal_result_written = False
         manifest: dict[str, Any] | None = None
+        locally_trusted = _claimed_job_is_locally_trusted(claimed, paths)
         try:
             try:
                 with tempfile.TemporaryDirectory(prefix="atomixos-staged-") as snapshot_dir:
@@ -1441,7 +1668,11 @@ def apply_staged_job(config_root: Path, runtime_root: Path | None = None) -> dic
                     manifest = verify_staged_job(snapshot_job, paths, require_active=False)
                     with provisioning_lock(config_root):
                         result = _render_verified_staged_candidate_sync(
-                            snapshot, config_root, manifest
+                            snapshot,
+                            config_root,
+                            manifest,
+                            paths,
+                            locally_trusted,
                         )
                 write_result(paths, claimed.job_id, {"status": "succeeded", "result": result})
             except Exception as exc:
@@ -1645,13 +1876,21 @@ async def stage_config_operation(
     operation: dict[str, Any],
     config_root: Path,
     progress: ProgressReporter | None = None,
+    request_payload: bytes | None = None,
+    authorization: dict[str, str] | None = None,
 ) -> None:
     """Reserve capacity and stage a typed operation outside the API job manager."""
     paths = _runtime_paths()
     _reserve_staged_job_or_raise(paths, job_id)
     try:
         await asyncio.to_thread(
-            _stage_config_operation_sync, job_id, operation, config_root, progress
+            _stage_config_operation_sync,
+            job_id,
+            operation,
+            config_root,
+            progress,
+            request_payload,
+            authorization,
         )
     except Exception:
         release_staged_job_slot(paths, job_id)
@@ -1663,9 +1902,19 @@ async def stage_reserved_config_operation(
     operation: dict[str, Any],
     config_root: Path,
     progress: ProgressReporter | None = None,
+    request_payload: bytes | None = None,
+    authorization: dict[str, str] | None = None,
 ) -> None:
     """Stage a typed operation using capacity reserved by the API job manager."""
-    await asyncio.to_thread(_stage_config_operation_sync, job_id, operation, config_root, progress)
+    await asyncio.to_thread(
+        _stage_config_operation_sync,
+        job_id,
+        operation,
+        config_root,
+        progress,
+        request_payload,
+        authorization,
+    )
 
 
 async def apply_config_transform(

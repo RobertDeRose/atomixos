@@ -7,6 +7,7 @@ import sys
 
 import pytest
 
+from atomixos_provision.auth import current_boot_id
 from atomixos_provision.config import ProvisionError
 from atomixos_provision.provision import (
     apply_staged_job,
@@ -791,6 +792,176 @@ def test_apply_staged_job_promotes_candidate_and_writes_result(tmp_path, monkeyp
     assert not (runtime_root / "active" / "job-1").exists()
     result_file = json.loads((runtime_root / "results" / "job-1.json").read_text())
     assert result_file["status"] == "succeeded"
+
+
+def test_worker_rejects_manifest_reapply_flag_without_authorization(tmp_path, monkeypatch):
+    """Verify that worker rejects manifest reapply flag without authorization."""
+    runtime_root = tmp_path / "run"
+    config_root = tmp_path / "config"
+    _force_staging(monkeypatch)
+    monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(runtime_root))
+    monkeypatch.setattr(
+        "atomixos_provision.provision.validate_config_root", lambda root, **_: root
+    )
+    monkeypatch.setattr("atomixos_provision.provision.os.chown", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        "atomixos_provision.config.load_config_schema",
+        lambda: {"type": "object", "additionalProperties": True},
+    )
+    monkeypatch.setattr(
+        "atomixos_provision.provision.complete_reapply",
+        lambda _root, _progress=None: (True, [], "skipped"),
+    )
+    monkeypatch.setattr("atomixos_provision.provision.reconcile_bootstrap_wan", lambda: None)
+    monkeypatch.setattr(
+        "atomixos_provision.provision._claimed_job_is_locally_trusted",
+        lambda *_args: False,
+    )
+
+    stage_config_bytes("job-1", _valid_config(), "config.toml", config_root, allow_reapply=False)
+    stage_config_bytes(
+        "job-2",
+        _valid_config("docker.io/library/busybox:latest"),
+        "config.toml",
+        config_root,
+        allow_reapply=False,
+    )
+    first = apply_staged_job(config_root, runtime_root)
+    assert first is not None
+    original = (config_root / "config.toml").read_bytes()
+
+    manifest_path = runtime_root / "queue" / "job-2" / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["allow_reapply"] = True
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ProvisionError, match="worker-verifiable authorization"):
+        apply_staged_job(config_root, runtime_root)
+
+    assert (config_root / "config.toml").read_bytes() == original
+    assert read_result(runtime_paths(runtime_root), "job-2")["status"] == "failed"
+
+
+def test_worker_renders_from_signed_request_not_staged_candidate(tmp_path, monkeypatch):
+    """Verify that worker renders from signed request not staged candidate."""
+    runtime_root = tmp_path / "run"
+    config_root = tmp_path / "config"
+    _force_staging(monkeypatch)
+    monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(runtime_root))
+    monkeypatch.setattr(
+        "atomixos_provision.provision.validate_config_root", lambda root, **_: root
+    )
+    monkeypatch.setattr("atomixos_provision.provision.os.chown", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        "atomixos_provision.config.load_config_schema",
+        lambda: {"type": "object", "additionalProperties": True},
+    )
+    monkeypatch.setattr(
+        "atomixos_provision.provision.complete_reapply",
+        lambda _root, _progress=None: (True, [], "skipped"),
+    )
+    monkeypatch.setattr("atomixos_provision.provision.reconcile_bootstrap_wan", lambda: None)
+    monkeypatch.setattr(
+        "atomixos_provision.provision._claimed_job_is_locally_trusted",
+        lambda *_args: False,
+    )
+    monkeypatch.setattr("atomixos_provision.provision.verify_ssh_signature", lambda *_args: True)
+
+    stage_config_bytes("job-1", _valid_config(), "config.toml", config_root)
+    assert apply_staged_job(config_root, runtime_root) is not None
+
+    signed_payload = _valid_config("docker.io/library/busybox:latest")
+    authorization = {
+        "nonce": f"{current_boot_id()}:signed-job",
+        "signature": "dGVzdA==",
+        "method": "POST",
+        "path": "/api/config",
+    }
+    stage_config_bytes(
+        "job-2",
+        signed_payload,
+        "config.toml",
+        config_root,
+        authorization=authorization,
+    )
+    candidate_path = runtime_root / "queue" / "job-2" / "candidate" / "config.toml"
+    tampered = candidate_path.read_bytes().replace(b"busybox", b"malicious")
+    candidate_path.write_bytes(tampered)
+    manifest_path = runtime_root / "queue" / "job-2" / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["source_sha256"] = hashlib.sha256(tampered).hexdigest()
+    for entry in manifest["candidate"]:
+        if entry["path"] == "config.toml":
+            entry["size"] = len(tampered)
+            entry["sha256"] = hashlib.sha256(tampered).hexdigest()
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    result = apply_staged_job(config_root, runtime_root)
+
+    assert result is not None
+    active = (config_root / "config.toml").read_text()
+    assert "busybox" in active
+    assert "malicious" not in active
+
+
+def test_worker_rejects_replayed_staged_authorization_nonce(tmp_path, monkeypatch):
+    """Verify that worker rejects replayed staged authorization nonce."""
+    runtime_root = tmp_path / "run"
+    config_root = tmp_path / "config"
+    _force_staging(monkeypatch)
+    monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(runtime_root))
+    monkeypatch.setattr(
+        "atomixos_provision.provision.validate_config_root", lambda root, **_: root
+    )
+    monkeypatch.setattr("atomixos_provision.provision.os.chown", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        "atomixos_provision.config.load_config_schema",
+        lambda: {"type": "object", "additionalProperties": True},
+    )
+    from atomixos_provision import provision
+
+    def complete_reapply(root, _progress=None):
+        provision.cleanup_rollback(root)
+        return True, [], "skipped"
+
+    monkeypatch.setattr("atomixos_provision.provision.complete_reapply", complete_reapply)
+    monkeypatch.setattr("atomixos_provision.provision.reconcile_bootstrap_wan", lambda: None)
+    monkeypatch.setattr(
+        "atomixos_provision.provision._claimed_job_is_locally_trusted",
+        lambda *_args: False,
+    )
+    monkeypatch.setattr("atomixos_provision.provision.verify_ssh_signature", lambda *_args: True)
+
+    stage_config_bytes("job-1", _valid_config(), "config.toml", config_root)
+    assert apply_staged_job(config_root, runtime_root) is not None
+    authorization = {
+        "nonce": f"{current_boot_id()}:replay",
+        "signature": "dGVzdA==",
+        "method": "POST",
+        "path": "/api/config",
+    }
+    stage_config_bytes(
+        "job-2",
+        _valid_config("docker.io/library/busybox:latest"),
+        "config.toml",
+        config_root,
+        authorization=authorization,
+    )
+    stage_config_bytes(
+        "job-3",
+        _valid_config("docker.io/library/nginx:latest"),
+        "config.toml",
+        config_root,
+        authorization=authorization,
+    )
+    assert apply_staged_job(config_root, runtime_root) is not None
+
+    with pytest.raises(ProvisionError, match="already consumed"):
+        apply_staged_job(config_root, runtime_root)
+
+    active = (config_root / "config.toml").read_text()
+    assert "busybox" in active
+    assert "nginx" not in active
 
 
 def test_finalize_staged_jobs_recovers_committed_result_after_result_write_failure(

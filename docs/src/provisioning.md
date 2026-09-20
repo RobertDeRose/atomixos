@@ -73,14 +73,17 @@ and `/api/config/export` require SSH-signature authentication. Clients request a
 single-use nonce from `GET /api/nonce`, then sign:
 
 ```text
-atomixos-reapply-v1
+atomixos-reapply-v2
 nonce:{nonce}
+method:{request_method}
 path:{request_path}
 sha256:{payload_sha256_hex}
 ```
 
 The request carries the base64 SSH signature in `X-AtomixOS-Signature` and the
 nonce in `X-AtomixOS-Nonce`; nonces expire after five minutes and are single-use.
+The method is uppercase. Nonces are scoped to the current boot so queued work
+cannot carry authorization across a reboot.
 Binary config submissions use `application/octet-stream` and identify the source
 with `x-config-filename` (for example `config.toml` or `config.tar.zst`); the
 server also detects supported archive magic bytes. Signatures cover the exact raw
@@ -101,12 +104,15 @@ and signature headers, while first-boot programmatic config submission remains
 unauthenticated.
 
 On production systems, mutating jobs are staged by the unprivileged API under
-`/run/atomixos-provision` after validation and candidate rendering. A root-owned
+`/run/atomixos-provision` after validation and candidate rendering. The staged
+job also retains the exact request bytes and verified authorization envelope. A root-owned
 `atomixos-provision-apply.path` unit watches ready markers and starts the
 `atomixos-provision-apply.service` oneshot worker. The worker verifies the staged
-manifest and tree before copying verified state into `/data/config-candidate`,
-then performs promotion, activation, rollback, and recovery. This keeps network
-parsing and upload handling unprivileged while preserving the same
+manifest and tree, re-verifies the signature against the active administrator
+keys, consumes the nonce in root-owned state, and reconstructs the requested
+operation from the signed method, path, and body. It then renders verified state
+into `/data/config-candidate` and performs promotion, activation, rollback, and
+recovery. This keeps HTTP parsing unprivileged while preserving the same
 operator-visible API responses and rollback behavior. Result handoff files are
 root-writable/group-readable, and queue claim/abandon operations share a runtime
 lock so timed-out queued jobs cannot race with the root worker claiming them.

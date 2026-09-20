@@ -207,9 +207,9 @@ application at `/Users/DeRoseR/workspace/personal/litestar-fullstack`.
 - Must preserve systemd socket activation (uvicorn accepts inherited fd via
   `LISTEN_FDS`/`LISTEN_PID` environment variables, matching current behavior).
 - Must preserve the SSH signature authentication contract:
-  - `GET /api/nonce` issues a single-use `secrets.token_urlsafe(32)` nonce (TTL 300s).
+  - `GET /api/nonce` issues a boot-scoped, single-use nonce (TTL 300s).
   - Signed message format:
-    `"atomixos-reapply-v1\nnonce:{nonce}\npath:{request_path}\nsha256:{payload_sha256_hex}\n"`
+    `"atomixos-reapply-v2\nnonce:{nonce}\nmethod:{request_method}\npath:{request_path}\nsha256:{payload_sha256_hex}\n"`
 - Headers: `X-AtomixOS-Nonce` + `X-AtomixOS-Signature` (base64 SSH sig blob).
 - Verification via `ssh-keygen -Y verify` against `{config_root}/admin-signers`.
 - Must preserve the first-boot provisioning flow without SSH signatures. The Boot UI

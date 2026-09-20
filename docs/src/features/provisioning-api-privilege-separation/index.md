@@ -23,9 +23,10 @@ restarts through result files, and rejected or tampered jobs never mutate `/data
 
 ## Design Integration
 
-The HTTP process owns parsing and unprivileged staging, while the root worker alone owns candidate re-rendering,
-promotion, users, network/firewall apply, Quadlet activation, and rollback. Atomic ready markers, root-controlled parent
-directories, manifest hashes, path/mode/owner checks, and allowlisted commands define the trust boundary.
+The HTTP process owns network parsing and unprivileged staging, while the root worker verifies the exact signed request,
+consumes authorization nonces in root-owned state, and alone owns candidate re-rendering, promotion, users,
+network/firewall apply, Quadlet activation, and rollback. Atomic ready markers, root-controlled parent directories,
+manifest hashes, path/mode/owner checks, active administrator keys, and allowlisted operations define the trust boundary.
 
 ## Operational Impact
 

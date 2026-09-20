@@ -244,7 +244,12 @@ async def test_first_boot_config_submit_accepts_programmatic_upload_without_toke
 
 
 async def test_config_submit_accepts_zstd_magic_without_filename_header(tmp_path, monkeypatch):
-    async def fake_stage_bytes(self, body, filename, progress, allow_reapply=True):
+    """Verify that config submit accepts zstd magic without filename header."""
+
+    async def fake_stage_bytes(
+        self, body, filename, progress, allow_reapply=True, authorization=None
+    ):
+        """Simulate stage bytes for the test."""
         calls.append((body, filename))
 
     manager = StagedJobManager()
@@ -266,7 +271,12 @@ async def test_config_submit_accepts_zstd_magic_without_filename_header(tmp_path
 
 
 async def test_config_submit_records_staging_provision_errors_as_failed_job(tmp_path, monkeypatch):
-    async def fake_stage_bytes(self, body, filename, progress, allow_reapply=True):
+    """Verify that config submit records staging provision errors as failed job."""
+
+    async def fake_stage_bytes(
+        self, body, filename, progress, allow_reapply=True, authorization=None
+    ):
+        """Simulate stage bytes for the test."""
         raise ProvisionError("bad bundle")
 
     manager = StagedJobManager()
@@ -545,10 +555,20 @@ async def test_partial_config_uses_staged_job_manager_when_available(tmp_path, m
 
     calls = {}
 
-    async def fake_stage_config_operation(job_id, operation, config_root, progress=None):
+    async def fake_stage_config_operation(
+        job_id,
+        operation,
+        config_root,
+        progress=None,
+        request_payload=None,
+        authorization=None,
+    ):
+        """Simulate stage config operation for the test."""
         calls["job_id"] = job_id
         calls["operation"] = operation
         calls["config_root"] = config_root
+        calls["request_payload"] = request_payload
+        calls["authorization"] = authorization
 
     (tmp_path / "admin-signers").write_text("ssh-ed25519 AAAA test\n")
     monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
@@ -585,6 +605,13 @@ async def test_partial_config_uses_staged_job_manager_when_available(tmp_path, m
         "name": "alice",
         "payload": {"isAdmin": False, "ssh_key": "ssh-ed25519 AAAA alice"},
     }
+    assert calls["request_payload"] == (b'{"isAdmin":false,"ssh_key":"ssh-ed25519 AAAA alice"}')
+    assert calls["authorization"] == {
+        "nonce": "test",
+        "signature": "dGVzdA==",
+        "method": "PUT",
+        "path": "/api/config/users/alice",
+    }
 
 
 async def test_partial_config_reports_full_staged_queue(tmp_path, monkeypatch):
@@ -592,7 +619,15 @@ async def test_partial_config_reports_full_staged_queue(tmp_path, monkeypatch):
         async def consume(self, nonce):
             return nonce == "test"
 
-    async def fake_stage_config_operation(job_id, operation, config_root, progress=None):
+    async def fake_stage_config_operation(
+        job_id,
+        operation,
+        config_root,
+        progress=None,
+        request_payload=None,
+        authorization=None,
+    ):
+        """Simulate stage config operation for the test."""
         return None
 
     (tmp_path / "admin-signers").write_text("ssh-ed25519 AAAA test\n")

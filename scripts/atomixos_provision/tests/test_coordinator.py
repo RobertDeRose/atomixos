@@ -38,8 +38,9 @@ async def test_staged_submission_uses_staging_and_reports_queue_policy(monkeypat
     coordinator = ProvisionCoordinator(service, manager)
     staged = []
 
-    async def stage_bytes(body, filename, progress, allow_reapply):
-        staged.append((body, filename, progress.id, allow_reapply))
+    async def stage_bytes(body, filename, progress, allow_reapply, authorization):
+        """Stage bytes."""
+        staged.append((body, filename, progress.id, allow_reapply, authorization))
 
     async def submit_staged(work):
         job = Job(id="staged-job")
@@ -49,11 +50,14 @@ async def test_staged_submission_uses_staging_and_reports_queue_policy(monkeypat
     monkeypatch.setattr(service, "stage_bytes", stage_bytes)
     monkeypatch.setattr(manager, "submit_staged", submit_staged)
     submission = await coordinator.submit_bytes(
-        b"version = 1\n", "config.toml", allow_reapply=True
+        b"version = 1\n",
+        "config.toml",
+        allow_reapply=True,
+        authorization={"nonce": "test"},
     )
 
     assert submission.job is not None
-    assert staged == [(b"version = 1\n", "config.toml", "staged-job", True)]
+    assert staged == [(b"version = 1\n", "config.toml", "staged-job", True, {"nonce": "test"})]
     assert submission.waits_for_privileged_worker is True
     assert submission.conflict_message == "the provision queue is full"
 
@@ -65,8 +69,9 @@ async def test_partial_submission_uses_exclusive_staged_admission(monkeypatch, t
     coordinator = ProvisionCoordinator(service, manager)
     calls = []
 
-    async def stage_partial(operation, progress):
-        calls.append((operation, progress.id))
+    async def stage_partial(operation, progress, request_payload, authorization):
+        """Stage partial."""
+        calls.append((operation, progress.id, request_payload, authorization))
 
     async def submit_staged_exclusive(work):
         job = Job(id="partial-job")
@@ -75,7 +80,18 @@ async def test_partial_submission_uses_exclusive_staged_admission(monkeypatch, t
 
     monkeypatch.setattr(service, "stage_partial", stage_partial)
     monkeypatch.setattr(manager, "submit_staged_exclusive", submit_staged_exclusive)
-    submission = await coordinator.submit_partial({"op": "delete_user", "name": "admin"})
+    submission = await coordinator.submit_partial(
+        {"op": "delete_user", "name": "admin"},
+        request_payload=b"{}",
+        authorization={"nonce": "test"},
+    )
 
-    assert calls == [({"op": "delete_user", "name": "admin"}, "partial-job")]
+    assert calls == [
+        (
+            {"op": "delete_user", "name": "admin"},
+            "partial-job",
+            b"{}",
+            {"nonce": "test"},
+        )
+    ]
     assert submission.conflict_message == "the provision queue is busy"
