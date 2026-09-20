@@ -217,105 +217,84 @@ scripts/atomixos_provision/
 ├── pyproject.toml
 ├── src/
 │   └── atomixos_provision/
-│       ├── __init__.py
-│       ├── app.py              # Litestar application factory, route wiring
-│       ├── auth.py             # SSH signature verification guard + nonce manager
-│       ├── config.py           # config.toml parsing and schema validation
-│       ├── config_builder.py   # Build config TOML from structured inputs (future use)
-│       ├── quadlet.py          # Quadlet unit rendering (container, network, volume, build)
-│       ├── quadlet_sync.py     # Copy rendered units to rootful/rootless target dirs
-│       ├── activation.py       # Activation script runner + service health checks + rollback
-│       ├── jobs.py             # Async job manager (single-flight, status tracking)
-│       ├── provision.py        # First-boot and re-apply orchestration
-│       ├── bundle.py           # Bundle import/export, safe archive and file placement
-│       ├── ui.py               # Boot UI HTML routes (/, /apply) — sync adapters
-│       └── server.py           # Uvicorn entry point, sd_listen_fds socket activation
-├── tests/
-│   ├── conftest.py
-│   ├── test_auth.py
-│   ├── test_config.py
-│   ├── test_config_builder.py
-│   ├── test_quadlet.py
-│   ├── test_activation.py
-│   ├── test_jobs.py
-│   ├── test_provision.py
-│   └── test_bundle.py
+│       ├── __init__.py            # Package boundary
+│       ├── app.py                 # Litestar application factory and explicit route wiring
+│       ├── server.py              # CLI, uvicorn, and inherited systemd socket startup
+│       ├── settings.py            # Environment-backed application settings
+│       ├── deps.py                # Dependency providers for settings and domain services
+│       ├── exceptions.py          # Domain error to HTTP response mapping
+│       ├── bootstrap_security.py  # Bootstrap origin and request validation
+│       ├── domain/
+│       │   ├── auth/controller.py # Nonce endpoint
+│       │   ├── config/            # Config controller, service, and job coordinator
+│       │   ├── jobs/controller.py # Job status endpoint
+│       │   └── system/controller.py # Health endpoint
+│       ├── auth.py                # SSH signature verification and nonce storage
+│       ├── config.py              # config.toml parsing and schema validation
+│       ├── schemas.py             # Typed API request and response models
+│       ├── partial_config.py      # Typed desired-state operations
+│       ├── staging.py             # Unprivileged queue and manifest boundary
+│       ├── state.py               # Provisioning-state predicates
+│       ├── provision.py           # Candidate, promotion, activation, and rollback orchestration
+│       ├── activation.py          # Service activation, health checks, and rollback
+│       ├── bundle.py              # Safe bundle import and deterministic locked export
+│       ├── config_builder.py      # Structured config generation helpers
+│       ├── jobs.py                # Async in-process job management
+│       ├── quadlet.py             # Quadlet rendering
+│       ├── quadlet_sync.py        # Rootful and rootless unit synchronization
+│       └── ui.py                  # First-boot UI and job progress routes
+├── tests/                         # Unit and Litestar integration tests
 └── README.md                   # Developer notes (not user-facing docs)
 ```
 
-### Target Service Layout
-
-The package should evolve toward explicit domain modules. Avoid the full
-`litestar-fullstack` auto-discovery/plugin stack for now; explicit route wiring is
-smaller, easier to audit, and better suited to an appliance. Adopt the separation
-of concerns, not the whole dependency stack.
-
-```text
-scripts/atomixos_provision/src/atomixos_provision/
-├── app.py                    # explicit Litestar app factory and route registration
-├── server.py                 # CLI + uvicorn + systemd socket activation
-├── settings.py               # small env/default settings object
-├── deps.py                   # dependency providers for settings, services, state
-├── exceptions.py             # domain errors -> HTTP responses
-├── domain/
-│   ├── auth/
-│   │   ├── controller.py     # nonce/auth-related API routes
-│   │   ├── service.py        # nonce and SSH signature verification helpers
-│   │   └── schemas.py        # NonceResponse, auth errors if needed
-│   ├── config/
-│   │   ├── controller.py     # /api/config, /api/validate, typed partial APIs
-│   │   ├── service.py        # import/export/patch orchestration facade
-│   │   └── schemas.py        # typed request/response DTOs
-│   ├── jobs/
-│   │   ├── controller.py     # /api/jobs/{job_id}
-│   │   ├── service.py        # job manager facade if needed
-│   │   └── schemas.py        # JobResponse, JobEvent
-│   └── system/
-│       ├── controller.py     # /api/health and system status
-│       └── schemas.py
-├── provision.py              # core candidate/promote/activate orchestration
-├── activation.py             # activation hook, service status, rollback
-├── config.py                 # config parser and validation
-├── config_builder.py         # config generation from form/API inputs
-├── quadlet.py                # render Quadlet desired state
-├── quadlet_sync.py           # sync rendered Quadlet units
-├── bundle.py                 # config bundle extraction, locked export, and file helpers
-└── ui.py                     # Boot UI routes until HTMX/server components are split out
-```
-
-The target layout should remain intentionally smaller than the Litestar reference
-application. Domain auto-discovery, SQLAlchemy repositories, SAQ/Redis workers,
-OAuth, Vite, and email plugins are not part of this foundation. `config_builder.py`
-and unused request `TypedDict`s plus operation-specific `ConfigService` convenience
-wrappers remain explicitly deferred scaffolding; controllers use the generic facade
-until a caller requires those helpers. They are not required runtime surfaces for
-this feature.
+The delivered package keeps route controllers and the config service/coordinator in
+explicit domain modules while retaining reusable low-level helpers at package scope.
+It intentionally avoids the `litestar-fullstack` auto-discovery/plugin stack,
+SQLAlchemy repositories, SAQ/Redis workers, OAuth, Vite, and email plugins. This
+boundary is smaller, easier to audit, and appropriate for an appliance.
 
 ### HTTP Endpoints
 
-| Method | Path                   | Auth                                      | Response | Description                           |
-|--------|------------------------|-------------------------------------------|----------|---------------------------------------|
-| GET    | `/`                    | none                                      | HTML     | Boot UI page                          |
-| GET    | `/api/nonce`           | none                                      | JSON     | Issue single-use nonce for auth       |
-| GET    | `/api/health`          | none                                      | JSON     | Liveness check                        |
-| GET    | `/api/jobs/{job_id}`   | job UUID                                  | JSON     | Poll async job status                 |
-| GET    | `/assets/atomixos.png` | none                                      | image    | Static logo                           |
-| POST   | `/api/config`          | SSH sig (provisioned) / none (first-boot) | JSON     | Submit config, returns job ID (async) |
-| GET    | `/api/config/export`   | SSH signature                             | tar.gz   | Export complete config bundle         |
-| POST   | `/api/validate`        | SSH sig                                   | JSON     | Validate config without applying      |
-| POST   | `/apply`               | bootstrap token (first-boot only)         | HTML     | Form upload → async job progress page |
+| Method | Path                                    | Auth                                      | Response | Description                             |
+|--------|-----------------------------------------|-------------------------------------------|----------|-----------------------------------------|
+| GET    | `/`                                     | none                                      | HTML     | Boot UI page                            |
+| GET    | `/api/nonce`                            | none                                      | JSON     | Issue single-use nonce for auth         |
+| GET    | `/api/health`                           | none                                      | JSON     | Liveness check                          |
+| GET    | `/api/jobs/{job_id}`                    | job UUID                                  | JSON     | Poll async job status                   |
+| GET    | `/assets/atomixos.png`                  | none                                      | image    | Static logo                             |
+| GET    | `/assets/config_dropzone.png`           | none                                      | image    | Static drop-zone illustration           |
+| POST   | `/api/config`                           | SSH sig (provisioned) / none (first-boot) | JSON     | Submit config, returns job ID (async)   |
+| GET    | `/api/config/export`                    | SSH signature                             | tar.gz   | Export complete config bundle           |
+| POST   | `/api/validate`                         | SSH sig                                   | JSON     | Validate config without applying        |
+| POST   | `/apply`                                | bootstrap token (first-boot only)         | HTML     | Form upload → async job progress page   |
+| PUT    | `/api/config/users/{name}`              | SSH signature                             | JSON     | Create or replace a user asynchronously |
+| DELETE | `/api/config/users/{name}`              | SSH signature                             | JSON     | Delete a user asynchronously            |
+| PATCH  | `/api/config/network`                   | SSH signature                             | JSON     | Patch network settings asynchronously   |
+| PUT    | `/api/config/containers/{name}`         | SSH signature                             | JSON     | Create or replace a container           |
+| DELETE | `/api/config/containers/{name}`         | SSH signature                             | JSON     | Delete a container                      |
+| PUT    | `/api/config/container-networks/{name}` | SSH signature                             | JSON     | Create or replace a container network   |
+| DELETE | `/api/config/container-networks/{name}` | SSH signature                             | JSON     | Delete a container network              |
+| PUT    | `/api/config/container-volumes/{name}`  | SSH signature                             | JSON     | Create or replace a container volume    |
+| DELETE | `/api/config/container-volumes/{name}`  | SSH signature                             | JSON     | Delete a container volume               |
+| GET    | `/ui/jobs/{job_id}`                     | first-boot job                            | HTML     | Render first-boot job status            |
+| GET    | `/ui/jobs/{job_id}/events`              | first-boot job                            | SSE      | Stream first-boot job status            |
 
 The delivered typed API endpoints are resource operations that reuse the same
 config service and job pipeline. Future additions must follow the same boundary.
-The current and planned resource surface is:
+The delivered resource surface is:
 
-| Method | Path                            | Description                                               |
-|--------|---------------------------------|-----------------------------------------------------------|
-| GET    | `/api/config/current`           | Return normalized current desired state                   |
-| GET    | `/api/config/export`            | Complete config.toml + managed files bundle               |
-| PATCH  | `/api/config/users/{name}`      | Apply a typed user change through candidate promotion     |
-| PATCH  | `/api/config/network`           | Apply typed network changes through candidate promotion   |
-| PATCH  | `/api/config/containers/{name}` | Apply typed container changes through candidate promotion |
+| Method | Path                                    | Description                                               |
+|--------|-----------------------------------------|-----------------------------------------------------------|
+| GET    | `/api/config/export`                    | Complete config.toml + managed files bundle               |
+| PUT    | `/api/config/users/{name}`              | Create or replace a user through candidate promotion      |
+| DELETE | `/api/config/users/{name}`              | Delete a user through candidate promotion                 |
+| PATCH  | `/api/config/network`                   | Apply typed network changes through candidate promotion   |
+| PUT    | `/api/config/containers/{name}`         | Create or replace a container through candidate promotion |
+| DELETE | `/api/config/containers/{name}`         | Delete a container through candidate promotion            |
+| PUT    | `/api/config/container-networks/{name}` | Create or replace a container network                     |
+| DELETE | `/api/config/container-networks/{name}` | Delete a container network                                |
+| PUT    | `/api/config/container-volumes/{name}`  | Create or replace a container volume                      |
+| DELETE | `/api/config/container-volumes/{name}`  | Delete a container volume                                 |
 
 ### Endpoint Architecture
 
@@ -365,7 +344,7 @@ POST /api/config
   -> validate full desired state
   -> render/promote/activate/rollback
 
-PATCH /api/config/users/admin
+PUT /api/config/users/admin
   -> load active desired state
   -> apply typed patch
   -> validate full desired state
@@ -534,11 +513,10 @@ compressed tar bundle generated from the canonical desired state and managed fil
 preserving the config bundle as the portable artifact. The implementation does not
 archive unrelated `/data/config` state.
 
-Future read/mutation examples include:
-
-- `PATCH /api/config/users/{name}` applies typed user changes.
-- `PATCH /api/config/network` applies typed LAN, DNS, NTP, and firewall changes.
-- `PATCH /api/config/containers/{name}` applies typed container changes.
+The delivered mutations cover users, network settings, containers, container
+networks, and container volumes. Any future read or mutation endpoint must preserve
+the same authenticated candidate pipeline and must be added to the authoritative
+route table above when delivered.
 
 Every partial mutation must run the same safety pipeline as full config import:
 
