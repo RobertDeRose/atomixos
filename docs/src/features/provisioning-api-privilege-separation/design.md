@@ -198,8 +198,10 @@ The API service writes `<job-id>.reserve` while staging to reserve FIFO capacity
 ready markers. The API writes `<job-id>/manifest.json` and the rendered
 candidate tree first. It creates `<job-id>.ready` only after staging is complete
 and fsynced as far as practical for tmpfs. The ready marker is the trigger
-contract for systemd. Stale reservations are discarded after the reservation TTL
-and never authorize a worker claim without a ready marker.
+contract for systemd. Publication requires the same live reservation that
+allocated queue capacity and preserves its sequence. A transient heartbeat
+failure is retried while staging. Expired reservations remove their unpublished
+job and temporary staging trees, but never remove a published or active job.
 `queue/` is `02770 root:atomixos-provision`; `results/` is
 `02750 root:atomixos-provision`; result files are `0640 root:atomixos-provision`.
 The API service can create staged queue entries and read terminal results, but

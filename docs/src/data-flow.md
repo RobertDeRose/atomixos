@@ -52,7 +52,8 @@ In production, re-apply is staged by the unprivileged API under
 `/run/atomixos-provision` before root touches `/data`. The API validates the
 submitted source, renders a complete candidate in tmpfs, writes a manifest with
 relative paths, ownership expectations, modes, sizes, and SHA-256 hashes, then
-publishes a ready marker. A root `atomixos-provision-apply.service` worker claims
+publishes a ready marker from the same live reservation that assigned its FIFO
+sequence. A root `atomixos-provision-apply.service` worker claims
 ready jobs, verifies the staged tree, re-renders the verified staged
 `config.toml` into `/data/config-candidate/`, and then uses the existing atomic
 promotion flow:

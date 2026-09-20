@@ -25,6 +25,7 @@ MANIFEST_VERSION = 1
 RESULT_VERSION = 1
 JOB_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
 DEFAULT_RUNTIME_ROOT = Path("/run/atomixos-provision")
+DEFAULT_MAX_STAGED_JOBS = 4
 MAX_CONTROL_JSON_BYTES = 1024 * 1024
 STAGED_RESERVATION_TTL_SECONDS = 300
 RUNTIME_ROOT_MODE = 0o755
@@ -248,18 +249,20 @@ def publish_ready_marker(paths: RuntimePaths, job_id: str) -> Path:
     validate_job_id(job_id)
     ready_path = paths.queue / f"{job_id}.ready"
     with queue_operation_lock(paths):
+        _cleanup_stale_reservations_locked(paths)
         reserve_path = paths.queue / f"{job_id}.reserve"
         try:
-            sequence, created_at = _reservation_sort_key(reserve_path)
-        except (FileNotFoundError, ProvisionError):
-            sequence = _next_ready_sequence_locked(paths)
-            created_at = time.time()
+            reserve_path.lstat()
+        except FileNotFoundError as exc:
+            raise ProvisionError(f"staged job reservation is missing: {job_id}") from exc
+        sequence, created_at = _reservation_sort_key(reserve_path)
         write_json_atomic(
             ready_path,
             {"job_id": job_id, "sequence": sequence, "created_at": created_at},
             mode=0o640,
         )
         reserve_path.unlink(missing_ok=True)
+        fsync_directory(paths.queue)
     return ready_path
 
 
@@ -419,14 +422,35 @@ def _cleanup_stale_reservations_locked(paths: RuntimePaths) -> None:
         except FileNotFoundError:
             continue
         if stat.S_ISLNK(reserve_stat.st_mode) or not stat.S_ISREG(reserve_stat.st_mode):
+            try:
+                job_id = validate_job_id(reserve_path.name.removesuffix(".reserve"))
+            except ProvisionError:
+                job_id = None
             _remove_staged_path(reserve_path)
+            if job_id is not None:
+                _remove_unpublished_job_locked(paths, job_id)
             removed = True
             continue
         if reserve_stat.st_mtime < deadline:
+            try:
+                job_id = validate_job_id(reserve_path.name.removesuffix(".reserve"))
+            except ProvisionError:
+                job_id = None
             _remove_staged_path(reserve_path)
+            if job_id is not None:
+                _remove_unpublished_job_locked(paths, job_id)
             removed = True
     if removed:
         fsync_directory(paths.queue)
+
+
+def _remove_unpublished_job_locked(paths: RuntimePaths, job_id: str) -> None:
+    """Remove incomplete unpublished state while holding the queue lock."""
+    if (paths.queue / f"{job_id}.ready").exists() or _is_plain_directory(paths.active / job_id):
+        return
+    _remove_staged_path(paths.queue / job_id)
+    for staging_path in paths.queue.glob(f".{job_id}.staging.*"):
+        _remove_staged_path(staging_path)
 
 
 def _ready_sequence_for_job_locked(paths: RuntimePaths, job_id: str) -> int | None:

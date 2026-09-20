@@ -333,9 +333,7 @@ class TestStagedJobManager:
         mgr = StagedJobManager(result_timeout_seconds=0.01)
         finish = asyncio.Event()
         monkeypatch.setattr(mgr, "_refresh_from_result", lambda _job: False)
-        monkeypatch.setattr(
-            mgr, "_handle_staged_timeout", lambda _job: StagedTimeoutState.MISSING
-        )
+        monkeypatch.setattr(mgr, "_handle_staged_timeout", lambda _job: StagedTimeoutState.MISSING)
 
         async def work(job):
             await finish.wait()
@@ -395,9 +393,7 @@ class TestStagedJobManager:
         monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
         mgr = StagedJobManager(result_timeout_seconds=0.01)
         monkeypatch.setattr(mgr, "_refresh_from_result", lambda _job: False)
-        monkeypatch.setattr(
-            mgr, "_handle_staged_timeout", lambda _job: StagedTimeoutState.MISSING
-        )
+        monkeypatch.setattr(mgr, "_handle_staged_timeout", lambda _job: StagedTimeoutState.MISSING)
 
         async def work(job):
             return None
@@ -647,14 +643,40 @@ class TestStagedJobManager:
         await mgr._task
 
     @pytest.mark.asyncio
+    async def test_staged_heartbeat_retries_transient_refresh_failure(self, monkeypatch):
+        monkeypatch.setattr("atomixos_provision.jobs._STAGED_RESERVATION_HEARTBEAT_SECONDS", 0.01)
+        mgr = StagedJobManager()
+        job = Job(id="job-1")
+        recovered = asyncio.Event()
+        refreshes = 0
+
+        def refresh(_job):
+            nonlocal refreshes
+            refreshes += 1
+            if refreshes == 1:
+                raise PermissionError("temporarily unavailable")
+            recovered.set()
+
+        monkeypatch.setattr(mgr, "_refresh_reservation", refresh)
+        task = asyncio.create_task(mgr._heartbeat_reservation(job))
+        await asyncio.wait_for(recovered.wait(), timeout=1)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        messages = [event["message"] for event in job.events]
+        assert messages == [
+            "reservation refresh failed; retrying: temporarily unavailable",
+            "reservation refresh recovered",
+        ]
+
+    @pytest.mark.asyncio
     async def test_staged_get_recovers_queued_job_state(self, monkeypatch, tmp_path):
         runtime_root = tmp_path / "run"
         monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(runtime_root))
         mgr = StagedJobManager(result_timeout_seconds=0.01)
         monkeypatch.setattr(mgr, "_refresh_from_result", lambda _job: False)
-        monkeypatch.setattr(
-            mgr, "_handle_staged_timeout", lambda _job: StagedTimeoutState.MISSING
-        )
+        monkeypatch.setattr(mgr, "_handle_staged_timeout", lambda _job: StagedTimeoutState.MISSING)
         paths = runtime_paths(runtime_root)
         ensure_runtime_layout(paths)
         (paths.queue / "job-1").mkdir()
@@ -768,9 +790,7 @@ class TestStagedJobManager:
         monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
         mgr = StagedJobManager(result_timeout_seconds=0.01)
         monkeypatch.setattr(mgr, "_refresh_from_result", lambda _job: False)
-        monkeypatch.setattr(
-            mgr, "_handle_staged_timeout", lambda _job: StagedTimeoutState.MISSING
-        )
+        monkeypatch.setattr(mgr, "_handle_staged_timeout", lambda _job: StagedTimeoutState.MISSING)
 
         async def work(job):
             return None
@@ -798,9 +818,7 @@ class TestStagedJobManager:
             return True
 
         monkeypatch.setattr(mgr, "_refresh_from_result", refresh)
-        monkeypatch.setattr(
-            mgr, "_handle_staged_timeout", lambda _job: StagedTimeoutState.MISSING
-        )
+        monkeypatch.setattr(mgr, "_handle_staged_timeout", lambda _job: StagedTimeoutState.MISSING)
 
         async def work(job):
             return None

@@ -11,6 +11,7 @@ from typing import Any
 
 from atomixos_provision.config import ProvisionError
 from atomixos_provision.staging import (
+    DEFAULT_MAX_STAGED_JOBS,
     StagedTimeoutState,
     interpret_staged_result,
     staged_timeout_state,
@@ -20,7 +21,6 @@ __all__ = ["Job", "JobManager", "JobState", "StagedJobManager"]
 
 # Maximum number of completed jobs to retain in memory.
 _MAX_RETAINED_JOBS = 64
-_DEFAULT_MAX_STAGED_JOBS = 4
 _STAGED_RESERVATION_HEARTBEAT_SECONDS = 30
 
 
@@ -231,7 +231,7 @@ class StagedJobManager(JobManager):
         self,
         *,
         result_timeout_seconds: float | None = None,
-        max_pending: int = _DEFAULT_MAX_STAGED_JOBS,
+        max_pending: int = DEFAULT_MAX_STAGED_JOBS,
     ) -> None:
         super().__init__()
         if result_timeout_seconds is None:
@@ -439,9 +439,23 @@ class StagedJobManager(JobManager):
             job.completed_at = time.monotonic()
 
     async def _heartbeat_reservation(self, job: Job) -> None:
+        """Refresh a reservation until staging finishes."""
+        last_error: OSError | None = None
         while True:
             await asyncio.sleep(_STAGED_RESERVATION_HEARTBEAT_SECONDS)
-            self._refresh_reservation(job)
+            try:
+                self._refresh_reservation(job)
+            except OSError as exc:
+                if last_error is None:
+                    job.set_stage(
+                        "running",
+                        f"reservation refresh failed; retrying: {exc}",
+                    )
+                last_error = exc
+            else:
+                if last_error is not None:
+                    job.set_stage("running", "reservation refresh recovered")
+                last_error = None
 
     async def _monitor_staged(self, job: Job) -> None:
         try:

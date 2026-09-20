@@ -40,7 +40,9 @@ applies one staged job at a time and returns `409 Conflict` when that queue is f
 resource for final success, failure, rollback status, and service deployment events.
 
 The staging boundary uses `/run/atomixos-provision`. The API writes a complete candidate tree, validated bundle files,
-and a manifest with relative paths, modes, sizes, and SHA-256 hashes, then publishes a ready marker. The root
+and a manifest with relative paths, modes, sizes, and SHA-256 hashes, then publishes a ready marker using the same
+live capacity reservation that assigned its FIFO sequence. Expired reservations remove incomplete unpublished staging.
+The root
 `atomixos-provision-apply.service` claims queued jobs, verifies manifest paths, owners, modes, symlinks, hashes, and
 expected entries, re-renders the verified staged `config.toml` into `/data/config-candidate`, and runs the existing
 promotion, activation, rollback, and recovery protocol. Root-written `/data/config` state is group-readable by

@@ -45,6 +45,7 @@ from atomixos_provision.quadlet import (
     render_volumes,
 )
 from atomixos_provision.staging import (
+    DEFAULT_MAX_STAGED_JOBS,
     MANIFEST_VERSION,
     ClaimedJob,
     RuntimePaths,
@@ -57,6 +58,8 @@ from atomixos_provision.staging import (
     interpret_staged_result,
     publish_ready_marker,
     read_result,
+    release_staged_job_slot,
+    reserve_staged_job_slot,
     runtime_paths,
     sha256_file,
     staged_timeout_state,
@@ -425,7 +428,36 @@ def _stage_prepared_sync(
         raise
 
 
-def stage_config_bytes(
+def _reserve_staged_job_or_raise(paths: RuntimePaths, job_id: str) -> None:
+    """Reserve staging capacity or raise a queue-full error."""
+    if not reserve_staged_job_slot(paths, job_id, DEFAULT_MAX_STAGED_JOBS):
+        raise StagedQueueBusyError("the provision queue is full")
+
+
+def _stage_and_wait_prepared_sync(
+    job_id: str,
+    config_path: Path,
+    files_path: Path | None,
+    config_root: Path,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Stage a prepared candidate and wait for its worker result."""
+    paths = _runtime_paths()
+    _reserve_staged_job_or_raise(paths, job_id)
+    try:
+        return _stage_prepared_sync(
+            job_id,
+            config_path,
+            files_path,
+            config_root,
+            **kwargs,
+        )
+    except Exception:
+        release_staged_job_slot(paths, job_id)
+        raise
+
+
+def stage_reserved_config_bytes(
     job_id: str,
     payload: bytes,
     filename: str,
@@ -451,6 +483,32 @@ def stage_config_bytes(
         )
     finally:
         tmpdir.cleanup()
+
+
+def stage_config_bytes(
+    job_id: str,
+    payload: bytes,
+    filename: str,
+    config_root: Path,
+    *,
+    allow_reapply: bool = True,
+    progress: ProgressReporter | None = None,
+) -> None:
+    """Reserve capacity and stage bytes outside the API job manager."""
+    paths = _runtime_paths()
+    _reserve_staged_job_or_raise(paths, job_id)
+    try:
+        stage_reserved_config_bytes(
+            job_id,
+            payload,
+            filename,
+            config_root,
+            allow_reapply=allow_reapply,
+            progress=progress,
+        )
+    except Exception:
+        release_staged_job_slot(paths, job_id)
+        raise
 
 
 def _wait_for_staged_result(
@@ -538,6 +596,23 @@ def _stage_config_operation_sync(
         )
     finally:
         tmpdir.cleanup()
+
+
+def _stage_and_wait_operation_sync(
+    job_id: str,
+    operation: dict[str, Any],
+    config_root: Path,
+    progress: ProgressReporter | None = None,
+) -> dict[str, Any]:
+    """Stage a typed operation and wait for its worker result."""
+    paths = _runtime_paths()
+    _reserve_staged_job_or_raise(paths, job_id)
+    try:
+        _stage_config_operation_sync(job_id, operation, config_root, progress)
+        return _wait_for_staged_result(paths, job_id, progress)
+    except Exception:
+        release_staged_job_slot(paths, job_id)
+        raise
 
 
 def write_imported_state(
@@ -1328,7 +1403,7 @@ def _provision_sync(
     tmpdir, config_path, files_path = prepare_source_bytes(payload, filename)
     try:
         if staging_enabled() and config_root.resolve(strict=False) == Path("/data/config"):
-            return _stage_prepared_sync(
+            return _stage_and_wait_prepared_sync(
                 _progress_job_id(progress),
                 config_path,
                 files_path,
@@ -1354,8 +1429,7 @@ def _apply_config_operation_sync(
     """Synchronously apply a typed operation to the current configuration."""
     if staging_enabled() and config_root.resolve(strict=False) == Path("/data/config"):
         job_id = _progress_job_id(progress)
-        _stage_config_operation_sync(job_id, operation, config_root, progress)
-        return _wait_for_staged_result(_runtime_paths(), job_id, progress)
+        return _stage_and_wait_operation_sync(job_id, operation, config_root, progress)
 
     with provisioning_lock(config_root):
         recover_config_root(config_root)
@@ -1400,7 +1474,7 @@ def import_config_from_path(source_path: Path, config_root: Path) -> dict[str, A
     tmpdir, config_path, files_path = prepare_source_path(source_path)
     try:
         if staging_enabled() and config_root.resolve(strict=False) == Path("/data/config"):
-            return _stage_prepared_sync(
+            return _stage_and_wait_prepared_sync(
                 str(uuid.uuid4()),
                 config_path,
                 files_path,
@@ -1460,7 +1534,25 @@ async def stage_config_operation(
     config_root: Path,
     progress: ProgressReporter | None = None,
 ) -> None:
-    """Stage a typed partial operation for the privileged worker."""
+    """Reserve capacity and stage a typed operation outside the API job manager."""
+    paths = _runtime_paths()
+    _reserve_staged_job_or_raise(paths, job_id)
+    try:
+        await asyncio.to_thread(
+            _stage_config_operation_sync, job_id, operation, config_root, progress
+        )
+    except Exception:
+        release_staged_job_slot(paths, job_id)
+        raise
+
+
+async def stage_reserved_config_operation(
+    job_id: str,
+    operation: dict[str, Any],
+    config_root: Path,
+    progress: ProgressReporter | None = None,
+) -> None:
+    """Stage a typed operation using capacity reserved by the API job manager."""
     await asyncio.to_thread(_stage_config_operation_sync, job_id, operation, config_root, progress)
 
 

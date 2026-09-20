@@ -12,6 +12,7 @@ from atomixos_provision.provision import (
     apply_staged_job,
     stage_config_bytes,
     stage_config_operation,
+    stage_reserved_config_bytes,
 )
 from atomixos_provision.staging import (
     ClaimedJob,
@@ -188,7 +189,7 @@ def test_published_staged_jobs_replace_capacity_reservations(tmp_path, monkeypat
     paths = runtime_paths(runtime_root)
 
     assert reserve_staged_job_slot(paths, "job-1", 1) is True
-    stage_config_bytes(
+    stage_reserved_config_bytes(
         "job-1",
         _valid_config(),
         "config.toml",
@@ -207,13 +208,13 @@ def test_reserved_sequence_controls_fifo_ready_order(tmp_path, monkeypatch):
 
     assert reserve_staged_job_slot(paths, "job-1", 2) is True
     assert reserve_staged_job_slot(paths, "job-2", 2) is True
-    stage_config_bytes(
+    stage_reserved_config_bytes(
         "job-2",
         _valid_config("docker.io/library/busybox:latest"),
         "config.toml",
         tmp_path / "config",
     )
-    stage_config_bytes("job-1", _valid_config(), "config.toml", tmp_path / "config")
+    stage_reserved_config_bytes("job-1", _valid_config(), "config.toml", tmp_path / "config")
 
     first = claim_next_job(paths)
     assert first is not None
@@ -284,6 +285,55 @@ def test_waiting_for_turn_expires_stale_lower_sequence_reservation(tmp_path, mon
     os.utime(paths.queue / "job-1.reserve", (1, 1))
 
     assert staged_job_waiting_for_turn(paths, "job-2") is False
+    assert not (paths.queue / "job-1.reserve").exists()
+
+
+def test_publish_ready_marker_requires_live_reservation(tmp_path):
+    """Verify that publish ready marker requires live reservation."""
+    paths = runtime_paths(tmp_path / "run")
+    ensure_runtime_layout(paths)
+    (paths.queue / "job-1").mkdir()
+
+    with pytest.raises(ProvisionError, match="reservation is missing"):
+        publish_ready_marker(paths, "job-1")
+
+    assert not (paths.queue / "job-1.ready").exists()
+
+
+def test_stale_reservation_cleanup_removes_unpublished_staging(tmp_path, monkeypatch):
+    """Verify that stale reservation cleanup removes unpublished staging."""
+    monkeypatch.setattr("atomixos_provision.staging.STAGED_RESERVATION_TTL_SECONDS", 60)
+    paths = runtime_paths(tmp_path / "run")
+    ensure_runtime_layout(paths)
+
+    assert reserve_staged_job_slot(paths, "job-1", 1) is True
+    (paths.queue / "job-1").mkdir()
+    hidden_staging = paths.queue / ".job-1.staging.partial"
+    hidden_staging.mkdir()
+    os.utime(paths.queue / "job-1.reserve", (1, 1))
+
+    assert reserve_staged_job_slot(paths, "job-2", 1) is True
+    assert not (paths.queue / "job-1").exists()
+    assert not hidden_staging.exists()
+    with pytest.raises(ProvisionError, match="reservation is missing"):
+        publish_ready_marker(paths, "job-1")
+
+
+def test_stale_reservation_cleanup_preserves_published_job(tmp_path, monkeypatch):
+    """Verify that stale reservation cleanup preserves published job."""
+    monkeypatch.setattr("atomixos_provision.staging.STAGED_RESERVATION_TTL_SECONDS", 60)
+    paths = runtime_paths(tmp_path / "run")
+    ensure_runtime_layout(paths)
+
+    assert reserve_staged_job_slot(paths, "job-1", 2) is True
+    (paths.queue / "job-1").mkdir()
+    publish_ready_marker(paths, "job-1")
+    assert reserve_staged_job_slot(paths, "job-1", 2) is True
+    os.utime(paths.queue / "job-1.reserve", (1, 1))
+
+    assert count_staged_jobs(paths) == 1
+    assert (paths.queue / "job-1").is_dir()
+    assert (paths.queue / "job-1.ready").is_file()
     assert not (paths.queue / "job-1.reserve").exists()
 
 

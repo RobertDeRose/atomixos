@@ -33,10 +33,11 @@ class ConfigService:
         progress: Job,
         allow_reapply: bool = True,
     ) -> None:
-        from atomixos_provision.provision import stage_config_bytes
+        """Stage raw configuration bytes for worker application."""
+        from atomixos_provision.provision import stage_reserved_config_bytes
 
         await asyncio.to_thread(
-            stage_config_bytes,
+            stage_reserved_config_bytes,
             progress.id,
             body,
             filename,
@@ -70,9 +71,10 @@ class ConfigService:
         operation: dict[str, Any],
         progress: Job,
     ) -> None:
-        from atomixos_provision.provision import stage_config_operation
+        """Stage a typed partial operation for worker application."""
+        from atomixos_provision.provision import stage_reserved_config_operation
 
-        await stage_config_operation(progress.id, operation, self.config_root, progress)
+        await stage_reserved_config_operation(progress.id, operation, self.config_root, progress)
 
     async def put_user(self, name: str, payload: dict[str, Any], progress: Job | None = None):
         return await self.apply_partial(
