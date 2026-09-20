@@ -15,6 +15,7 @@ from atomixos_provision.provision import (
 )
 from atomixos_provision.staging import (
     ClaimedJob,
+    StagedTimeoutState,
     abandon_queued_job,
     can_abandon_queued_job,
     claim_next_job,
@@ -243,8 +244,8 @@ def test_staged_timeout_state_distinguishes_claimed_and_waiting_jobs(tmp_path):
     (paths.queue / "job-2").mkdir()
     publish_ready_marker(paths, "job-2")
 
-    assert staged_timeout_state(paths, "job-1") == "claimed"
-    assert staged_timeout_state(paths, "job-2") == "active"
+    assert staged_timeout_state(paths, "job-1") is StagedTimeoutState.CLAIMED
+    assert staged_timeout_state(paths, "job-2") is StagedTimeoutState.WAITING
 
 
 def test_claim_next_job_expires_stale_lower_sequence_reservation(tmp_path, monkeypatch):

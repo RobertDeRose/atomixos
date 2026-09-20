@@ -48,6 +48,7 @@ from atomixos_provision.staging import (
     MANIFEST_VERSION,
     ClaimedJob,
     RuntimePaths,
+    StagedTimeoutState,
     claim_next_job,
     cleanup_claimed_job,
     ensure_runtime_layout,
@@ -476,12 +477,17 @@ def _wait_for_staged_result(
         if result is not None:
             return _staged_result_payload_or_raise(result)
         timeout_state = staged_timeout_state(paths, job_id)
-        if timeout_state == "active":
+        if timeout_state in {
+            StagedTimeoutState.WAITING,
+            StagedTimeoutState.CLAIMED,
+        }:
             deadline = time.monotonic() + STAGED_RESULT_TIMEOUT_SECONDS
+            if progress and timeout_state is StagedTimeoutState.CLAIMED:
+                progress.set_stage("running", "privileged apply worker is running")
             continue
-        if timeout_state == "abandoned":
+        if timeout_state is StagedTimeoutState.ABANDONED:
             raise ProvisionError("timed out waiting for privileged apply worker")
-        if timeout_state == "missing":
+        if timeout_state is StagedTimeoutState.MISSING:
             raise ProvisionError("privileged apply worker did not publish a result")
         raise ProvisionError("timed out waiting for privileged apply worker")
 

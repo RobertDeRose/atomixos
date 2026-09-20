@@ -10,7 +10,11 @@ from enum import StrEnum
 from typing import Any
 
 from atomixos_provision.config import ProvisionError
-from atomixos_provision.staging import interpret_staged_result, staged_timeout_state
+from atomixos_provision.staging import (
+    StagedTimeoutState,
+    interpret_staged_result,
+    staged_timeout_state,
+)
 
 __all__ = ["Job", "JobManager", "JobState", "StagedJobManager"]
 
@@ -449,11 +453,17 @@ class StagedJobManager(JobManager):
                     timeout_state = self._handle_staged_timeout(job)
                     if self._refresh_from_result(job):
                         break
-                    if timeout_state == "active":
+                    if timeout_state in {
+                        StagedTimeoutState.WAITING,
+                        StagedTimeoutState.CLAIMED,
+                    }:
                         deadline = time.monotonic() + self._result_timeout_seconds
-                        job.set_stage("queued", "waiting for privileged apply worker")
+                        if timeout_state is StagedTimeoutState.CLAIMED:
+                            job.set_stage("running", "privileged apply worker is running")
+                        else:
+                            job.set_stage("queued", "waiting for privileged apply worker")
                         continue
-                    if timeout_state == "missing":
+                    if timeout_state is StagedTimeoutState.MISSING:
                         raise ProvisionError("privileged apply worker did not publish a result")
                     raise ProvisionError("timed out waiting for privileged apply worker")
                 await asyncio.sleep(0.2)
@@ -550,7 +560,8 @@ class StagedJobManager(JobManager):
         self._monitored_job_ids.add(job.id)
         self._task = asyncio.create_task(self._monitor_staged(job))
 
-    def _handle_staged_timeout(self, job: Job) -> str:
+    def _handle_staged_timeout(self, job: Job) -> StagedTimeoutState:
+        """Reconcile a staged job after result monitoring times out."""
         try:
             from atomixos_provision.provision import _runtime_paths
 

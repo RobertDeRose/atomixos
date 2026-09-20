@@ -15,6 +15,7 @@ import stat
 import tempfile
 import time
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -71,6 +72,15 @@ class StagedResult:
     payload: dict[str, Any]
     error: str | None
     rollback_status: str | None
+
+
+class StagedTimeoutState(StrEnum):
+    """Queue state used when a staged-result reconciliation interval expires."""
+
+    WAITING = "waiting"
+    CLAIMED = "claimed"
+    ABANDONED = "abandoned"
+    MISSING = "missing"
 
 
 def runtime_paths(root: Path) -> RuntimePaths:
@@ -689,16 +699,21 @@ def staged_job_presence(paths: RuntimePaths, job_id: str) -> str:
         return _job_presence_locked(paths, job_id)
 
 
-def staged_timeout_state(paths: RuntimePaths, job_id: str) -> str:
+def staged_timeout_state(paths: RuntimePaths, job_id: str) -> StagedTimeoutState:
     """Resolve timeout handling without racing a queued job's worker claim."""
     presence = staged_job_presence(paths, job_id)
     if presence == "active":
-        return "claimed"
+        return StagedTimeoutState.CLAIMED
     if staged_job_waiting_for_turn(paths, job_id):
-        return "active"
+        return StagedTimeoutState.WAITING
     if try_abandon_queued_job(paths, job_id):
-        return "abandoned"
-    return staged_job_presence(paths, job_id)
+        return StagedTimeoutState.ABANDONED
+    final_presence = staged_job_presence(paths, job_id)
+    if final_presence == "active":
+        return StagedTimeoutState.CLAIMED
+    if final_presence == "queued":
+        return StagedTimeoutState.WAITING
+    return StagedTimeoutState.MISSING
 
 
 def abandon_queued_job(paths: RuntimePaths, job_id: str) -> None:

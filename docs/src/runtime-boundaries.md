@@ -54,7 +54,9 @@ provisioning, authentication, and Boot UI guards, while missing signer state fai
 
 Runtime result files under `/run/atomixos-provision/results` are root-writable and group-readable only. Claim and queued-job
 abandonment share `/run/atomixos-provision/queue.lock`, and the root worker finalizer records failed results for claimed
-jobs left behind by an interrupted worker.
+jobs left behind by an interrupted worker. Result polling may abandon only an
+unclaimed queued job; a claimed job remains nonterminal until the worker or its
+finalizer publishes the authoritative result.
 
 The first-boot Boot UI is a browser-only wrapper around that same boundary. It
 submits uploaded or dropped `config.toml` or supported bundle sources through `/apply`, uses the bootstrap CSRF

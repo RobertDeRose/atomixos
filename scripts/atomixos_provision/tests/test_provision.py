@@ -19,7 +19,6 @@ from atomixos_provision.provision import (
     write_imported_state,
 )
 from atomixos_provision.staging import (
-    ensure_runtime_layout,
     reserve_staged_job_slot,
     runtime_paths,
 )
@@ -344,16 +343,28 @@ async def test_apply_config_operation_direct_path_applies_candidate(monkeypatch,
     assert "9.9.9.9" in (config_root / "config.toml").read_text()
 
 
-def test_wait_for_staged_result_times_out_while_worker_active(monkeypatch, tmp_path):
+def test_wait_for_staged_result_keeps_claimed_job_nonterminal(monkeypatch, tmp_path):
+    """Verify that wait for staged result keeps claimed job nonterminal."""
     from atomixos_provision import provision
 
     paths = runtime_paths(tmp_path / "run")
     (paths.active / "job-1").mkdir(parents=True)
+    reads = {"count": 0}
 
-    monkeypatch.setattr(provision, "STAGED_RESULT_TIMEOUT_SECONDS", 0.01)
+    def read_result_after_two_intervals(_paths, _job_id):
+        """Read result after two intervals."""
+        reads["count"] += 1
+        if reads["count"] < 3:
+            return None
+        return {"status": "succeeded", "result": {"warnings": []}}
 
-    with pytest.raises(ProvisionError, match="timed out waiting"):
-        provision._wait_for_staged_result(paths, "job-1")
+    times = iter([0, 2, 4, 6, 8, 10])
+    monkeypatch.setattr(provision, "STAGED_RESULT_TIMEOUT_SECONDS", 1)
+    monkeypatch.setattr(provision.time, "monotonic", lambda: next(times))
+    monkeypatch.setattr(provision, "read_result", read_result_after_two_intervals)
+
+    assert provision._wait_for_staged_result(paths, "job-1") == {"warnings": []}
+    assert reads["count"] == 3
 
 
 def test_wait_for_staged_result_rereads_before_timeout_failure(monkeypatch, tmp_path):
@@ -395,26 +406,6 @@ def test_wait_for_staged_result_abandons_queued_job_on_timeout(monkeypatch, tmp_
 
     assert not (paths.queue / "job-1").exists()
     assert not (paths.queue / "job-1.ready").exists()
-
-
-def test_wait_for_staged_result_times_out_claimed_job_without_result(monkeypatch, tmp_path):
-    from atomixos_provision import provision
-
-    paths = runtime_paths(tmp_path / "run")
-    (paths.active / "job-1").mkdir(parents=True)
-    calls = {"count": 0}
-
-    def fake_monotonic():
-        calls["count"] += 1
-        return 0 if calls["count"] == 1 else 2
-
-    monkeypatch.setattr(provision, "STAGED_RESULT_TIMEOUT_SECONDS", 1)
-    monkeypatch.setattr(provision.time, "monotonic", fake_monotonic)
-    monkeypatch.setattr(provision.time, "sleep", lambda _seconds: None)
-    monkeypatch.setattr(provision, "read_result", lambda _paths, _job_id: None)
-
-    with pytest.raises(ProvisionError, match="timed out waiting"):
-        provision._wait_for_staged_result(paths, "job-1")
 
 
 def test_wait_for_staged_result_fails_when_worker_removes_job_without_result(
@@ -947,18 +938,6 @@ async def test_apply_config_transform_rejects_data_config_outside_worker(monkeyp
 
     with pytest.raises(ProvisionError, match="must use staged operations"):
         await apply_config_transform(lambda config: config, Path("/data/config"))
-
-
-def test_wait_for_staged_result_times_out_active_job_without_result(monkeypatch, tmp_path):
-    from atomixos_provision import provision
-
-    paths = runtime_paths(tmp_path / "run")
-    ensure_runtime_layout(paths, for_worker=True)
-    (paths.active / "job-1").mkdir()
-    monkeypatch.setattr(provision, "STAGED_RESULT_TIMEOUT_SECONDS", 0.01)
-
-    with pytest.raises(ProvisionError, match="timed out waiting"):
-        provision._wait_for_staged_result(paths, "job-1")
 
 
 def test_reapply_renders_network_settings_and_rolls_back_on_activation_failure(
