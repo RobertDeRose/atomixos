@@ -469,8 +469,10 @@ nixos-lib.runTest {
         gateway.succeed("curl -fsS http://127.0.0.1:18081/api/nonce > /tmp/partial-export-nonce.json")
         gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nnonce = json.loads(Path('/tmp/partial-export-nonce.json').read_text())['nonce']\nPath('/tmp/partial-export-nonce.txt').write_text(nonce)\nPath('/tmp/empty-body').write_bytes(bytes())\nPY")
         gateway.succeed("/tmp/sign-reapply /tmp/partial-export-nonce.txt /api/config/export /tmp/empty-body /tmp/auth-test-key /tmp/partial-export-signature-b64.txt")
-        gateway.succeed("curl -fsS -H \"X-AtomixOS-Nonce: $(cat /tmp/partial-export-nonce.txt)\" -H \"X-AtomixOS-Signature: $(cat /tmp/partial-export-signature-b64.txt)\" http://127.0.0.1:18081/api/config/export > /tmp/partial-export.toml")
+        gateway.succeed("curl -fsS -H \"X-AtomixOS-Nonce: $(cat /tmp/partial-export-nonce.txt)\" -H \"X-AtomixOS-Signature: $(cat /tmp/partial-export-signature-b64.txt)\" http://127.0.0.1:18081/api/config/export > /tmp/partial-export.tar.gz")
+        gateway.succeed("tar -xOf /tmp/partial-export.tar.gz config.toml > /tmp/partial-export.toml")
         gateway.succeed("grep -F '[users.alice]' /tmp/partial-export.toml")
+        gateway.succeed("grep '9.9.9.9' /tmp/partial-export.toml")
 
         # Signature is bound to the submitted payload digest.
         gateway.succeed("curl -fsS http://127.0.0.1:18081/api/nonce > /tmp/auth-tamper-nonce-response.json")
