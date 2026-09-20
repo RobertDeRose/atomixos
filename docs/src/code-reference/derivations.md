@@ -155,12 +155,12 @@ mkimage -C none -A arm64 -T script -d boot.cmd boot.scr
   squashfsImage, bootPartition, partitionLayout }:
 ```
 
-| Parameter       | Source                 | Description                  |
-|-----------------|------------------------|------------------------------|
-| `ubootRock64`   | nixpkgs                | U-Boot package for Rock64    |
-| `nixosConfig`   | `rock64System.config`  | Provides kernel, initrd, DTB |
-| `squashfsImage` | `packages.squashfs`    | Squashfs derivation          |
-| `bootPartition` | `packages.boot-partition` | Shared boot-slot filesystem |
+| Parameter         | Source                     | Description                              |
+|-------------------|----------------------------|------------------------------------------|
+| `ubootRock64`     | nixpkgs                    | U-Boot package for Rock64                |
+| `nixosConfig`     | `rock64System.config`      | Provides kernel, initrd, DTB             |
+| `squashfsImage`   | `packages.squashfs`        | Squashfs derivation                      |
+| `bootPartition`   | `packages.boot-partition`  | Shared boot-slot filesystem              |
 | `partitionLayout` | `nix/partition-layout.nix` | Shared labels, GUIDs, offsets, and sizes |
 
 **Delegates to:** `scripts/build-image.sh`

@@ -36,9 +36,9 @@ mise run config:lan-range \
 
 The task modifies the built-in fallback LAN defaults used by development images:
 
-| File                      | What Changes                                                                                             |
-|---------------------------|----------------------------------------------------------------------------------------------------------|
-| `modules/lan-gateway.nix` | fallback eth1 `Address`, dnsmasq `dhcp-range`, DHCP options 3/6/42, gateway hosts, chrony `allow` subnet |
+| File                | What Changes                                                   |
+|---------------------|----------------------------------------------------------------|
+| `defaults/lan.json` | Shared fallback gateway CIDR and DHCP start/end address fields |
 
 ## After Changing
 

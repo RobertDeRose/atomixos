@@ -27,12 +27,12 @@ check size limit.
 
 Builds a signed RAUC bundle (`.raucb`).
 
-| Input                            | Description                                            |
-|----------------------------------|--------------------------------------------------------|
-| `@bootPartition@`                | Shared boot-slot filesystem derivation                 |
-| `@squashfs@`                     | Squashfs image directory                               |
-| `@signingCert@` / `@signingKey@` | RAUC signing credentials                               |
-| `@version@`                      | Bundle version string                                  |
+| Input                            | Description                            |
+|----------------------------------|----------------------------------------|
+| `@bootPartition@`                | Shared boot-slot filesystem derivation |
+| `@squashfs@`                     | Squashfs image directory               |
+| `@signingCert@` / `@signingKey@` | RAUC signing credentials               |
+| `@version@`                      | Bundle version string                  |
 
 **Steps:** Copy the shared `boot.vfat`, generate the manifest, and sign with `rauc bundle`.
 
@@ -42,12 +42,12 @@ Builds a signed RAUC bundle (`.raucb`).
 
 Assembles the flashable disk image.
 
-| Input                       | Description                 |
-|-----------------------------|-----------------------------|
-| `@bootPartition@`           | Shared boot-slot filesystem |
-| `@squashfs@`                | Squashfs image              |
-| `@uboot@`                   | U-Boot package              |
-| `@imageName@`               | Output filename             |
+| Input             | Description                 |
+|-------------------|-----------------------------|
+| `@bootPartition@` | Shared boot-slot filesystem |
+| `@squashfs@`      | Squashfs image              |
+| `@uboot@`         | U-Boot package              |
+| `@imageName@`     | Output filename             |
 
 **Steps:** Create a sparse image, write U-Boot at raw offsets, create the GPT from the shared partition layout, copy the
 shared boot-slot filesystem to `boot-a`, and write squashfs to `rootfs-a`. Slot B and `/data` are created by initrd
@@ -178,9 +178,9 @@ Litestar provisioning service package used by first boot and re-apply flows.
 4. `domain/*/controller.py` contains API route handlers grouped by domain
 5. `domain/config/coordinator.py` owns direct-versus-staged submission and admission policy
 6. `domain/config/service.py` exposes the config apply/validate facade
-6. `schemas.py` defines typed API response shapes
-7. `exceptions.py` maps domain errors to API response bodies
-8. `provision.py`, `bundle.py`, `quadlet.py`, and `activation.py` implement the safe apply pipeline
+7. `schemas.py` defines typed API response shapes
+8. `exceptions.py` maps domain errors to API response bodies
+9. `provision.py`, `bundle.py`, `quadlet.py`, and `activation.py` implement the safe apply pipeline
 
 `POST /api/config` is asynchronous and returns a job URL. The job endpoint
 reports provisioning steps, service deployment/status events, final result, and
@@ -260,8 +260,9 @@ resolve the minicom binary.
 
 **Location:** `.mise/tasks/config/lan-range`
 
-Updates built-in fallback LAN gateway/DHCP configuration in `modules/lan-gateway.nix`. Runtime LAN changes should use
-`[network.dnsmasq]` or `[network.interfaces.eth1]` in `config.toml` instead.
+Updates the built-in fallback LAN gateway/DHCP fields in `defaults/lan.json`. Nix, Python, and boot-time shell consumers
+load that contract; runtime LAN changes should use `[network.dnsmasq]` or `[network.interfaces.eth1]` in `config.toml`
+instead.
 
 | Flag             | Default          | Description           |
 |------------------|------------------|-----------------------|
@@ -269,4 +270,4 @@ Updates built-in fallback LAN gateway/DHCP configuration in `modules/lan-gateway
 | `--dhcp-start`   | `172.20.30.10`   | DHCP pool start       |
 | `--dhcp-end`     | `172.20.30.254`  | DHCP pool end         |
 
-Modifies: `modules/lan-gateway.nix`.
+Modifies: `defaults/lan.json`.
