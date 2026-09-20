@@ -130,15 +130,15 @@ def test_provisioning_lock_rejects_writable_runtime_lock_directory(monkeypatch, 
     lock_dir.chmod(0o775)
     monkeypatch.setattr(provision, "PROVISION_LOCK_DIR", lock_dir)
 
-    with pytest.raises(
-        ProvisionError, match="must not be group/world writable"
-    ), provisioning_lock(Path("/data/config")):
+    with (
+        pytest.raises(ProvisionError, match="must not be group/world writable"),
+        provisioning_lock(Path("/data/config")),
+    ):
         pass
 
 
-def test_provisioning_lock_rejects_non_root_runtime_lock_directory(
-    monkeypatch, tmp_path
-):
+def test_provisioning_lock_rejects_non_root_runtime_lock_directory(monkeypatch, tmp_path):
+    """Verify that provisioning lock rejects non root runtime lock directory."""
     from atomixos_provision import provision
 
     lock_dir = tmp_path / "run-locks"
@@ -146,9 +146,10 @@ def test_provisioning_lock_rejects_non_root_runtime_lock_directory(
     monkeypatch.setattr(provision, "PROVISION_LOCK_DIR", lock_dir)
     monkeypatch.setattr(provision.os, "geteuid", lambda: 0)
 
-    with pytest.raises(
-        ProvisionError, match="lock directory must be root-owned"
-    ), provisioning_lock(Path("/data/config")):
+    with (
+        pytest.raises(ProvisionError, match="lock directory must be root-owned"),
+        provisioning_lock(Path("/data/config")),
+    ):
         pass
 
 
@@ -205,9 +206,9 @@ async def test_stage_config_operation_queues_rendered_candidate(monkeypatch, tmp
     assert "[users.alice]" in config_path.read_text()
     assert json.loads(manifest_path.read_text())["operation"] == "partial-apply"
 
-async def test_stage_config_operation_does_not_recover_config_root(
-    monkeypatch, tmp_path
-):
+
+async def test_stage_config_operation_does_not_recover_config_root(monkeypatch, tmp_path):
+    """Verify that stage config operation does not recover config root."""
     from atomixos_provision import provision
 
     runtime_root = tmp_path / "run"
@@ -232,6 +233,7 @@ async def test_stage_config_operation_does_not_recover_config_root(
     )
 
     assert (runtime_root / "queue" / "job-1.ready").exists()
+
 
 async def test_stage_config_operation_rejects_pending_promotion_without_recovery(
     monkeypatch, tmp_path
@@ -264,8 +266,6 @@ async def test_stage_config_operation_rejects_pending_promotion_without_recovery
     assert not (runtime_root / "queue" / "job-1.ready").exists()
 
 
-
-
 async def test_stage_config_operation_rejects_when_queue_not_empty(monkeypatch, tmp_path):
     runtime_root = tmp_path / "run"
     config_root = tmp_path / "config"
@@ -289,9 +289,8 @@ async def test_stage_config_operation_rejects_when_queue_not_empty(monkeypatch, 
         )
 
 
-async def test_apply_config_operation_staged_path_waits_after_queueing(
-    monkeypatch, tmp_path
-):
+async def test_apply_config_operation_staged_path_waits_after_queueing(monkeypatch, tmp_path):
+    """Verify that apply config operation staged path waits after queueing."""
     from atomixos_provision import provision
 
     calls = []
@@ -343,7 +342,6 @@ async def test_apply_config_operation_direct_path_applies_candidate(monkeypatch,
 
     assert result["reapply"] is True
     assert "9.9.9.9" in (config_root / "config.toml").read_text()
-
 
 
 def test_wait_for_staged_result_times_out_while_worker_active(monkeypatch, tmp_path):
@@ -399,9 +397,7 @@ def test_wait_for_staged_result_abandons_queued_job_on_timeout(monkeypatch, tmp_
     assert not (paths.queue / "job-1.ready").exists()
 
 
-def test_wait_for_staged_result_times_out_claimed_job_without_result(
-    monkeypatch, tmp_path
-):
+def test_wait_for_staged_result_times_out_claimed_job_without_result(monkeypatch, tmp_path):
     from atomixos_provision import provision
 
     paths = runtime_paths(tmp_path / "run")
@@ -525,9 +521,10 @@ def test_write_imported_state_uses_private_permissions_and_cleans_quadlet(tmp_pa
     assert not stale_quadlet.exists()
     assert (config_root / "quadlet" / "app.container").exists()
     assert json.loads((config_root / "host-network.json").read_text()) == parsed["host_network"]
-    assert json.loads((config_root / "activation-policy.json").read_text()) == parsed[
-        "activation_policy"
-    ]
+    assert (
+        json.loads((config_root / "activation-policy.json").read_text())
+        == parsed["activation_policy"]
+    )
 
 
 def test_write_imported_state_marks_build_rootless_when_consumed_by_rootless_container(tmp_path):
@@ -788,6 +785,7 @@ def test_import_config_from_path_stages_data_config_outside_worker(monkeypatch, 
     assert result == {"queued": True}
     assert calls
 
+
 def test_import_config_from_path_applies_data_config_in_worker(monkeypatch, tmp_path):
     from atomixos_provision import provision
 
@@ -812,7 +810,6 @@ def test_import_config_from_path_applies_data_config_in_worker(monkeypatch, tmp_
 
     assert result == {"applied": True}
     assert calls
-
 
 
 async def test_apply_config_transform_preserves_bundle_files(tmp_path, monkeypatch):
@@ -867,6 +864,7 @@ Volume = "${{FILES_DIR}}/app/settings.json:/settings.json:ro"
     assert (config_root / "files" / "app" / "settings.json").read_text() == "{}\n"
     unit_text = (config_root / "quadlet" / "app.container").read_text()
     assert f"Volume={config_root}/files/app/settings.json:/settings.json:ro" in unit_text
+
 
 async def test_staged_partial_apply_preserves_bundle_files(tmp_path, monkeypatch):
     from atomixos_provision import provision
@@ -934,7 +932,6 @@ Volume = "${{FILES_DIR}}/app/settings.json:/settings.json:ro"
     assert f"Volume={config_root}/files/app/settings.json:/settings.json:ro" in unit_text
 
 
-
 async def test_apply_config_transform_rejects_data_config_outside_worker(monkeypatch):
     monkeypatch.setattr(
         "atomixos_provision.provision.validate_config_root", lambda _root: Path("/data/config")
@@ -942,6 +939,7 @@ async def test_apply_config_transform_rejects_data_config_outside_worker(monkeyp
 
     with pytest.raises(ProvisionError, match="must use staged operations"):
         await apply_config_transform(lambda config: config, Path("/data/config"))
+
 
 def test_wait_for_staged_result_times_out_active_job_without_result(monkeypatch, tmp_path):
     from atomixos_provision import provision
@@ -953,7 +951,6 @@ def test_wait_for_staged_result_times_out_active_job_without_result(monkeypatch,
 
     with pytest.raises(ProvisionError, match="timed out waiting"):
         provision._wait_for_staged_result(paths, "job-1")
-
 
 
 def test_reapply_renders_network_settings_and_rolls_back_on_activation_failure(
@@ -1161,9 +1158,7 @@ def test_write_imported_state_grants_service_read_access_when_root(tmp_path, mon
     assert (config_root / "config.toml").stat().st_mode & 0o040
 
 
-def test_write_imported_state_does_not_grant_service_group_to_bundle_files(
-    tmp_path, monkeypatch
-):
+def test_write_imported_state_does_not_grant_service_group_to_bundle_files(tmp_path, monkeypatch):
     from atomixos_provision import provision
 
     config_path = tmp_path / "config.toml"

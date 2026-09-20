@@ -63,10 +63,7 @@ OPEN_NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
 
 def _open_dir_no_follow(path: Path) -> int:
     flags = (
-        os.O_RDONLY
-        | getattr(os, "O_DIRECTORY", 0)
-        | OPEN_NOFOLLOW
-        | getattr(os, "O_CLOEXEC", 0)
+        os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | OPEN_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
     )
     try:
         fd = os.open(path, flags)
@@ -159,13 +156,8 @@ def _snapshot_dir(
             raise provision_error(
                 f"bundle member {child_path!r} exceeds {max_file_bytes} byte limit"
             )
-        if (
-            max_total_bytes is not None
-            and total_bytes[0] + child_stat.st_size > max_total_bytes
-        ):
-            raise provision_error(
-                f"bundle exceeds {max_total_bytes} byte decompressed limit"
-            )
+        if max_total_bytes is not None and total_bytes[0] + child_stat.st_size > max_total_bytes:
+            raise provision_error(f"bundle exceeds {max_total_bytes} byte decompressed limit")
         file_fd = os.open(
             name,
             os.O_RDONLY | OPEN_NOFOLLOW | getattr(os, "O_CLOEXEC", 0),
@@ -186,9 +178,7 @@ def _snapshot_dir(
                 )
             total_bytes[0] += actual_size
             if max_total_bytes is not None and total_bytes[0] > max_total_bytes:
-                raise provision_error(
-                    f"bundle exceeds {max_total_bytes} byte decompressed limit"
-                )
+                raise provision_error(f"bundle exceeds {max_total_bytes} byte decompressed limit")
         finally:
             if file_fd >= 0:
                 os.close(file_fd)
@@ -221,16 +211,14 @@ def _read_export_file(path: Path, member_name: str) -> bytes:
             raise provision_error(f"bundle member must be a regular file: {path}")
         if file_stat.st_size > MAX_BUNDLE_MEMBER_BYTES:
             raise provision_error(
-                f"bundle member {member_name!r} exceeds "
-                f"{MAX_BUNDLE_MEMBER_BYTES} byte limit"
+                f"bundle member {member_name!r} exceeds {MAX_BUNDLE_MEMBER_BYTES} byte limit"
             )
         with os.fdopen(fd, "rb") as source:
             fd = -1
             content = source.read()
         if len(content) > MAX_BUNDLE_MEMBER_BYTES:
             raise provision_error(
-                f"bundle member {member_name!r} exceeds "
-                f"{MAX_BUNDLE_MEMBER_BYTES} byte limit"
+                f"bundle member {member_name!r} exceeds {MAX_BUNDLE_MEMBER_BYTES} byte limit"
             )
         return content
     except OSError as exc:
@@ -261,6 +249,7 @@ def _build_export_tar(config_bytes: bytes, files_root: Path | None) -> bytes:
     member_count = 0
 
     with tarfile.open(fileobj=output, mode="w:", format=tarfile.PAX_FORMAT) as archive:
+
         def add_file(name: str, content: bytes, mode: int) -> None:
             """Add a file to the deterministic export archive."""
             nonlocal member_count
@@ -272,9 +261,7 @@ def _build_export_tar(config_bytes: bytes, files_root: Path | None) -> bytes:
                 raise provision_error(
                     f"bundle member {name!r} exceeds {MAX_BUNDLE_MEMBER_BYTES} byte limit"
                 )
-            archive.addfile(
-                _tar_info(name, mode=mode, size=len(content)), io.BytesIO(content)
-            )
+            archive.addfile(_tar_info(name, mode=mode, size=len(content)), io.BytesIO(content))
 
         def add_directory(name: str) -> None:
             """Add a directory to the deterministic export archive."""
@@ -307,9 +294,7 @@ def _build_export_tar(config_bytes: bytes, files_root: Path | None) -> bytes:
 
     tar_bytes = output.getvalue()
     if len(tar_bytes) > MAX_DECOMPRESSED_BYTES:
-        raise provision_error(
-            f"bundle exceeds {MAX_DECOMPRESSED_BYTES} byte decompressed limit"
-        )
+        raise provision_error(f"bundle exceeds {MAX_DECOMPRESSED_BYTES} byte decompressed limit")
     compressed = io.BytesIO()
     with gzip.GzipFile(fileobj=compressed, mode="wb", compresslevel=9, mtime=0) as gzip_file:
         gzip_file.write(tar_bytes)
@@ -324,9 +309,7 @@ def export_bundle_bytes(config_root: Path) -> bytes:
     config_path = config_root / "config.toml"
     config_bytes = _read_export_file(config_path, "config.toml")
     if len(config_bytes) > MAX_DECOMPRESSED_BYTES:
-        raise provision_error(
-            f"bundle exceeds {MAX_DECOMPRESSED_BYTES} byte decompressed limit"
-        )
+        raise provision_error(f"bundle exceeds {MAX_DECOMPRESSED_BYTES} byte decompressed limit")
 
     files_path = config_root / "files"
     try:

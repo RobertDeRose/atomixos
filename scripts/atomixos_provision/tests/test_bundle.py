@@ -327,9 +327,7 @@ class TestExportBundle:
         with pytest.raises(ProvisionError, match="decompressed limit"):
             export_bundle_bytes(tmp_path)
 
-        monkeypatch.setattr(
-            "atomixos_provision.bundle.MAX_DECOMPRESSED_BYTES", 256 * 1024 * 1024
-        )
+        monkeypatch.setattr("atomixos_provision.bundle.MAX_DECOMPRESSED_BYTES", 256 * 1024 * 1024)
         monkeypatch.setattr("atomixos_provision.bundle.MAX_SOURCE_BYTES", 1)
         with pytest.raises(ProvisionError, match="export exceeds"):
             export_bundle_bytes(tmp_path)

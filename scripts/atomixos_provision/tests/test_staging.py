@@ -93,13 +93,12 @@ def test_staged_job_reservations_count_toward_queue_bound(tmp_path, monkeypatch)
     release_staged_job_slot(paths, "job-1")
     assert count_staged_jobs(paths) == 0
 
+
 def test_reserved_control_suffixes_are_rejected_as_job_ids():
     with pytest.raises(ProvisionError, match="reserved suffix"):
         validate_job_id("job.ready")
     with pytest.raises(ProvisionError, match="reserved suffix"):
         validate_job_id("job.reserve")
-
-
 
 
 def test_malformed_reservation_directory_is_removed(tmp_path, monkeypatch):
@@ -142,6 +141,7 @@ def test_staged_job_count_treats_unreadable_active_dir_as_busy(tmp_path, monkeyp
     assert count_staged_jobs(paths) == 1
     assert has_staged_jobs(paths) is True
 
+
 def test_active_symlink_does_not_block_claim_or_delete_target(tmp_path, monkeypatch):
     runtime_root = tmp_path / "run"
     config_root = tmp_path / "config"
@@ -163,7 +163,6 @@ def test_active_symlink_does_not_block_claim_or_delete_target(tmp_path, monkeypa
     assert finalized == 0
     assert (target / "keep").read_text(encoding="utf-8") == "safe\n"
     assert not (paths.active / "job-old").is_symlink()
-
 
 
 def test_refresh_staged_job_reservation_prevents_stale_cleanup(tmp_path, monkeypatch):
@@ -322,7 +321,6 @@ def test_publish_ready_marker_does_not_follow_existing_symlink(tmp_path):
     assert marker["job_id"] == "job-1"
 
 
-
 def _force_staging(monkeypatch) -> None:
     monkeypatch.delenv("ATOMIXOS_PROVISION_WORKER_ACTIVE", raising=False)
 
@@ -384,6 +382,7 @@ def test_claim_next_job_uses_ready_marker_sequence_order(tmp_path):
     assert claimed is not None
     assert claimed.job_id == "a-job"
 
+
 def test_malformed_ready_marker_utf8_is_skipped_without_blocking_worker(tmp_path):
     paths = runtime_paths(tmp_path / "run")
     ensure_runtime_layout(paths, for_worker=True)
@@ -407,8 +406,6 @@ def test_invalid_utf8_control_json_reports_provision_error(tmp_path):
 
     with pytest.raises(ProvisionError, match="invalid staged JSON"):
         read_json(path)
-
-
 
 
 def test_claim_next_job_does_not_reclaim_active_job(tmp_path):
@@ -608,9 +605,8 @@ def test_runtime_layout_keeps_results_read_only_for_service_group(tmp_path):
     assert paths.active.stat().st_mode & 0o7777 == 0o2750
 
 
-def test_staged_job_presence_treats_unreadable_active_dir_as_active(
-    tmp_path, monkeypatch
-):
+def test_staged_job_presence_treats_unreadable_active_dir_as_active(tmp_path, monkeypatch):
+    """Verify that staged job presence treats unreadable active dir as active."""
     paths = runtime_paths(tmp_path / "run")
     ensure_runtime_layout(paths, for_worker=True)
     original_lstat = type(paths.active).lstat
@@ -633,6 +629,7 @@ def test_read_result_rejects_group_writable_results_directory(tmp_path):
     with pytest.raises(ProvisionError, match="results directory must not be group/world writable"):
         read_result(paths, "job-1")
 
+
 def test_read_result_rejects_non_root_owned_default_results_directory(tmp_path, monkeypatch):
     from atomixos_provision import staging
 
@@ -653,7 +650,6 @@ def test_read_result_rejects_non_root_owned_default_results_directory(tmp_path, 
 
     with pytest.raises(ProvisionError, match="results directory must be root-owned"):
         read_result(paths, "job-1")
-
 
 
 def test_read_result_rejects_group_writable_result_file(tmp_path):
@@ -749,9 +745,9 @@ def test_apply_staged_job_verifies_active_source_before_snapshot_copy(tmp_path, 
     with pytest.raises(ProvisionError, match="source verification failed"):
         apply_staged_job(config_root, runtime_root)
 
-def test_apply_staged_job_rejects_candidate_root_symlink_before_tree_walk(
-    tmp_path, monkeypatch
-):
+
+def test_apply_staged_job_rejects_candidate_root_symlink_before_tree_walk(tmp_path, monkeypatch):
+    """Verify that apply staged job rejects candidate root symlink before tree walk."""
     runtime_root = tmp_path / "run"
     config_root = tmp_path / "config"
     _force_staging(monkeypatch)
@@ -773,8 +769,6 @@ def test_apply_staged_job_rejects_candidate_root_symlink_before_tree_walk(
 
     with pytest.raises(ProvisionError, match="must not be a symlink"):
         apply_staged_job(config_root, runtime_root)
-
-
 
 
 def test_apply_staged_job_uses_verified_manifest_for_snapshot_copy(tmp_path, monkeypatch):
@@ -882,7 +876,6 @@ def test_staged_snapshot_preserves_nested_directory_modes(tmp_path, monkeypatch)
     assert oct((config_root / "quadlet").stat().st_mode & 0o7777) == "0o755"
 
 
-
 def test_staged_snapshot_reapplies_directory_modes_after_file_copy(tmp_path, monkeypatch):
     runtime_root = tmp_path / "run"
     config_root = tmp_path / "config"
@@ -921,6 +914,7 @@ def test_staged_snapshot_reapplies_directory_modes_after_file_copy(tmp_path, mon
     assert result is not None
     assert oct((config_root / "quadlet").stat().st_mode & 0o7777) == "0o755"
 
+
 def test_staged_snapshot_normalizes_special_directory_mode_bits(tmp_path, monkeypatch):
     runtime_root = tmp_path / "run"
     config_root = tmp_path / "config"
@@ -955,7 +949,6 @@ def test_staged_snapshot_normalizes_special_directory_mode_bits(tmp_path, monkey
 
     assert result is not None
     assert oct((config_root / "quadlet").stat().st_mode & 0o7777) == "0o755"
-
 
 
 def test_apply_staged_job_promotes_verified_snapshot_not_mutated_active_tree(
@@ -1042,9 +1035,7 @@ async def test_apply_staged_partial_renders_against_current_config(tmp_path, mon
     second = apply_staged_job(config_root, runtime_root)
 
     assert second is not None
-    assert 'Image = "docker.io/library/caddy:latest"' in (
-        config_root / "config.toml"
-    ).read_text()
+    assert 'Image = "docker.io/library/caddy:latest"' in (config_root / "config.toml").read_text()
 
 
 @pytest.mark.asyncio
@@ -1113,9 +1104,8 @@ def test_apply_staged_job_rejects_tampering_without_data_mutation(tmp_path, monk
     assert "staged file" in result_file["error"]
 
 
-def test_apply_staged_job_rejects_unexpected_top_level_before_snapshot(
-    tmp_path, monkeypatch
-):
+def test_apply_staged_job_rejects_unexpected_top_level_before_snapshot(tmp_path, monkeypatch):
+    """Verify that apply staged job rejects unexpected top level before snapshot."""
     runtime_root = tmp_path / "run"
     config_root = tmp_path / "config"
     copied_paths = []
@@ -1132,7 +1122,6 @@ def test_apply_staged_job_rejects_unexpected_top_level_before_snapshot(
     from atomixos_provision import provision
 
     original_copy = provision._copy_staged_file_from_path
-
 
     def recording_copy(source, destination, expected_size=None):
         copied_paths.append(source.name)
@@ -1151,9 +1140,8 @@ def test_apply_staged_job_rejects_unexpected_top_level_before_snapshot(
     assert not config_root.exists()
 
 
-def test_apply_staged_job_rejects_size_race_without_snapshot_copy(
-    tmp_path, monkeypatch
-):
+def test_apply_staged_job_rejects_size_race_without_snapshot_copy(tmp_path, monkeypatch):
+    """Verify that apply staged job rejects size race without snapshot copy."""
     runtime_root = tmp_path / "run"
     config_root = tmp_path / "config"
     copied_bytes = []
@@ -1170,7 +1158,6 @@ def test_apply_staged_job_rejects_size_race_without_snapshot_copy(
     from atomixos_provision import provision
 
     original_copy_stream = provision._copy_staged_file_stream
-
 
     def recording_copy_stream(source_file, source, destination, expected_size):
         if source.name == "config.toml" and source.parent.name == "candidate":

@@ -52,13 +52,18 @@ _BOOT_UI_JOBS_DIR = "boot-ui-jobs"
 def render_bootstrap_page(
     config_text: str = "", message_html: str = "", bootstrap_token: str = ""
 ) -> str:
-    message_block = f'<section id="job-status" class="message">{message_html}</section>' if message_html else '<section id="job-status"></section>'
+    """Render the first-boot provisioning page."""
+    message_block = (
+        f'<section id="job-status" class="message">{message_html}</section>'
+        if message_html
+        else '<section id="job-status"></section>'
+    )
     config_text_json = json.dumps(config_text).replace("<", "\\u003c")
     applied_config_block = (
-        "<section class=\"panel\">"
+        '<section class="panel">'
         "<h2>Applied Configuration</h2>"
-        "<button type=\"button\" onclick=\"downloadAppliedConfig()\">Download applied config.toml</button>"
-        f"<textarea class=\"medium\" readonly>{html.escape(config_text)}</textarea>"
+        '<button type="button" onclick="downloadAppliedConfig()">Download applied config.toml</button>'
+        f'<textarea class="medium" readonly>{html.escape(config_text)}</textarea>'
         "<script>"
         "function downloadAppliedConfig() {"
         f"const blob = new Blob([{config_text_json}], {{type: 'text/plain'}});"
@@ -256,13 +261,15 @@ def render_job_fragment(job: Job) -> str:
         return fragment + f'<script>startJobStream("{html.escape(job.id)}");</script>'
 
     if state == "succeeded":
-        return _html_page_fragment(
-            _render_job_message_html(snapshot), "status-succeeded"
-        ) + "<script>completeApplyButton();</script>"
+        return (
+            _html_page_fragment(_render_job_message_html(snapshot), "status-succeeded")
+            + "<script>completeApplyButton();</script>"
+        )
 
-    return _html_page_fragment(
-        _render_job_message_html(snapshot), "status-failed"
-    ) + "<script>resetApplyButton();</script>"
+    return (
+        _html_page_fragment(_render_job_message_html(snapshot), "status-failed")
+        + "<script>resetApplyButton();</script>"
+    )
 
 
 def _render_job_message_html(snapshot: dict[str, Any]) -> str:
@@ -296,7 +303,9 @@ def _render_job_message_html(snapshot: dict[str, Any]) -> str:
 
     rollback = snapshot.get("rollback_status")
     rollback_html = (
-        f"<p><strong>Rollback status:</strong> {html.escape(str(rollback))}</p>" if rollback else ""
+        f"<p><strong>Rollback status:</strong> {html.escape(str(rollback))}</p>"
+        if rollback
+        else ""
     )
     return (
         f"<p><strong>Configuration failed.</strong></p>"
@@ -315,7 +324,11 @@ def _render_job_events(events: list[dict[str, Any]]) -> str:
         "</li>"
         for event in recent_events
     )
-    return f'<div class="event-log"><ol class="events">{event_items}</ol></div>' if event_items else ""
+    return (
+        f'<div class="event-log"><ol class="events">{event_items}</ol></div>'
+        if event_items
+        else ""
+    )
 
 
 def _is_htmx_request(request: Request) -> bool:
@@ -523,11 +536,11 @@ async def apply_form(request: Request, state: State) -> Response[str]:
         if final_state not in {"submitted", "running"}:
             if is_htmx_request:
                 return Response(render_job_fragment(job), status_code=200, media_type="text/html")
-            status_code = 400 if final_state == "failed" else 200 if final_state == "succeeded" else 202
+            status_code = (
+                400 if final_state == "failed" else 200 if final_state == "succeeded" else 202
+            )
             rendered_config_text = (
-                config_text
-                if final_state == "succeeded" and isinstance(config_text, str)
-                else ""
+                config_text if final_state == "succeeded" and isinstance(config_text, str) else ""
             )
             return Response(
                 render_bootstrap_page(
@@ -584,6 +597,7 @@ async def job_events(job_id: str, job_manager: JobManager, state: State) -> Resp
     job = job_manager.get(job_id)
     if job is None:
         if _device_is_provisioned(state.config_root):
+
             async def recovered_stream():
                 yield {"data": _render_recovered_success_fragment()}
                 yield {"event": "done", "data": ""}

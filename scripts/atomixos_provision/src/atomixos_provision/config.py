@@ -615,9 +615,7 @@ def load_network_settings(network_value: Any) -> dict[str, Any]:
     interfaces = load_network_interfaces(network.get("interfaces"))
     eth1 = interfaces.get("eth1")
     if eth1 and eth1.get("mode") == "static":
-        eth1_gateway = require_ipv4_interface(
-            eth1["address"], "network.interfaces.eth1.address"
-        )
+        eth1_gateway = require_ipv4_interface(eth1["address"], "network.interfaces.eth1.address")
         if "gateway_cidr" in lan_input:
             dnsmasq_gateway = require_ipv4_interface(
                 lan_input["gateway_cidr"], "network.dnsmasq.gateway_cidr"
@@ -768,8 +766,8 @@ def load_activation_policy(activation_value: Any, known_units: set[str]) -> dict
 
     overlap = sorted(set(required_units) & set(allow_degraded))
     if overlap:
-        message = (
-            "activation.allow_degraded must not include required units: " + ", ".join(overlap)
+        message = "activation.allow_degraded must not include required units: " + ", ".join(
+            overlap
         )
         raise provision_error(message)
 

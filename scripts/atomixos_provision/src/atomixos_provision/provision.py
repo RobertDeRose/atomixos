@@ -1009,8 +1009,7 @@ def _validate_staged_snapshot_manifest(
     unexpected = actual - allowed
     if unexpected:
         raise ProvisionError(
-            "staged job contains unexpected top-level entries: "
-            + ", ".join(sorted(unexpected))
+            "staged job contains unexpected top-level entries: " + ", ".join(sorted(unexpected))
         )
     if not (source / "candidate").is_dir():
         raise ProvisionError("staged job missing candidate directory")
@@ -1276,9 +1275,7 @@ def apply_staged_job(config_root: Path, runtime_root: Path | None = None) -> dic
             with tempfile.TemporaryDirectory(prefix="atomixos-staged-") as snapshot_dir:
                 snapshot = Path(snapshot_dir) / claimed.job_id
                 source_manifest = verify_staged_job(claimed, paths)
-                _copy_staged_job_snapshot(
-                    claimed.path, snapshot, claimed.job_id, source_manifest
-                )
+                _copy_staged_job_snapshot(claimed.path, snapshot, claimed.job_id, source_manifest)
                 snapshot_job = ClaimedJob(claimed.job_id, snapshot)
                 manifest = verify_staged_job(snapshot_job, paths, require_active=False)
                 with provisioning_lock(config_root):
@@ -1324,10 +1321,7 @@ def _provision_sync(
         progress.set_stage("prepare", f"unpacking {filename}")
     tmpdir, config_path, files_path = prepare_source_bytes(payload, filename)
     try:
-        if (
-            staging_enabled()
-            and config_root.resolve(strict=False) == Path("/data/config")
-        ):
+        if staging_enabled() and config_root.resolve(strict=False) == Path("/data/config"):
             return _stage_prepared_sync(
                 _progress_job_id(progress),
                 config_path,
@@ -1351,10 +1345,8 @@ def _apply_config_operation_sync(
     config_root: Path,
     progress: ProgressReporter | None = None,
 ) -> dict[str, Any]:
-    if (
-        staging_enabled()
-        and config_root.resolve(strict=False) == Path("/data/config")
-    ):
+    """Synchronously apply a typed operation to the current configuration."""
+    if staging_enabled() and config_root.resolve(strict=False) == Path("/data/config"):
         job_id = _progress_job_id(progress)
         _stage_config_operation_sync(job_id, operation, config_root, progress)
         return _wait_for_staged_result(_runtime_paths(), job_id, progress)
@@ -1472,6 +1464,7 @@ async def apply_config_transform(
     progress: ProgressReporter | None = None,
 ) -> dict[str, Any]:
     """Apply a config transform under the same lock and pipeline as full imports."""
+
     def _apply_transform_sync() -> dict[str, Any]:
         if staging_enabled() and config_root.resolve(strict=False) == Path("/data/config"):
             raise ProvisionError("config transforms for /data/config must use staged operations")

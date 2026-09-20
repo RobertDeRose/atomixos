@@ -10,6 +10,7 @@ from atomixos_provision.settings import AppSettings
 
 __all__ = ["main"]
 
+
 @click.group()
 def cli() -> None:
     """AtomixOS provisioning CLI."""

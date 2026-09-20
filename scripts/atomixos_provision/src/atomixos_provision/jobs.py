@@ -240,13 +240,11 @@ class StagedJobManager(JobManager):
         self._recovery_lock = threading.Lock()
         self._monitored_job_ids: set[str] = set()
 
-
     @property
     def is_busy(self) -> bool:
         """True if any staged job is currently being prepared or monitored."""
         return any(
-            job.state in (JobState.SUBMITTED, JobState.RUNNING)
-            for job in self._jobs.values()
+            job.state in (JobState.SUBMITTED, JobState.RUNNING) for job in self._jobs.values()
         )
 
     async def submit_staged(
@@ -436,9 +434,7 @@ class StagedJobManager(JobManager):
                         job.set_stage("queued", "waiting for privileged apply worker")
                         continue
                     if timeout_state == "missing":
-                        raise ProvisionError(
-                            "privileged apply worker did not publish a result"
-                        )
+                        raise ProvisionError("privileged apply worker did not publish a result")
                     raise ProvisionError("timed out waiting for privileged apply worker")
                 await asyncio.sleep(0.2)
         except asyncio.CancelledError:

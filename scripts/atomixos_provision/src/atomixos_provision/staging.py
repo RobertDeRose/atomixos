@@ -343,9 +343,8 @@ def _is_plain_directory(path: Path) -> bool:
         return False
 
 
-def _count_staged_jobs_locked(
-    paths: RuntimePaths, *, exclude_job_id: str | None = None
-) -> int:
+def _count_staged_jobs_locked(paths: RuntimePaths, *, exclude_job_id: str | None = None) -> int:
+    """Count active staged jobs while holding the queue lock."""
     count = 0
     active_job_ids: set[str] = set()
     try:
@@ -802,9 +801,8 @@ def _verify_job_top_level(job_path: Path, manifest: dict[str, Any]) -> None:
         raise ProvisionError("staged job missing candidate directory")
 
 
-def _verify_tree(
-    root: Path, expected_entries: Any, expected_uid: int, expected_gid: int
-) -> None:
+def _verify_tree(root: Path, expected_entries: Any, expected_uid: int, expected_gid: int) -> None:
+    """Verify a staged tree against its manifest entries."""
     if not isinstance(expected_entries, list):
         raise ProvisionError("staged manifest tree entries must be a list")
     expected = {_entry_key(entry): entry for entry in expected_entries}
