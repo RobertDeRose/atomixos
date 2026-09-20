@@ -65,6 +65,13 @@ promotion flow:
 4. On success, clean up `/data/config-rollback`.
 5. On failure, restore `/data/config-rollback` to `/data/config` and re-activate with the restored activation policy.
 
+Before promotion, the worker writes a root-only apply receipt into the durable
+candidate. The receipt binds the staged job ID and source digest to its success
+payload. The worker removes the claimed job only after terminal result JSON is
+written. If the worker stops between promotion and result publication, its
+finalizer first recovers the promotion state, then uses the active receipt and
+claimed manifest to publish the authoritative success or failure result.
+
 `POST /api/config` is asynchronous for programmatic clients. It returns a typed response with `job_id`, `state`, and
 `job_url`; the `Location` header points to the same job resource. The job records provisioning steps, service
 deployment/status events, activation failures, final result, and rollback status.
@@ -87,8 +94,8 @@ commands that explicitly run with `ATOMIXOS_PROVISION_WORKER_ACTIVE=1`.
 Authenticated `GET /api/config/export` takes the provisioning lock and snapshots
 only the canonical `config.toml` plus the managed `/data/config/files/` tree. It
 returns a deterministic `config-bundle.tar.gz` (`application/gzip`) accepted by
-the same importer. Generated JSON, Quadlet output, markers, signer material, and
-other `/data/config` state are excluded. Missing `files/` is omitted; an existing
+the same importer. Generated JSON, Quadlet output, markers, signer material, the
+apply receipt, and other `/data/config` state are excluded. Missing `files/` is omitted; an existing
 empty directory is represented as an empty `files` archive entry. Archive members
 are relative regular files or directories and remain bounded during snapshotting by
 the import size, member, and count limits, so exporting and importing the bundle

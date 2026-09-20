@@ -212,6 +212,10 @@ The root worker claims a job by atomically renaming the staged directory from
 Claim and timeout-abandon operations share `/run/atomixos-provision/queue.lock`
 so the API cannot mark a job failed while the root worker is claiming it. Only
 one apply mutates `/data` at a time under `/run/atomixos-provision/config.lock`.
+Before promotion, the worker adds a root-only
+`/data/config/.atomixos-apply-receipt.json` to the durable candidate. The receipt
+binds the job ID and source digest to the successful result payload. It is
+generated runtime control state and is not included in config bundle exports.
 
 ### Staging Manifest
 
@@ -304,8 +308,10 @@ The design uses systemd as the privilege boundary:
   - verifies staged inputs
   - writes durable candidate state under `/data`
   - promotes, activates, rolls back, and writes result JSON
-  - runs a stop-post finalizer that writes failed results for claimed jobs left
-    behind if the worker is interrupted before terminal result publication
+  - retains the claimed job until terminal result publication succeeds
+  - runs a stop-post finalizer that recovers the config root and compares the
+    active receipt with the claimed manifest before publishing success or
+    failure for an interrupted job
 
 The API can poll result files and expose the same `/api/jobs/{id}` contract. If
 the API service restarts, it can reconstruct terminal job state from result JSON

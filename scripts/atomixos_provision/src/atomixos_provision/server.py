@@ -149,6 +149,7 @@ def apply_staged(config_root: Path, runtime_root: Path | None, drain: bool) -> N
 
 
 @cli.command("finalize-staged")
+@click.argument("config_root", type=click.Path(path_type=Path))
 @click.option(
     "--runtime-root",
     default=None,
@@ -160,12 +161,12 @@ def apply_staged(config_root: Path, runtime_root: Path | None, drain: bool) -> N
     default="privileged apply worker stopped before writing a result",
     help="Failure reason to record for abandoned active jobs.",
 )
-def finalize_staged(runtime_root: Path | None, reason: str) -> None:
+def finalize_staged(config_root: Path, runtime_root: Path | None, reason: str) -> None:
     """Finalize claimed staged jobs left behind by an interrupted worker."""
     from atomixos_provision.provision import finalize_staged_jobs
 
     try:
-        finalized = finalize_staged_jobs(runtime_root, reason)
+        finalized = finalize_staged_jobs(config_root, runtime_root, reason)
         click.echo(json.dumps({"ok": True, "finalized": finalized}))
     except Exception as exc:
         click.echo(json.dumps({"ok": False, "error": str(exc)}))

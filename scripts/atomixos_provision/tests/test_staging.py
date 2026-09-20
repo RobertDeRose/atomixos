@@ -10,6 +10,7 @@ import pytest
 from atomixos_provision.config import ProvisionError
 from atomixos_provision.provision import (
     apply_staged_job,
+    finalize_staged_jobs,
     stage_config_bytes,
     stage_config_operation,
     stage_reserved_config_bytes,
@@ -40,6 +41,7 @@ from atomixos_provision.staging import (
     validate_job_id,
     verify_staged_job,
     write_json_atomic,
+    write_result,
 )
 
 VALID_ED25519_KEY = (
@@ -647,6 +649,20 @@ def test_finalize_abandoned_active_jobs_marks_claimed_job_failed(tmp_path, monke
     assert result["error"] == "worker stopped"
 
 
+def test_finalize_abandoned_active_jobs_preserves_existing_result(tmp_path):
+    """Verify that finalize abandoned active jobs preserves existing result."""
+    paths = runtime_paths(tmp_path / "run")
+    ensure_runtime_layout(paths, for_worker=True)
+    (paths.active / "job-1").mkdir()
+    write_result(paths, "job-1", {"status": "failed", "error": "original failure"})
+    original = read_result(paths, "job-1")
+
+    assert finalize_abandoned_active_jobs(paths, "replacement failure") == 1
+
+    assert read_result(paths, "job-1") == original
+    assert not (paths.active / "job-1").exists()
+
+
 @pytest.mark.skipif(
     sys.platform == "darwin",
     reason="macOS filesystems do not preserve Linux setgid directory mode bits",
@@ -767,9 +783,155 @@ def test_apply_staged_job_promotes_candidate_and_writes_result(tmp_path, monkeyp
     assert result["reapply"] is False
     assert (config_root / "config.toml").exists()
     assert (config_root / ".first-config").read_text() == "ok\n"
+    receipt_path = config_root / ".atomixos-apply-receipt.json"
+    receipt = json.loads(receipt_path.read_text())
+    assert receipt["job_id"] == "job-1"
+    assert receipt["result"] == result
+    assert receipt_path.stat().st_mode & 0o777 == 0o600
     assert not (runtime_root / "active" / "job-1").exists()
     result_file = json.loads((runtime_root / "results" / "job-1.json").read_text())
     assert result_file["status"] == "succeeded"
+
+
+def test_finalize_staged_jobs_recovers_committed_result_after_result_write_failure(
+    tmp_path, monkeypatch
+):
+    """Verify that finalize staged jobs recovers committed result after result write failure."""
+    runtime_root = tmp_path / "run"
+    config_root = tmp_path / "config"
+    _force_staging(monkeypatch)
+    monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(runtime_root))
+    monkeypatch.setattr(
+        "atomixos_provision.provision.validate_config_root", lambda root, **_: root
+    )
+    monkeypatch.setattr("atomixos_provision.provision.os.chown", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        "atomixos_provision.config.load_config_schema",
+        lambda: {"type": "object", "additionalProperties": True},
+    )
+    monkeypatch.setattr(
+        "atomixos_provision.provision.complete_reapply",
+        lambda _root, _progress=None: (True, [], "skipped"),
+    )
+    monkeypatch.setattr("atomixos_provision.provision.reconcile_bootstrap_wan", lambda: None)
+
+    from atomixos_provision import provision
+
+    original_write_result = provision.write_result
+    stage_config_bytes("job-1", _valid_config(), "config.toml", config_root)
+
+    def fail_write_result(*_args, **_kwargs):
+        """Raise the simulated write result failure."""
+        raise PermissionError("result unavailable")
+
+    monkeypatch.setattr(provision, "write_result", fail_write_result)
+
+    with pytest.raises(PermissionError, match="result unavailable"):
+        apply_staged_job(config_root, runtime_root)
+
+    assert (runtime_root / "active" / "job-1").is_dir()
+    assert (config_root / ".atomixos-apply-receipt.json").is_file()
+
+    monkeypatch.setattr(provision, "write_result", original_write_result)
+    assert finalize_staged_jobs(config_root, runtime_root, "worker stopped") == 1
+
+    result = read_result(runtime_paths(runtime_root), "job-1")
+    assert result is not None
+    assert result["status"] == "succeeded"
+    assert result["result"]["reapply"] is False
+    assert not (runtime_root / "active" / "job-1").exists()
+
+
+def test_failed_result_write_keeps_claim_for_finalizer(tmp_path, monkeypatch):
+    """Verify that failed result write keeps claim for finalizer."""
+    runtime_root = tmp_path / "run"
+    config_root = tmp_path / "config"
+    _force_staging(monkeypatch)
+    monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(runtime_root))
+    monkeypatch.setattr(
+        "atomixos_provision.provision.validate_config_root", lambda root, **_: root
+    )
+    monkeypatch.setattr(
+        "atomixos_provision.config.load_config_schema",
+        lambda: {"type": "object", "additionalProperties": True},
+    )
+
+    from atomixos_provision import provision
+
+    original_write_result = provision.write_result
+    stage_config_bytes("job-1", _valid_config(), "config.toml", config_root)
+
+    def reject_staged_job(*_args, **_kwargs):
+        """Handle reject staged job."""
+        raise ProvisionError("verification failed")
+
+    def fail_write_result(*_args, **_kwargs):
+        """Raise the simulated write result failure."""
+        raise PermissionError("result unavailable")
+
+    monkeypatch.setattr(provision, "verify_staged_job", reject_staged_job)
+    monkeypatch.setattr(provision, "write_result", fail_write_result)
+
+    with pytest.raises(PermissionError, match="result unavailable"):
+        apply_staged_job(config_root, runtime_root)
+
+    assert (runtime_root / "active" / "job-1").is_dir()
+    monkeypatch.setattr(provision, "write_result", original_write_result)
+    assert finalize_staged_jobs(config_root, runtime_root, "worker stopped") == 1
+
+    result = read_result(runtime_paths(runtime_root), "job-1")
+    assert result is not None
+    assert result["status"] == "failed"
+    assert result["error"] == "worker stopped"
+    assert not (runtime_root / "active" / "job-1").exists()
+
+
+def test_finalize_staged_jobs_rolls_back_uncommitted_reapply(tmp_path, monkeypatch):
+    """Verify that finalize staged jobs rolls back uncommitted reapply."""
+    runtime_root = tmp_path / "run"
+    config_root = tmp_path / "config"
+    _force_staging(monkeypatch)
+    monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(runtime_root))
+    monkeypatch.setattr(
+        "atomixos_provision.provision.validate_config_root", lambda root, **_: root
+    )
+    monkeypatch.setattr("atomixos_provision.provision.os.chown", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        "atomixos_provision.config.load_config_schema",
+        lambda: {"type": "object", "additionalProperties": True},
+    )
+    monkeypatch.setattr("atomixos_provision.provision.reconcile_bootstrap_wan", lambda: None)
+    monkeypatch.setattr(
+        "atomixos_provision.provision.complete_reapply",
+        lambda _root, _progress=None: (True, [], "skipped"),
+    )
+
+    stage_config_bytes("job-1", _valid_config(), "config.toml", config_root)
+    apply_staged_job(config_root, runtime_root)
+    original_config = (config_root / "config.toml").read_bytes()
+
+    def interrupt_activation(_root, _progress=None):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr("atomixos_provision.provision.complete_reapply", interrupt_activation)
+    stage_config_bytes(
+        "job-2",
+        _valid_config("docker.io/library/busybox:latest"),
+        "config.toml",
+        config_root,
+    )
+
+    with pytest.raises(KeyboardInterrupt):
+        apply_staged_job(config_root, runtime_root)
+
+    assert (runtime_root / "active" / "job-2").is_dir()
+    assert finalize_staged_jobs(config_root, runtime_root, "worker stopped") == 1
+
+    result = read_result(runtime_paths(runtime_root), "job-2")
+    assert result is not None
+    assert result["status"] == "failed"
+    assert (config_root / "config.toml").read_bytes() == original_config
+    assert not (runtime_root / "active" / "job-2").exists()
 
 
 def test_apply_staged_job_verifies_active_source_before_snapshot_copy(tmp_path, monkeypatch):

@@ -210,7 +210,9 @@ def test_apply_staged_command_returns_json_error(monkeypatch, tmp_path):
 def test_finalize_staged_command_returns_json(monkeypatch, tmp_path):
     captured = {}
 
-    def fake_finalize(runtime_root, reason):
+    def fake_finalize(config_root, runtime_root, reason):
+        """Simulate finalize for the test."""
+        captured["config_root"] = config_root
         captured["runtime_root"] = runtime_root
         captured["reason"] = reason
         return 2
@@ -221,6 +223,7 @@ def test_finalize_staged_command_returns_json(monkeypatch, tmp_path):
         server.cli,
         [
             "finalize-staged",
+            str(tmp_path / "config"),
             "--runtime-root",
             str(tmp_path / "run"),
             "--reason",
@@ -231,7 +234,11 @@ def test_finalize_staged_command_returns_json(monkeypatch, tmp_path):
     assert result.exit_code == 0, result.output
     assert '"ok": true' in result.output
     assert '"finalized": 2' in result.output
-    assert captured == {"runtime_root": tmp_path / "run", "reason": "worker stopped"}
+    assert captured == {
+        "config_root": tmp_path / "config",
+        "runtime_root": tmp_path / "run",
+        "reason": "worker stopped",
+    }
 
 
 def test_recover_data_config_requires_worker_context(monkeypatch):

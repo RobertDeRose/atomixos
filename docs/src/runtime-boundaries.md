@@ -42,11 +42,11 @@ resource for final success, failure, rollback status, and service deployment eve
 The staging boundary uses `/run/atomixos-provision`. The API writes a complete candidate tree, validated bundle files,
 and a manifest with relative paths, modes, sizes, and SHA-256 hashes, then publishes a ready marker using the same
 live capacity reservation that assigned its FIFO sequence. Expired reservations remove incomplete unpublished staging.
-The root
-`atomixos-provision-apply.service` claims queued jobs, verifies manifest paths, owners, modes, symlinks, hashes, and
-expected entries, re-renders the verified staged `config.toml` into `/data/config-candidate`, and runs the existing
-promotion, activation, rollback, and recovery protocol. Root-written `/data/config` state is group-readable by
-`atomixos-provision` so the unprivileged API can authenticate and export approved state. Bundle `files/` payloads are
+The root `atomixos-provision-apply.service` claims queued jobs, verifies manifest paths, owners, modes, symlinks,
+hashes, and expected entries, then re-renders the verified staged `config.toml` into `/data/config-candidate`. It runs
+the existing promotion, activation, rollback, and recovery protocol. Root-written `/data/config` state is
+group-readable by `atomixos-provision` so the unprivileged API can authenticate and export approved state, except for
+the owner-only apply receipt that binds a committed job and source digest to its result. Bundle `files/` payloads are
 owned by `appsvc`, group-readable by `atomixos-provision`, and installed as read-only files and directories. They are
 preserved through a no-symlink snapshot path. Export is allowlisted to
 `config.toml` and `files/`, returns a deterministic `config-bundle.tar.gz` under the provisioning lock, and excludes
@@ -55,8 +55,9 @@ shared provisioning predicate treats that marker or a valid `config.toml` as the
 provisioning, authentication, and Boot UI guards, while missing signer state fails closed.
 
 Runtime result files under `/run/atomixos-provision/results` are root-writable and group-readable only. Claim and queued-job
-abandonment share `/run/atomixos-provision/queue.lock`, and the root worker finalizer records failed results for claimed
-jobs left behind by an interrupted worker. Result polling may abandon only an
+abandonment share `/run/atomixos-provision/queue.lock`. The worker retains active jobs until terminal result publication.
+Its finalizer recovers the config root and matches the owner-only apply receipt against the claimed manifest before
+recording authoritative success or failure for a job left by an interrupted worker. Result polling may abandon only an
 unclaimed queued job; a claimed job remains nonterminal until the worker or its
 finalizer publishes the authoritative result.
 

@@ -553,7 +553,7 @@ async def test_partial_config_uses_staged_job_manager_when_available(tmp_path, m
     (tmp_path / "admin-signers").write_text("ssh-ed25519 AAAA test\n")
     monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
     monkeypatch.setattr(
-        "atomixos_provision.provision.stage_config_operation",
+        "atomixos_provision.provision.stage_reserved_config_operation",
         fake_stage_config_operation,
     )
     monkeypatch.setattr(
@@ -598,7 +598,7 @@ async def test_partial_config_reports_full_staged_queue(tmp_path, monkeypatch):
     (tmp_path / "admin-signers").write_text("ssh-ed25519 AAAA test\n")
     monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
     monkeypatch.setattr(
-        "atomixos_provision.provision.stage_config_operation",
+        "atomixos_provision.provision.stage_reserved_config_operation",
         fake_stage_config_operation,
     )
     monkeypatch.setattr(

@@ -18,6 +18,7 @@ from atomixos_provision.staging import (
     count_staged_jobs,
     ensure_runtime_layout,
     publish_ready_marker,
+    read_json,
     reserve_staged_job_slot,
     runtime_paths,
     staged_job_presence,
@@ -643,18 +644,28 @@ class TestStagedJobManager:
         await mgr._task
 
     @pytest.mark.asyncio
-    async def test_staged_heartbeat_retries_transient_refresh_failure(self, monkeypatch):
+    async def test_staged_heartbeat_retries_transient_refresh_failure(self, monkeypatch, tmp_path):
+        """Verify that staged heartbeat retries transient refresh failure."""
         monkeypatch.setattr("atomixos_provision.jobs._STAGED_RESERVATION_HEARTBEAT_SECONDS", 0.01)
+        runtime_root = tmp_path / "run"
+        monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(runtime_root))
+        paths = runtime_paths(runtime_root)
+        assert reserve_staged_job_slot(paths, "job-1", 1) is True
+        reserve_path = paths.queue / "job-1.reserve"
+        original_sequence = read_json(reserve_path)["sequence"]
         mgr = StagedJobManager()
         job = Job(id="job-1")
         recovered = asyncio.Event()
         refreshes = 0
+        real_refresh = mgr._refresh_reservation
 
-        def refresh(_job):
+        def refresh(current_job):
+            """Refresh the test reservation."""
             nonlocal refreshes
             refreshes += 1
             if refreshes == 1:
                 raise PermissionError("temporarily unavailable")
+            real_refresh(current_job)
             recovered.set()
 
         monkeypatch.setattr(mgr, "_refresh_reservation", refresh)
@@ -669,6 +680,7 @@ class TestStagedJobManager:
             "reservation refresh failed; retrying: temporarily unavailable",
             "reservation refresh recovered",
         ]
+        assert read_json(reserve_path)["sequence"] == original_sequence
 
     @pytest.mark.asyncio
     async def test_staged_get_recovers_queued_job_state(self, monkeypatch, tmp_path):

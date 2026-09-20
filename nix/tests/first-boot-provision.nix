@@ -74,6 +74,18 @@ nixos-lib.runTest {
         "d /data 0755 root root -"
         "d /etc/containers/systemd 0755 root root -"
       ];
+
+      users.users.atomixos-provision = {
+        group = "atomixos-provision";
+        isSystemUser = true;
+      };
+      users.groups.atomixos-provision = { };
+
+      users.users.appsvc = {
+        group = "appsvc";
+        isSystemUser = true;
+      };
+      users.groups.appsvc = { };
     };
 
   testScript = ''
@@ -448,11 +460,16 @@ nixos-lib.runTest {
         gateway.succeed("curl -fsS http://127.0.0.1:18081/api/nonce > /tmp/auth-nonce-response.json")
         gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nresp = json.loads(Path('/tmp/auth-nonce-response.json').read_text())\nassert set(resp) == {'nonce'}, resp\nassert len(resp['nonce']) > 20, resp\nPath('/tmp/auth-nonce.txt').write_text(resp['nonce'])\nPY")
 
+        # Re-apply a complete bundle so the later export still has managed files.
+        gateway.succeed("rm -rf /tmp/no-health-bundle && mkdir -p /tmp/no-health-bundle")
+        gateway.succeed("cp /tmp/no-health-config.toml /tmp/no-health-bundle/config.toml && cp -r /tmp/bundle-root/files /tmp/no-health-bundle/files")
+        gateway.succeed("tar -C /tmp/no-health-bundle -czf /tmp/no-health-config.tar.gz config.toml files")
+
         # Sign the nonce, path, and payload digest with our test key
-        gateway.succeed("/tmp/sign-reapply /tmp/auth-nonce.txt /api/config /tmp/no-health-config.toml /tmp/auth-test-key /tmp/auth-signature-b64.txt")
+        gateway.succeed("/tmp/sign-reapply /tmp/auth-nonce.txt /api/config /tmp/no-health-config.tar.gz /tmp/auth-test-key /tmp/auth-signature-b64.txt")
 
         # Authenticated POST should succeed
-        gateway.succeed("curl -fsS -H 'Content-Type: text/plain' -H \"X-AtomixOS-Nonce: $(cat /tmp/auth-nonce.txt)\" -H \"X-AtomixOS-Signature: $(cat /tmp/auth-signature-b64.txt)\" --data-binary @/tmp/no-health-config.toml http://127.0.0.1:18081/api/config > /tmp/auth-success-response.json")
+        gateway.succeed("curl -fsS -H 'Content-Type: application/gzip' -H 'X-Config-Filename: no-health-config.tar.gz' -H \"X-AtomixOS-Nonce: $(cat /tmp/auth-nonce.txt)\" -H \"X-AtomixOS-Signature: $(cat /tmp/auth-signature-b64.txt)\" --data-binary @/tmp/no-health-config.tar.gz http://127.0.0.1:18081/api/config > /tmp/auth-success-response.json")
         gateway.succeed("python3 /tmp/assert-api-job http://127.0.0.1:18081 /tmp/auth-success-response.json succeeded")
         gateway.succeed("cat /tmp/auth-test-key.pub > /tmp/auth-root/admin-signers")
 
@@ -479,6 +496,9 @@ nixos-lib.runTest {
         # complete managed tree without root privileges.
         gateway.succeed("kill $(cat /tmp/auth-bootstrap.pid)")
         gateway.succeed("while ss -tln | grep ':18081'; do sleep 0.2; done")
+        # Unsafe test roots use a sibling lock instead of the production lock
+        # under /run/atomixos-provision, so mirror its service-group access.
+        gateway.succeed("chgrp atomixos-provision /tmp/.auth-root.lock && chmod 0660 /tmp/.auth-root.lock")
         gateway.succeed("runuser -u atomixos-provision -- env PATH=/tmp/auth-bin:/run/current-system/sw/bin ATOMIXOS_ALLOW_UNSAFE_CONFIG_ROOT=1 first-boot-provision serve /tmp/auth-root --host 127.0.0.1 --port 18081 >/tmp/auth-bootstrap.log 2>&1 & echo $! >/tmp/auth-bootstrap.pid")
         gateway.wait_until_succeeds("ss -tln | grep ':18081'", timeout=30)
         gateway.succeed("curl -fsS http://127.0.0.1:18081/api/nonce > /tmp/partial-export-nonce.json")

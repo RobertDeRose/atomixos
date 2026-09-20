@@ -251,6 +251,7 @@ class TestExportBundle:
         for excluded in (
             ".first-config",
             "admin-signers",
+            ".atomixos-apply-receipt.json",
             "users.json",
             "quadlet-runtime.json",
         ):

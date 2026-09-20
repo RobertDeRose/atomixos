@@ -75,6 +75,15 @@ class StagedResult:
     rollback_status: str | None
 
 
+@dataclass(frozen=True)
+class CommittedStagedResult:
+    """Durable evidence that a staged job became the active config."""
+
+    job_id: str
+    source_sha256: str
+    result: dict[str, Any]
+
+
 class StagedTimeoutState(StrEnum):
     """Queue state used when a staged-result reconciliation interval expires."""
 
@@ -642,8 +651,12 @@ def write_result(paths: RuntimePaths, job_id: str, payload: dict[str, Any]) -> P
     return path
 
 
-def finalize_abandoned_active_jobs(paths: RuntimePaths, reason: str) -> int:
-    """Write failed results for claimed jobs left behind by an interrupted worker."""
+def finalize_abandoned_active_jobs(
+    paths: RuntimePaths,
+    reason: str,
+    committed: CommittedStagedResult | None = None,
+) -> int:
+    """Write terminal results for jobs left by an interrupted worker."""
     ensure_runtime_layout(paths, for_worker=True)
     finalized = 0
     with queue_operation_lock(paths):
@@ -657,11 +670,32 @@ def finalize_abandoned_active_jobs(paths: RuntimePaths, reason: str) -> int:
                 continue
             job_id = validate_job_id(active_path.name)
             if read_result(paths, job_id) is None:
-                write_result(paths, job_id, {"status": "failed", "error": reason})
+                if _active_job_matches_commit(active_path, job_id, committed):
+                    payload = {"status": "succeeded", "result": committed.result}
+                else:
+                    payload = {"status": "failed", "error": reason}
+                write_result(paths, job_id, payload)
             shutil.rmtree(active_path, ignore_errors=True)
             finalized += 1
         fsync_directory(paths.active)
     return finalized
+
+
+def _active_job_matches_commit(
+    active_path: Path,
+    job_id: str,
+    committed: CommittedStagedResult | None,
+) -> bool:
+    if committed is None or committed.job_id != job_id:
+        return False
+    try:
+        manifest = read_json(active_path / "manifest.json")
+    except (OSError, ProvisionError):
+        return False
+    return (
+        manifest.get("job_id") == job_id
+        and manifest.get("source_sha256") == committed.source_sha256
+    )
 
 
 def read_result(paths: RuntimePaths, job_id: str) -> dict[str, Any] | None:

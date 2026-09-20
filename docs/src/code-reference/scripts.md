@@ -194,7 +194,7 @@ The `atomixos-provision` CLI also exposes these maintenance commands:
 | `validate PATH`                                       | Validate a TOML file or supported bundle                |
 | `import SOURCE CONFIG_ROOT`                           | Import a source through the maintenance path            |
 | `apply-staged CONFIG_ROOT`                            | Consume one or all queued jobs as the root worker       |
-| `finalize-staged`                                     | Publish failures for jobs left by an interrupted worker |
+| `finalize-staged CONFIG_ROOT`                         | Recover and finalize jobs left by an interrupted worker |
 | `recover CONFIG_ROOT`                                 | Recover an interrupted atomic promotion                 |
 | `sync-quadlet CONFIG_ROOT QUADLET_DIR [ROOTLESS_DIR]` | Sync rendered Quadlet units                             |
 | `check-health CONFIG_ROOT`                            | Check required provisioned services                     |

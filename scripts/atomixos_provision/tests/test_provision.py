@@ -306,6 +306,11 @@ async def test_apply_config_operation_staged_path_waits_after_queueing(monkeypat
     )
     monkeypatch.setattr(provision, "_wait_for_staged_result", fake_wait)
     monkeypatch.setattr(provision, "staging_enabled", lambda: True)
+    monkeypatch.setattr(
+        provision,
+        "_reserve_staged_job_or_raise",
+        lambda _paths, _job_id: calls.append("reserve"),
+    )
 
     result = await apply_config_operation(
         {"op": "put_user", "name": "alice", "payload": {"isAdmin": False, "ssh_key": "k"}},
@@ -313,7 +318,7 @@ async def test_apply_config_operation_staged_path_waits_after_queueing(monkeypat
     )
 
     assert result == {"warnings": []}
-    assert calls == ["stage", "wait"]
+    assert calls == ["reserve", "stage", "wait"]
 
 
 async def test_apply_config_operation_direct_path_applies_candidate(monkeypatch, tmp_path):
@@ -762,6 +767,7 @@ def test_import_config_from_path_stages_data_config_outside_worker(monkeypatch, 
     from atomixos_provision import provision
 
     calls = []
+    reservations = []
     config_path = tmp_path / "config.toml"
     config_path.write_text("version = 1\n")
     monkeypatch.setattr(provision, "validate_config_root", lambda _root: Path("/data/config"))
@@ -770,11 +776,17 @@ def test_import_config_from_path_stages_data_config_outside_worker(monkeypatch, 
         "_stage_prepared_sync",
         lambda *args, **kwargs: calls.append((args, kwargs)) or {"queued": True},
     )
+    monkeypatch.setattr(
+        provision,
+        "_reserve_staged_job_or_raise",
+        lambda _paths, job_id: reservations.append(job_id),
+    )
 
     result = import_config_from_path(config_path, Path("/data/config"))
 
     assert result == {"queued": True}
     assert calls
+    assert reservations == [calls[0][0][0]]
 
 
 def test_import_config_from_path_applies_data_config_in_worker(monkeypatch, tmp_path):

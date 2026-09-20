@@ -48,6 +48,7 @@ from atomixos_provision.staging import (
     DEFAULT_MAX_STAGED_JOBS,
     MANIFEST_VERSION,
     ClaimedJob,
+    CommittedStagedResult,
     RuntimePaths,
     StagedTimeoutState,
     claim_next_job,
@@ -57,6 +58,7 @@ from atomixos_provision.staging import (
     has_staged_jobs,
     interpret_staged_result,
     publish_ready_marker,
+    read_json,
     read_result,
     release_staged_job_slot,
     reserve_staged_job_slot,
@@ -107,6 +109,8 @@ HOST_NETWORK_FILENAME = "host-network.json"
 ACTIVATION_POLICY_FILENAME = "activation-policy.json"
 OS_UPGRADE_FILENAME = "os-upgrade.json"
 HEALTH_REQUIRED_FILENAME = "health-required.json"
+APPLY_RECEIPT_FILENAME = ".atomixos-apply-receipt.json"
+APPLY_RECEIPT_VERSION = 1
 APP_RUNTIME_USER = "appsvc"
 ROOTLESS_NETWORK_NAME = "pasta"
 PROVISION_SERVICE_USER = "atomixos-provision"
@@ -188,8 +192,9 @@ def _grant_service_read_access(config_root: Path) -> None:
         return
     _uid, gid = identity
     files_root = config_root / "files"
+    receipt_path = config_root / APPLY_RECEIPT_FILENAME
     for path in [config_root, *config_root.rglob("*")]:
-        if path == files_root or files_root in path.parents:
+        if path in (receipt_path, files_root) or files_root in path.parents:
             continue
         try:
             path_stat = path.lstat()
@@ -1258,6 +1263,83 @@ def _copy_staged_file_stream(
     destination.chmod(stat.S_IMODE(source_stat.st_mode) & 0o7777)
 
 
+def _staged_success_result(manifest: dict[str, Any], *, is_reapply: bool) -> dict[str, Any]:
+    """Build the terminal success result for a staged apply."""
+    forwarding_url = manifest.get("forwarding_url")
+    result: dict[str, Any] = {
+        "warnings": list(manifest.get("warnings", [])),
+        "reapply": is_reapply,
+        "forwarding_url": forwarding_url if isinstance(forwarding_url, str) else None,
+    }
+    if is_reapply:
+        result["rolled_back"] = False
+    return result
+
+
+def _write_apply_receipt(
+    candidate_root: Path,
+    manifest: dict[str, Any],
+    result: dict[str, Any],
+) -> None:
+    job_id = validate_job_id(manifest.get("job_id", ""))
+    source_sha256 = manifest.get("source_sha256")
+    if not _is_sha256(source_sha256):
+        raise ProvisionError("staged manifest is missing a valid source digest")
+    write_json_atomic(
+        candidate_root / APPLY_RECEIPT_FILENAME,
+        {
+            "version": APPLY_RECEIPT_VERSION,
+            "job_id": job_id,
+            "source_sha256": source_sha256,
+            "result": result,
+        },
+        mode=0o600,
+    )
+
+
+def _read_apply_receipt(config_root: Path) -> CommittedStagedResult | None:
+    receipt_path = config_root / APPLY_RECEIPT_FILENAME
+    try:
+        receipt_stat = receipt_path.lstat()
+    except FileNotFoundError:
+        return None
+    if stat.S_ISLNK(receipt_stat.st_mode) or not stat.S_ISREG(receipt_stat.st_mode):
+        raise ProvisionError(f"apply receipt must be a regular file: {receipt_path}")
+    if receipt_stat.st_mode & (stat.S_IRWXG | stat.S_IRWXO):
+        raise ProvisionError(f"apply receipt must be owner-only: {receipt_path}")
+    receipt = read_json(receipt_path)
+    if receipt.get("version") != APPLY_RECEIPT_VERSION:
+        raise ProvisionError(f"unsupported apply receipt version: {receipt_path}")
+    job_id = validate_job_id(receipt.get("job_id", ""))
+    source_sha256 = receipt.get("source_sha256")
+    if not _is_sha256(source_sha256):
+        raise ProvisionError(f"apply receipt has invalid source digest: {receipt_path}")
+    result = receipt.get("result")
+    if not isinstance(result, dict):
+        raise ProvisionError(f"apply receipt has invalid result: {receipt_path}")
+    return CommittedStagedResult(job_id, source_sha256, result)
+
+
+def _is_sha256(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
+def _committed_result_for_manifest(
+    receipt: CommittedStagedResult | None,
+    job_id: str,
+    manifest: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    if receipt is None or manifest is None:
+        return None
+    if receipt.job_id != job_id or receipt.source_sha256 != manifest.get("source_sha256"):
+        return None
+    return receipt.result
+
+
 def _promote_pre_rendered_candidate_sync(
     candidate_root: Path,
     bundle_files_root: Path | None,
@@ -1280,6 +1362,7 @@ def _promote_pre_rendered_candidate_sync(
         copy_bundle_files(bundle_files_root, durable_candidate)
 
     if is_reapply:
+        result = _staged_success_result(manifest, is_reapply=True)
         if manifest.get("preserve_bundle_files") is True:
             copy_bundle_files(config_root / "files", durable_candidate)
         if _has_first_config_marker(config_root):
@@ -1289,6 +1372,7 @@ def _promote_pre_rendered_candidate_sync(
             )
         else:
             _write_first_config_marker(durable_candidate)
+        _write_apply_receipt(durable_candidate, manifest, result)
         _grant_service_read_access(durable_candidate)
         if progress:
             progress.set_stage("promote", "swapping active config root")
@@ -1299,20 +1383,16 @@ def _promote_pre_rendered_candidate_sync(
             exc = ProvisionError(error_msg)
             exc.rollback_status = rollback_status  # type: ignore[attr-defined]
             raise exc
-        forwarding_url = manifest.get("forwarding_url")
         lan_settings = manifest.get("lan_settings")
         if isinstance(lan_settings, dict):
             schedule_bootstrap_rebind({"lan_settings": lan_settings})
-        return {
-            "warnings": list(manifest.get("warnings", [])),
-            "reapply": True,
-            "rolled_back": False,
-            "forwarding_url": forwarding_url if isinstance(forwarding_url, str) else None,
-        }
+        return result
 
     if progress:
         progress.set_stage("promote", "activating initial config root")
     _write_first_config_marker(durable_candidate)
+    result = _staged_success_result(manifest, is_reapply=False)
+    _write_apply_receipt(durable_candidate, manifest, result)
     _grant_service_read_access(durable_candidate)
     atomic_promote_initial(config_root, durable_candidate)
     if os.environ.get(BOOTSTRAP_ACTIVATION_ENV):
@@ -1332,12 +1412,7 @@ def _promote_pre_rendered_candidate_sync(
     reconcile_bootstrap_wan()
     if progress:
         progress.set_stage("complete", "initial provisioning complete")
-    forwarding_url = manifest.get("forwarding_url")
-    return {
-        "warnings": list(manifest.get("warnings", [])),
-        "reapply": False,
-        "forwarding_url": forwarding_url if isinstance(forwarding_url, str) else None,
-    }
+    return result
 
 
 def apply_staged_job(config_root: Path, runtime_root: Path | None = None) -> dict[str, Any] | None:
@@ -1352,29 +1427,55 @@ def apply_staged_job(config_root: Path, runtime_root: Path | None = None) -> dic
         claimed = claim_next_job(paths)
         if claimed is None:
             return None
+        terminal_result_written = False
+        manifest: dict[str, Any] | None = None
         try:
-            with tempfile.TemporaryDirectory(prefix="atomixos-staged-") as snapshot_dir:
-                snapshot = Path(snapshot_dir) / claimed.job_id
-                source_manifest = verify_staged_job(claimed, paths)
-                _copy_staged_job_snapshot(claimed.path, snapshot, claimed.job_id, source_manifest)
-                snapshot_job = ClaimedJob(claimed.job_id, snapshot)
-                manifest = verify_staged_job(snapshot_job, paths, require_active=False)
-                with provisioning_lock(config_root):
-                    result = _render_verified_staged_candidate_sync(
-                        snapshot, config_root, manifest
+            try:
+                with tempfile.TemporaryDirectory(prefix="atomixos-staged-") as snapshot_dir:
+                    snapshot = Path(snapshot_dir) / claimed.job_id
+                    source_manifest = verify_staged_job(claimed, paths)
+                    _copy_staged_job_snapshot(
+                        claimed.path, snapshot, claimed.job_id, source_manifest
                     )
-            write_result(paths, claimed.job_id, {"status": "succeeded", "result": result})
+                    snapshot_job = ClaimedJob(claimed.job_id, snapshot)
+                    manifest = verify_staged_job(snapshot_job, paths, require_active=False)
+                    with provisioning_lock(config_root):
+                        result = _render_verified_staged_candidate_sync(
+                            snapshot, config_root, manifest
+                        )
+                write_result(paths, claimed.job_id, {"status": "succeeded", "result": result})
+            except Exception as exc:
+                try:
+                    with provisioning_lock(config_root):
+                        recover_config_root(config_root)
+                        receipt = _read_apply_receipt(config_root)
+                    committed_result = _committed_result_for_manifest(
+                        receipt, claimed.job_id, manifest
+                    )
+                    if committed_result is not None:
+                        payload: dict[str, Any] = {
+                            "status": "succeeded",
+                            "result": committed_result,
+                        }
+                    else:
+                        payload = {"status": "failed", "error": str(exc)}
+                        rollback_status = getattr(exc, "rollback_status", None)
+                        if isinstance(rollback_status, str):
+                            payload["rollback_status"] = rollback_status
+                    write_result(paths, claimed.job_id, payload)
+                except Exception as reconciliation_error:
+                    reconciliation_error.staged_job_claimed = True  # type: ignore[attr-defined]
+                    raise reconciliation_error from exc
+                terminal_result_written = True
+                if committed_result is not None:
+                    return committed_result
+                exc.staged_job_claimed = True  # type: ignore[attr-defined]
+                raise
+            terminal_result_written = True
             return result
-        except Exception as exc:
-            payload: dict[str, Any] = {"status": "failed", "error": str(exc)}
-            rollback_status = getattr(exc, "rollback_status", None)
-            if isinstance(rollback_status, str):
-                payload["rollback_status"] = rollback_status
-            write_result(paths, claimed.job_id, payload)
-            exc.staged_job_claimed = True  # type: ignore[attr-defined]
-            raise
         finally:
-            cleanup_claimed_job(claimed)
+            if terminal_result_written:
+                cleanup_claimed_job(claimed)
     finally:
         if previous_worker_active is None:
             os.environ.pop(PROVISION_WORKER_ACTIVE_ENV, None)
@@ -1382,12 +1483,23 @@ def apply_staged_job(config_root: Path, runtime_root: Path | None = None) -> dic
             os.environ[PROVISION_WORKER_ACTIVE_ENV] = previous_worker_active
 
 
-def finalize_staged_jobs(runtime_root: Path | None = None, reason: str | None = None) -> int:
-    """Mark active staged jobs failed after an interrupted root worker."""
+def finalize_staged_jobs(
+    config_root: Path,
+    runtime_root: Path | None = None,
+    reason: str | None = None,
+) -> int:
+    """Recover config state and finalize jobs left by an interrupted worker."""
+    config_root = validate_config_root(config_root, allow_unsafe_env=False)
+    require_worker_for_data_config(config_root, "finalize staged jobs")
     paths = runtime_paths(runtime_root or _runtime_paths().root)
-    return finalize_abandoned_active_jobs(
-        paths, reason or "privileged apply worker stopped before writing a result"
-    )
+    with provisioning_lock(config_root):
+        recover_config_root(config_root)
+        receipt = _read_apply_receipt(config_root)
+        return finalize_abandoned_active_jobs(
+            paths,
+            reason or "privileged apply worker stopped before writing a result",
+            receipt,
+        )
 
 
 def _provision_sync(
