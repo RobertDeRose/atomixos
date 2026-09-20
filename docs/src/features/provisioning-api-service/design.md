@@ -9,7 +9,7 @@
 - Design path: `docs/src/features/provisioning-api-service/design.md`
 - Implemented record: `docs/src/features/provisioning-api-service/index.md`
 - Base branch: `dev`
-- Status: in progress
+- Status: delivered locally
 
 ## Feature Summary
 
@@ -25,8 +25,7 @@ typed changes without losing the canonical portable bundle or adding a database 
 
 The service exposes nonce, config submission, validation, jobs, health, complete bundle export, CLI maintenance, and
 first-boot UI behavior through systemd socket activation. Fresh bootstrap and provisioned SSH-signature rules remain
-distinct. The current implementation is partially complete; the retained implementation and validation tasks below must
-close the bundle contract and target-evidence gaps before delivery.
+distinct. Complete bundle round trips, explicit target checks, and the rootfs closure budget are validated.
 
 ## Requirements
 
@@ -77,8 +76,8 @@ records rather than treating them as future route examples.
 The service is long-lived and socket-activated, so upgrades must preserve the inherited descriptor and unit contract.
 Direct development/test jobs are memory-only and single-flight. Production jobs use a bounded FIFO (four pending jobs by
 default), one root worker at a time, and result files under `/run/atomixos-provision` for restart recovery. Export is
-read-only but still uses the provisioning lock to avoid reading a partially promoted tree. Closure size and full target
-builds remain active validation obligations.
+read-only but still uses the provisioning lock to avoid reading a partially promoted tree. The full target build and
+closure-size gates are part of the recorded delivery evidence.
 
 ## Documentation Impact
 
@@ -120,9 +119,8 @@ advance in parallel; route and Nix integration depended on the stable service an
 
 ## Open Questions
 
-The export contract decision is resolved in favor of complete compressed-tar bundle export, and T086 now owns the
-implemented archive and round-trip evidence. Remaining close-out work is concrete: the full aarch64 build/VM run and
-rootfs closure-budget verification.
+No delivery-blocking design questions remain. Complete compressed-tar bundle export is implemented and covered by
+round-trip evidence. True live `pulling` status remains deferred until activation can stream a reliable event source.
 
 ## Overview
 
@@ -138,7 +136,7 @@ The first step replaced the monolithic `first-boot-provision.py` with the
 signature authentication, async jobs, and structured deployment progress. Delivered
 follow-up work added privilege-separated staging, live OpenAPI schema, typed partial
 routes, config reapply, and the asynchronous Boot UI. The retained implementation
-work completes portable bundle export and hardens the remaining job/error/package
+work completed portable bundle export and hardened the remaining job, error, and package
 contracts without creating divergent mutation paths.
 
 ## Source
@@ -685,7 +683,8 @@ Explicitly avoid adding these until there is a concrete need:
   successfully into a clean config root with equivalent managed-file contents.
 - Package tests cover archive path/type/size safety, deterministic export contents,
   missing/empty managed files, authentication, and full import/export round trips.
-- Existing NixOS VM integration tests pass unchanged.
+- Existing NixOS VM integration coverage passes with fixtures aligned to the delivered bundle and LAN-defaults
+  contracts.
 - Rootfs closure stays within 1 GB.
 - `ruff check` and `ruff format` pass.
 - API response shapes for jobs and validation are typed and documented.
