@@ -322,7 +322,7 @@ async def submit_config(
 )
 async def export_config(config_service: ConfigService) -> Response[bytes]:
     return Response(
-        config_service.export_config(),
+        await config_service.export_config(),
         media_type="application/gzip",
         headers={"content-disposition": 'attachment; filename="config-bundle.tar.gz"'},
     )

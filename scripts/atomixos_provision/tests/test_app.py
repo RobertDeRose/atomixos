@@ -1,6 +1,7 @@
 """Tests for atomixos_provision.app routes."""
 
 import asyncio
+import threading
 from pathlib import Path
 
 from litestar import Litestar, post
@@ -9,7 +10,9 @@ from litestar.testing import AsyncTestClient
 
 from atomixos_provision.app import create_app
 from atomixos_provision.config import ProvisionError, ProvisionSystemError
-from atomixos_provision.domain.config.controller import validate_config
+from atomixos_provision.domain.config.controller import export_config, validate_config
+from atomixos_provision.domain.config.service import ConfigService
+from atomixos_provision.domain.system.controller import health
 from atomixos_provision.jobs import Job, JobManager, JobState, StagedJobManager
 from atomixos_provision.staging import reserve_staged_job_slot, runtime_paths
 
@@ -89,6 +92,25 @@ async def test_validate_propagates_internal_schema_errors_for_framework_500():
         app=_validation_app(ProvisionSystemError("schema unavailable"))
     ) as client:
         response = await client.post("/api/validate", content=b"invalid")
+
+    assert response.status_code == 500
+
+
+async def test_validate_invalid_server_schema_uses_framework_500(tmp_path, monkeypatch):
+    """Verify that validate invalid server schema uses framework 500."""
+    schema_path = tmp_path / "invalid-schema.json"
+    schema_path.write_text('{"type": 42}')
+    monkeypatch.setenv("ATOMIXOS_CONFIG_SCHEMA", str(schema_path))
+
+    @post("/api/validate")
+    async def endpoint() -> Response:
+        """Handle the test validation endpoint."""
+        return await validate_config.fn(
+            _ValidationRequest(b"version = 1\n"), ConfigService(tmp_path)
+        )
+
+    async with AsyncTestClient(app=Litestar(route_handlers=[endpoint])) as client:
+        response = await client.post("/api/validate", content=b"version = 1\n")
 
     assert response.status_code == 500
 
@@ -440,6 +462,35 @@ async def test_authenticated_config_export_returns_complete_bundle(tmp_path, mon
     assert response.headers["content-disposition"] == (
         'attachment; filename="config-bundle.tar.gz"'
     )
+
+
+async def test_config_export_does_not_block_health_request(tmp_path, monkeypatch):
+    """Verify that config export does not block health request."""
+    export_started = threading.Event()
+    release_export = threading.Event()
+
+    def blocked_export(config_root):
+        """Handle blocked export."""
+        assert config_root == tmp_path
+        export_started.set()
+        assert release_export.wait(timeout=2)
+        return b"\x1f\x8bexported-bundle"
+
+    monkeypatch.setattr(
+        "atomixos_provision.provision.locked_export_config_bytes",
+        blocked_export,
+    )
+
+    export_task = asyncio.create_task(export_config.fn(ConfigService(tmp_path)))
+    try:
+        assert await asyncio.to_thread(export_started.wait, 1)
+        health_response = await asyncio.wait_for(health.fn(), timeout=1)
+    finally:
+        release_export.set()
+    export_response = await export_task
+
+    assert health_response == {"status": "ok"}
+    assert export_response.content == b"\x1f\x8bexported-bundle"
 
 
 async def test_partial_config_rejects_unknown_top_level_keys(tmp_path, monkeypatch):

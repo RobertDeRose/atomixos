@@ -51,17 +51,19 @@ async def test_put_user_applies_config_operation(tmp_path, monkeypatch):
     }
 
 
-def test_export_config_reads_current_bundle_bytes(tmp_path):
+async def test_export_config_reads_current_bundle_bytes(tmp_path):
+    """Verify that export config reads current bundle bytes."""
     _write_current_config(tmp_path)
     (tmp_path / "files").mkdir()
     (tmp_path / "files" / "cert.pem").write_text("CERT\n")
 
-    body = ConfigService(tmp_path).export_config()
+    body = await ConfigService(tmp_path).export_config()
 
     assert body.startswith(b"\x1f\x8b")
 
 
-def test_export_config_uses_locked_export(tmp_path, monkeypatch):
+async def test_export_config_uses_locked_export(tmp_path, monkeypatch):
+    """Verify that export config uses locked export."""
     captured = {}
 
     def fake_locked_export_config_bytes(config_root):
@@ -73,7 +75,7 @@ def test_export_config_uses_locked_export(tmp_path, monkeypatch):
         fake_locked_export_config_bytes,
     )
 
-    body = ConfigService(tmp_path).export_config()
+    body = await ConfigService(tmp_path).export_config()
 
     assert body == b"\x1f\x8bexported-bundle"
     assert captured["config_root"] == tmp_path

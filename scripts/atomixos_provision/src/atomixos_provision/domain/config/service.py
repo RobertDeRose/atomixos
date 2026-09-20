@@ -50,10 +50,11 @@ class ConfigService:
 
         return await validate_config_bytes(body, filename, self.config_root)
 
-    def export_config(self) -> bytes:
+    async def export_config(self) -> bytes:
+        """Export the current configuration under the provisioning lock."""
         from atomixos_provision.provision import locked_export_config_bytes
 
-        return locked_export_config_bytes(self.config_root)
+        return await asyncio.to_thread(locked_export_config_bytes, self.config_root)
 
     async def apply_partial(
         self,

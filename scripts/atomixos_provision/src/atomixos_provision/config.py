@@ -15,6 +15,7 @@ from jsonschema.exceptions import SchemaError, best_match
 __all__ = [
     "DEFAULT_LAN_GATEWAY_IP",
     "ProvisionError",
+    "ProvisionSystemError",
     "load_config",
     "load_config_schema",
     "load_lan_defaults",
@@ -205,7 +206,7 @@ def validate_against_schema(value: Any, schema: dict, path: str, root_schema: di
         Draft202012Validator.check_schema(root_schema)
         validator = Draft202012Validator(root_schema).evolve(schema=schema)
     except SchemaError as exc:
-        raise provision_error(f"invalid config schema: {exc.message}") from exc
+        raise ProvisionSystemError(f"invalid config schema: {exc.message}") from exc
     error = best_match(validator.iter_errors(value))
     if error is not None:
         raise provision_error(_schema_error_message(error, path))
