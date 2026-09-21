@@ -23,12 +23,15 @@ class _AcceptingNonceStore:
 
 
 class TestNonceStore:
+    """Group tests for NonceStore."""
+
     @pytest.fixture()
     def store(self):
         return NonceStore(ttl=5)
 
     @pytest.mark.asyncio
     async def test_issue_and_consume(self, store):
+        """Verify that issue and consume."""
         nonce = await store.issue()
         assert isinstance(nonce, str)
         assert len(nonce) > 20
@@ -88,6 +91,8 @@ class TestNonceStore:
 
 
 class TestReapplySignatureMessage:
+    """Group tests for ReapplySignatureMessage."""
+
     def test_format(self):
         """Verify that format."""
         msg = reapply_signature_message("nonce123", "POST", "/api/config", b"hello")
@@ -154,7 +159,10 @@ class _Headers(dict):
 
 
 class _Connection:
+    """Provide the Connection test helper."""
+
     def __init__(self, tmp_path, signature: str):
+        """Initialize this helper."""
         (tmp_path / "admin-signers").write_text("ssh-ed25519 AAAA test\n")
         self.headers = _Headers(
             {
@@ -186,7 +194,10 @@ class _Connection:
 
 
 class _UnsignedConnection:
+    """Provide the UnsignedConnection test helper."""
+
     def __init__(self, tmp_path, initialized: bool = False):
+        """Initialize this helper."""
         self.headers = _Headers({})
         self.url = type("URL", (), {"path": "/api/config"})()
         self.method = "POST"

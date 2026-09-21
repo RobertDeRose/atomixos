@@ -549,6 +549,8 @@ async def test_partial_config_rejects_unknown_top_level_keys(tmp_path, monkeypat
 
 
 async def test_partial_config_uses_staged_job_manager_when_available(tmp_path, monkeypatch):
+    """Verify that partial config uses staged job manager when available."""
+
     class AcceptingNonceStore:
         async def consume(self, nonce):
             return nonce == "test"
@@ -615,6 +617,8 @@ async def test_partial_config_uses_staged_job_manager_when_available(tmp_path, m
 
 
 async def test_partial_config_reports_full_staged_queue(tmp_path, monkeypatch):
+    """Verify that partial config reports full staged queue."""
+
     class AcceptingNonceStore:
         async def consume(self, nonce):
             return nonce == "test"
@@ -1075,6 +1079,7 @@ async def test_apply_form_keeps_polling_after_config_appears(tmp_path, monkeypat
 
 
 async def test_job_events_streams_status_fragments(tmp_path, monkeypatch):
+    """Verify that job events streams status fragments."""
     started = asyncio.Event()
     finish = asyncio.Event()
 
@@ -1315,6 +1320,7 @@ async def test_boot_ui_rejects_malformed_terminal_job_after_provisioning(tmp_pat
 
 
 async def test_openapi_documents_public_api_contract(tmp_path):
+    """Verify that openapi documents public api contract."""
     async with AsyncTestClient(app=create_app(config_root=tmp_path)) as client:
         response = await client.get("/schema/openapi.json")
 

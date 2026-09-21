@@ -67,6 +67,7 @@ async def test_export_config_uses_locked_export(tmp_path, monkeypatch):
     captured = {}
 
     def fake_locked_export_config_bytes(config_root):
+        """Simulate locked export config bytes for the test."""
         captured["config_root"] = config_root
         return b"\x1f\x8bexported-bundle"
 

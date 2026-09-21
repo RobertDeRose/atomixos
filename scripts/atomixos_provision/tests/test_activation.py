@@ -497,6 +497,7 @@ class TestCompleteReapply:
         assert (config_root / "config.toml").read_text() == "previous"
 
     def test_activation_runs_before_policy_restart(self, tmp_path, monkeypatch):
+        """Verify that activation runs before policy restart."""
         config_root = tmp_path / "config"
         config_root.mkdir()
         rollback = tmp_path / "config-rollback"
@@ -677,6 +678,7 @@ class TestCompleteReapply:
         assert complete_reapply(config_root) == (True, [], "skipped")
 
     def test_invalid_numeric_activation_policy_rolls_back(self, tmp_path, monkeypatch):
+        """Verify that invalid numeric activation policy rolls back."""
         config_root = tmp_path / "config"
         config_root.mkdir()
         rollback = tmp_path / "config-rollback"

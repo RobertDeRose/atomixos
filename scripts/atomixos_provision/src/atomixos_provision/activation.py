@@ -644,6 +644,7 @@ def _restart_rootless_service(
 def run_activation_sequence(
     config_root: Path, progress: ProgressReporter | None = None
 ) -> list[str]:
+    """Run activation commands and restart affected services."""
     policy = load_activation_policy(config_root)
     timeout_seconds = int(policy.get("timeout_seconds", BOOTSTRAP_ACTIVATION_TIMEOUT_SECONDS))
     settle_seconds = int(policy.get("settle_seconds", 0))

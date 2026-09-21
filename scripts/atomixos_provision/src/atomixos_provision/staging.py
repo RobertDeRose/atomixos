@@ -36,6 +36,8 @@ ACTIVE_DIR_MODE = 0o2750
 
 @dataclass(frozen=True)
 class RuntimePaths:
+    """Describe filesystem paths used by staged provisioning."""
+
     root: Path
 
     @property
@@ -273,6 +275,7 @@ def read_control_file(path: Path, *, max_bytes: int = MAX_CONTROL_JSON_BYTES) ->
 
 
 def publish_ready_marker(paths: RuntimePaths, job_id: str) -> Path:
+    """Publish a staged job after validating its live reservation."""
     validate_job_id(job_id)
     ready_path = paths.queue / f"{job_id}.ready"
     with queue_operation_lock(paths):
@@ -441,6 +444,7 @@ def _reservation_sort_key(path: Path) -> tuple[int, float]:
 
 
 def _cleanup_stale_reservations_locked(paths: RuntimePaths) -> None:
+    """Remove stale capacity reservations while holding the queue lock."""
     deadline = time.time() - STAGED_RESERVATION_TTL_SECONDS
     removed = False
     for reserve_path in paths.queue.glob("*.reserve"):
@@ -496,6 +500,7 @@ def _ready_sequence_for_job_locked(paths: RuntimePaths, job_id: str) -> int | No
 
 
 def _has_lower_sequence_reservation_locked(paths: RuntimePaths, sequence: int) -> bool:
+    """Return whether a lower FIFO reservation exists under the queue lock."""
     for control_path in [*paths.queue.glob("*.reserve"), *paths.queue.glob("*.ready")]:
         try:
             control_sequence = (
@@ -534,6 +539,7 @@ def claim_next_job(paths: RuntimePaths) -> ClaimedJob | None:
 
 
 def _claim_next_job_locked(paths: RuntimePaths) -> ClaimedJob | None:
+    """Claim the next FIFO-ready staged job while holding the queue lock."""
     active_jobs = sorted(path for path in paths.active.iterdir() if _is_plain_directory(path))
     if active_jobs:
         return None
@@ -622,6 +628,7 @@ def _open_queue_lock(paths: RuntimePaths):
 def verify_staged_job(
     job: ClaimedJob, paths: RuntimePaths, *, require_active: bool = True
 ) -> dict[str, Any]:
+    """Verify ownership, modes, and manifest contents for a staged job."""
     if require_active:
         active_root = paths.active.resolve(strict=False)
         job_path = job.path.resolve(strict=False)
@@ -831,6 +838,7 @@ def fsync_directory(path: Path) -> None:
 
 
 def _verify_job_top_level(job_path: Path, manifest: dict[str, Any]) -> None:
+    """Verify the allowlisted top-level entries of a staged job."""
     allowed = {"manifest.json", "candidate"}
     if manifest.get("bundle_files") or manifest.get("bundle_files_present") is True:
         allowed.add("bundle-files")

@@ -208,6 +208,7 @@ def test_apply_staged_command_returns_json_error(monkeypatch, tmp_path):
 
 
 def test_finalize_staged_command_returns_json(monkeypatch, tmp_path):
+    """Verify that finalize staged command returns json."""
     captured = {}
 
     def fake_finalize(config_root, runtime_root, reason):

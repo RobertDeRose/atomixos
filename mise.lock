@@ -28,19 +28,41 @@ url = "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_
 url_api = "https://api.github.com/repos/rhysd/actionlint/releases/assets/384924880"
 provenance = "github-attestations"
 
+[[tools."aqua:Mic92/nixfmt-rs"]]
+version = "0.5.3"
+backend = "aqua:Mic92/nixfmt-rs"
+
+[tools."aqua:Mic92/nixfmt-rs"."platforms.linux-arm64"]
+checksum = "sha256:e38383b7535abebb675dba8aa03bce4c57006815a2c1fe272e546a382ad49dfd"
+url = "https://github.com/Mic92/nixfmt-rs/releases/download/0.5.3/nixfmt-aarch64-linux"
+url_api = "https://api.github.com/repos/Mic92/nixfmt-rs/releases/assets/538070956"
+provenance = "github-attestations"
+
+[tools."aqua:Mic92/nixfmt-rs"."platforms.linux-x64"]
+checksum = "sha256:16e797a6672e8cbeb682e223f0d4c2eb540de14055063ed9b2573d42b7e0b807"
+url = "https://github.com/Mic92/nixfmt-rs/releases/download/0.5.3/nixfmt-x86_64-linux"
+url_api = "https://api.github.com/repos/Mic92/nixfmt-rs/releases/assets/538070953"
+provenance = "github-attestations"
+
+[tools."aqua:Mic92/nixfmt-rs"."platforms.macos-arm64"]
+checksum = "sha256:2425d0bfe2980c2e1bdca0318c8405abf9c53e19ff9d607e217c73803a60b81d"
+url = "https://github.com/Mic92/nixfmt-rs/releases/download/0.5.3/nixfmt-aarch64-darwin"
+url_api = "https://api.github.com/repos/Mic92/nixfmt-rs/releases/assets/538070952"
+provenance = "github-attestations"
+
 [[tools.cargo-binstall]]
 version = "1.17.6"
 backend = "aqua:cargo-bins/cargo-binstall"
 
 [tools.cargo-binstall."platforms.linux-arm64"]
-checksum = "sha256:e5f2c4b79b10370dff707b86a14e7a0ad399c5dc5853824e933432910741992c"
-url = "https://github.com/cargo-bins/cargo-binstall/releases/download/v1.17.6/cargo-binstall-aarch64-unknown-linux-musl.tgz"
-url_api = "https://api.github.com/repos/cargo-bins/cargo-binstall/releases/assets/363950035"
+checksum = "sha256:9444558747305a5c44f1b8c444e12358f63417ef6cdb236f9797484d37d75b9c"
+url = "https://github.com/cargo-bins/cargo-binstall/releases/download/v1.17.6/cargo-binstall-aarch64-unknown-linux-gnu.tgz"
+url_api = "https://api.github.com/repos/cargo-bins/cargo-binstall/releases/assets/363950048"
 
 [tools.cargo-binstall."platforms.linux-x64"]
-checksum = "sha256:f926d96e9f0822ded35c4ac2071ce190bd1311565695c49c45e295de0d685aaa"
-url = "https://github.com/cargo-bins/cargo-binstall/releases/download/v1.17.6/cargo-binstall-x86_64-unknown-linux-musl.tgz"
-url_api = "https://api.github.com/repos/cargo-bins/cargo-binstall/releases/assets/363949889"
+checksum = "sha256:b9b4632ff9852cf60bd501002a02a47c9d5bd500a7e18f908297dda0c25d7b0d"
+url = "https://github.com/cargo-bins/cargo-binstall/releases/download/v1.17.6/cargo-binstall-x86_64-unknown-linux-gnu.tgz"
+url_api = "https://api.github.com/repos/cargo-bins/cargo-binstall/releases/assets/363949924"
 
 [tools.cargo-binstall."platforms.macos-arm64"]
 checksum = "sha256:101447fa30a723ca8e1a13cec11bb1350b7179331b2aa7054d27bef7a3e19021"
@@ -51,6 +73,10 @@ url_api = "https://api.github.com/repos/cargo-bins/cargo-binstall/releases/asset
 checksum = "sha256:cd07fd79e2848b13b994e3f83fa5377b631625b847f0734219f2706feb518258"
 url = "https://github.com/cargo-bins/cargo-binstall/releases/download/v1.17.6/cargo-binstall-x86_64-apple-darwin.zip"
 url_api = "https://api.github.com/repos/cargo-bins/cargo-binstall/releases/assets/363949977"
+
+[[tools."cargo:deadnix"]]
+version = "1.3.1"
+backend = "cargo:deadnix"
 
 [[tools.cocogitto]]
 version = "7.0.0"
@@ -196,9 +222,9 @@ version = "0.5.0"
 backend = "aqua:rust-lang/mdBook"
 
 [tools.mdbook."platforms.linux-x64"]
-checksum = "sha256:34c7a1b8cbd8daec5060aa9ed85441e0c50219a37c8c7975b69b991848a202ce"
-url = "https://github.com/rust-lang/mdBook/releases/download/v0.5.0/mdbook-v0.5.0-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/rust-lang/mdBook/releases/assets/317671007"
+checksum = "sha256:4a00aa3fc44cee2721efb7b9b7b599877f28360967f8dfaa61ee2990f2736f77"
+url = "https://github.com/rust-lang/mdBook/releases/download/v0.5.0/mdbook-v0.5.0-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/rust-lang/mdBook/releases/assets/317670925"
 
 [tools.mdbook."platforms.macos-arm64"]
 checksum = "sha256:98e539c6b7b099caf42d1ad40ae33d7a30155956f2d7f83b8001ece6c13e27b8"
@@ -209,14 +235,6 @@ url_api = "https://api.github.com/repos/rust-lang/mdBook/releases/assets/3176710
 checksum = "sha256:98e539c6b7b099caf42d1ad40ae33d7a30155956f2d7f83b8001ece6c13e27b8"
 url = "https://github.com/rust-lang/mdBook/releases/download/v0.5.0/mdbook-v0.5.0-x86_64-apple-darwin.tar.gz"
 url_api = "https://api.github.com/repos/rust-lang/mdBook/releases/assets/317671066"
-
-[[tools."nix:deadnix"]]
-version = "1.3.1"
-backend = "nix:deadnix"
-
-[[tools."nix:nixfmt"]]
-version = "1.3.1"
-backend = "nix:nixfmt"
 
 [[tools.node]]
 version = "24.18.0"
@@ -282,15 +300,15 @@ version = "0.15.12"
 backend = "aqua:astral-sh/ruff"
 
 [tools.ruff."platforms.linux-arm64"]
-checksum = "sha256:8996fe01814d00480c81da2b8ce9e8274f63eb07992318f082f7071772699635"
-url = "https://github.com/astral-sh/ruff/releases/download/0.15.12/ruff-aarch64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/astral-sh/ruff/releases/assets/404672628"
+checksum = "sha256:4dcd4cd8beb525d04294eeab67d84d199cce2c44b66858978ca729b694fe29ff"
+url = "https://github.com/astral-sh/ruff/releases/download/0.15.12/ruff-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/astral-sh/ruff/releases/assets/404672624"
 provenance = "github-attestations"
 
 [tools.ruff."platforms.linux-x64"]
-checksum = "sha256:e0b074f722f87efe2e09de3a77820a012d1417ebabbd308cccdf6b98ba8d4bb3"
-url = "https://github.com/astral-sh/ruff/releases/download/0.15.12/ruff-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/astral-sh/ruff/releases/assets/404672687"
+checksum = "sha256:5e26a7811f7db364864ace00cced53003556a37b63f3c987e340b18207776f1c"
+url = "https://github.com/astral-sh/ruff/releases/download/0.15.12/ruff-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/astral-sh/ruff/releases/assets/404672684"
 provenance = "github-attestations"
 
 [tools.ruff."platforms.macos-arm64"]
@@ -310,15 +328,15 @@ version = "0.1.69"
 backend = "aqua:rvben/rumdl"
 
 [tools.rumdl."platforms.linux-arm64"]
-checksum = "sha256:11fd15adaf26e3bea43c22eb7681131f0bfb959e5bd41d7e5aaa596fdd282427"
-url = "https://github.com/rvben/rumdl/releases/download/v0.1.69/rumdl-v0.1.69-aarch64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/393318019"
+checksum = "sha256:f1b3dcc3fafc803b5bf4cf7cdc876e202f6bdc73e9a5ee0502a9648670a1e9b7"
+url = "https://github.com/rvben/rumdl/releases/download/v0.1.69/rumdl-v0.1.69-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/393318028"
 provenance = "github-attestations"
 
 [tools.rumdl."platforms.linux-x64"]
-checksum = "sha256:05ab4edfd0a5c17ad7fecf5f3cf61f4242f61ab2fc519916dd06565b763027db"
-url = "https://github.com/rvben/rumdl/releases/download/v0.1.69/rumdl-v0.1.69-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/393318023"
+checksum = "sha256:0ab2f42bb37ff2ddc48cd3e9d52037c90c62c8821fbb94ec106c7caef48b1e16"
+url = "https://github.com/rvben/rumdl/releases/download/v0.1.69/rumdl-v0.1.69-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/rvben/rumdl/releases/assets/393318015"
 provenance = "github-attestations"
 
 [tools.rumdl."platforms.macos-arm64"]
@@ -434,15 +452,15 @@ version = "0.11.32"
 backend = "aqua:astral-sh/uv"
 
 [tools.uv."platforms.linux-arm64"]
-checksum = "sha256:d70cdae687feb6aad9a09fe8d686df8c8efaf69a1007fa581379a2025adc10a5"
-url = "https://github.com/astral-sh/uv/releases/download/0.11.32/uv-aarch64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/487747547"
+checksum = "sha256:4d4fa08d95b06642e5800df6a22bd71455f23f988269e18da2847971d8c0bf31"
+url = "https://github.com/astral-sh/uv/releases/download/0.11.32/uv-aarch64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/487747534"
 provenance = "github-attestations"
 
 [tools.uv."platforms.linux-x64"]
-checksum = "sha256:1fd052f196108d87e61fc3d98fe06b4ec758c9a1eb1466a6fd1a436fe45885f2"
-url = "https://github.com/astral-sh/uv/releases/download/0.11.32/uv-x86_64-unknown-linux-musl.tar.gz"
-url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/487747669"
+checksum = "sha256:aab924fd522efd06f1c5f3b93a243864fc453132c94b2dc49f1371b528a4b967"
+url = "https://github.com/astral-sh/uv/releases/download/0.11.32/uv-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/astral-sh/uv/releases/assets/487747663"
 provenance = "github-attestations"
 
 [tools.uv."platforms.macos-arm64"]

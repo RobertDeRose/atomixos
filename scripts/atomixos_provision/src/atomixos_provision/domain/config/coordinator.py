@@ -34,9 +34,11 @@ class ProvisionCoordinator:
         authorization: dict[str, str] | None = None,
         on_started: Callable[[str], None] | None = None,
     ) -> SubmissionResult:
+        """Submit raw configuration bytes through the selected job adapter."""
         if isinstance(self._job_manager, StagedJobManager):
 
             async def stage_work(job: Job) -> None:
+                """Stage the prepared provisioning work."""
                 if on_started is not None:
                     on_started(job.id)
                 await self._config_service.stage_bytes(

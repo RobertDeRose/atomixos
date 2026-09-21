@@ -194,8 +194,11 @@ class TestJobManager:
 
 
 class TestStagedJobManager:
+    """Group tests for StagedJobManager."""
+
     @pytest.mark.asyncio
     async def test_staged_job_times_out_waiting_for_worker_result(self, monkeypatch, tmp_path):
+        """Verify that staged job times out waiting for worker result."""
         monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
         mgr = StagedJobManager(result_timeout_seconds=0.01)
         monkeypatch.setattr(mgr, "_refresh_from_result", lambda _job: False)
@@ -330,6 +333,7 @@ class TestStagedJobManager:
     async def test_staged_runner_does_not_release_reservation_before_cancelled_work_finishes(
         self, monkeypatch, tmp_path
     ):
+        """Verify reservation release waits for cancelled staging work to finish."""
         monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
         mgr = StagedJobManager(result_timeout_seconds=0.01)
         finish = asyncio.Event()
@@ -391,6 +395,7 @@ class TestStagedJobManager:
 
     @pytest.mark.asyncio
     async def test_staged_submit_returns_after_staging_before_result(self, monkeypatch, tmp_path):
+        """Verify that staged submit returns after staging before result."""
         monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
         mgr = StagedJobManager(result_timeout_seconds=0.01)
         monkeypatch.setattr(mgr, "_refresh_from_result", lambda _job: False)
@@ -684,6 +689,7 @@ class TestStagedJobManager:
 
     @pytest.mark.asyncio
     async def test_staged_get_recovers_queued_job_state(self, monkeypatch, tmp_path):
+        """Verify that staged get recovers queued job state."""
         runtime_root = tmp_path / "run"
         monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(runtime_root))
         mgr = StagedJobManager(result_timeout_seconds=0.01)
@@ -799,6 +805,7 @@ class TestStagedJobManager:
     async def test_staged_job_fails_if_worker_removes_job_without_result(
         self, monkeypatch, tmp_path
     ):
+        """Verify that staged job fails if worker removes job without result."""
         monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
         mgr = StagedJobManager(result_timeout_seconds=0.01)
         monkeypatch.setattr(mgr, "_refresh_from_result", lambda _job: False)
@@ -817,6 +824,7 @@ class TestStagedJobManager:
 
     @pytest.mark.asyncio
     async def test_staged_job_refreshes_result_before_timeout_failure(self, monkeypatch, tmp_path):
+        """Verify that staged job refreshes result before timeout failure."""
         monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
         mgr = StagedJobManager(result_timeout_seconds=0.01)
         refreshes = {"count": 0}

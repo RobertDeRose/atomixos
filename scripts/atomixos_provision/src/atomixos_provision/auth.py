@@ -216,6 +216,7 @@ def build_allowed_signers(config_root: Path) -> Path | None:
 
 
 async def _verify_ssh_auth(connection: ASGIConnection, allowed_path: Path) -> None:
+    """Verify SSH authentication and preserve evidence for the worker."""
     try:
         nonce = connection.headers.get("x-atomixos-nonce", "")
         signature_b64 = connection.headers.get("x-atomixos-signature", "")

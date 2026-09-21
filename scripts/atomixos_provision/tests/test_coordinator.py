@@ -33,6 +33,7 @@ async def test_direct_submission_applies_through_config_service(monkeypatch, tmp
 
 @pytest.mark.asyncio
 async def test_staged_submission_uses_staging_and_reports_queue_policy(monkeypatch, tmp_path):
+    """Verify that staged submission uses staging and reports queue policy."""
     service = ConfigService(tmp_path)
     manager = StagedJobManager()
     coordinator = ProvisionCoordinator(service, manager)
@@ -64,6 +65,7 @@ async def test_staged_submission_uses_staging_and_reports_queue_policy(monkeypat
 
 @pytest.mark.asyncio
 async def test_partial_submission_uses_exclusive_staged_admission(monkeypatch, tmp_path):
+    """Verify that partial submission uses exclusive staged admission."""
     service = ConfigService(tmp_path)
     manager = StagedJobManager()
     coordinator = ProvisionCoordinator(service, manager)

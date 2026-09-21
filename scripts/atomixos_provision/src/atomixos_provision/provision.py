@@ -200,6 +200,7 @@ def _write_first_config_marker(candidate_root: Path) -> None:
 
 
 def _grant_service_read_access(config_root: Path) -> None:
+    """Grant the provisioning service read access to managed configuration."""
     identity = _service_identity()
     if identity is None:
         return
@@ -402,6 +403,7 @@ def _stage_prepared_sync(
     request_payload: bytes | None = None,
     authorization: dict[str, str] | None = None,
 ) -> dict[str, Any]:
+    """Synchronously publish a prepared configuration candidate."""
     job_id = validate_job_id(job_id)
     config_root = validate_config_root(config_root)
     paths = _runtime_paths()
@@ -516,6 +518,7 @@ def stage_reserved_config_bytes(
     progress: ProgressReporter | None = None,
     authorization: dict[str, str] | None = None,
 ) -> None:
+    """Stage configuration bytes using an existing capacity reservation."""
     if progress:
         progress.set_stage("prepare", f"unpacking {filename}")
     tmpdir, config_path, files_path = prepare_source_bytes(payload, filename)
@@ -568,6 +571,7 @@ def stage_config_bytes(
 def _wait_for_staged_result(
     paths: RuntimePaths, job_id: str, progress: ProgressReporter | None = None
 ) -> dict[str, Any]:
+    """Wait for a staged worker result while tracking active claims."""
     deadline = time.monotonic() + STAGED_RESULT_TIMEOUT_SECONDS
     last_stage = None
     while True:
@@ -622,6 +626,7 @@ def _stage_config_operation_sync(
     request_payload: bytes | None = None,
     authorization: dict[str, str] | None = None,
 ) -> None:
+    """Synchronously stage a typed configuration operation."""
     config_root = validate_config_root(config_root)
     paths = _runtime_paths()
     if promotion_marker_path(config_root).exists():
@@ -1122,6 +1127,7 @@ def _copy_candidate_to_durable(candidate_root: Path, durable_candidate: Path) ->
 def _copy_staged_job_snapshot(
     source: Path, destination: Path, job_id: str, manifest: dict[str, Any]
 ) -> None:
+    """Copy a verified staged job into a private worker snapshot."""
     if destination.exists():
         shutil.rmtree(destination)
     _validate_staged_snapshot_manifest(source, job_id, manifest)
@@ -1147,6 +1153,7 @@ def _copy_staged_job_snapshot(
 def _validate_staged_snapshot_manifest(
     source: Path, job_id: str, manifest: dict[str, Any]
 ) -> None:
+    """Validate snapshot contents against the staged manifest."""
     if manifest.get("version") != MANIFEST_VERSION:
         raise ProvisionError("unsupported staged manifest version")
     if manifest.get("job_id") != job_id:
@@ -1501,6 +1508,7 @@ def _promote_pre_rendered_candidate_sync(
     manifest: dict[str, Any],
     progress: ProgressReporter | None = None,
 ) -> dict[str, Any]:
+    """Promote and activate a pre-rendered candidate transactionally."""
     config_root = validate_config_root(config_root, allow_unsafe_env=False)
     recover_config_root(config_root)
     is_reapply = _is_provisioned_config_root(config_root)

@@ -196,6 +196,7 @@ def test_refresh_staged_job_reservation_prevents_stale_cleanup(tmp_path, monkeyp
 
 
 def test_published_staged_jobs_replace_capacity_reservations(tmp_path, monkeypatch):
+    """Verify that published staged jobs replace capacity reservations."""
     runtime_root = tmp_path / "run"
     config_root = tmp_path / "config"
     monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(runtime_root))
@@ -215,6 +216,7 @@ def test_published_staged_jobs_replace_capacity_reservations(tmp_path, monkeypat
 
 
 def test_reserved_sequence_controls_fifo_ready_order(tmp_path, monkeypatch):
+    """Verify that reserved sequence controls fifo ready order."""
     runtime_root = tmp_path / "run"
     monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(runtime_root))
     paths = runtime_paths(runtime_root)
@@ -251,6 +253,7 @@ def test_claim_next_job_waits_for_lower_sequence_reservation(tmp_path):
 
 
 def test_staged_timeout_state_distinguishes_claimed_and_waiting_jobs(tmp_path):
+    """Verify that staged timeout state distinguishes claimed and waiting jobs."""
     paths = runtime_paths(tmp_path / "run")
     ensure_runtime_layout(paths, for_worker=True)
     (paths.active / "job-1").mkdir()
@@ -769,6 +772,7 @@ def test_verify_staged_job_rejects_tampered_file(tmp_path, monkeypatch):
 
 
 def test_apply_staged_job_promotes_candidate_and_writes_result(tmp_path, monkeypatch):
+    """Verify that apply staged job promotes candidate and writes result."""
     runtime_root = tmp_path / "run"
     config_root = tmp_path / "config"
     _force_staging(monkeypatch)
@@ -1286,6 +1290,7 @@ def test_apply_staged_job_uses_verified_manifest_for_snapshot_copy(tmp_path, mon
 
 
 def test_apply_staged_job_rerenders_derived_state_from_config(tmp_path, monkeypatch):
+    """Verify that apply staged job rerenders derived state from config."""
     runtime_root = tmp_path / "run"
     config_root = tmp_path / "config"
     _force_staging(monkeypatch)
@@ -1323,6 +1328,7 @@ def test_apply_staged_job_rerenders_derived_state_from_config(tmp_path, monkeypa
 
 
 def test_staged_snapshot_preserves_nested_directory_modes(tmp_path, monkeypatch):
+    """Verify that staged snapshot preserves nested directory modes."""
     runtime_root = tmp_path / "run"
     config_root = tmp_path / "config"
     _force_staging(monkeypatch)
@@ -1351,6 +1357,7 @@ def test_staged_snapshot_preserves_nested_directory_modes(tmp_path, monkeypatch)
 
 
 def test_staged_snapshot_reapplies_directory_modes_after_file_copy(tmp_path, monkeypatch):
+    """Verify that staged snapshot reapplies directory modes after file copy."""
     runtime_root = tmp_path / "run"
     config_root = tmp_path / "config"
     _force_staging(monkeypatch)
@@ -1394,6 +1401,7 @@ def test_staged_snapshot_reapplies_directory_modes_after_file_copy(tmp_path, mon
     reason="macOS filesystems do not preserve Linux setgid directory mode bits",
 )
 def test_staged_snapshot_normalizes_special_directory_mode_bits(tmp_path, monkeypatch):
+    """Verify that staged snapshot normalizes special directory mode bits."""
     runtime_root = tmp_path / "run"
     config_root = tmp_path / "config"
     _force_staging(monkeypatch)
@@ -1432,6 +1440,7 @@ def test_staged_snapshot_normalizes_special_directory_mode_bits(tmp_path, monkey
 def test_apply_staged_job_promotes_verified_snapshot_not_mutated_active_tree(
     tmp_path, monkeypatch
 ):
+    """Verify that apply staged job promotes verified snapshot not mutated active tree."""
     runtime_root = tmp_path / "run"
     config_root = tmp_path / "config"
     _force_staging(monkeypatch)
@@ -1473,6 +1482,7 @@ def test_apply_staged_job_promotes_verified_snapshot_not_mutated_active_tree(
 
 @pytest.mark.asyncio
 async def test_apply_staged_partial_renders_against_current_config(tmp_path, monkeypatch):
+    """Verify that apply staged partial renders against current config."""
     runtime_root = tmp_path / "run"
     config_root = tmp_path / "config"
     _force_staging(monkeypatch)
@@ -1518,6 +1528,7 @@ async def test_apply_staged_partial_renders_against_current_config(tmp_path, mon
 
 @pytest.mark.asyncio
 async def test_apply_staged_partial_rejects_tampered_candidate_config(tmp_path, monkeypatch):
+    """Verify that apply staged partial rejects tampered candidate config."""
     runtime_root = tmp_path / "run"
     config_root = tmp_path / "config"
     _force_staging(monkeypatch)

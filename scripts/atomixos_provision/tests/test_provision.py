@@ -122,6 +122,7 @@ def test_provisioning_lock_uses_runtime_lock_for_data_config(monkeypatch, tmp_pa
 
 
 def test_provisioning_lock_rejects_writable_runtime_lock_directory(monkeypatch, tmp_path):
+    """Verify that provisioning lock rejects writable runtime lock directory."""
     from atomixos_provision import provision
 
     lock_dir = tmp_path / "run-locks"
@@ -153,6 +154,7 @@ def test_provisioning_lock_rejects_non_root_runtime_lock_directory(monkeypatch, 
 
 
 def test_locked_export_uses_runtime_lock_for_data_config(monkeypatch, tmp_path):
+    """Verify that locked export uses runtime lock for data config."""
     from atomixos_provision import provision
 
     data_root = tmp_path / "data"
@@ -459,6 +461,7 @@ def test_write_imported_state_writes_apply_users_inputs(tmp_path):
 
 
 def test_write_imported_state_uses_private_permissions_and_cleans_quadlet(tmp_path):
+    """Verify that write imported state uses private permissions and cleans quadlet."""
     config_path = tmp_path / "config.toml"
     config_path.write_text("version = 1\n")
     config_root = tmp_path / "config"
@@ -764,6 +767,7 @@ def test_import_config_migrates_existing_config_without_first_marker(tmp_path, m
 
 
 def test_import_config_from_path_stages_data_config_outside_worker(monkeypatch, tmp_path):
+    """Verify that import config from path stages data config outside worker."""
     from atomixos_provision import provision
 
     calls = []
@@ -816,6 +820,7 @@ def test_import_config_from_path_applies_data_config_in_worker(monkeypatch, tmp_
 
 
 async def test_apply_config_transform_preserves_bundle_files(tmp_path, monkeypatch):
+    """Verify that apply config transform preserves bundle files."""
     monkeypatch.setenv("ATOMIXOS_ALLOW_UNSAFE_CONFIG_ROOT", "1")
     monkeypatch.setattr(
         "atomixos_provision.config.load_config_schema",
@@ -874,6 +879,7 @@ Volume = "${{FILES_DIR}}/app/settings.json:/settings.json:ro"
 
 
 async def test_staged_partial_apply_preserves_bundle_files(tmp_path, monkeypatch):
+    """Verify that staged partial apply preserves bundle files."""
     from atomixos_provision import provision
 
     def complete_staged_apply(root, _progress=None, *, before_commit=None):

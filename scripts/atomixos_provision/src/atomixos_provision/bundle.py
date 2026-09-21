@@ -64,6 +64,7 @@ OPEN_NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
 
 
 def _open_dir_no_follow(path: Path) -> int:
+    """Open a directory without following its final symlink."""
     flags = (
         os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | OPEN_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
     )

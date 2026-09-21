@@ -253,6 +253,7 @@ def _html_page_fragment(content: str, status_class: str = "") -> str:
 
 
 def render_job_fragment(job: Job) -> str:
+    """Render the current job status fragment."""
     snapshot = job.snapshot()
     state = str(snapshot["state"])
 
@@ -273,6 +274,7 @@ def render_job_fragment(job: Job) -> str:
 
 
 def _render_job_message_html(snapshot: dict[str, Any]) -> str:
+    """Render escaped job status text and progress markup."""
     state = str(snapshot["state"])
     event_html = _render_job_events(snapshot["events"])
 
@@ -316,6 +318,7 @@ def _render_job_message_html(snapshot: dict[str, Any]) -> str:
 
 
 def _render_job_events(events: list[dict[str, Any]]) -> str:
+    """Render server-sent event data for a job update."""
     recent_events = events[-40:]
     event_items = "".join(
         "<li>"
@@ -343,6 +346,7 @@ async def _require_unprovisioned(connection, _: Any) -> None:
 
 
 async def _require_unprovisioned_or_boot_ui_terminal_job(connection, _: Any) -> None:
+    """Allow bootstrap UI access only while unprovisioned or finishing a job."""
     config_root: Path = connection.app.state.config_root
     if not _device_is_provisioned(config_root):
         return
@@ -613,6 +617,7 @@ async def job_events(job_id: str, job_manager: JobManager, state: State) -> Resp
         )
 
     async def stream():
+        """Stream job status events to the client."""
         last_body = ""
         while True:
             body = render_job_fragment(job)

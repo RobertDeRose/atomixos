@@ -233,6 +233,7 @@ class StagedJobManager(JobManager):
         result_timeout_seconds: float | None = None,
         max_pending: int = DEFAULT_MAX_STAGED_JOBS,
     ) -> None:
+        """Initialize staged job tracking and timeout state."""
         super().__init__()
         if result_timeout_seconds is None:
             from atomixos_provision.provision import STAGED_RESULT_TIMEOUT_SECONDS
@@ -334,6 +335,7 @@ class StagedJobManager(JobManager):
         job: Job,
         work: Callable[[Job], Coroutine[Any, Any, None]],
     ) -> Job:
+        """Stage a reserved job and monitor it through terminal state."""
         with job._lock:
             job.state = JobState.RUNNING
             job.started_at = time.monotonic()
@@ -458,6 +460,7 @@ class StagedJobManager(JobManager):
                 last_error = None
 
     async def _monitor_staged(self, job: Job) -> None:
+        """Monitor a published staged job for worker results."""
         try:
             deadline = time.monotonic() + self._result_timeout_seconds
             while job.state in (JobState.SUBMITTED, JobState.RUNNING):
@@ -498,6 +501,7 @@ class StagedJobManager(JobManager):
             self._monitored_job_ids.discard(job.id)
 
     def _refresh_from_result(self, job: Job) -> bool:
+        """Refresh job state from a published worker result."""
         try:
             from atomixos_provision.provision import _runtime_paths
             from atomixos_provision.staging import read_result
@@ -523,6 +527,7 @@ class StagedJobManager(JobManager):
         return True
 
     def _release_reservation(self, job: Job) -> None:
+        """Release a job's staging capacity reservation."""
         try:
             from atomixos_provision.provision import _runtime_paths
             from atomixos_provision.staging import release_staged_job_slot
@@ -532,6 +537,7 @@ class StagedJobManager(JobManager):
             return
 
     def _refresh_reservation(self, job: Job) -> None:
+        """Refresh a job's staging capacity reservation."""
         try:
             from atomixos_provision.provision import _runtime_paths
             from atomixos_provision.staging import refresh_staged_job_slot
@@ -541,6 +547,7 @@ class StagedJobManager(JobManager):
             return
 
     def _job_from_result(self, job_id: str) -> Job | None:
+        """Translate a worker result into public job state."""
         job = Job(id=job_id)
         if self._refresh_from_result(job):
             return job

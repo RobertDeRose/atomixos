@@ -76,6 +76,7 @@ def _object_schema(properties: dict[str, Schema], required: list[str] | None = N
 
 
 def _json_body(schema: Schema | Reference, description: str) -> RequestBody:
+    """Build a required JSON request-body description."""
     return RequestBody(
         required=True,
         description=description,
@@ -209,6 +210,7 @@ class ConfigOperation(Operation):
     """Patch generated config operations for binary uploads and auth docs."""
 
     def __post_init__(self) -> None:
+        """Validate the initialized configuration operation."""
         if self.operation_id == "configSubmit":
             self.request_body = _BINARY_CONFIG_BODY
             self.parameters = [
@@ -324,6 +326,7 @@ async def submit_config(
     tags=["config"],
 )
 async def export_config(config_service: ConfigService) -> Response[bytes]:
+    """Return the current configuration as a gzip bundle."""
     return Response(
         await config_service.export_config(),
         media_type="application/gzip",
@@ -347,6 +350,7 @@ async def put_partial_user(
     request: Request,
     provision_coordinator: ProvisionCoordinator,
 ) -> Response[SubmitConfigResponseBody]:
+    """Create or replace a user through a partial configuration job."""
     return await _submit_partial_operation(
         provision_coordinator,
         {"op": "put_user", "name": name, "payload": dict(data)},
@@ -369,6 +373,7 @@ async def delete_partial_user(
     request: Request,
     provision_coordinator: ProvisionCoordinator,
 ) -> Response[SubmitConfigResponseBody]:
+    """Delete a user through a partial configuration job."""
     return await _submit_partial_operation(
         provision_coordinator, {"op": "delete_user", "name": name}, request
     )
@@ -389,6 +394,7 @@ async def patch_partial_network(
     request: Request,
     provision_coordinator: ProvisionCoordinator,
 ) -> Response[SubmitConfigResponseBody]:
+    """Update network settings through a partial configuration job."""
     return await _submit_partial_operation(
         provision_coordinator,
         {"op": "patch_network", "payload": dict(data)},
@@ -412,6 +418,7 @@ async def put_container(
     request: Request,
     provision_coordinator: ProvisionCoordinator,
 ) -> Response[SubmitConfigResponseBody]:
+    """Create or replace a container through a partial configuration job."""
     return await _submit_partial_operation(
         provision_coordinator,
         {"op": "put_resource", "table": "container", "name": name, "payload": dict(data)},
@@ -432,6 +439,7 @@ async def put_container(
 async def delete_container(
     name: str, request: Request, provision_coordinator: ProvisionCoordinator
 ) -> Response[SubmitConfigResponseBody]:
+    """Delete a container through a partial configuration job."""
     return await _submit_partial_operation(
         provision_coordinator,
         {"op": "delete_resource", "table": "container", "name": name},
@@ -455,6 +463,7 @@ async def put_container_network(
     request: Request,
     provision_coordinator: ProvisionCoordinator,
 ) -> Response[SubmitConfigResponseBody]:
+    """Create or replace a container network through a partial job."""
     return await _submit_partial_operation(
         provision_coordinator,
         {"op": "put_resource", "table": "network", "name": name, "payload": dict(data)},
@@ -475,6 +484,7 @@ async def put_container_network(
 async def delete_container_network(
     name: str, request: Request, provision_coordinator: ProvisionCoordinator
 ) -> Response[SubmitConfigResponseBody]:
+    """Delete a container network through a partial configuration job."""
     return await _submit_partial_operation(
         provision_coordinator,
         {"op": "delete_resource", "table": "network", "name": name},
@@ -498,6 +508,7 @@ async def put_container_volume(
     request: Request,
     provision_coordinator: ProvisionCoordinator,
 ) -> Response[SubmitConfigResponseBody]:
+    """Create or replace a container volume through a partial job."""
     return await _submit_partial_operation(
         provision_coordinator,
         {"op": "put_resource", "table": "volume", "name": name, "payload": dict(data)},
@@ -518,6 +529,7 @@ async def put_container_volume(
 async def delete_container_volume(
     name: str, request: Request, provision_coordinator: ProvisionCoordinator
 ) -> Response[SubmitConfigResponseBody]:
+    """Delete a container volume through a partial configuration job."""
     return await _submit_partial_operation(
         provision_coordinator,
         {"op": "delete_resource", "table": "volume", "name": name},

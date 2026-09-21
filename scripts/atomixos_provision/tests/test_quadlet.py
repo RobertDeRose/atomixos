@@ -113,6 +113,8 @@ class TestRenderSection:
 
 
 class TestRenderContainers:
+    """Group tests for RenderContainers."""
+
     def test_minimal_privileged(self):
         table = {
             "myapp": {

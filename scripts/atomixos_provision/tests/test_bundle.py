@@ -118,7 +118,10 @@ class TestValidateSourceSize:
 
 
 class TestCopyBundleFiles:
+    """Group tests for CopyBundleFiles."""
+
     def _mock_appsvc(self, monkeypatch):
+        """Handle mock appsvc."""
         chowns: list[tuple[str, int, int]] = []
         monkeypatch.setattr(
             "atomixos_provision.bundle.pwd.getpwnam",
@@ -135,6 +138,7 @@ class TestCopyBundleFiles:
         return chowns
 
     def test_copies_files(self, tmp_path, monkeypatch):
+        """Verify that copies files."""
         chowns = self._mock_appsvc(monkeypatch)
         source = tmp_path / "source_files"
         source.mkdir()
@@ -190,6 +194,7 @@ class TestCopyBundleFiles:
             copy_bundle_files(source, config_root)
 
     def test_creates_empty_files_dir(self, tmp_path, monkeypatch):
+        """Verify that creates empty files dir."""
         self._mock_appsvc(monkeypatch)
         source = tmp_path / "source_files"
         source.mkdir()
