@@ -49,6 +49,7 @@ class ConfigService:
         )
 
     async def validate_bytes(self, body: bytes, filename: str) -> dict[str, Any]:
+        """Validate raw configuration bytes without applying them."""
         from atomixos_provision.provision import validate_config_bytes
 
         return await validate_config_bytes(body, filename, self.config_root)
@@ -64,6 +65,7 @@ class ConfigService:
         operation: dict[str, Any],
         progress: Job | None = None,
     ) -> dict[str, Any]:
+        """Apply a typed partial configuration operation."""
         from atomixos_provision.provision import apply_config_operation
 
         return await apply_config_operation(operation, self.config_root, progress)
@@ -88,6 +90,7 @@ class ConfigService:
         )
 
     async def put_user(self, name: str, payload: dict[str, Any], progress: Job | None = None):
+        """Create or replace a user through a partial operation."""
         return await self.apply_partial(
             {"op": "put_user", "name": name, "payload": payload}, progress
         )

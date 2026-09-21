@@ -135,6 +135,7 @@ def apply_operation(config: dict[str, Any], operation: dict[str, Any]) -> dict[s
 
 
 def canonical_config_bytes(config: dict[str, Any]) -> bytes:
+    """Serialize configuration into canonical TOML bytes."""
     return (_dumps_toml(config).strip() + "\n").encode()
 
 

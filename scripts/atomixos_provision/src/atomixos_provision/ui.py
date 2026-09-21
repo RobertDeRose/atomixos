@@ -248,6 +248,7 @@ def uploaded_config_text(payload: bytes, filename: str) -> str:
 
 
 def _html_page_fragment(content: str, status_class: str = "") -> str:
+    """Wrap status content in the Boot UI job-status container."""
     classes = "message" + (f" {status_class}" if status_class else "")
     return f'<section id="job-status" class="{classes}">{content}</section>'
 
@@ -335,6 +336,7 @@ def _render_job_events(events: list[dict[str, Any]]) -> str:
 
 
 def _is_htmx_request(request: Request) -> bool:
+    """Return whether a request originated from the HTMX client."""
     return request.headers.get("hx-request", "").lower() == "true"
 
 
@@ -376,6 +378,7 @@ def _device_is_provisioned(config_root: Path) -> bool:
 
 
 def _render_recovered_success_fragment() -> str:
+    """Render terminal success after the bootstrap service reconnects."""
     return _html_page_fragment(
         "<p><strong>Configuration applied.</strong></p>"
         "<p>The bootstrap service reconnected after provisioning completed.</p>",
@@ -603,6 +606,7 @@ async def job_events(job_id: str, job_manager: JobManager, state: State) -> Resp
         if _device_is_provisioned(state.config_root):
 
             async def recovered_stream():
+                """Stream recovered terminal success to the Boot UI."""
                 yield {"data": _render_recovered_success_fragment()}
                 yield {"event": "done", "data": ""}
                 with boot_ui_jobs_lock:

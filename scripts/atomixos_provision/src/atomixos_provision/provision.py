@@ -185,6 +185,7 @@ def _first_config_marker_path(config_root: Path) -> Path:
 
 
 def _has_first_config_marker(config_root: Path) -> bool:
+    """Return whether the first-configuration marker exists."""
     return _first_config_marker_path(config_root).is_file()
 
 
@@ -194,6 +195,7 @@ def _is_provisioned_config_root(config_root: Path) -> bool:
 
 
 def _write_first_config_marker(candidate_root: Path) -> None:
+    """Write the first-configuration marker into a candidate root."""
     marker = _first_config_marker_path(candidate_root)
     marker.write_text("ok\n", encoding="utf-8")
     marker.chmod(0o600)
@@ -377,11 +379,13 @@ def _stage_request_evidence(
 
 
 def _progress_job_id(progress: ProgressReporter | None) -> str:
+    """Return the progress reporter's job ID or generate one."""
     job_id = getattr(progress, "id", None)
     return str(job_id) if isinstance(job_id, str) and job_id else str(uuid.uuid4())
 
 
 def _copy_current_bundle_files(config_root: Path, destination: Path) -> None:
+    """Copy managed bundle files from the active configuration."""
     files_root = config_root / "files"
     if not files_root.exists():
         return
@@ -609,6 +613,7 @@ def _wait_for_staged_result(
 
 
 def _staged_result_payload_or_raise(result: dict[str, Any]) -> dict[str, Any]:
+    """Return a successful staged payload or raise its reported error."""
     outcome = interpret_staged_result(result)
     if outcome.succeeded:
         return outcome.payload
@@ -1174,6 +1179,7 @@ def _validate_staged_snapshot_manifest(
 
 
 def _manifest_nonnegative_int(manifest: dict[str, Any], key: str) -> int:
+    """Read a required non-negative integer from a staged manifest."""
     value = manifest.get(key)
     if not isinstance(value, int) or isinstance(value, bool) or value < 0:
         raise ProvisionError(f"staged manifest {key} must be a non-negative integer")
@@ -1380,6 +1386,7 @@ def _render_verified_staged_candidate_sync(
 
 
 def _manifest_bool(manifest: dict[str, Any], key: str, *, default: bool) -> bool:
+    """Read a boolean value from a staged manifest."""
     value = manifest.get(key, default)
     if not isinstance(value, bool):
         raise ProvisionError(f"staged manifest {key} must be a boolean")
@@ -1889,6 +1896,7 @@ async def apply_config_transform(
     """Apply a config transform under the same lock and pipeline as full imports."""
 
     def _apply_transform_sync() -> dict[str, Any]:
+        """Apply the transformation synchronously under the provision lock."""
         if staging_enabled() and config_root.resolve(strict=False) == Path("/data/config"):
             raise ProvisionError("config transforms for /data/config must use staged operations")
         with provisioning_lock(config_root):

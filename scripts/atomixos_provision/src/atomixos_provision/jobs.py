@@ -255,6 +255,7 @@ class StagedJobManager(JobManager):
         self,
         work: Callable[[Job], Coroutine[Any, Any, None]],
     ) -> Job | None:
+        """Submit staged work under the normal queue admission policy."""
         return await self._submit_staged(work, exclusive=False)
 
     async def submit_staged_exclusive(

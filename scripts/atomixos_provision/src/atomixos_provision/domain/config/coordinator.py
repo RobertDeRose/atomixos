@@ -53,6 +53,7 @@ class ProvisionCoordinator:
             return SubmissionResult(job, "the provision queue is full", True)
 
         async def apply_work(job: Job) -> dict[str, object]:
+            """Apply raw configuration bytes in the direct job runner."""
             if on_started is not None:
                 on_started(job.id)
             return await self._config_service.apply_bytes(body, filename, job, allow_reapply)
@@ -83,6 +84,7 @@ class ProvisionCoordinator:
             return SubmissionResult(job, "the provision queue is busy", True)
 
         async def apply_work(job: Job) -> dict[str, object]:
+            """Apply a partial operation in the direct job runner."""
             return await self._config_service.apply_partial(operation, job)
 
         job = await self._job_manager.submit(apply_work)

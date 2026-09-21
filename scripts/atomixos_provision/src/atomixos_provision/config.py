@@ -112,6 +112,7 @@ class ProvisionSystemError(ProvisionError):
 
 
 def provision_error(message: str) -> ProvisionError:
+    """Build a validation error for submitted provisioning data."""
     return ProvisionError(message)
 
 
@@ -164,6 +165,7 @@ def load_config_schema() -> dict[str, Any]:
 
 
 def _schema_error_path(path: str, segments: list[Any]) -> str:
+    """Render a JSON-schema error path from its path segments."""
     rendered = path
     for segment in segments:
         rendered += f"[{segment}]" if isinstance(segment, int) else f".{segment}"

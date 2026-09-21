@@ -42,6 +42,7 @@ class RuntimePaths:
 
     @property
     def queue(self) -> Path:
+        """Return the staged-job queue directory."""
         return self.root / "queue"
 
     @property
@@ -58,6 +59,7 @@ class RuntimePaths:
 
     @property
     def queue_sequence(self) -> Path:
+        """Return the persistent queue sequence file."""
         return self.queue / ".sequence"
 
     @property
@@ -92,10 +94,12 @@ class StagedTimeoutState(StrEnum):
 
 
 def runtime_paths(root: Path) -> RuntimePaths:
+    """Resolve a runtime root into its staged-provisioning paths."""
     return RuntimePaths(root.resolve(strict=False))
 
 
 def ensure_runtime_layout(paths: RuntimePaths, *, for_worker: bool = False) -> None:
+    """Create runtime directories with their required permissions."""
     _ensure_directory(paths.root, RUNTIME_ROOT_MODE)
     _ensure_directory(paths.queue, QUEUE_DIR_MODE)
     if for_worker or paths.results.exists():
@@ -162,6 +166,7 @@ def sha256_file(path: Path) -> str:
 
 
 def sha256_bytes(payload: bytes) -> str:
+    """Return the SHA-256 digest of an in-memory payload."""
     return hashlib.sha256(payload).hexdigest()
 
 
@@ -188,6 +193,7 @@ def consume_authorization_nonce(paths: RuntimePaths, nonce: str) -> None:
 
 
 def tree_manifest(root: Path) -> list[dict[str, Any]]:
+    """Build a deterministic manifest for a staged directory tree."""
     if not root.exists():
         return []
     entries: list[dict[str, Any]] = []
@@ -485,6 +491,7 @@ def _remove_unpublished_job_locked(paths: RuntimePaths, job_id: str) -> None:
 
 
 def _ready_sequence_for_job_locked(paths: RuntimePaths, job_id: str) -> int | None:
+    """Read a job's ready or reserved sequence while holding the queue lock."""
     for path in (paths.queue / f"{job_id}.ready", paths.queue / f"{job_id}.reserve"):
         try:
             return (
@@ -659,6 +666,7 @@ def verify_staged_job(
 
 
 def write_result(paths: RuntimePaths, job_id: str, payload: dict[str, Any]) -> Path:
+    """Atomically publish a privileged worker result."""
     validate_job_id(job_id)
     result = {"version": RESULT_VERSION, "job_id": job_id, "completed_at": time.time(), **payload}
     path = paths.results / f"{job_id}.json"
@@ -680,6 +688,7 @@ def write_result(paths: RuntimePaths, job_id: str, payload: dict[str, Any]) -> P
 
 
 def read_result(paths: RuntimePaths, job_id: str) -> dict[str, Any] | None:
+    """Read and validate a published privileged worker result."""
     validate_job_id(job_id)
     path = paths.results / f"{job_id}.json"
     results_stat = _verify_results_directory(
@@ -776,6 +785,7 @@ def try_abandon_queued_job(paths: RuntimePaths, job_id: str) -> bool:
 
 
 def _job_presence_locked(paths: RuntimePaths, job_id: str) -> str:
+    """Report whether a job is queued, active, or missing under the queue lock."""
     active_path = paths.active / job_id
     try:
         active_stat = active_path.lstat()
@@ -811,6 +821,7 @@ def _verify_results_directory(
 
 
 def cleanup_claimed_job(job: ClaimedJob) -> None:
+    """Remove a claimed job's private active directory."""
     shutil.rmtree(job.path, ignore_errors=True)
 
 
