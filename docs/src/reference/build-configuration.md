@@ -221,7 +221,7 @@ parse policy itself. Lima tasks invoke the same wrapper inside the repository mo
 
 | `mise` task                 | Applies local overlay | Contract                                              |
 |-----------------------------|-----------------------|-------------------------------------------------------|
-| `check`, `nix:check`        | Yes                   | Evaluate and test effective policy                    |
+| `check`                     | Yes                   | Evaluate effective policy                             |
 | `build`                     | Yes                   | Build and retain configured artifacts                 |
 | `build:squashfs`            | Yes                   | Build immutable configured system policy              |
 | `build:rauc-bundle`         | Yes                   | Build configured update and audit sidecars            |

@@ -144,6 +144,20 @@ local linters = new Mapping<String, Step> {
   ["trailing-whitespace"] = Builtins.trailing_whitespace
 }
 
+local validators = new Mapping<String, Step> {
+  ["nix"] = new Step {
+    check =
+      #"""
+      ./scripts/nix-with-build-config.sh flake check --no-build --option eval-system aarch64-linux
+      ./scripts/nix-with-build-config.sh flake check
+      """#
+  }
+}
+
+local checks = (linters) {
+  ["nix"] = validators["nix"]
+}
+
 default_branch = "dev"
 exclude = List("**/mermaid.min.js", "**/.opencode/*")
 fail_fast = false
@@ -164,7 +178,7 @@ hooks {
     }
   }
   ["check"] {
-    steps = linters
+    steps = checks
   }
   ["fix"] {
     fix = true

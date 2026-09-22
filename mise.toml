@@ -16,9 +16,7 @@ env_shell_expand = true
 actionlint = "1.7.12"
 cargo-binstall = "latest"
 cocogitto = "latest"
-harper-cli = "latest"
 hk = "1.44.3"
-mdbook = "0.5.0"
 node = "lts"
 pkl = "0.31.1"
 ruff = "0.15.12"
@@ -28,6 +26,7 @@ shfmt = "3.13.1"
 tombi = "0.9.16"
 typos = "1.45.0"
 uv = "latest"
+"github:rust-lang/mdbook" = "latest"
 
 [env]
 GIT_CONFIG_PARAMETERS = "'merge.ff=only'"
@@ -41,21 +40,11 @@ postinstall = "hk install --mise"
 
 [tasks.check]
 description = "Run repository validation"
-depends = ["nix:check"]
 run = "hk check -a"
 
 [tasks.fix]
 description = "Apply deterministic repository fixes"
 run = "hk fix -a"
-
-[tasks."nix:check"]
-description = "Evaluate Linux target outputs and run host-compatible checks"
-run = """
-# Keep the target-system evaluation separate from optional host-system checks.
-# Evaluating every system in one pass duplicates large NixOS graphs in memory.
-./scripts/nix-with-build-config.sh flake check --no-build --option eval-system aarch64-linux
-./scripts/nix-with-build-config.sh flake check
-"""
 
 [tasks."docs:check"]
 description = "Validate and build the documentation"

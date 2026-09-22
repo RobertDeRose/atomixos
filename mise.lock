@@ -174,29 +174,24 @@ checksum = "sha256:2f2f489d3fec7e9a27124c9f8405027920a2c085c6a0630aef0f37dc27212
 url = "https://github.com/joshrotenberg/mdbook-lint/releases/download/v0.14.3/mdbook-lint-x86_64-apple-darwin.tar.xz"
 url_api = "https://api.github.com/repos/joshrotenberg/mdbook-lint/releases/assets/366434398"
 
-[[tools.harper-cli]]
-version = "2.6.0"
-backend = "aqua:Automattic/harper/harper-cli"
+[[tools."github:rust-lang/mdbook"]]
+version = "0.5.4"
+backend = "github:rust-lang/mdbook"
 
-[tools.harper-cli."platforms.linux-arm64"]
-checksum = "sha256:e95271b44eafd5883878f49f231bbc2a4639a7cc4c3f5554039942dbbb9ec71d"
-url = "https://github.com/Automattic/harper/releases/download/v2.6.0/harper-cli-aarch64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/Automattic/harper/releases/assets/456745232"
+[tools."github:rust-lang/mdbook"."platforms.linux-arm64"]
+checksum = "sha256:753e5c5c363ee8a56972344dcf91466f005a51db84a7aeffe427ae3ef83d6d44"
+url = "https://github.com/rust-lang/mdBook/releases/download/v0.5.4/mdbook-v0.5.4-aarch64-unknown-linux-musl.tar.gz"
+url_api = "https://api.github.com/repos/rust-lang/mdBook/releases/assets/468210015"
 
-[tools.harper-cli."platforms.linux-x64"]
-checksum = "sha256:4c7706869d57e05861b08f1e0750835d6ac3eb16b9c333538ba425d05757725f"
-url = "https://github.com/Automattic/harper/releases/download/v2.6.0/harper-cli-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/Automattic/harper/releases/assets/456744965"
+[tools."github:rust-lang/mdbook"."platforms.linux-x64"]
+checksum = "sha256:3f28de05dafca9d0f2eab99c662116b0e37b89b1d96a08f8f430b9eeae958cd7"
+url = "https://github.com/rust-lang/mdBook/releases/download/v0.5.4/mdbook-v0.5.4-x86_64-unknown-linux-gnu.tar.gz"
+url_api = "https://api.github.com/repos/rust-lang/mdBook/releases/assets/468209394"
 
-[tools.harper-cli."platforms.macos-arm64"]
-checksum = "sha256:4ff0a0aa1e845a7295d85ce70877cdd8bd9e917a7a0027b0ed57acd2bf13808f"
-url = "https://github.com/Automattic/harper/releases/download/v2.6.0/harper-cli-aarch64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/Automattic/harper/releases/assets/456745684"
-
-[tools.harper-cli."platforms.macos-x64"]
-checksum = "sha256:23d03f4482d11a72fa370b186322962e49093e88d7b13f3c9d43f5bb29ff9b43"
-url = "https://github.com/Automattic/harper/releases/download/v2.6.0/harper-cli-x86_64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/Automattic/harper/releases/assets/456744844"
+[tools."github:rust-lang/mdbook"."platforms.macos-arm64"]
+checksum = "sha256:03e8a6d8b13a2971e0b3280affd03b388373c1485e26f73407c3a76b0b1838df"
+url = "https://github.com/rust-lang/mdBook/releases/download/v0.5.4/mdbook-v0.5.4-aarch64-apple-darwin.tar.gz"
+url_api = "https://api.github.com/repos/rust-lang/mdBook/releases/assets/468209418"
 
 [[tools.hk]]
 version = "1.44.3"
@@ -216,25 +211,6 @@ url_api = "https://api.github.com/repos/jdx/hk/releases/assets/409190424"
 checksum = "sha256:e9000438928e7c66fd7790f0b47ca9b1c0b971c834238c1fa5faffae7fd92625"
 url = "https://github.com/jdx/hk/releases/download/v1.44.3/hk-aarch64-apple-darwin.tar.gz"
 url_api = "https://api.github.com/repos/jdx/hk/releases/assets/409190415"
-
-[[tools.mdbook]]
-version = "0.5.0"
-backend = "aqua:rust-lang/mdBook"
-
-[tools.mdbook."platforms.linux-x64"]
-checksum = "sha256:4a00aa3fc44cee2721efb7b9b7b599877f28360967f8dfaa61ee2990f2736f77"
-url = "https://github.com/rust-lang/mdBook/releases/download/v0.5.0/mdbook-v0.5.0-x86_64-unknown-linux-gnu.tar.gz"
-url_api = "https://api.github.com/repos/rust-lang/mdBook/releases/assets/317670925"
-
-[tools.mdbook."platforms.macos-arm64"]
-checksum = "sha256:98e539c6b7b099caf42d1ad40ae33d7a30155956f2d7f83b8001ece6c13e27b8"
-url = "https://github.com/rust-lang/mdBook/releases/download/v0.5.0/mdbook-v0.5.0-x86_64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/rust-lang/mdBook/releases/assets/317671066"
-
-[tools.mdbook."platforms.macos-x64"]
-checksum = "sha256:98e539c6b7b099caf42d1ad40ae33d7a30155956f2d7f83b8001ece6c13e27b8"
-url = "https://github.com/rust-lang/mdBook/releases/download/v0.5.0/mdbook-v0.5.0-x86_64-apple-darwin.tar.gz"
-url_api = "https://api.github.com/repos/rust-lang/mdBook/releases/assets/317671066"
 
 [[tools.node]]
 version = "24.18.0"

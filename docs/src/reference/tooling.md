@@ -15,12 +15,12 @@
 | `.config/cog-changelog.tera`        | Renders plain Markdown changelogs without author noise.                     |
 | `scripts/setup-tooling.py`          | Resolves the lock, installs tools, installs hooks, and returns JSON status. |
 | `scripts/enable-docs-deployment.py` | Configures workflow-built Pages through external `gh`.                      |
-| `.github/workflows/validate.yml`    | Runs locked `mise run check` on pushes and pull requests.                   |
+| `.github/workflows/hk.yml`          | Runs the locked hk quality gate on pushes and pull requests.                |
 | `.github/workflows/docs.yml`        | Builds gated docs from the default branch or manual dispatch.               |
 
 ## Tools
 
-The universal tool set is hk `1.49.0`, Node `lts`, and the `latest` Cocogitto, Harper CLI, Contextlint, mdBook, uv,
+The universal tool set is hk `1.49.0`, Node `lts`, and the `latest` Cocogitto, Contextlint, mdBook, uv,
 rumdl, typos, and `npm:markdown-table-formatter` releases. Contextlint checks documentation links, anchors, and image
 targets. Its reviewed low-download aube exception applies only to `@contextlint/cli`. Both hk Pkl imports use `1.49.0`.
 Equivalent native hk steps own matching formatter and linter commands. Independent steps have no explicit `depends`
@@ -44,8 +44,7 @@ selects the newest stable tag; unstable selects the source default-branch HEAD. 
 
 Changelog-visible `feat`, `fix`, `perf`, and `refactor` commits require a semantic scope. The commit hook also checks
 Conventional Commit syntax, grammar, a 72-character subject, 100-character body lines, and canonical optional `Beads:`
-footers. Harper uses its full native rule set after filtering Git comments/diffs, canonical release subjects, and a
-canonical `Beads:` footer; the other commit validators still inspect the unfiltered message. Internal build, chore, CI,
+footers. The other commit validators inspect the unfiltered message. Internal build, chore, CI,
 documentation, release, style, and test commits are omitted from `cog changelog`. Breaking changes render as plain
 Markdown.
 
