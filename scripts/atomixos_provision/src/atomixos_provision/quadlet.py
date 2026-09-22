@@ -215,7 +215,10 @@ def managed_files_are_writable(container_table: dict[str, Any]) -> bool:
         if not isinstance(container, dict):
             continue
         for directive in ("Volume", "Mount"):
-            for value in container.get(directive, []):
+            raw_values = container.get(directive, [])
+            if isinstance(raw_values, str):
+                raw_values = [raw_values]
+            for value in raw_values:
                 if (
                     isinstance(value, str)
                     and FILES_DIR_TOKEN in value

@@ -168,6 +168,20 @@ class TestRenderContainers:
         assert len(warnings) == 1
         assert "use a Podman volume for mutable runtime data" in warnings[0]
 
+    def test_scalar_managed_file_mount_marks_files_writable(self):
+        """Verify that scalar mount directives drive writable permissions."""
+        table = {
+            "app": {
+                "privileged": False,
+                "Container": {
+                    "Image": "alpine:latest",
+                    "Volume": "${FILES_DIR}/state:/state:rw",
+                },
+            }
+        }
+
+        assert managed_files_are_writable(table)
+
     def test_managed_file_podman_args_mounts_warn(self):
         """Verify that PodmanArgs mount forms receive managed-file warnings."""
         table = {

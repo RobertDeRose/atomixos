@@ -183,6 +183,17 @@ class TestCopyBundleFiles:
         assert (str(files_root), 1000, 2000) in chowns
         assert files_root.joinpath("state.json").stat().st_mode & 0o777 == 0o640
 
+    def test_rejects_symlinked_files_root_during_migration(self, tmp_path, monkeypatch):
+        """Verify that migration never follows a files-root symlink."""
+        self._mock_appsvc(monkeypatch)
+        target = tmp_path / "target"
+        target.mkdir()
+        files_root = tmp_path / "files"
+        files_root.symlink_to(target, target_is_directory=True)
+
+        with pytest.raises(ProvisionError, match="managed files root must be a directory"):
+            grant_managed_file_access(files_root)
+
     def test_rejects_symlink_source_entries(self, tmp_path, monkeypatch):
         self._mock_appsvc(monkeypatch)
         source = tmp_path / "source_files"

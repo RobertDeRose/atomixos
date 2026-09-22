@@ -542,8 +542,12 @@ def _grant_managed_file_access(
 
 def grant_managed_file_access(path: Path, *, writable: bool = False) -> None:
     """Migrate managed files to the service identities and requested access mode."""
-    if not path.exists():
+    try:
+        path_stat = path.lstat()
+    except FileNotFoundError:
         return
+    if stat.S_ISLNK(path_stat.st_mode) or not stat.S_ISDIR(path_stat.st_mode):
+        raise provision_error(f"managed files root must be a directory: {path}")
     try:
         app_uid = pwd.getpwnam(APP_RUNTIME_USER).pw_uid
         reader_gid = grp.getgrnam(PROVISION_READER_GROUP).gr_gid
