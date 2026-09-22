@@ -230,7 +230,7 @@ def _grant_service_read_access(config_root: Path) -> None:
 
 
 def grant_service_read_access(config_root: Path) -> None:
-    """Migrate a config root so the unprivileged API can read control state."""
+    """Reconcile a config root so the unprivileged API can read control state."""
     _grant_service_read_access(config_root)
 
 

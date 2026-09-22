@@ -745,7 +745,7 @@ Image = "docker.io/library/alpine:latest"
     assert (config_root / "managed-users.json").read_text() == '["admin"]\n'
 
 
-def test_import_config_migrates_existing_config_without_first_marker(tmp_path, monkeypatch):
+def test_import_config_reconciles_existing_config_without_first_marker(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "atomixos_provision.config.load_config_schema",
         lambda: {"type": "object", "additionalProperties": True},

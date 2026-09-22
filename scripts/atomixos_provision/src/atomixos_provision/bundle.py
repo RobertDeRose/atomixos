@@ -541,7 +541,7 @@ def _grant_managed_file_access(
 
 
 def grant_managed_file_access(path: Path, *, writable: bool = False) -> None:
-    """Migrate managed files to the service identities and requested access mode."""
+    """Reconcile managed files with the requested identities and access mode."""
     try:
         path_stat = path.lstat()
     except FileNotFoundError:
