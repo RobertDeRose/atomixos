@@ -47,6 +47,7 @@ from atomixos_provision.auth import (
 from atomixos_provision.bundle import (
     copy_bundle_files,
     export_bundle_bytes,
+    grant_managed_file_access,
     prepare_source_bytes,
     prepare_source_path,
     stage_bundle_files,
@@ -54,6 +55,7 @@ from atomixos_provision.bundle import (
 from atomixos_provision.config import ProvisionError, load_config
 from atomixos_provision.quadlet import (
     RUNTIME_METADATA_FILENAME,
+    managed_files_are_writable,
     render_builds,
     render_containers,
     render_networks,
@@ -209,8 +211,9 @@ def _grant_service_read_access(config_root: Path) -> None:
     _uid, gid = identity
     files_root = config_root / "files"
     receipt_path = config_root / APPLY_RECEIPT_FILENAME
+    grant_managed_file_access(files_root, writable=_managed_files_are_writable(config_root))
     for path in [config_root, *config_root.rglob("*")]:
-        if path in (receipt_path, files_root) or files_root in path.parents:
+        if path == receipt_path or files_root in path.parents:
             continue
         try:
             path_stat = path.lstat()
@@ -229,6 +232,22 @@ def _grant_service_read_access(config_root: Path) -> None:
 def grant_service_read_access(config_root: Path) -> None:
     """Migrate a config root so the unprivileged API can read control state."""
     _grant_service_read_access(config_root)
+
+
+def _managed_files_are_writable(config_root: Path) -> bool:
+    """Return whether the active config requests writable managed-file mounts."""
+    config_path = config_root / "config.toml"
+    if not config_path.is_file():
+        return False
+    try:
+        parsed = load_config(config_path)
+    except (OSError, ProvisionError):
+        return False
+    containers = parsed.get("containers", {})
+    if not isinstance(containers, dict):
+        return False
+    container_table = containers.get("container", {})
+    return isinstance(container_table, dict) and managed_files_are_writable(container_table)
 
 
 @contextlib.contextmanager

@@ -148,7 +148,7 @@ def test_non_data_config_app_uses_direct_job_manager_by_default(tmp_path):
     assert not isinstance(app.state.job_manager, StagedJobManager)
 
 
-async def test_auth_error_response_uses_framework_shape(tmp_path):
+async def test_initial_provisioning_with_signers_uses_bootstrap_auth(tmp_path):
     (tmp_path / "admin-signers").write_text("ssh-ed25519 AAAA test\n")
     app = create_app(config_root=tmp_path)
     async with AsyncTestClient(app=app) as client:
@@ -158,13 +158,8 @@ async def test_auth_error_response_uses_framework_shape(tmp_path):
             headers={"x-atomixos-bootstrap-token": app.state.bootstrap_token},
         )
 
-    assert response.status_code == 401
-    body = response.json()
-    body_text = str(body)
-    assert "authentication required" in body_text
-    assert "X-AtomixOS-Nonce" in body_text
-    assert "X-AtomixOS-Signature" in body_text
-    assert "Atomicnix" not in body_text
+    assert response.status_code == 202
+    assert response.headers["location"].startswith("/api/jobs/")
 
 
 async def test_config_submission_includes_job_url(tmp_path, monkeypatch):

@@ -23,6 +23,7 @@ __all__ = [
     "detect_bundle_kind",
     "export_bundle_bytes",
     "extract_bundle_archive",
+    "grant_managed_file_access",
     "import_bundle_bytes",
     "prepare_source_bytes",
     "prepare_source_path",
@@ -514,23 +515,46 @@ def _remove_bundle_files_target(target: Path) -> None:
     target.unlink()
 
 
-def _grant_managed_file_access(path: Path, app_uid: int, reader_gid: int) -> None:
-    """Install managed payloads read-only for appsvc and the provisioning API."""
-    # Keep the staging root owned and writable by the installer until it is
-    # renamed. This is required by platforms that reject renaming a read-only
-    # source directory. Descendants receive their final access before exposure.
-    path.chmod(0o750)
+def _grant_managed_file_access(
+    path: Path,
+    app_uid: int,
+    reader_gid: int,
+    *,
+    writable: bool = False,
+    staging: bool = False,
+) -> None:
+    """Install managed payloads for appsvc and the provisioning API."""
+    # Keep the top-level staging directory writable until it is atomically
+    # renamed into place; the final target is tightened by the caller.
+    path.chmod(0o750 if staging or writable else 0o550)
     for current in path.rglob("*"):
         current_stat = current.lstat()
         if stat.S_ISLNK(current_stat.st_mode):
             raise provision_error(f"bundle files entry must not be a symlink: {current}")
         os.chown(current, app_uid, reader_gid, follow_symlinks=False)
         if stat.S_ISDIR(current_stat.st_mode):
-            current.chmod(0o550)
+            current.chmod(0o750 if writable else 0o550)
         elif stat.S_ISREG(current_stat.st_mode):
-            current.chmod(0o440)
+            current.chmod(0o640 if writable else 0o440)
         else:
             raise provision_error(f"bundle files entry must be a regular file: {current}")
+
+
+def grant_managed_file_access(path: Path, *, writable: bool = False) -> None:
+    """Migrate managed files to the service identities and requested access mode."""
+    if not path.exists():
+        return
+    try:
+        app_uid = pwd.getpwnam(APP_RUNTIME_USER).pw_uid
+        reader_gid = grp.getgrnam(PROVISION_READER_GROUP).gr_gid
+    except KeyError as exc:
+        message = (
+            "managed-file identity not found: "
+            f"user={APP_RUNTIME_USER}, group={PROVISION_READER_GROUP}"
+        )
+        raise provision_error(message) from exc
+    os.chown(path, app_uid, reader_gid, follow_symlinks=False)
+    _grant_managed_file_access(path, app_uid, reader_gid, writable=writable)
 
 
 # --- Extraction ---
@@ -670,7 +694,7 @@ def copy_bundle_files(files_source: Path | None, config_root: Path) -> None:
         staging_root.chmod(0o700)
         staging_target = staging_root / "files"
         _snapshot_files_source(files_source, staging_target)
-        _grant_managed_file_access(staging_target, app_uid, reader_gid)
+        _grant_managed_file_access(staging_target, app_uid, reader_gid, staging=True)
         _remove_bundle_files_target(target)
         os.replace(staging_target, target)
         target.chmod(0o550)

@@ -257,8 +257,13 @@ async def ssh_auth_guard(connection: ASGIConnection, _: BaseRouteHandler) -> Non
     config_root: Path = connection.app.state.config_root
     signer_state: SignerState = connection.app.state.signer_state
 
-    # Only a truly unprovisioned root may bypass auth; a provisioned root with
-    # missing/corrupt signers must fail closed.
+    # Initial provisioning is authorized by the bootstrap-origin guard. A
+    # signer file may already be staged, but it does not make the root
+    # provisioned and must not force re-apply authentication yet.
+    if not is_provisioned_config_root(config_root):
+        return
+
+    # A provisioned root with missing/corrupt signers must fail closed.
     allowed_path = build_allowed_signers(config_root)
     if allowed_path is None:
         if signer_state.initialized or is_provisioned_config_root(config_root):

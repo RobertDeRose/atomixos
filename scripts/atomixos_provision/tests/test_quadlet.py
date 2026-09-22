@@ -7,6 +7,7 @@ import pytest
 from atomixos_provision.config import ProvisionError
 from atomixos_provision.quadlet import (
     format_scalar,
+    managed_files_are_writable,
     normalize_directives,
     render_builds,
     render_containers,
@@ -166,6 +167,48 @@ class TestRenderContainers:
         )
         assert len(warnings) == 1
         assert "use a Podman volume for mutable runtime data" in warnings[0]
+
+    def test_managed_file_podman_args_mounts_warn(self):
+        """Verify that PodmanArgs mount forms receive managed-file warnings."""
+        table = {
+            "app": {
+                "privileged": False,
+                "Container": {
+                    "Image": "alpine:latest",
+                    "PodmanArgs": [
+                        "--volume=${FILES_DIR}/state:/state:rw",
+                        "--mount=type=bind,source=${FILES_DIR}/cache,target=/cache,rw",
+                    ],
+                },
+            }
+        }
+
+        _rendered, _runtime, warnings = render_containers(table, Path("/data/config"))
+
+        assert len(warnings) == 2
+        assert managed_files_are_writable(table)
+
+    def test_read_only_podman_args_mounts_do_not_warn(self):
+        """Verify that read-only PodmanArgs mounts remain warning-free."""
+        table = {
+            "app": {
+                "privileged": False,
+                "Container": {
+                    "Image": "alpine:latest",
+                    "PodmanArgs": [
+                        "--volume",
+                        "${FILES_DIR}/state:/state:ro",
+                        "--mount",
+                        "type=bind,source=${FILES_DIR}/cache,target=/cache,readonly",
+                    ],
+                },
+            }
+        }
+
+        _rendered, _runtime, warnings = render_containers(table, Path("/data/config"))
+
+        assert warnings == []
+        assert not managed_files_are_writable(table)
 
     @pytest.mark.parametrize("mutating_option", ["rw", "U"])
     def test_managed_file_mount_warns_about_mutating_options(self, mutating_option):

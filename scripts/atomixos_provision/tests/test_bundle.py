@@ -11,6 +11,7 @@ from atomixos_provision.bundle import (
     detect_bundle_kind,
     export_bundle_bytes,
     extract_bundle_archive,
+    grant_managed_file_access,
     prepare_source_bytes,
     prepare_source_path,
     stage_bundle_files,
@@ -167,6 +168,20 @@ class TestCopyBundleFiles:
             for path, uid, gid in chowns
             if (uid, gid) == (1000, 2000)
         )
+
+    def test_migrates_existing_files_for_writable_mount(self, tmp_path, monkeypatch):
+        """Verify that recovery migration preserves rootless writable access."""
+        self._mock_appsvc(monkeypatch)
+        files_root = tmp_path / "files"
+        files_root.mkdir()
+        (files_root / "state.json").write_text("{}\n")
+        (files_root / "state.json").chmod(0o600)
+
+        grant_managed_file_access(files_root, writable=True)
+
+        assert files_root.stat().st_mode & 0o777 == 0o750
+        assert (str(files_root), 1000, 2000) in chowns
+        assert files_root.joinpath("state.json").stat().st_mode & 0o777 == 0o640
 
     def test_rejects_symlink_source_entries(self, tmp_path, monkeypatch):
         self._mock_appsvc(monkeypatch)

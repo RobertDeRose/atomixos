@@ -151,33 +151,7 @@ def managed_file_mount_warning(directive: str, value: str, path: str) -> str | N
     if FILES_DIR_TOKEN not in value:
         return None
 
-    if directive == "Volume":
-        parts = value.rsplit(":", 1)
-        volume_options = set(parts[1].split(",")) if len(parts) == 2 else set()
-        read_only = "ro" in volume_options and not {"rw", "U"}.intersection(volume_options)
-    else:
-        mount_options: dict[str, str] = {}
-        flags: set[str] = set()
-        for option in value.split(","):
-            key, separator, raw_value = option.partition("=")
-            normalized_key = key.strip().lower()
-            if separator:
-                mount_options[normalized_key] = raw_value.strip().lower()
-            else:
-                flags.add(normalized_key)
-        read_only = (
-            "ro" in flags
-            or "readonly" in flags
-            or mount_options.get("ro") == "true"
-            or mount_options.get("readonly") == "true"
-        ) and not (
-            {"rw", "readwrite", "u", "chown"}.intersection(flags)
-            or mount_options.get("rw") == "true"
-            or mount_options.get("readwrite") == "true"
-            or mount_options.get("u") == "true"
-            or mount_options.get("chown") == "true"
-        )
-
+    read_only = managed_file_mount_is_read_only(directive, value)
     if read_only:
         return None
     return (
@@ -185,6 +159,79 @@ def managed_file_mount_warning(directive: str, value: str, path: str) -> str | N
         "managed bundle files are included in config export, so use a Podman volume "
         "for mutable runtime data"
     )
+
+
+def managed_file_mount_is_read_only(directive: str, value: str) -> bool:
+    """Return whether a managed-file mount explicitly requests read-only access."""
+    if directive in {"Volume", "PodmanArgsVolume"}:
+        parts = value.rsplit(":", 1)
+        volume_options = set(parts[1].split(",")) if len(parts) == 2 else set()
+        return "ro" in volume_options and not {"rw", "U"}.intersection(volume_options)
+
+    mount_options: dict[str, str] = {}
+    flags: set[str] = set()
+    for option in value.split(","):
+        key, separator, raw_value = option.partition("=")
+        normalized_key = key.strip().lower()
+        if separator:
+            mount_options[normalized_key] = raw_value.strip().lower()
+        else:
+            flags.add(normalized_key)
+    return (
+        "ro" in flags
+        or "readonly" in flags
+        or mount_options.get("ro") == "true"
+        or mount_options.get("readonly") == "true"
+    ) and not (
+        {"rw", "readwrite", "u", "chown"}.intersection(flags)
+        or mount_options.get("rw") == "true"
+        or mount_options.get("readwrite") == "true"
+        or mount_options.get("u") == "true"
+        or mount_options.get("chown") == "true"
+    )
+
+
+def _podman_mount_values(values: list[str]):
+    """Yield mount arguments carried by PodmanArgs."""
+    for index, raw_value in enumerate(values):
+        value = raw_value.strip()
+        for option in ("--volume=", "-v=", "--mount="):
+            if value.startswith(option):
+                yield option.rstrip("=").lstrip("-"), value[len(option) :], index
+                break
+        else:
+            for option in ("--volume", "-v", "--mount"):
+                if value == option and index + 1 < len(values):
+                    yield option.lstrip("-"), values[index + 1], index + 1
+                    break
+
+
+def managed_files_are_writable(container_table: dict[str, Any]) -> bool:
+    """Return whether any configured managed-file mount needs host write access."""
+    for raw_sections in container_table.values():
+        if not isinstance(raw_sections, dict):
+            continue
+        container = raw_sections.get("Container")
+        if not isinstance(container, dict):
+            continue
+        for directive in ("Volume", "Mount"):
+            for value in container.get(directive, []):
+                if (
+                    isinstance(value, str)
+                    and FILES_DIR_TOKEN in value
+                    and not managed_file_mount_is_read_only(directive, value)
+                ):
+                    return True
+        raw_podman_args = container.get("PodmanArgs", [])
+        if isinstance(raw_podman_args, str):
+            raw_podman_args = [raw_podman_args]
+        podman_args = [value for value in raw_podman_args if isinstance(value, str)]
+        for value, mount_value, _index in _podman_mount_values(podman_args):
+            if FILES_DIR_TOKEN in mount_value and not managed_file_mount_is_read_only(
+                "Volume" if value in {"volume", "v"} else "Mount", mount_value
+            ):
+                return True
+    return False
 
 
 # --- Main Render Functions ---
@@ -229,6 +276,21 @@ def render_containers(
                 )
                 if warning is not None:
                     warnings.append(warning)
+        podman_args = container_directives.get("PodmanArgs", [])
+        for directive, value, idx in _podman_mount_values(
+            [
+                require_string(value, f"{container_path}.Container.PodmanArgs[{idx}]")
+                for idx, value in enumerate(podman_args)
+            ]
+        ):
+            mount_path = f"{container_path}.Container.PodmanArgs[{idx}]"
+            warning = managed_file_mount_warning(
+                "PodmanArgsVolume" if directive in {"volume", "v"} else "PodmanArgsMount",
+                value,
+                mount_path,
+            )
+            if warning is not None:
+                warnings.append(warning)
 
         if privileged:
             if "Network" in container_directives and container_directives["Network"] != ["host"]:

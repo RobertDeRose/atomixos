@@ -85,6 +85,7 @@ let
   '';
   provisionApplyFinalizeScript = pkgs.writeShellScript "atomixos-provision-apply-finalize" ''
     set -euo pipefail
+    export ATOMIXOS_PROVISION_WORKER_ACTIVE=1
     exec ${provisionCli}/bin/atomixos-provision finalize-staged /data/config --runtime-root /run/atomixos-provision
   '';
   ubootEnvTools = self.packages.${pkgs.stdenv.hostPlatform.system}.uboot-env-tools;

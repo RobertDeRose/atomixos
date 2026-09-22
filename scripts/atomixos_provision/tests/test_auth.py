@@ -225,6 +225,7 @@ class _UnsignedConnection:
 @pytest.mark.asyncio
 async def test_auth_guard_rejects_non_strict_base64_signature(tmp_path):
     connection = _Connection(tmp_path, "not valid base64!!!!")
+    (tmp_path / "config.toml").write_text("version = 1\n")
 
     with pytest.raises(NotAuthorizedException, match="invalid signature encoding"):
         await ssh_auth_guard(connection, None)
@@ -235,6 +236,7 @@ async def test_auth_guard_preserves_verified_authorization_for_worker(tmp_path, 
     """Verify that auth guard preserves verified authorization for worker."""
     nonce = f"{current_boot_id()}:test"
     connection = _Connection(tmp_path, "dGVzdA==")
+    (tmp_path / "config.toml").write_text("version = 1\n")
     connection.headers["x-atomixos-nonce"] = nonce
     monkeypatch.setattr("atomixos_provision.auth.verify_ssh_signature", lambda *args: True)
 
@@ -251,6 +253,14 @@ async def test_auth_guard_preserves_verified_authorization_for_worker(tmp_path, 
 @pytest.mark.asyncio
 async def test_auth_guard_allows_unprovisioned_without_signers(tmp_path):
     connection = _UnsignedConnection(tmp_path)
+
+    await ssh_auth_guard(connection, None)
+
+
+@pytest.mark.asyncio
+async def test_auth_guard_allows_initial_provisioning_with_signers(tmp_path):
+    connection = _UnsignedConnection(tmp_path)
+    (tmp_path / "admin-signers").write_text("ssh-ed25519 AAAA test\n")
 
     await ssh_auth_guard(connection, None)
 
