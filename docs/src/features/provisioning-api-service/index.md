@@ -3,9 +3,9 @@
 ## Delivery Summary
 
 - Beads feature root: `atomixos-dhe`
-- Status: delivered locally
-- Pull request: not created
-- Delivery: ready on `feat/provisioning-api-service`; no merge or push has occurred
+- Status: pull request open
+- Pull request: [#7](https://github.com/RobertDeRose/atomixos/pull/7)
+- Delivery: awaiting review and merge into `dev`
 - Design record: [design.md](design.md)
 - Completion commits: `2a08b9a65be7a92bf5fac3fa125759d5882bc7d0`,
   `3dd5be205f792f4b75845702be07d86337bbfd9d`, `b498d873222f670b7287e6105a63a974aebcb78c`,

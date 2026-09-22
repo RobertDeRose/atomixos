@@ -1,6 +1,7 @@
 """Tests for atomixos_provision.app routes."""
 
 import asyncio
+import json
 import threading
 from pathlib import Path
 
@@ -607,7 +608,10 @@ async def test_partial_config_uses_staged_job_manager_when_available(tmp_path, m
         "name": "alice",
         "payload": {"isAdmin": False, "ssh_key": "ssh-ed25519 AAAA alice"},
     }
-    assert calls["request_payload"] == (b'{"isAdmin":false,"ssh_key":"ssh-ed25519 AAAA alice"}')
+    assert json.loads(calls["request_payload"]) == {
+        "isAdmin": False,
+        "ssh_key": "ssh-ed25519 AAAA alice",
+    }
     assert calls["authorization"] == {
         "nonce": "test",
         "signature": "dGVzdA==",
