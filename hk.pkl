@@ -1,5 +1,6 @@
-amends "package://github.com/jdx/hk/releases/download/v1.41.0/hk@1.41.0#/Config.pkl"
-import "package://github.com/jdx/hk/releases/download/v1.41.0/hk@1.41.0#/Builtins.pkl"
+amends "package://github.com/jdx/hk/releases/download/v2.0.1/hk@2.0.1#/Config.pkl"
+
+import "package://github.com/jdx/hk/releases/download/v2.0.1/hk@2.0.1#/Builtins.pkl"
 
 local commit_message_validation: Step = new Step {
   check =
@@ -89,7 +90,7 @@ local cocogitto_commit_message: Step = new Step {
 
 local linters = new Mapping<String, Step> {
   ["actionlint"] = Builtins.actionlint
-  ["check_byte_order_marker"] = Builtins.check_byte_order_marker
+  ["check_byte_order_marker"] = Builtins.byte_order_marker
   ["check_case_conflict"] = Builtins.check_case_conflict
   ["check_executables_have_shebangs"] = Builtins.check_executables_have_shebangs
   ["check_symlinks"] = Builtins.check_symlinks
