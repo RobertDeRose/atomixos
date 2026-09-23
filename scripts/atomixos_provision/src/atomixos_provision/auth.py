@@ -14,10 +14,14 @@ from litestar.connection import ASGIConnection
 from litestar.exceptions import NotAuthorizedException
 from litestar.handlers import BaseRouteHandler
 
+from atomixos_provision.state import is_provisioned_config_root
+
 __all__ = [
     "NonceStore",
     "SignerState",
     "build_allowed_signers",
+    "current_boot_id",
+    "nonce_matches_current_boot",
     "reapply_signature_message",
     "ssh_auth_guard",
     "ssh_auth_required_guard",
@@ -32,6 +36,7 @@ MAX_OUTSTANDING_NONCES_PER_CLIENT = int(
     os.environ.get("ATOMIXOS_MAX_OUTSTANDING_NONCES_PER_CLIENT", "16")
 )
 SSH_KEYGEN_BIN = os.environ.get("ATOMIXOS_SSH_KEYGEN", "ssh-keygen")
+_FALLBACK_BOOT_ID = secrets.token_hex(16)
 AUTH_REQUIRED_MESSAGE = (
     "authentication required: provide X-AtomixOS-Nonce and X-AtomixOS-Signature headers"
 )
@@ -59,7 +64,7 @@ class NonceStore:
             self._prune()
             self._evict_client_over_limit(client_id)
             self._evict_over_limit()
-            nonce = secrets.token_urlsafe(32)
+            nonce = f"{current_boot_id()}:{secrets.token_urlsafe(32)}"
             self._nonces[nonce] = (time.monotonic(), client_id)
             return nonce
 
@@ -124,10 +129,31 @@ class SignerState:
 # --- Signature Helpers ---
 
 
-def reapply_signature_message(nonce: str, path: str, payload: bytes) -> str:
+def current_boot_id() -> str:
+    """Return the kernel boot identifier used to scope replay protection."""
+    try:
+        value = Path("/proc/sys/kernel/random/boot_id").read_text().strip()
+    except OSError:
+        return _FALLBACK_BOOT_ID
+    return value or _FALLBACK_BOOT_ID
+
+
+def nonce_matches_current_boot(nonce: str) -> bool:
+    """Return whether a nonce was issued for the current boot."""
+    boot_id, separator, token = nonce.partition(":")
+    return bool(separator and token and secrets.compare_digest(boot_id, current_boot_id()))
+
+
+def reapply_signature_message(nonce: str, method: str, path: str, payload: bytes) -> str:
     """Build the message string that the client must sign."""
     digest = hashlib.sha256(payload).hexdigest()
-    return f"atomixos-reapply-v1\nnonce:{nonce}\npath:{path}\nsha256:{digest}\n"
+    return (
+        "atomixos-reapply-v2\n"
+        f"nonce:{nonce}\n"
+        f"method:{method.upper()}\n"
+        f"path:{path}\n"
+        f"sha256:{digest}\n"
+    )
 
 
 def verify_ssh_signature(message: str, signature_blob: bytes, allowed_keys_path: Path) -> bool:
@@ -190,6 +216,7 @@ def build_allowed_signers(config_root: Path) -> Path | None:
 
 
 async def _verify_ssh_auth(connection: ASGIConnection, allowed_path: Path) -> None:
+    """Verify SSH authentication and preserve evidence for the worker."""
     try:
         nonce = connection.headers.get("x-atomixos-nonce", "")
         signature_b64 = connection.headers.get("x-atomixos-signature", "")
@@ -201,7 +228,9 @@ async def _verify_ssh_auth(connection: ASGIConnection, allowed_path: Path) -> No
             raise NotAuthorizedException(detail="invalid or expired nonce")
 
         body = await connection.body()
-        message = reapply_signature_message(nonce, connection.url.path, body)
+        method = connection.method.upper()
+        path = connection.url.path
+        message = reapply_signature_message(nonce, method, path, body)
         try:
             signature_blob = base64.b64decode(signature_b64, validate=True)
         except Exception as exc:
@@ -213,6 +242,12 @@ async def _verify_ssh_auth(connection: ASGIConnection, allowed_path: Path) -> No
         if not valid:
             raise NotAuthorizedException(detail="signature verification failed")
         connection.scope["atomixos_authenticated"] = True
+        connection.scope["atomixos_authorization"] = {
+            "nonce": nonce,
+            "signature": signature_b64,
+            "method": method,
+            "path": path,
+        }
     finally:
         Path(allowed_path).unlink(missing_ok=True)
 
@@ -222,11 +257,16 @@ async def ssh_auth_guard(connection: ASGIConnection, _: BaseRouteHandler) -> Non
     config_root: Path = connection.app.state.config_root
     signer_state: SignerState = connection.app.state.signer_state
 
-    # Only a truly unprovisioned root may bypass auth; a provisioned root with
-    # missing/corrupt signers must fail closed.
+    # Initial provisioning is authorized by the bootstrap-origin guard. A
+    # signer file may already be staged, but it does not make the root
+    # provisioned and must not force re-apply authentication yet.
+    if not is_provisioned_config_root(config_root):
+        return
+
+    # A provisioned root with missing/corrupt signers must fail closed.
     allowed_path = build_allowed_signers(config_root)
     if allowed_path is None:
-        if signer_state.initialized or (config_root / "config.toml").exists():
+        if signer_state.initialized or is_provisioned_config_root(config_root):
             raise NotAuthorizedException(detail="admin signers temporarily unavailable")
         return
     await signer_state.mark_initialized()

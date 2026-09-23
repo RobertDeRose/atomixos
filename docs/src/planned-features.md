@@ -159,11 +159,12 @@ this page remains the human-readable roadmap.
 
 ### Provisioning API Service (`provisioning-api-service`)
 
-- Status: partially completed
+- Status: delivered locally
 - Overview: Replaces the one-shot provisioning importer with the long-lived Litestar service and shared validation,
   rendering, promotion, activation, rollback, and asynchronous job pipeline.
 - Dependencies: `first-boot-local-provisioning`, `config-reapply-improvements`
-- Remaining work: Close the retained full-build, config round-trip, and rootfs closure-budget validation tasks.
+- Delivered in: The `atomixos_provision` package, first-boot module and socket units, complete bundle export and import,
+  target VM checks, and provisioning operator and reference documentation.
 
 ### Network Config Extensions (`network-config-extensions`)
 

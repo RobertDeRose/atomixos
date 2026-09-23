@@ -1,5 +1,6 @@
-amends "package://github.com/jdx/hk/releases/download/v1.41.0/hk@1.41.0#/Config.pkl"
-import "package://github.com/jdx/hk/releases/download/v1.41.0/hk@1.41.0#/Builtins.pkl"
+amends "package://github.com/jdx/hk/releases/download/v2.0.1/hk@2.0.1#/Config.pkl"
+
+import "package://github.com/jdx/hk/releases/download/v2.0.1/hk@2.0.1#/Builtins.pkl"
 
 local commit_message_validation: Step = new Step {
   check =
@@ -87,35 +88,9 @@ local cocogitto_commit_message: Step = new Step {
   check = "cog --quiet verify --file {{commit_msg_file}}"
 }
 
-local harper_commit_message: Step = new Step {
-  check =
-    #"""
-    output=$(mktemp)
-    trap 'rm -f "$output"' EXIT
-    awk '
-      /^# ------------------------ >8 ------------------------/ { exit }
-      /^diff --git / { exit }
-      /^#/ { next }
-      /^Beads: [a-z][a-z0-9-]*-[a-z0-9][a-z0-9.-]*(, [a-z][a-z0-9-]*-[a-z0-9][a-z0-9.-]*)*$/ { next }
-      {
-        line = $0
-        if (!seen_subject && NF) {
-          seen_subject = 1
-          if (line ~ /^release: v[0-9]+\.[0-9]+\.[0-9]+$/) { next }
-          sub(/^[a-z]+(\([^)]+\))?!?: /, "", line)
-        }
-        print line
-      }
-    ' {{commit_msg_file}} | harper-cli lint --quiet --no-color --user-dict-path .config/harper-dictionary.txt 2>"$output"
-    status=$?
-    awk '!/^Note: Using user dictionary at /' "$output" >&2
-    exit "$status"
-    """#
-}
-
 local linters = new Mapping<String, Step> {
   ["actionlint"] = Builtins.actionlint
-  ["check_byte_order_marker"] = Builtins.check_byte_order_marker
+  ["check_byte_order_marker"] = Builtins.byte_order_marker
   ["check_case_conflict"] = Builtins.check_case_conflict
   ["check_executables_have_shebangs"] = Builtins.check_executables_have_shebangs
   ["check_symlinks"] = Builtins.check_symlinks
@@ -170,6 +145,20 @@ local linters = new Mapping<String, Step> {
   ["trailing-whitespace"] = Builtins.trailing_whitespace
 }
 
+local validators = new Mapping<String, Step> {
+  ["nix"] = new Step {
+    check =
+      #"""
+      ./scripts/nix-with-build-config.sh flake check --no-build --option eval-system aarch64-linux
+      ./scripts/nix-with-build-config.sh flake check
+      """#
+  }
+}
+
+local checks = (linters) {
+  ["nix"] = validators["nix"]
+}
+
 default_branch = "dev"
 exclude = List("**/mermaid.min.js", "**/.opencode/*")
 fail_fast = false
@@ -184,14 +173,13 @@ hooks {
     steps = new Mapping<String, Step> {
       ["commit_message_format"] = commit_message_validation
       ["cocogitto_commit_msg"] = cocogitto_commit_message
-      ["harper_commit_message"] = harper_commit_message
       ["commit_message_beads"] = commit_message_beads
       ["commit_message_length"] = commit_message_length
       ["commit_message_scope"] = commit_message_scope
     }
   }
   ["check"] {
-    steps = linters
+    steps = checks
   }
   ["fix"] {
     fix = true

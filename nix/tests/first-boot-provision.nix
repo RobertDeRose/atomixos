@@ -74,6 +74,18 @@ nixos-lib.runTest {
         "d /data 0755 root root -"
         "d /etc/containers/systemd 0755 root root -"
       ];
+
+      users.users.atomixos-provision = {
+        group = "atomixos-provision";
+        isSystemUser = true;
+      };
+      users.groups.atomixos-provision = { };
+
+      users.users.appsvc = {
+        group = "appsvc";
+        isSystemUser = true;
+      };
+      users.groups.appsvc = { };
     };
 
   testScript = ''
@@ -112,7 +124,7 @@ nixos-lib.runTest {
         gateway.succeed("cat > /tmp/invalid-ntp-config.toml <<'EOF'\nversion = 1\n\n[users.admin]\nisAdmin = true\nssh_key = \"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGfm/RhPyisFyBAwigDt2AnnOU1fMAVk4XaCj3S/k/3Z admin@example\"\n\n[network.ntp]\nservers = [\"time.cloudflare.com\\nallow 0.0.0.0/0\"]\n\n[activation]\nrequired = [\"myapp\"]\n\n[containers.container.myapp]\nprivileged = false\n\n[containers.container.myapp.Container]\nImage = \"ghcr.io/example/myapp:latest\"\nEOF")
         gateway.succeed("cat > /tmp/no-health-config.toml <<'EOF'\nversion = 1\n\n[users.admin]\nisAdmin = true\nssh_key = \"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGfm/RhPyisFyBAwigDt2AnnOU1fMAVk4XaCj3S/k/3Z admin@example\"\n\n[network.firewall.inbound.wan]\ntcp = [443]\n\n[activation]\nrequired = [\"placeholder\"]\n\n[containers.container.placeholder]\nprivileged = true\n\n[containers.container.placeholder.Container]\nImage = \"ghcr.io/example/placeholder:latest\"\nEOF")
         gateway.succeed("cat > /tmp/operator-admin-config.toml <<'EOF'\nversion = 1\n\n[users.operator]\nisAdmin = true\nssh_key = \"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFGTDzwiQNe3nwhmg/G81QDhQBbpgOyvrKXeYnQHYOUd operator@example\"\n\n[activation]\nrequired = [\"placeholder\"]\n\n[containers.container.placeholder]\nprivileged = true\n\n[containers.container.placeholder.Container]\nImage = \"ghcr.io/example/placeholder:latest\"\nEOF")
-        gateway.succeed("cat > /tmp/sign-reapply <<'PY'\n#!/usr/bin/env python3\nimport base64\nimport hashlib\nimport subprocess\nimport sys\nfrom pathlib import Path\nnonce_path, path, payload_path, key_path, sig_b64_path = sys.argv[1:]\nnonce = Path(nonce_path).read_text().strip()\npayload = Path(payload_path).read_bytes()\nmessage = f'atomixos-reapply-v1\\nnonce:{nonce}\\npath:{path}\\nsha256:{hashlib.sha256(payload).hexdigest()}\\n'.encode()\nproc = subprocess.run(['ssh-keygen', '-Y', 'sign', '-f', key_path, '-n', 'atomixos-reapply'], input=message, stdout=subprocess.PIPE, check=True)\nPath(sig_b64_path).write_text(base64.b64encode(proc.stdout).decode())\nPY\nchmod +x /tmp/sign-reapply")
+        gateway.succeed("cat > /tmp/sign-reapply <<'PY'\n#!/usr/bin/env python3\nimport base64\nimport hashlib\nimport subprocess\nimport sys\nfrom pathlib import Path\nnonce_path, method, path, payload_path, key_path, sig_b64_path = sys.argv[1:]\nnonce = Path(nonce_path).read_text().strip()\npayload = Path(payload_path).read_bytes()\nmessage = f'atomixos-reapply-v2\\nnonce:{nonce}\\nmethod:{method.upper()}\\npath:{path}\\nsha256:{hashlib.sha256(payload).hexdigest()}\\n'.encode()\nproc = subprocess.run(['ssh-keygen', '-Y', 'sign', '-f', key_path, '-n', 'atomixos-reapply'], input=message, stdout=subprocess.PIPE, check=True)\nPath(sig_b64_path).write_text(base64.b64encode(proc.stdout).decode())\nPY\nchmod +x /tmp/sign-reapply")
         gateway.succeed("first-boot-provision validate /tmp/config.toml")
         gateway.fail("first-boot-provision validate /tmp/invalid-ntp-config.toml")
         gateway.succeed("ATOMIXOS_PROVISION_WORKER_ACTIVE=1 first-boot-provision import /tmp/config.toml /data/config")
@@ -179,7 +191,7 @@ nixos-lib.runTest {
         gateway.succeed("printf '127.0.0.1 localhost\n10.0.0.2 old # ATOMIXOS_LAN_GATEWAY\n' >/tmp/lan-apply/etc-hosts")
         gateway.succeed("cat > /tmp/lan-apply/bin/networkctl <<'EOF'\n#!/usr/bin/env bash\nprintf '%s\n' \"$*\" >>/tmp/lan-apply/networkctl.log\nEOF\nchmod +x /tmp/lan-apply/bin/networkctl")
         gateway.succeed("cat > /tmp/lan-apply/bin/systemctl <<'EOF'\n#!/usr/bin/env bash\nprintf '%s\n' \"$*\" >>/tmp/lan-apply/systemctl.log\nEOF\nchmod +x /tmp/lan-apply/bin/systemctl")
-        gateway.succeed("PATH=/tmp/lan-apply/bin:$PATH ATOMIXOS_LAN_SETTINGS_FILE=/data/config/lan-settings.json ATOMIXOS_DNSMASQ_CONFIG_DIR=/tmp/lan-apply ATOMIXOS_DNSMASQ_HOSTS_FILE=/tmp/lan-apply/dnsmasq-hosts ATOMIXOS_CHRONY_LAN_FILE=/tmp/lan-apply/chrony-lan.conf ATOMIXOS_LAN_NETWORK_FILE=/tmp/lan-apply/etc/systemd/network/20-lan.network.d/50-atomixos.conf ATOMIXOS_ETC_HOSTS_FILE=/tmp/lan-apply/etc-hosts ATOMIXOS_SYS_CLASS_NET_DIR=/tmp/lan-apply/sys/class/net python3 ${../../scripts/lan-gateway-apply.py}")
+        gateway.succeed("PATH=/tmp/lan-apply/bin:$PATH ATOMIXOS_LAN_DEFAULTS_FILE=${../../defaults/lan.json} ATOMIXOS_LAN_SETTINGS_FILE=/data/config/lan-settings.json ATOMIXOS_DNSMASQ_CONFIG_DIR=/tmp/lan-apply ATOMIXOS_DNSMASQ_HOSTS_FILE=/tmp/lan-apply/dnsmasq-hosts ATOMIXOS_CHRONY_LAN_FILE=/tmp/lan-apply/chrony-lan.conf ATOMIXOS_LAN_NETWORK_FILE=/tmp/lan-apply/etc/systemd/network/20-lan.network.d/50-atomixos.conf ATOMIXOS_ETC_HOSTS_FILE=/tmp/lan-apply/etc-hosts ATOMIXOS_SYS_CLASS_NET_DIR=/tmp/lan-apply/sys/class/net python3 ${../../scripts/lan-gateway-apply.py}")
         gateway.succeed("test ! -L /tmp/lan-apply/etc/systemd/network/20-lan.network.d/50-atomixos.conf")
         gateway.succeed("test ! -L /tmp/lan-apply/atomixos-lan.conf")
         gateway.succeed("grep '^Address=10.44.0.1/24$' /tmp/lan-apply/etc/systemd/network/20-lan.network.d/50-atomixos.conf")
@@ -206,16 +218,16 @@ nixos-lib.runTest {
         gateway.succeed("grep '^try-restart dnsmasq.service$' /tmp/lan-apply/systemctl.log")
         gateway.succeed("grep '^try-restart chronyd.service$' /tmp/lan-apply/systemctl.log")
         gateway.succeed("rm -f /tmp/lan-apply/fleet-bootstrap.conf")
-        gateway.succeed("PATH=/tmp/lan-apply/bin:$PATH ATOMIXOS_BOOTSTRAP_TRANSPORT=nixstasis ATOMIXOS_BOOTSTRAP_SOCKET_OVERRIDE=/tmp/lan-apply/fleet-bootstrap.conf ATOMIXOS_LAN_SETTINGS_FILE=/data/config/lan-settings.json ATOMIXOS_DNSMASQ_CONFIG_DIR=/tmp/lan-apply ATOMIXOS_DNSMASQ_HOSTS_FILE=/tmp/lan-apply/dnsmasq-hosts ATOMIXOS_CHRONY_LAN_FILE=/tmp/lan-apply/chrony-lan.conf ATOMIXOS_LAN_NETWORK_FILE=/tmp/lan-apply/etc/systemd/network/20-lan.network.d/50-atomixos.conf ATOMIXOS_ETC_HOSTS_FILE=/tmp/lan-apply/etc-hosts ATOMIXOS_SYS_CLASS_NET_DIR=/tmp/lan-apply/sys/class/net python3 ${../../scripts/lan-gateway-apply.py}")
+        gateway.succeed("PATH=/tmp/lan-apply/bin:$PATH ATOMIXOS_LAN_DEFAULTS_FILE=${../../defaults/lan.json} ATOMIXOS_BOOTSTRAP_TRANSPORT=nixstasis ATOMIXOS_BOOTSTRAP_SOCKET_OVERRIDE=/tmp/lan-apply/fleet-bootstrap.conf ATOMIXOS_LAN_SETTINGS_FILE=/data/config/lan-settings.json ATOMIXOS_DNSMASQ_CONFIG_DIR=/tmp/lan-apply ATOMIXOS_DNSMASQ_HOSTS_FILE=/tmp/lan-apply/dnsmasq-hosts ATOMIXOS_CHRONY_LAN_FILE=/tmp/lan-apply/chrony-lan.conf ATOMIXOS_LAN_NETWORK_FILE=/tmp/lan-apply/etc/systemd/network/20-lan.network.d/50-atomixos.conf ATOMIXOS_ETC_HOSTS_FILE=/tmp/lan-apply/etc-hosts ATOMIXOS_SYS_CLASS_NET_DIR=/tmp/lan-apply/sys/class/net python3 ${../../scripts/lan-gateway-apply.py}")
         gateway.succeed("test ! -e /tmp/lan-apply/fleet-bootstrap.conf")
         gateway.succeed("rm -f /tmp/lan-apply/networkctl.log /tmp/lan-apply/systemctl.log")
-        gateway.succeed("PATH=/tmp/lan-apply/bin:$PATH ATOMIXOS_LAN_SETTINGS_FILE=/data/config/lan-settings.json ATOMIXOS_DNSMASQ_CONFIG_DIR=/tmp/lan-apply ATOMIXOS_DNSMASQ_HOSTS_FILE=/tmp/lan-apply/dnsmasq-hosts ATOMIXOS_CHRONY_LAN_FILE=/tmp/lan-apply/chrony-lan.conf ATOMIXOS_LAN_NETWORK_FILE=/tmp/lan-apply/etc/systemd/network/20-lan.network.d/50-atomixos.conf ATOMIXOS_ETC_HOSTS_FILE=/tmp/lan-apply/etc-hosts ATOMIXOS_SYS_CLASS_NET_DIR=/tmp/lan-apply/sys/class/net python3 ${../../scripts/lan-gateway-apply.py}")
+        gateway.succeed("PATH=/tmp/lan-apply/bin:$PATH ATOMIXOS_LAN_DEFAULTS_FILE=${../../defaults/lan.json} ATOMIXOS_LAN_SETTINGS_FILE=/data/config/lan-settings.json ATOMIXOS_DNSMASQ_CONFIG_DIR=/tmp/lan-apply ATOMIXOS_DNSMASQ_HOSTS_FILE=/tmp/lan-apply/dnsmasq-hosts ATOMIXOS_CHRONY_LAN_FILE=/tmp/lan-apply/chrony-lan.conf ATOMIXOS_LAN_NETWORK_FILE=/tmp/lan-apply/etc/systemd/network/20-lan.network.d/50-atomixos.conf ATOMIXOS_ETC_HOSTS_FILE=/tmp/lan-apply/etc-hosts ATOMIXOS_SYS_CLASS_NET_DIR=/tmp/lan-apply/sys/class/net python3 ${../../scripts/lan-gateway-apply.py}")
         gateway.succeed("test ! -e /tmp/lan-apply/networkctl.log")
         gateway.succeed("grep '^daemon-reload$' /tmp/lan-apply/systemctl.log")
         gateway.succeed("rm -f /tmp/lan-apply/systemctl.log")
         gateway.succeed("cat > /tmp/lan-apply/bin/networkctl <<'EOF'\n#!/usr/bin/env bash\necho reload failed >&2\nexit 1\nEOF\nchmod +x /tmp/lan-apply/bin/networkctl")
         gateway.succeed("printf '{\"gateway_cidr\":\"10.44.1.1/24\",\"gateway_ip\":\"10.44.1.1\",\"subnet_cidr\":\"10.44.1.0/24\",\"netmask\":\"255.255.255.0\",\"dhcp_start\":\"10.44.1.10\",\"dhcp_end\":\"10.44.1.200\",\"domain\":\"lab\",\"hostname_pattern\":\"gateway-{mac}\",\"gateway_aliases\":[\"atomixos\"]}\n' >/tmp/lan-apply/restart-fail-settings.json")
-        gateway.fail("PATH=/tmp/lan-apply/bin:$PATH ATOMIXOS_LAN_SETTINGS_FILE=/tmp/lan-apply/restart-fail-settings.json ATOMIXOS_DNSMASQ_CONFIG_DIR=/tmp/lan-apply ATOMIXOS_DNSMASQ_HOSTS_FILE=/tmp/lan-apply/dnsmasq-hosts ATOMIXOS_CHRONY_LAN_FILE=/tmp/lan-apply/chrony-lan.conf ATOMIXOS_LAN_NETWORK_FILE=/tmp/lan-apply/etc/systemd/network/20-lan.network.d/50-atomixos.conf ATOMIXOS_ETC_HOSTS_FILE=/tmp/lan-apply/etc-hosts ATOMIXOS_SYS_CLASS_NET_DIR=/tmp/lan-apply/sys/class/net python3 ${../../scripts/lan-gateway-apply.py} >/tmp/lan-apply/restart-fail.out 2>/tmp/lan-apply/restart-fail.err")
+        gateway.fail("PATH=/tmp/lan-apply/bin:$PATH ATOMIXOS_LAN_DEFAULTS_FILE=${../../defaults/lan.json} ATOMIXOS_LAN_SETTINGS_FILE=/tmp/lan-apply/restart-fail-settings.json ATOMIXOS_DNSMASQ_CONFIG_DIR=/tmp/lan-apply ATOMIXOS_DNSMASQ_HOSTS_FILE=/tmp/lan-apply/dnsmasq-hosts ATOMIXOS_CHRONY_LAN_FILE=/tmp/lan-apply/chrony-lan.conf ATOMIXOS_LAN_NETWORK_FILE=/tmp/lan-apply/etc/systemd/network/20-lan.network.d/50-atomixos.conf ATOMIXOS_ETC_HOSTS_FILE=/tmp/lan-apply/etc-hosts ATOMIXOS_SYS_CLASS_NET_DIR=/tmp/lan-apply/sys/class/net python3 ${../../scripts/lan-gateway-apply.py} >/tmp/lan-apply/restart-fail.out 2>/tmp/lan-apply/restart-fail.err")
         gateway.succeed("grep -F '[lan-gateway-apply] command failed: networkctl reload: reload failed' /tmp/lan-apply/restart-fail.err")
 
         gateway.succeed("rm -rf /tmp/quadlet-sync && mkdir -p /tmp/quadlet-sync/bin /var/lib/appsvc/.config/containers/systemd /var/lib/appsvc")
@@ -263,16 +275,16 @@ nixos-lib.runTest {
 
         gateway.succeed("rm -rf /tmp/bootstrap-root")
         gateway.succeed("printf '{bad json\n' >/tmp/lan-apply/bad-lan-settings.json")
-        gateway.fail("PATH=/tmp/lan-apply/bin:$PATH ATOMIXOS_LAN_SETTINGS_FILE=/tmp/lan-apply/bad-lan-settings.json ATOMIXOS_DNSMASQ_CONFIG_DIR=/tmp/lan-apply ATOMIXOS_DNSMASQ_HOSTS_FILE=/tmp/lan-apply/dnsmasq-hosts ATOMIXOS_CHRONY_LAN_FILE=/tmp/lan-apply/chrony-lan.conf ATOMIXOS_LAN_NETWORK_FILE=/tmp/lan-apply/etc/systemd/network/20-lan.network.d/50-atomixos.conf ATOMIXOS_ETC_HOSTS_FILE=/tmp/lan-apply/etc-hosts ATOMIXOS_SYS_CLASS_NET_DIR=/tmp/lan-apply/sys/class/net python3 ${../../scripts/lan-gateway-apply.py} >/tmp/lan-apply/bad-json.out 2>/tmp/lan-apply/bad-json.err")
+        gateway.fail("PATH=/tmp/lan-apply/bin:$PATH ATOMIXOS_LAN_DEFAULTS_FILE=${../../defaults/lan.json} ATOMIXOS_LAN_SETTINGS_FILE=/tmp/lan-apply/bad-lan-settings.json ATOMIXOS_DNSMASQ_CONFIG_DIR=/tmp/lan-apply ATOMIXOS_DNSMASQ_HOSTS_FILE=/tmp/lan-apply/dnsmasq-hosts ATOMIXOS_CHRONY_LAN_FILE=/tmp/lan-apply/chrony-lan.conf ATOMIXOS_LAN_NETWORK_FILE=/tmp/lan-apply/etc/systemd/network/20-lan.network.d/50-atomixos.conf ATOMIXOS_ETC_HOSTS_FILE=/tmp/lan-apply/etc-hosts ATOMIXOS_SYS_CLASS_NET_DIR=/tmp/lan-apply/sys/class/net python3 ${../../scripts/lan-gateway-apply.py} >/tmp/lan-apply/bad-json.out 2>/tmp/lan-apply/bad-json.err")
         gateway.succeed("grep -F '[lan-gateway-apply] invalid JSON in /tmp/lan-apply/bad-lan-settings.json:' /tmp/lan-apply/bad-json.err")
         gateway.succeed("printf '{\"gateway_ip\":\"10.44.0.1\"}\n' >/tmp/lan-apply/missing-lan-settings.json")
-        gateway.fail("PATH=/tmp/lan-apply/bin:$PATH ATOMIXOS_LAN_SETTINGS_FILE=/tmp/lan-apply/missing-lan-settings.json ATOMIXOS_DNSMASQ_CONFIG_DIR=/tmp/lan-apply ATOMIXOS_DNSMASQ_HOSTS_FILE=/tmp/lan-apply/dnsmasq-hosts ATOMIXOS_CHRONY_LAN_FILE=/tmp/lan-apply/chrony-lan.conf ATOMIXOS_LAN_NETWORK_FILE=/tmp/lan-apply/etc/systemd/network/20-lan.network.d/50-atomixos.conf ATOMIXOS_ETC_HOSTS_FILE=/tmp/lan-apply/etc-hosts ATOMIXOS_SYS_CLASS_NET_DIR=/tmp/lan-apply/sys/class/net python3 ${../../scripts/lan-gateway-apply.py} >/tmp/lan-apply/missing-key.out 2>/tmp/lan-apply/missing-key.err")
+        gateway.fail("PATH=/tmp/lan-apply/bin:$PATH ATOMIXOS_LAN_DEFAULTS_FILE=${../../defaults/lan.json} ATOMIXOS_LAN_SETTINGS_FILE=/tmp/lan-apply/missing-lan-settings.json ATOMIXOS_DNSMASQ_CONFIG_DIR=/tmp/lan-apply ATOMIXOS_DNSMASQ_HOSTS_FILE=/tmp/lan-apply/dnsmasq-hosts ATOMIXOS_CHRONY_LAN_FILE=/tmp/lan-apply/chrony-lan.conf ATOMIXOS_LAN_NETWORK_FILE=/tmp/lan-apply/etc/systemd/network/20-lan.network.d/50-atomixos.conf ATOMIXOS_ETC_HOSTS_FILE=/tmp/lan-apply/etc-hosts ATOMIXOS_SYS_CLASS_NET_DIR=/tmp/lan-apply/sys/class/net python3 ${../../scripts/lan-gateway-apply.py} >/tmp/lan-apply/missing-key.out 2>/tmp/lan-apply/missing-key.err")
         gateway.succeed("grep -F \"[lan-gateway-apply] missing required key 'gateway_cidr' in /tmp/lan-apply/missing-lan-settings.json\" /tmp/lan-apply/missing-key.err")
         gateway.succeed("printf '{\"gateway_cidr\":\"10.44.0.1/24\",\"gateway_ip\":\"10.44.0.1\",\"subnet_cidr\":\"10.44.0.0/24\",\"netmask\":\"255.255.255.0\",\"dhcp_start\":\"10.44.0.10\",\"dhcp_end\":\"10.44.0.200\",\"domain\":\"lab bad\",\"gateway_aliases\":[\"atomixos\"]}\n' >/tmp/lan-apply/invalid-domain-settings.json")
-        gateway.fail("PATH=/tmp/lan-apply/bin:$PATH ATOMIXOS_LAN_SETTINGS_FILE=/tmp/lan-apply/invalid-domain-settings.json ATOMIXOS_DNSMASQ_CONFIG_DIR=/tmp/lan-apply ATOMIXOS_DNSMASQ_HOSTS_FILE=/tmp/lan-apply/dnsmasq-hosts ATOMIXOS_CHRONY_LAN_FILE=/tmp/lan-apply/chrony-lan.conf ATOMIXOS_LAN_NETWORK_FILE=/tmp/lan-apply/etc/systemd/network/20-lan.network.d/50-atomixos.conf ATOMIXOS_ETC_HOSTS_FILE=/tmp/lan-apply/etc-hosts ATOMIXOS_SYS_CLASS_NET_DIR=/tmp/lan-apply/sys/class/net python3 ${../../scripts/lan-gateway-apply.py} >/tmp/lan-apply/invalid-domain.out 2>/tmp/lan-apply/invalid-domain.err")
+        gateway.fail("PATH=/tmp/lan-apply/bin:$PATH ATOMIXOS_LAN_DEFAULTS_FILE=${../../defaults/lan.json} ATOMIXOS_LAN_SETTINGS_FILE=/tmp/lan-apply/invalid-domain-settings.json ATOMIXOS_DNSMASQ_CONFIG_DIR=/tmp/lan-apply ATOMIXOS_DNSMASQ_HOSTS_FILE=/tmp/lan-apply/dnsmasq-hosts ATOMIXOS_CHRONY_LAN_FILE=/tmp/lan-apply/chrony-lan.conf ATOMIXOS_LAN_NETWORK_FILE=/tmp/lan-apply/etc/systemd/network/20-lan.network.d/50-atomixos.conf ATOMIXOS_ETC_HOSTS_FILE=/tmp/lan-apply/etc-hosts ATOMIXOS_SYS_CLASS_NET_DIR=/tmp/lan-apply/sys/class/net python3 ${../../scripts/lan-gateway-apply.py} >/tmp/lan-apply/invalid-domain.out 2>/tmp/lan-apply/invalid-domain.err")
         gateway.succeed("grep -F \"[lan-gateway-apply] domain must be a valid DNS name in /tmp/lan-apply/invalid-domain-settings.json: 'lab bad'\" /tmp/lan-apply/invalid-domain.err")
         gateway.succeed("printf '{\"gateway_cidr\":\"10.44.0.1/24\",\"gateway_ip\":\"10.44.0.1\",\"subnet_cidr\":\"10.44.0.0/24\",\"netmask\":\"255.255.255.0\",\"dhcp_start\":\"10.44.0.1\",\"dhcp_end\":\"10.44.0.200\",\"domain\":\"lab\",\"gateway_aliases\":[\"atomixos\"]}\n' >/tmp/lan-apply/gateway-dhcp-settings.json")
-        gateway.fail("PATH=/tmp/lan-apply/bin:$PATH ATOMIXOS_LAN_SETTINGS_FILE=/tmp/lan-apply/gateway-dhcp-settings.json ATOMIXOS_DNSMASQ_CONFIG_DIR=/tmp/lan-apply ATOMIXOS_DNSMASQ_HOSTS_FILE=/tmp/lan-apply/dnsmasq-hosts ATOMIXOS_CHRONY_LAN_FILE=/tmp/lan-apply/chrony-lan.conf ATOMIXOS_LAN_NETWORK_FILE=/tmp/lan-apply/etc/systemd/network/20-lan.network.d/50-atomixos.conf ATOMIXOS_ETC_HOSTS_FILE=/tmp/lan-apply/etc-hosts ATOMIXOS_SYS_CLASS_NET_DIR=/tmp/lan-apply/sys/class/net python3 ${../../scripts/lan-gateway-apply.py} >/tmp/lan-apply/gateway-dhcp.out 2>/tmp/lan-apply/gateway-dhcp.err")
+        gateway.fail("PATH=/tmp/lan-apply/bin:$PATH ATOMIXOS_LAN_DEFAULTS_FILE=${../../defaults/lan.json} ATOMIXOS_LAN_SETTINGS_FILE=/tmp/lan-apply/gateway-dhcp-settings.json ATOMIXOS_DNSMASQ_CONFIG_DIR=/tmp/lan-apply ATOMIXOS_DNSMASQ_HOSTS_FILE=/tmp/lan-apply/dnsmasq-hosts ATOMIXOS_CHRONY_LAN_FILE=/tmp/lan-apply/chrony-lan.conf ATOMIXOS_LAN_NETWORK_FILE=/tmp/lan-apply/etc/systemd/network/20-lan.network.d/50-atomixos.conf ATOMIXOS_ETC_HOSTS_FILE=/tmp/lan-apply/etc-hosts ATOMIXOS_SYS_CLASS_NET_DIR=/tmp/lan-apply/sys/class/net python3 ${../../scripts/lan-gateway-apply.py} >/tmp/lan-apply/gateway-dhcp.out 2>/tmp/lan-apply/gateway-dhcp.err")
         gateway.succeed("grep -F \"[lan-gateway-apply] dhcp_start and dhcp_end must not include gateway_ip in /tmp/lan-apply/gateway-dhcp-settings.json\" /tmp/lan-apply/gateway-dhcp.err")
 
         # ── apply-users: create managed users from users.json ──
@@ -415,7 +427,16 @@ nixos-lib.runTest {
         # Set up a provisioned config root with known admin key
         gateway.succeed("rm -rf /tmp/auth-root && mkdir -p /tmp/auth-root")
         gateway.succeed("ssh-keygen -t ed25519 -N \"\" -f /tmp/auth-test-key -q")
-        gateway.succeed("first-boot-provision import /tmp/config.toml /tmp/auth-root")
+        gateway.succeed("first-boot-provision import /tmp/config.tar.gz /tmp/auth-root")
+
+        # Managed bundle files are installed read-only by default. The application
+        # runtime owns them, while the unprivileged API can read them for export.
+        gateway.succeed("test \"$(stat -c '%U:%G:%a' /tmp/auth-root/files)\" = 'appsvc:atomixos-provision:550'")
+        gateway.succeed("test \"$(stat -c '%U:%G:%a' /tmp/auth-root/files/app/config.yaml)\" = 'appsvc:atomixos-provision:440'")
+        gateway.succeed("runuser -u appsvc -- test -r /tmp/auth-root/files/app/config.yaml")
+        gateway.succeed("runuser -u appsvc -- test ! -w /tmp/auth-root/files/app/config.yaml")
+        gateway.succeed("runuser -u atomixos-provision -- test -r /tmp/auth-root/files/app/config.yaml")
+        gateway.succeed("runuser -u atomixos-provision -- test ! -w /tmp/auth-root/files/app/config.yaml")
 
         # Overwrite admin authorized key with our test key
         gateway.succeed("cat /tmp/auth-test-key.pub > /tmp/auth-root/admin-signers")
@@ -439,11 +460,16 @@ nixos-lib.runTest {
         gateway.succeed("curl -fsS http://127.0.0.1:18081/api/nonce > /tmp/auth-nonce-response.json")
         gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nresp = json.loads(Path('/tmp/auth-nonce-response.json').read_text())\nassert set(resp) == {'nonce'}, resp\nassert len(resp['nonce']) > 20, resp\nPath('/tmp/auth-nonce.txt').write_text(resp['nonce'])\nPY")
 
+        # Re-apply a complete bundle so the later export still has managed files.
+        gateway.succeed("rm -rf /tmp/no-health-bundle && mkdir -p /tmp/no-health-bundle")
+        gateway.succeed("cp /tmp/no-health-config.toml /tmp/no-health-bundle/config.toml && cp -r /tmp/bundle-root/files /tmp/no-health-bundle/files")
+        gateway.succeed("tar -C /tmp/no-health-bundle -czf /tmp/no-health-config.tar.gz config.toml files")
+
         # Sign the nonce, path, and payload digest with our test key
-        gateway.succeed("/tmp/sign-reapply /tmp/auth-nonce.txt /api/config /tmp/no-health-config.toml /tmp/auth-test-key /tmp/auth-signature-b64.txt")
+        gateway.succeed("/tmp/sign-reapply /tmp/auth-nonce.txt POST /api/config /tmp/no-health-config.tar.gz /tmp/auth-test-key /tmp/auth-signature-b64.txt")
 
         # Authenticated POST should succeed
-        gateway.succeed("curl -fsS -H 'Content-Type: text/plain' -H \"X-AtomixOS-Nonce: $(cat /tmp/auth-nonce.txt)\" -H \"X-AtomixOS-Signature: $(cat /tmp/auth-signature-b64.txt)\" --data-binary @/tmp/no-health-config.toml http://127.0.0.1:18081/api/config > /tmp/auth-success-response.json")
+        gateway.succeed("curl -fsS -H 'Content-Type: application/gzip' -H 'X-Config-Filename: no-health-config.tar.gz' -H \"X-AtomixOS-Nonce: $(cat /tmp/auth-nonce.txt)\" -H \"X-AtomixOS-Signature: $(cat /tmp/auth-signature-b64.txt)\" --data-binary @/tmp/no-health-config.tar.gz http://127.0.0.1:18081/api/config > /tmp/auth-success-response.json")
         gateway.succeed("python3 /tmp/assert-api-job http://127.0.0.1:18081 /tmp/auth-success-response.json succeeded")
         gateway.succeed("cat /tmp/auth-test-key.pub > /tmp/auth-root/admin-signers")
 
@@ -451,7 +477,7 @@ nixos-lib.runTest {
         gateway.succeed("curl -fsS http://127.0.0.1:18081/api/nonce > /tmp/partial-user-nonce.json")
         gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nnonce = json.loads(Path('/tmp/partial-user-nonce.json').read_text())['nonce']\nPath('/tmp/partial-user-nonce.txt').write_text(nonce)\nPY")
         gateway.succeed("cat > /tmp/partial-user.json <<'EOF'\n{\"isAdmin\": false, \"ssh_key\": \"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFGTDzwiQNe3nwhmg/G81QDhQBbpgOyvrKXeYnQHYOUd alice@example\"}\nEOF")
-        gateway.succeed("/tmp/sign-reapply /tmp/partial-user-nonce.txt /api/config/users/alice /tmp/partial-user.json /tmp/auth-test-key /tmp/partial-user-signature-b64.txt")
+        gateway.succeed("/tmp/sign-reapply /tmp/partial-user-nonce.txt PUT /api/config/users/alice /tmp/partial-user.json /tmp/auth-test-key /tmp/partial-user-signature-b64.txt")
         gateway.succeed("curl -fsS -X PUT -H 'Content-Type: application/json' -H \"X-AtomixOS-Nonce: $(cat /tmp/partial-user-nonce.txt)\" -H \"X-AtomixOS-Signature: $(cat /tmp/partial-user-signature-b64.txt)\" --data-binary @/tmp/partial-user.json http://127.0.0.1:18081/api/config/users/alice > /tmp/partial-user-response.json")
         gateway.succeed("python3 /tmp/assert-api-job http://127.0.0.1:18081 /tmp/partial-user-response.json succeeded")
         gateway.succeed("grep -F '[users.alice]' /tmp/auth-root/config.toml")
@@ -460,22 +486,35 @@ nixos-lib.runTest {
         gateway.succeed("curl -fsS http://127.0.0.1:18081/api/nonce > /tmp/partial-network-nonce.json")
         gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nnonce = json.loads(Path('/tmp/partial-network-nonce.json').read_text())['nonce']\nPath('/tmp/partial-network-nonce.txt').write_text(nonce)\nPY")
         gateway.succeed("cat > /tmp/partial-network.json <<'EOF'\n{\"dns_servers\": [\"9.9.9.9\"], \"interfaces\": {\"eth0\": {\"mode\": \"dhcp\"}}}\nEOF")
-        gateway.succeed("/tmp/sign-reapply /tmp/partial-network-nonce.txt /api/config/network /tmp/partial-network.json /tmp/auth-test-key /tmp/partial-network-signature-b64.txt")
+        gateway.succeed("/tmp/sign-reapply /tmp/partial-network-nonce.txt PATCH /api/config/network /tmp/partial-network.json /tmp/auth-test-key /tmp/partial-network-signature-b64.txt")
         gateway.succeed("curl -fsS -X PATCH -H 'Content-Type: application/json' -H \"X-AtomixOS-Nonce: $(cat /tmp/partial-network-nonce.txt)\" -H \"X-AtomixOS-Signature: $(cat /tmp/partial-network-signature-b64.txt)\" --data-binary @/tmp/partial-network.json http://127.0.0.1:18081/api/config/network > /tmp/partial-network-response.json")
         gateway.succeed("python3 /tmp/assert-api-job http://127.0.0.1:18081 /tmp/partial-network-response.json succeeded")
         gateway.succeed("grep '9.9.9.9' /tmp/auth-root/config.toml")
         gateway.succeed("cat /tmp/auth-test-key.pub > /tmp/auth-root/admin-signers")
 
+        # Restart as the production API identity to prove export can read the
+        # complete managed tree without root privileges.
+        gateway.succeed("kill $(cat /tmp/auth-bootstrap.pid)")
+        gateway.succeed("while ss -tln | grep ':18081'; do sleep 0.2; done")
+        # Unsafe test roots use a sibling lock instead of the production lock
+        # under /run/atomixos-provision, so mirror its service-group access.
+        gateway.succeed("chgrp atomixos-provision /tmp/.auth-root.lock && chmod 0660 /tmp/.auth-root.lock")
+        gateway.succeed("runuser -u atomixos-provision -- env PATH=/tmp/auth-bin:/run/current-system/sw/bin ATOMIXOS_ALLOW_UNSAFE_CONFIG_ROOT=1 first-boot-provision serve /tmp/auth-root --host 127.0.0.1 --port 18081 >/tmp/auth-bootstrap.log 2>&1 & echo $! >/tmp/auth-bootstrap.pid")
+        gateway.wait_until_succeeds("ss -tln | grep ':18081'", timeout=30)
         gateway.succeed("curl -fsS http://127.0.0.1:18081/api/nonce > /tmp/partial-export-nonce.json")
         gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nnonce = json.loads(Path('/tmp/partial-export-nonce.json').read_text())['nonce']\nPath('/tmp/partial-export-nonce.txt').write_text(nonce)\nPath('/tmp/empty-body').write_bytes(bytes())\nPY")
-        gateway.succeed("/tmp/sign-reapply /tmp/partial-export-nonce.txt /api/config/export /tmp/empty-body /tmp/auth-test-key /tmp/partial-export-signature-b64.txt")
-        gateway.succeed("curl -fsS -H \"X-AtomixOS-Nonce: $(cat /tmp/partial-export-nonce.txt)\" -H \"X-AtomixOS-Signature: $(cat /tmp/partial-export-signature-b64.txt)\" http://127.0.0.1:18081/api/config/export > /tmp/partial-export.toml")
+        gateway.succeed("/tmp/sign-reapply /tmp/partial-export-nonce.txt GET /api/config/export /tmp/empty-body /tmp/auth-test-key /tmp/partial-export-signature-b64.txt")
+        gateway.succeed("curl -fsS -H \"X-AtomixOS-Nonce: $(cat /tmp/partial-export-nonce.txt)\" -H \"X-AtomixOS-Signature: $(cat /tmp/partial-export-signature-b64.txt)\" http://127.0.0.1:18081/api/config/export > /tmp/partial-export.tar.gz")
+        gateway.succeed("tar -xOf /tmp/partial-export.tar.gz config.toml > /tmp/partial-export.toml")
+        gateway.succeed("tar -xOf /tmp/partial-export.tar.gz files/app/config.yaml > /tmp/partial-export-managed.yaml")
         gateway.succeed("grep -F '[users.alice]' /tmp/partial-export.toml")
+        gateway.succeed("grep '9.9.9.9' /tmp/partial-export.toml")
+        gateway.succeed("grep -F 'hello: world' /tmp/partial-export-managed.yaml")
 
         # Signature is bound to the submitted payload digest.
         gateway.succeed("curl -fsS http://127.0.0.1:18081/api/nonce > /tmp/auth-tamper-nonce-response.json")
         gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nnonce = json.loads(Path('/tmp/auth-tamper-nonce-response.json').read_text())['nonce']\nPath('/tmp/auth-tamper-nonce.txt').write_text(nonce)\nPY")
-        gateway.succeed("/tmp/sign-reapply /tmp/auth-tamper-nonce.txt /api/config /tmp/no-health-config.toml /tmp/auth-test-key /tmp/auth-tamper-signature-b64.txt")
+        gateway.succeed("/tmp/sign-reapply /tmp/auth-tamper-nonce.txt POST /api/config /tmp/no-health-config.toml /tmp/auth-test-key /tmp/auth-tamper-signature-b64.txt")
         gateway.succeed("curl -s -o /tmp/auth-tamper-response.json -w '%{http_code}' -H 'Content-Type: text/plain' -H \"X-AtomixOS-Nonce: $(cat /tmp/auth-tamper-nonce.txt)\" -H \"X-AtomixOS-Signature: $(cat /tmp/auth-tamper-signature-b64.txt)\" --data-binary @/tmp/config.toml http://127.0.0.1:18081/api/config > /tmp/auth-tamper-code")
         gateway.succeed("grep '^401$' /tmp/auth-tamper-code")
         gateway.succeed("grep 'signature verification failed' /tmp/auth-tamper-response.json")
@@ -515,7 +554,7 @@ nixos-lib.runTest {
         # Get nonce and sign
         gateway.succeed("curl -fsS http://127.0.0.1:18082/api/nonce > /tmp/atomic-nonce.json")
         gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nnonce = json.loads(Path('/tmp/atomic-nonce.json').read_text())['nonce']\nPath('/tmp/atomic-nonce.txt').write_text(nonce)\nPY")
-        gateway.succeed("/tmp/sign-reapply /tmp/atomic-nonce.txt /api/config /tmp/no-health-config.toml /tmp/atomic-key /tmp/atomic-sig-b64.txt")
+        gateway.succeed("/tmp/sign-reapply /tmp/atomic-nonce.txt POST /api/config /tmp/no-health-config.toml /tmp/atomic-key /tmp/atomic-sig-b64.txt")
 
         # Authenticated re-apply: rollback is cleaned after successful activation
         gateway.succeed("curl -fsS -H 'Content-Type: text/plain' -H \"X-AtomixOS-Nonce: $(cat /tmp/atomic-nonce.txt)\" -H \"X-AtomixOS-Signature: $(cat /tmp/atomic-sig-b64.txt)\" --data-binary @/tmp/no-health-config.toml http://127.0.0.1:18082/api/config > /tmp/atomic-apply-response.json")
@@ -554,7 +593,7 @@ nixos-lib.runTest {
         gateway.wait_until_succeeds("ss -tln | grep ':18087'", timeout=30)
         gateway.succeed("curl -fsS http://127.0.0.1:18087/api/nonce > /tmp/rootless-health-nonce.json")
         gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nnonce = json.loads(Path('/tmp/rootless-health-nonce.json').read_text())['nonce']\nPath('/tmp/rootless-health-nonce.txt').write_text(nonce)\nPY")
-        gateway.succeed("/tmp/sign-reapply /tmp/rootless-health-nonce.txt /api/config /tmp/config.toml /tmp/rootless-health-key /tmp/rootless-health-sig-b64.txt")
+        gateway.succeed("/tmp/sign-reapply /tmp/rootless-health-nonce.txt POST /api/config /tmp/config.toml /tmp/rootless-health-key /tmp/rootless-health-sig-b64.txt")
         gateway.succeed("curl -fsS -H 'Content-Type: text/plain' -H \"X-AtomixOS-Nonce: $(cat /tmp/rootless-health-nonce.txt)\" -H \"X-AtomixOS-Signature: $(cat /tmp/rootless-health-sig-b64.txt)\" --data-binary @/tmp/config.toml http://127.0.0.1:18087/api/config > /tmp/rootless-health-response.json")
         gateway.succeed("python3 /tmp/assert-api-job http://127.0.0.1:18087 /tmp/rootless-health-response.json succeeded")
         gateway.succeed("grep -- '--user is-active --quiet myapp.service' /tmp/rootless-health-runuser.log")
@@ -572,7 +611,7 @@ nixos-lib.runTest {
         # Get nonce and sign
         gateway.succeed("curl -fsS http://127.0.0.1:18083/api/nonce > /tmp/reapply-invalid-nonce.json")
         gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nnonce = json.loads(Path('/tmp/reapply-invalid-nonce.json').read_text())['nonce']\nPath('/tmp/reapply-invalid-nonce.txt').write_text(nonce)\nPY")
-        gateway.succeed("/tmp/sign-reapply /tmp/reapply-invalid-nonce.txt /api/config /tmp/invalid-config.toml /tmp/reapply-invalid-key /tmp/reapply-invalid-sig-b64.txt")
+        gateway.succeed("/tmp/sign-reapply /tmp/reapply-invalid-nonce.txt POST /api/config /tmp/invalid-config.toml /tmp/reapply-invalid-key /tmp/reapply-invalid-sig-b64.txt")
         # Submit invalid config via authenticated API — accepted as a job, then fails.
         gateway.succeed("curl -fsS -H 'Content-Type: text/plain' -H \"X-AtomixOS-Nonce: $(cat /tmp/reapply-invalid-nonce.txt)\" -H \"X-AtomixOS-Signature: $(cat /tmp/reapply-invalid-sig-b64.txt)\" --data-binary @/tmp/invalid-config.toml http://127.0.0.1:18083/api/config > /tmp/reapply-invalid-response.json")
         gateway.succeed("python3 /tmp/assert-api-job http://127.0.0.1:18083 /tmp/reapply-invalid-response.json failed")
@@ -596,7 +635,7 @@ nixos-lib.runTest {
         # Get nonce and sign
         gateway.succeed("curl -fsS http://127.0.0.1:18084/api/nonce > /tmp/rollback-nonce.json")
         gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nnonce = json.loads(Path('/tmp/rollback-nonce.json').read_text())['nonce']\nPath('/tmp/rollback-nonce.txt').write_text(nonce)\nPY")
-        gateway.succeed("/tmp/sign-reapply /tmp/rollback-nonce.txt /api/config /tmp/config.toml /tmp/rollback-key /tmp/rollback-sig-b64.txt")
+        gateway.succeed("/tmp/sign-reapply /tmp/rollback-nonce.txt POST /api/config /tmp/config.toml /tmp/rollback-key /tmp/rollback-sig-b64.txt")
         # Submit valid config — activation fails inside the async job and rolls back.
         gateway.succeed("curl -fsS -H 'Content-Type: text/plain' -H \"X-AtomixOS-Nonce: $(cat /tmp/rollback-nonce.txt)\" -H \"X-AtomixOS-Signature: $(cat /tmp/rollback-sig-b64.txt)\" --data-binary @/tmp/config.toml http://127.0.0.1:18084/api/config > /tmp/rollback-response.json")
         gateway.succeed("python3 /tmp/assert-api-job http://127.0.0.1:18084 /tmp/rollback-response.json failed")
@@ -619,7 +658,7 @@ nixos-lib.runTest {
         gateway.wait_until_succeeds("ss -tln | grep ':18086'", timeout=30)
         gateway.succeed("curl -fsS http://127.0.0.1:18086/api/nonce > /tmp/apply-rollback-nonce.json")
         gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nnonce = json.loads(Path('/tmp/apply-rollback-nonce.json').read_text())['nonce']\nPath('/tmp/apply-rollback-nonce.txt').write_text(nonce)\nPY")
-        gateway.succeed("/tmp/sign-reapply /tmp/apply-rollback-nonce.txt /api/config /tmp/config.toml /tmp/apply-rollback-key /tmp/apply-rollback-sig-b64.txt")
+        gateway.succeed("/tmp/sign-reapply /tmp/apply-rollback-nonce.txt POST /api/config /tmp/config.toml /tmp/apply-rollback-key /tmp/apply-rollback-sig-b64.txt")
         gateway.succeed("curl -fsS -H 'Content-Type: text/plain' -H \"X-AtomixOS-Nonce: $(cat /tmp/apply-rollback-nonce.txt)\" -H \"X-AtomixOS-Signature: $(cat /tmp/apply-rollback-sig-b64.txt)\" --data-binary @/tmp/config.toml http://127.0.0.1:18086/api/config > /tmp/apply-rollback-response.json")
         gateway.succeed("python3 /tmp/assert-api-job http://127.0.0.1:18086 /tmp/apply-rollback-response.json failed")
         gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\njob = json.loads(Path('/tmp/apply-rollback-response.json.job').read_text())\nassert job['rollback_status'] == 'failed', job\nassert 'activation failed' in job['error'], job\nassert 'rollback activation/health failed' in job['error'], job\nPY")
@@ -641,7 +680,7 @@ nixos-lib.runTest {
         gateway.wait_until_succeeds("ss -tln | grep ':18085'", timeout=30)
         gateway.succeed("curl -fsS http://127.0.0.1:18085/api/nonce > /tmp/health-rollback-nonce.json")
         gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nnonce = json.loads(Path('/tmp/health-rollback-nonce.json').read_text())['nonce']\nPath('/tmp/health-rollback-nonce.txt').write_text(nonce)\nPY")
-        gateway.succeed("/tmp/sign-reapply /tmp/health-rollback-nonce.txt /api/config /tmp/config.toml /tmp/health-rollback-key /tmp/health-rollback-sig-b64.txt")
+        gateway.succeed("/tmp/sign-reapply /tmp/health-rollback-nonce.txt POST /api/config /tmp/config.toml /tmp/health-rollback-key /tmp/health-rollback-sig-b64.txt")
         gateway.succeed("curl -fsS -H 'Content-Type: text/plain' -H \"X-AtomixOS-Nonce: $(cat /tmp/health-rollback-nonce.txt)\" -H \"X-AtomixOS-Signature: $(cat /tmp/health-rollback-sig-b64.txt)\" --data-binary @/tmp/config.toml http://127.0.0.1:18085/api/config > /tmp/health-rollback-response.json")
         gateway.succeed("python3 /tmp/assert-api-job http://127.0.0.1:18085 /tmp/health-rollback-response.json failed")
         gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\njob = json.loads(Path('/tmp/health-rollback-response.json.job').read_text())\nassert job['rollback_status'] == 'failed', job\nassert 'edgeproxy.service' in job['error'], job\nassert 'rollback activation/health failed' in job['error'], job\nPY")

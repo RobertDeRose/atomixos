@@ -135,12 +135,12 @@ def apply_operation(config: dict[str, Any], operation: dict[str, Any]) -> dict[s
 
 
 def canonical_config_bytes(config: dict[str, Any]) -> bytes:
+    """Serialize configuration into canonical TOML bytes."""
     return (_dumps_toml(config).strip() + "\n").encode()
 
 
-def _require_payload(
-    payload: dict[str, Any], allowed_keys: set[str] | None
-) -> dict[str, Any]:
+def _require_payload(payload: dict[str, Any], allowed_keys: set[str] | None) -> dict[str, Any]:
+    """Return an operation payload or reject the malformed operation."""
     if not isinstance(payload, dict):
         raise provision_error("partial request body must be a JSON object")
     if allowed_keys is not None:

@@ -15,6 +15,7 @@ import stat
 import tempfile
 import time
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,7 @@ MANIFEST_VERSION = 1
 RESULT_VERSION = 1
 JOB_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
 DEFAULT_RUNTIME_ROOT = Path("/run/atomixos-provision")
+DEFAULT_MAX_STAGED_JOBS = 4
 MAX_CONTROL_JSON_BYTES = 1024 * 1024
 STAGED_RESERVATION_TTL_SECONDS = 300
 RUNTIME_ROOT_MODE = 0o755
@@ -34,10 +36,13 @@ ACTIVE_DIR_MODE = 0o2750
 
 @dataclass(frozen=True)
 class RuntimePaths:
+    """Describe filesystem paths used by staged provisioning."""
+
     root: Path
 
     @property
     def queue(self) -> Path:
+        """Return the staged-job queue directory."""
         return self.root / "queue"
 
     @property
@@ -54,7 +59,13 @@ class RuntimePaths:
 
     @property
     def queue_sequence(self) -> Path:
+        """Return the persistent queue sequence file."""
         return self.queue / ".sequence"
+
+    @property
+    def used_nonces(self) -> Path:
+        """Return the directory containing consumed authorization nonces."""
+        return self.root / "used-nonces"
 
 
 @dataclass(frozen=True)
@@ -73,11 +84,22 @@ class StagedResult:
     rollback_status: str | None
 
 
+class StagedTimeoutState(StrEnum):
+    """Queue state used when a staged-result reconciliation interval expires."""
+
+    WAITING = "waiting"
+    CLAIMED = "claimed"
+    ABANDONED = "abandoned"
+    MISSING = "missing"
+
+
 def runtime_paths(root: Path) -> RuntimePaths:
+    """Resolve a runtime root into its staged-provisioning paths."""
     return RuntimePaths(root.resolve(strict=False))
 
 
 def ensure_runtime_layout(paths: RuntimePaths, *, for_worker: bool = False) -> None:
+    """Create runtime directories with their required permissions."""
     _ensure_directory(paths.root, RUNTIME_ROOT_MODE)
     _ensure_directory(paths.queue, QUEUE_DIR_MODE)
     if for_worker or paths.results.exists():
@@ -144,10 +166,34 @@ def sha256_file(path: Path) -> str:
 
 
 def sha256_bytes(payload: bytes) -> str:
+    """Return the SHA-256 digest of an in-memory payload."""
     return hashlib.sha256(payload).hexdigest()
 
 
+def consume_authorization_nonce(paths: RuntimePaths, nonce: str) -> None:
+    """Consume a boot-scoped authorization nonce in root-owned runtime state."""
+    from atomixos_provision.auth import nonce_matches_current_boot
+
+    if not nonce_matches_current_boot(nonce):
+        raise ProvisionError("staged authorization nonce is not valid for this boot")
+    paths.used_nonces.mkdir(parents=True, exist_ok=True, mode=0o700)
+    paths.used_nonces.chmod(0o700)
+    marker = paths.used_nonces / hashlib.sha256(nonce.encode()).hexdigest()
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_CLOEXEC", 0)
+    try:
+        fd = os.open(marker, flags, 0o600)
+    except FileExistsError as exc:
+        raise ProvisionError("staged authorization nonce was already consumed") from exc
+    try:
+        os.write(fd, b"used\n")
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    fsync_directory(paths.used_nonces)
+
+
 def tree_manifest(root: Path) -> list[dict[str, Any]]:
+    """Build a deterministic manifest for a staged directory tree."""
     if not root.exists():
         return []
     entries: list[dict[str, Any]] = []
@@ -235,21 +281,24 @@ def read_control_file(path: Path, *, max_bytes: int = MAX_CONTROL_JSON_BYTES) ->
 
 
 def publish_ready_marker(paths: RuntimePaths, job_id: str) -> Path:
+    """Publish a staged job after validating its live reservation."""
     validate_job_id(job_id)
     ready_path = paths.queue / f"{job_id}.ready"
     with queue_operation_lock(paths):
+        _cleanup_stale_reservations_locked(paths)
         reserve_path = paths.queue / f"{job_id}.reserve"
         try:
-            sequence, created_at = _reservation_sort_key(reserve_path)
-        except (FileNotFoundError, ProvisionError):
-            sequence = _next_ready_sequence_locked(paths)
-            created_at = time.time()
+            reserve_path.lstat()
+        except FileNotFoundError as exc:
+            raise ProvisionError(f"staged job reservation is missing: {job_id}") from exc
+        sequence, created_at = _reservation_sort_key(reserve_path)
         write_json_atomic(
             ready_path,
             {"job_id": job_id, "sequence": sequence, "created_at": created_at},
             mode=0o640,
         )
         reserve_path.unlink(missing_ok=True)
+        fsync_directory(paths.queue)
     return ready_path
 
 
@@ -343,9 +392,8 @@ def _is_plain_directory(path: Path) -> bool:
         return False
 
 
-def _count_staged_jobs_locked(
-    paths: RuntimePaths, *, exclude_job_id: str | None = None
-) -> int:
+def _count_staged_jobs_locked(paths: RuntimePaths, *, exclude_job_id: str | None = None) -> int:
+    """Count active staged jobs while holding the queue lock."""
     count = 0
     active_job_ids: set[str] = set()
     try:
@@ -402,6 +450,7 @@ def _reservation_sort_key(path: Path) -> tuple[int, float]:
 
 
 def _cleanup_stale_reservations_locked(paths: RuntimePaths) -> None:
+    """Remove stale capacity reservations while holding the queue lock."""
     deadline = time.time() - STAGED_RESERVATION_TTL_SECONDS
     removed = False
     for reserve_path in paths.queue.glob("*.reserve"):
@@ -410,17 +459,39 @@ def _cleanup_stale_reservations_locked(paths: RuntimePaths) -> None:
         except FileNotFoundError:
             continue
         if stat.S_ISLNK(reserve_stat.st_mode) or not stat.S_ISREG(reserve_stat.st_mode):
-            _remove_staged_path(reserve_path)
+            try:
+                job_id = validate_job_id(reserve_path.name.removesuffix(".reserve"))
+            except ProvisionError:
+                job_id = None
+            remove_staged_path(reserve_path)
+            if job_id is not None:
+                _remove_unpublished_job_locked(paths, job_id)
             removed = True
             continue
         if reserve_stat.st_mtime < deadline:
-            _remove_staged_path(reserve_path)
+            try:
+                job_id = validate_job_id(reserve_path.name.removesuffix(".reserve"))
+            except ProvisionError:
+                job_id = None
+            remove_staged_path(reserve_path)
+            if job_id is not None:
+                _remove_unpublished_job_locked(paths, job_id)
             removed = True
     if removed:
         fsync_directory(paths.queue)
 
 
+def _remove_unpublished_job_locked(paths: RuntimePaths, job_id: str) -> None:
+    """Remove incomplete unpublished state while holding the queue lock."""
+    if (paths.queue / f"{job_id}.ready").exists() or _is_plain_directory(paths.active / job_id):
+        return
+    remove_staged_path(paths.queue / job_id)
+    for staging_path in paths.queue.glob(f".{job_id}.staging.*"):
+        remove_staged_path(staging_path)
+
+
 def _ready_sequence_for_job_locked(paths: RuntimePaths, job_id: str) -> int | None:
+    """Read a job's ready or reserved sequence while holding the queue lock."""
     for path in (paths.queue / f"{job_id}.ready", paths.queue / f"{job_id}.reserve"):
         try:
             return (
@@ -436,6 +507,7 @@ def _ready_sequence_for_job_locked(paths: RuntimePaths, job_id: str) -> int | No
 
 
 def _has_lower_sequence_reservation_locked(paths: RuntimePaths, sequence: int) -> bool:
+    """Return whether a lower FIFO reservation exists under the queue lock."""
     for control_path in [*paths.queue.glob("*.reserve"), *paths.queue.glob("*.ready")]:
         try:
             control_sequence = (
@@ -444,7 +516,7 @@ def _has_lower_sequence_reservation_locked(paths: RuntimePaths, sequence: int) -
                 else _reservation_sort_key(control_path)[0]
             )
         except ProvisionError:
-            _remove_staged_path(control_path)
+            remove_staged_path(control_path)
             fsync_directory(paths.queue)
             continue
         if control_sequence < sequence:
@@ -474,6 +546,7 @@ def claim_next_job(paths: RuntimePaths) -> ClaimedJob | None:
 
 
 def _claim_next_job_locked(paths: RuntimePaths) -> ClaimedJob | None:
+    """Claim the next FIFO-ready staged job while holding the queue lock."""
     active_jobs = sorted(path for path in paths.active.iterdir() if _is_plain_directory(path))
     if active_jobs:
         return None
@@ -485,7 +558,7 @@ def _claim_next_job_locked(paths: RuntimePaths) -> ClaimedJob | None:
             validate_job_id(ready_path.name.removesuffix(".ready"))
             ready_markers.append((sort_key, ready_path))
         except ProvisionError:
-            _remove_staged_path(ready_path)
+            remove_staged_path(ready_path)
             fsync_directory(paths.queue)
     for sort_key, ready_path in sorted(ready_markers):
         sequence, _name = sort_key
@@ -496,10 +569,10 @@ def _claim_next_job_locked(paths: RuntimePaths) -> ClaimedJob | None:
         try:
             queued_stat = queued_path.lstat()
         except FileNotFoundError:
-            _remove_staged_path(ready_path)
+            remove_staged_path(ready_path)
             continue
         if stat.S_ISLNK(queued_stat.st_mode) or not stat.S_ISDIR(queued_stat.st_mode):
-            _remove_staged_path(ready_path)
+            remove_staged_path(ready_path)
             continue
         active_path = paths.active / job_id
         try:
@@ -509,7 +582,7 @@ def _claim_next_job_locked(paths: RuntimePaths) -> ClaimedJob | None:
         active_stat = active_path.lstat()
         if stat.S_ISLNK(active_stat.st_mode) or not stat.S_ISDIR(active_stat.st_mode):
             raise ProvisionError(f"claimed staged job is not a directory: {active_path}")
-        _remove_staged_path(ready_path)
+        remove_staged_path(ready_path)
         fsync_directory(paths.queue)
         fsync_directory(paths.active)
         return ClaimedJob(job_id, active_path)
@@ -562,6 +635,7 @@ def _open_queue_lock(paths: RuntimePaths):
 def verify_staged_job(
     job: ClaimedJob, paths: RuntimePaths, *, require_active: bool = True
 ) -> dict[str, Any]:
+    """Verify ownership, modes, and manifest contents for a staged job."""
     if require_active:
         active_root = paths.active.resolve(strict=False)
         job_path = job.path.resolve(strict=False)
@@ -585,10 +659,14 @@ def verify_staged_job(
         _verify_tree(job.path / "bundle-files", bundle_entries, expected_uid, expected_gid)
     elif (job.path / "bundle-files").exists():
         raise ProvisionError("staged job has unexpected bundle-files directory")
+    request = manifest.get("request")
+    if request is not None:
+        _verify_staged_request(job.path, request, expected_uid, expected_gid)
     return manifest
 
 
 def write_result(paths: RuntimePaths, job_id: str, payload: dict[str, Any]) -> Path:
+    """Atomically publish a privileged worker result."""
     validate_job_id(job_id)
     result = {"version": RESULT_VERSION, "job_id": job_id, "completed_at": time.time(), **payload}
     path = paths.results / f"{job_id}.json"
@@ -609,29 +687,8 @@ def write_result(paths: RuntimePaths, job_id: str, payload: dict[str, Any]) -> P
     return path
 
 
-def finalize_abandoned_active_jobs(paths: RuntimePaths, reason: str) -> int:
-    """Write failed results for claimed jobs left behind by an interrupted worker."""
-    ensure_runtime_layout(paths, for_worker=True)
-    finalized = 0
-    with queue_operation_lock(paths):
-        for active_path in sorted(paths.active.iterdir()):
-            try:
-                active_stat = active_path.lstat()
-            except FileNotFoundError:
-                continue
-            if stat.S_ISLNK(active_stat.st_mode) or not stat.S_ISDIR(active_stat.st_mode):
-                _remove_staged_path(active_path)
-                continue
-            job_id = validate_job_id(active_path.name)
-            if read_result(paths, job_id) is None:
-                write_result(paths, job_id, {"status": "failed", "error": reason})
-            shutil.rmtree(active_path, ignore_errors=True)
-            finalized += 1
-        fsync_directory(paths.active)
-    return finalized
-
-
 def read_result(paths: RuntimePaths, job_id: str) -> dict[str, Any] | None:
+    """Read and validate a published privileged worker result."""
     validate_job_id(job_id)
     path = paths.results / f"{job_id}.json"
     results_stat = _verify_results_directory(
@@ -690,16 +747,21 @@ def staged_job_presence(paths: RuntimePaths, job_id: str) -> str:
         return _job_presence_locked(paths, job_id)
 
 
-def staged_timeout_state(paths: RuntimePaths, job_id: str) -> str:
+def staged_timeout_state(paths: RuntimePaths, job_id: str) -> StagedTimeoutState:
     """Resolve timeout handling without racing a queued job's worker claim."""
     presence = staged_job_presence(paths, job_id)
     if presence == "active":
-        return "claimed"
+        return StagedTimeoutState.CLAIMED
     if staged_job_waiting_for_turn(paths, job_id):
-        return "active"
+        return StagedTimeoutState.WAITING
     if try_abandon_queued_job(paths, job_id):
-        return "abandoned"
-    return staged_job_presence(paths, job_id)
+        return StagedTimeoutState.ABANDONED
+    final_presence = staged_job_presence(paths, job_id)
+    if final_presence == "active":
+        return StagedTimeoutState.CLAIMED
+    if final_presence == "queued":
+        return StagedTimeoutState.WAITING
+    return StagedTimeoutState.MISSING
 
 
 def abandon_queued_job(paths: RuntimePaths, job_id: str) -> None:
@@ -716,13 +778,14 @@ def try_abandon_queued_job(paths: RuntimePaths, job_id: str) -> bool:
             return False
         queued_path = paths.queue / job_id
         ready_path = paths.queue / f"{job_id}.ready"
-        _remove_staged_path(ready_path)
+        remove_staged_path(ready_path)
         shutil.rmtree(queued_path, ignore_errors=True)
         fsync_directory(paths.queue)
         return True
 
 
 def _job_presence_locked(paths: RuntimePaths, job_id: str) -> str:
+    """Report whether a job is queued, active, or missing under the queue lock."""
     active_path = paths.active / job_id
     try:
         active_stat = active_path.lstat()
@@ -758,10 +821,12 @@ def _verify_results_directory(
 
 
 def cleanup_claimed_job(job: ClaimedJob) -> None:
+    """Remove a claimed job's private active directory."""
     shutil.rmtree(job.path, ignore_errors=True)
 
 
-def _remove_staged_path(path: Path) -> None:
+def remove_staged_path(path: Path) -> None:
+    """Remove a staged path without following symlinks."""
     try:
         path_stat = path.lstat()
     except FileNotFoundError:
@@ -784,9 +849,12 @@ def fsync_directory(path: Path) -> None:
 
 
 def _verify_job_top_level(job_path: Path, manifest: dict[str, Any]) -> None:
+    """Verify the allowlisted top-level entries of a staged job."""
     allowed = {"manifest.json", "candidate"}
     if manifest.get("bundle_files") or manifest.get("bundle_files_present") is True:
         allowed.add("bundle-files")
+    if manifest.get("request") is not None:
+        allowed.add("request.bin")
     actual = {child.name for child in job_path.iterdir()}
     unexpected = actual - allowed
     if unexpected:
@@ -802,9 +870,37 @@ def _verify_job_top_level(job_path: Path, manifest: dict[str, Any]) -> None:
         raise ProvisionError("staged job missing candidate directory")
 
 
-def _verify_tree(
-    root: Path, expected_entries: Any, expected_uid: int, expected_gid: int
+def _verify_staged_request(
+    job_path: Path,
+    request: Any,
+    expected_uid: int,
+    expected_gid: int,
 ) -> None:
+    """Verify staged request metadata and payload bounds."""
+    if not isinstance(request, dict):
+        raise ProvisionError("staged request metadata must be an object")
+    request_path = job_path / "request.bin"
+    _verify_path_metadata(request_path, expected_uid, expected_gid)
+    try:
+        request_stat = request_path.lstat()
+    except OSError as exc:
+        raise ProvisionError(f"cannot stat staged request: {request_path}") from exc
+    if not stat.S_ISREG(request_stat.st_mode):
+        raise ProvisionError(f"staged request must be a regular file: {request_path}")
+    size = request.get("size")
+    digest = request.get("sha256")
+    if not isinstance(size, int) or isinstance(size, bool) or size < 0:
+        raise ProvisionError("staged request size must be a non-negative integer")
+    if request_stat.st_size != size:
+        raise ProvisionError("staged request size changed")
+    if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
+        raise ProvisionError("staged request hash is invalid")
+    if sha256_file(request_path) != digest:
+        raise ProvisionError("staged request hash changed")
+
+
+def _verify_tree(root: Path, expected_entries: Any, expected_uid: int, expected_gid: int) -> None:
+    """Verify a staged tree against its manifest entries."""
     if not isinstance(expected_entries, list):
         raise ProvisionError("staged manifest tree entries must be a list")
     expected = {_entry_key(entry): entry for entry in expected_entries}

@@ -74,6 +74,7 @@ nixos-lib.runTest {
         raucStub
         pkgs.jq
       ];
+      environment.etc."atomixos/lan-defaults.json".source = ../../defaults/lan.json;
 
       boot.kernelParams = [ "rauc.slot=boot.0" ];
       atomixos.rauc.statusFile = "/tmp/rauc.status";

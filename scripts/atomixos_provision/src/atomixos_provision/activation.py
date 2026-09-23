@@ -6,6 +6,7 @@ import pwd
 import shutil
 import subprocess
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
 
@@ -490,13 +491,9 @@ def report_runtime_services(
     return statuses
 
 
-def degraded_service_failures(
-    policy: dict[str, object], statuses: dict[str, str]
-) -> list[str]:
+def degraded_service_failures(policy: dict[str, object], statuses: dict[str, str]) -> list[str]:
     """Return failed non-required services that are not explicitly allowed degraded."""
-    if not policy.get("strict_units", False) or not policy.get(
-        "allow_degraded_configured", False
-    ):
+    if not policy.get("strict_units", False) or not policy.get("allow_degraded_configured", False):
         return []
     required = {service_name(unit) for unit in policy.get("required", []) if isinstance(unit, str)}
     allowed = {
@@ -647,6 +644,7 @@ def _restart_rootless_service(
 def run_activation_sequence(
     config_root: Path, progress: ProgressReporter | None = None
 ) -> list[str]:
+    """Run activation commands and restart affected services."""
     policy = load_activation_policy(config_root)
     timeout_seconds = int(policy.get("timeout_seconds", BOOTSTRAP_ACTIVATION_TIMEOUT_SECONDS))
     settle_seconds = int(policy.get("settle_seconds", 0))
@@ -654,8 +652,10 @@ def run_activation_sequence(
 
     report_runtime_deploy_start(config_root, progress)
     activation_failures = activate_services(progress, timeout_seconds)
-    restart_failures = [] if activation_failures else restart_activation_services(
-        config_root, policy, progress, deadline
+    restart_failures = (
+        []
+        if activation_failures
+        else restart_activation_services(config_root, policy, progress, deadline)
     )
     if not restart_failures and not activation_failures and settle_seconds:
         if settle_seconds > remaining_timeout(deadline):
@@ -677,7 +677,10 @@ def run_activation_sequence(
 
 
 def complete_reapply(
-    config_root: Path, progress: ProgressReporter | None = None
+    config_root: Path,
+    progress: ProgressReporter | None = None,
+    *,
+    before_commit: Callable[[], None] | None = None,
 ) -> tuple[bool, list[str], str]:
     """Run activation + health checks, rolling back on failure.
 
@@ -708,6 +711,8 @@ def complete_reapply(
                     "failed",
                 )
         return False, failures, "completed" if restored else "skipped"
+    if before_commit is not None:
+        before_commit()
     if progress:
         progress.set_stage("cleanup", "removing rollback state")
     cleanup_rollback(config_root)

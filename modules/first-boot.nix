@@ -80,12 +80,13 @@ let
     export ATOMIXOS_BOOTSTRAP_ACTIVATION=${bootstrapActivationScript}
     export ATOMIXOS_PROVISION_WORKER_ACTIVE=1
     export ATOMIXOS_PROVISION_RESULT_TIMEOUT_SECONDS=3900
-    ${provisionCli}/bin/atomixos-provision finalize-staged --runtime-root /run/atomixos-provision
+    ${provisionCli}/bin/atomixos-provision finalize-staged /data/config --runtime-root /run/atomixos-provision
     exec ${provisionCli}/bin/atomixos-provision apply-staged /data/config --runtime-root /run/atomixos-provision --drain
   '';
   provisionApplyFinalizeScript = pkgs.writeShellScript "atomixos-provision-apply-finalize" ''
     set -euo pipefail
-    exec ${provisionCli}/bin/atomixos-provision finalize-staged --runtime-root /run/atomixos-provision
+    export ATOMIXOS_PROVISION_WORKER_ACTIVE=1
+    exec ${provisionCli}/bin/atomixos-provision finalize-staged /data/config --runtime-root /run/atomixos-provision
   '';
   ubootEnvTools = self.packages.${pkgs.stdenv.hostPlatform.system}.uboot-env-tools;
   firstBootEnv = {
@@ -175,6 +176,8 @@ in
       pkgs.zstd
       provisionCli
     ];
+
+    environment.ATOMIXOS_BOOTSTRAP_TRANSPORT = bootstrapTransport;
 
     serviceConfig = {
       Type = "oneshot";

@@ -78,25 +78,26 @@ foundation.
 
 Split the network-facing provisioning API from privileged host mutation work
 without using setuid Python helpers. The Litestar/uvicorn service runs as an
-unprivileged user and performs HTTP handling, authentication, upload parsing,
-validation, sanitization, and candidate rendering into tmpfs under
+unprivileged user and performs HTTP handling, authentication, early validation,
+sanitization, and candidate rendering into tmpfs under
 `/run/atomixos-provision`.
 
 Root-owned systemd units then consume completed staged jobs. A `systemd.path`
 unit watches for ready markers and starts a root oneshot apply service. The root
-worker verifies the staged source, re-renders canonical state into a durable
+worker re-verifies authorization and the staged request, re-renders canonical state into a durable
 `/data/config-candidate`, promotes it within `/data`, runs activation, performs
 rollback on failure, and writes job results for the API to report.
 
-This design reduces disk churn and keeps untrusted request parsing out of root.
+This design reduces disk churn and keeps network-facing parsing out of root.
 Root still performs the final host mutation, but it consumes a narrow staged
-contract instead of raw HTTP uploads or arbitrary helper commands.
+contract containing exact signed request bytes instead of accepting HTTP traffic
+or arbitrary helper commands.
 
 ## Goals
 
 1. Run the Litestar/uvicorn provisioning service without root privileges.
-2. Parse, validate, sanitize, and render submitted config sources before any root
-   process handles them.
+2. Parse, validate, sanitize, and render submitted config sources before the root
+   worker independently verifies authorization and repeats authoritative parsing.
 3. Stage candidate jobs in tmpfs under `/run/atomixos-provision` to avoid
    persistent writes for failed validation or render attempts.
 4. Trigger privileged apply work with root-owned systemd path and oneshot service
@@ -174,6 +175,7 @@ Use tmpfs-backed runtime state for unprivileged staging:
   queue/
     <job-id>/
       manifest.json
+      request.bin
       candidate/
         config.toml
         users.json
@@ -195,11 +197,14 @@ Use tmpfs-backed runtime state for unprivileged staging:
 
 The API service writes `<job-id>.reserve` while staging to reserve FIFO capacity.
 `queue/.sequence` assigns monotonically increasing order to reservations and
-ready markers. The API writes `<job-id>/manifest.json` and the rendered
-candidate tree first. It creates `<job-id>.ready` only after staging is complete
+ready markers. The API writes `<job-id>/manifest.json`, the exact request bytes,
+authorization metadata, and the rendered candidate tree first. It creates
+`<job-id>.ready` only after staging is complete
 and fsynced as far as practical for tmpfs. The ready marker is the trigger
-contract for systemd. Stale reservations are discarded after the reservation TTL
-and never authorize a worker claim without a ready marker.
+contract for systemd. Publication requires the same live reservation that
+allocated queue capacity and preserves its sequence. A transient heartbeat
+failure is retried while staging. Expired reservations remove their unpublished
+job and temporary staging trees, but never remove a published or active job.
 `queue/` is `02770 root:atomixos-provision`; `results/` is
 `02750 root:atomixos-provision`; result files are `0640 root:atomixos-provision`.
 The API service can create staged queue entries and read terminal results, but
@@ -210,6 +215,13 @@ The root worker claims a job by atomically renaming the staged directory from
 Claim and timeout-abandon operations share `/run/atomixos-provision/queue.lock`
 so the API cannot mark a job failed while the root worker is claiming it. Only
 one apply mutates `/data` at a time under `/run/atomixos-provision/config.lock`.
+Before promotion, the worker adds a root-only
+`/data/config/.atomixos-apply-receipt.json` to the durable candidate. The receipt
+binds the job ID and source digest to the eventual result payload. Its initial
+`promoted` phase records an incomplete transaction. The worker changes it to
+`committed` only after activation and health checks pass and before removing
+rollback state. It is generated runtime control state and is not included in
+config bundle exports.
 
 ### Staging Manifest
 
@@ -221,12 +233,13 @@ least:
 - operation type: initial apply, re-apply, or typed partial apply rendered to a
   full candidate
 - source filename and source digest
+- exact request size and digest, plus the verified nonce, signature, method, and
+  path for authenticated requests
 - rendered candidate file list with relative paths, SHA-256 hashes, sizes, and
   expected modes
 - bundle file list with relative paths, SHA-256 hashes, sizes, and expected
   modes when bundle files are present
 - activation policy summary
-- whether re-apply is authorized
 - API service UID/GID expected to own staged files
 - created timestamp
 
@@ -249,8 +262,15 @@ Before touching `/data`, the root worker verifies:
 - staged files and directories are not group/world writable
 - file sizes and SHA-256 hashes match the manifest
 - no unexpected top-level entries are present
-- operation type and re-apply authorization are consistent with current
-  `/data/config` state
+- the exact request digest matches the manifest
+- on re-apply, the request signature verifies against the active administrator
+  keys, its boot-scoped nonce has not been consumed in root-owned state, and the
+  signed method and path map to a supported provisioning operation
+
+The worker derives initial-apply versus re-apply from `/data/config`; it never
+trusts the staged `allow_reapply` flag as authorization. Root-created local
+maintenance jobs remain trusted by filesystem ownership, preserving integrator
+freedom over valid rootful and rootless Podman configuration.
 
 Verification failure writes a failed result and discards the staged job without
 mutating `/data`.
@@ -270,7 +290,8 @@ rename the tmpfs candidate directly into `/data/config`. The worker should:
 5. Promote `/data/config-candidate` to `/data/config` using the existing
    crash-safe promotion and rollback protocol within `/data`.
 6. Run activation and health checks.
-7. Roll back on activation failure.
+7. Mark the receipt `committed` before removing rollback state, or roll back on
+   activation failure.
 8. Write `/run/atomixos-provision/results/<job-id>.json` as `0640 root:atomixos-provision`.
    Result JSON is versioned and includes `version`, `job_id`, `completed_at`,
    and `status` (`succeeded` or `failed`). Successful results include a
@@ -302,8 +323,10 @@ The design uses systemd as the privilege boundary:
   - verifies staged inputs
   - writes durable candidate state under `/data`
   - promotes, activates, rolls back, and writes result JSON
-  - runs a stop-post finalizer that writes failed results for claimed jobs left
-    behind if the worker is interrupted before terminal result publication
+  - retains the claimed job until terminal result publication succeeds
+  - runs a stop-post finalizer that resolves the receipt phase, restores or
+    discards incomplete promotions, and compares only committed receipts with
+    claimed manifests before publishing success for an interrupted job
 
 The API can poll result files and expose the same `/api/jobs/{id}` contract. If
 the API service restarts, it can reconstruct terminal job state from result JSON
@@ -315,9 +338,9 @@ existing work. When the queue is full, submission returns conflict/backpressure
 instead of evicting existing work. The root worker
 keeps only one staged job active at a time. Polling may abandon a job only if it
 is still queued under the shared queue lock; once the root worker claims a job,
-the API waits up to the configured result timeout for the worker or worker
-finalizer to write a terminal result, then reports a timeout instead of waiting
-indefinitely.
+the configured result timeout becomes a reconciliation interval. A claimed job
+remains nonterminal until the root worker or its stop-post finalizer publishes a
+terminal result.
 
 ### Existing Behavior Preservation
 
@@ -393,8 +416,8 @@ Root worker responsibilities:
 ## Success Criteria
 
 1. The network-facing API process runs unprivileged.
-2. Root does not parse raw uploads, multipart requests, or unvalidated bundle
-   archives.
+2. Root is not network-facing and authoritatively parses only request bytes whose
+   staged integrity and re-apply authorization it has verified.
 3. Root mutation is available only through the systemd apply worker and verified
    staged manifest contract.
 4. Failed validation and rendering do not write to `/data`.

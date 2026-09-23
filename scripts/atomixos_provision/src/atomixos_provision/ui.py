@@ -25,6 +25,7 @@ from atomixos_provision.bootstrap_security import enforce_bootstrap_browser_orig
 from atomixos_provision.config import ProvisionError
 from atomixos_provision.domain.config.coordinator import ProvisionCoordinator
 from atomixos_provision.jobs import Job, JobManager
+from atomixos_provision.state import is_provisioned_config_root
 
 __all__ = ["ui_routes"]
 
@@ -51,13 +52,18 @@ _BOOT_UI_JOBS_DIR = "boot-ui-jobs"
 def render_bootstrap_page(
     config_text: str = "", message_html: str = "", bootstrap_token: str = ""
 ) -> str:
-    message_block = f'<section id="job-status" class="message">{message_html}</section>' if message_html else '<section id="job-status"></section>'
+    """Render the first-boot provisioning page."""
+    message_block = (
+        f'<section id="job-status" class="message">{message_html}</section>'
+        if message_html
+        else '<section id="job-status"></section>'
+    )
     config_text_json = json.dumps(config_text).replace("<", "\\u003c")
     applied_config_block = (
-        "<section class=\"panel\">"
+        '<section class="panel">'
         "<h2>Applied Configuration</h2>"
-        "<button type=\"button\" onclick=\"downloadAppliedConfig()\">Download applied config.toml</button>"
-        f"<textarea class=\"medium\" readonly>{html.escape(config_text)}</textarea>"
+        '<button type="button" onclick="downloadAppliedConfig()">Download applied config.toml</button>'
+        f'<textarea class="medium" readonly>{html.escape(config_text)}</textarea>'
         "<script>"
         "function downloadAppliedConfig() {"
         f"const blob = new Blob([{config_text_json}], {{type: 'text/plain'}});"
@@ -242,11 +248,13 @@ def uploaded_config_text(payload: bytes, filename: str) -> str:
 
 
 def _html_page_fragment(content: str, status_class: str = "") -> str:
+    """Wrap status content in the Boot UI job-status container."""
     classes = "message" + (f" {status_class}" if status_class else "")
     return f'<section id="job-status" class="{classes}">{content}</section>'
 
 
 def render_job_fragment(job: Job) -> str:
+    """Render the current job status fragment."""
     snapshot = job.snapshot()
     state = str(snapshot["state"])
 
@@ -255,16 +263,19 @@ def render_job_fragment(job: Job) -> str:
         return fragment + f'<script>startJobStream("{html.escape(job.id)}");</script>'
 
     if state == "succeeded":
-        return _html_page_fragment(
-            _render_job_message_html(snapshot), "status-succeeded"
-        ) + "<script>completeApplyButton();</script>"
+        return (
+            _html_page_fragment(_render_job_message_html(snapshot), "status-succeeded")
+            + "<script>completeApplyButton();</script>"
+        )
 
-    return _html_page_fragment(
-        _render_job_message_html(snapshot), "status-failed"
-    ) + "<script>resetApplyButton();</script>"
+    return (
+        _html_page_fragment(_render_job_message_html(snapshot), "status-failed")
+        + "<script>resetApplyButton();</script>"
+    )
 
 
 def _render_job_message_html(snapshot: dict[str, Any]) -> str:
+    """Render escaped job status text and progress markup."""
     state = str(snapshot["state"])
     event_html = _render_job_events(snapshot["events"])
 
@@ -295,7 +306,9 @@ def _render_job_message_html(snapshot: dict[str, Any]) -> str:
 
     rollback = snapshot.get("rollback_status")
     rollback_html = (
-        f"<p><strong>Rollback status:</strong> {html.escape(str(rollback))}</p>" if rollback else ""
+        f"<p><strong>Rollback status:</strong> {html.escape(str(rollback))}</p>"
+        if rollback
+        else ""
     )
     return (
         f"<p><strong>Configuration failed.</strong></p>"
@@ -306,6 +319,7 @@ def _render_job_message_html(snapshot: dict[str, Any]) -> str:
 
 
 def _render_job_events(events: list[dict[str, Any]]) -> str:
+    """Render server-sent event data for a job update."""
     recent_events = events[-40:]
     event_items = "".join(
         "<li>"
@@ -314,10 +328,15 @@ def _render_job_events(events: list[dict[str, Any]]) -> str:
         "</li>"
         for event in recent_events
     )
-    return f'<div class="event-log"><ol class="events">{event_items}</ol></div>' if event_items else ""
+    return (
+        f'<div class="event-log"><ol class="events">{event_items}</ol></div>'
+        if event_items
+        else ""
+    )
 
 
 def _is_htmx_request(request: Request) -> bool:
+    """Return whether a request originated from the HTMX client."""
     return request.headers.get("hx-request", "").lower() == "true"
 
 
@@ -329,6 +348,7 @@ async def _require_unprovisioned(connection, _: Any) -> None:
 
 
 async def _require_unprovisioned_or_boot_ui_terminal_job(connection, _: Any) -> None:
+    """Allow bootstrap UI access only while unprovisioned or finishing a job."""
     config_root: Path = connection.app.state.config_root
     if not _device_is_provisioned(config_root):
         return
@@ -348,15 +368,17 @@ async def _require_unprovisioned_or_boot_ui_terminal_job(connection, _: Any) -> 
 
     # Provisioning can restart the bootstrap service, which drops in-memory jobs.
     # Once config exists, let the reconnecting Boot UI render terminal success.
-    if not (config_root / "config.toml").exists():
+    if not _device_is_provisioned(config_root):
         raise NotFoundException()
 
 
 def _device_is_provisioned(config_root: Path) -> bool:
-    return (config_root / "config.toml").exists() or (config_root / "admin-signers").exists()
+    """Return whether the device configuration has been provisioned."""
+    return is_provisioned_config_root(config_root)
 
 
 def _render_recovered_success_fragment() -> str:
+    """Render terminal success after the bootstrap service reconnects."""
     return _html_page_fragment(
         "<p><strong>Configuration applied.</strong></p>"
         "<p>The bootstrap service reconnected after provisioning completed.</p>",
@@ -521,11 +543,11 @@ async def apply_form(request: Request, state: State) -> Response[str]:
         if final_state not in {"submitted", "running"}:
             if is_htmx_request:
                 return Response(render_job_fragment(job), status_code=200, media_type="text/html")
-            status_code = 400 if final_state == "failed" else 200 if final_state == "succeeded" else 202
+            status_code = (
+                400 if final_state == "failed" else 200 if final_state == "succeeded" else 202
+            )
             rendered_config_text = (
-                config_text
-                if final_state == "succeeded" and isinstance(config_text, str)
-                else ""
+                config_text if final_state == "succeeded" and isinstance(config_text, str) else ""
             )
             return Response(
                 render_bootstrap_page(
@@ -550,7 +572,7 @@ async def job_fragment(job_id: str, job_manager: JobManager, state: State) -> Re
     boot_ui_jobs, boot_ui_jobs_lock = _boot_ui_job_state(state)
     job = job_manager.get(job_id)
     if job is None:
-        if (state.config_root / "config.toml").exists():
+        if _device_is_provisioned(state.config_root):
             with boot_ui_jobs_lock:
                 boot_ui_jobs.discard(job_id)
                 _forget_boot_ui_job(job_id)
@@ -563,9 +585,7 @@ async def job_fragment(job_id: str, job_manager: JobManager, state: State) -> Re
     body = render_job_fragment(job)
     if str(job.snapshot()["state"]) in {"succeeded", "failed"}:
         with boot_ui_jobs_lock:
-            if (state.config_root / "config.toml").exists() or (
-                state.config_root / "admin-signers"
-            ).exists():
+            if _device_is_provisioned(state.config_root):
                 if job_id not in boot_ui_jobs and not _has_boot_ui_job_marker(job_id):
                     raise NotFoundException()
                 boot_ui_jobs.discard(job_id)
@@ -583,8 +603,10 @@ async def job_events(job_id: str, job_manager: JobManager, state: State) -> Resp
     boot_ui_jobs, boot_ui_jobs_lock = _boot_ui_job_state(state)
     job = job_manager.get(job_id)
     if job is None:
-        if (state.config_root / "config.toml").exists():
+        if _device_is_provisioned(state.config_root):
+
             async def recovered_stream():
+                """Stream recovered terminal success to the Boot UI."""
                 yield {"data": _render_recovered_success_fragment()}
                 yield {"event": "done", "data": ""}
                 with boot_ui_jobs_lock:
@@ -599,6 +621,7 @@ async def job_events(job_id: str, job_manager: JobManager, state: State) -> Resp
         )
 
     async def stream():
+        """Stream job status events to the client."""
         last_body = ""
         while True:
             body = render_job_fragment(job)
@@ -608,9 +631,7 @@ async def job_events(job_id: str, job_manager: JobManager, state: State) -> Resp
             if str(job.snapshot()["state"]) in {"succeeded", "failed"}:
                 yield {"event": "done", "data": ""}
                 with boot_ui_jobs_lock:
-                    if (state.config_root / "config.toml").exists() or (
-                        state.config_root / "admin-signers"
-                    ).exists():
+                    if _device_is_provisioned(state.config_root):
                         boot_ui_jobs.discard(job_id)
                         _forget_boot_ui_job(job_id)
                 break

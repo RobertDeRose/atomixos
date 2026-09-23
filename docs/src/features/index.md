@@ -13,6 +13,7 @@ remains in [Planned features](../planned-features.md) and Beads.
 - [Activation Options](activation-options/index.md)
 - [Caddy AuthCrunch Cockpit Tutorial](caddy-authcrunch-cockpit-tutorial/index.md)
 - [Nixstasis Client](nixstasis-client/index.md)
+- [Provisioning API Service](provisioning-api-service/index.md)
 - [Provisioning API Privilege Separation](provisioning-api-privilege-separation/index.md)
 - [Provisioning API Live Schema Contract](provisioning-api-live-schema-contract/index.md)
 - [Typed Partial Provisioning API](typed-partial-provisioning-api/index.md)

@@ -1,12 +1,19 @@
 """Tests for atomixos_provision.app routes."""
 
 import asyncio
+import json
+import threading
 from pathlib import Path
 
+from litestar import Litestar, post
+from litestar.response import Response
 from litestar.testing import AsyncTestClient
 
 from atomixos_provision.app import create_app
-from atomixos_provision.config import ProvisionError
+from atomixos_provision.config import ProvisionError, ProvisionSystemError
+from atomixos_provision.domain.config.controller import export_config, validate_config
+from atomixos_provision.domain.config.service import ConfigService
+from atomixos_provision.domain.system.controller import health
 from atomixos_provision.jobs import Job, JobManager, JobState, StagedJobManager
 from atomixos_provision.staging import reserve_staged_job_slot, runtime_paths
 
@@ -22,6 +29,91 @@ def _job_fragment_url(response_text: str) -> str:
 
 def _job_events_url(response_text: str) -> str:
     return _job_fragment_url(response_text) + "/events"
+
+
+class _ValidationRequest:
+    """Provide the ValidationRequest test helper."""
+
+    def __init__(self, body: bytes = b"invalid"):
+        """Initialize this helper."""
+        self._body = body
+        self.headers = {}
+
+    async def body(self):
+        """Return the stored request body."""
+        return self._body
+
+
+class _ValidationService:
+    """Provide the ValidationService test helper."""
+
+    def __init__(self, error):
+        """Initialize this helper."""
+        self.error = error
+
+    async def validate_bytes(self, body, filename):
+        """Validate bytes."""
+        assert body == b"invalid"
+        assert filename == "config.toml"
+        raise self.error
+
+
+async def test_validate_maps_known_provision_errors_to_bad_request():
+    """Verify that validate maps known provision errors to bad request."""
+    response = await validate_config.fn(
+        _ValidationRequest(), _ValidationService(ProvisionError("invalid config"))
+    )
+
+    assert response.status_code == 400
+    assert response.content == {"ok": False, "error": "invalid config"}
+
+
+def _validation_app(error):
+    """Handle validation app."""
+
+    @post("/api/validate")
+    async def endpoint() -> Response:
+        """Handle the test validation endpoint."""
+        return await validate_config.fn(_ValidationRequest(), _ValidationService(error))
+
+    return Litestar(route_handlers=[endpoint])
+
+
+async def test_validate_propagates_unexpected_errors_for_framework_500():
+    """Verify that validate propagates unexpected errors for framework 500."""
+    async with AsyncTestClient(app=_validation_app(OSError("schema unavailable"))) as client:
+        response = await client.post("/api/validate", content=b"invalid")
+
+    assert response.status_code == 500
+
+
+async def test_validate_propagates_internal_schema_errors_for_framework_500():
+    """Verify that validate propagates internal schema errors for framework 500."""
+    async with AsyncTestClient(
+        app=_validation_app(ProvisionSystemError("schema unavailable"))
+    ) as client:
+        response = await client.post("/api/validate", content=b"invalid")
+
+    assert response.status_code == 500
+
+
+async def test_validate_invalid_server_schema_uses_framework_500(tmp_path, monkeypatch):
+    """Verify that validate invalid server schema uses framework 500."""
+    schema_path = tmp_path / "invalid-schema.json"
+    schema_path.write_text('{"type": 42}')
+    monkeypatch.setenv("ATOMIXOS_CONFIG_SCHEMA", str(schema_path))
+
+    @post("/api/validate")
+    async def endpoint() -> Response:
+        """Handle the test validation endpoint."""
+        return await validate_config.fn(
+            _ValidationRequest(b"version = 1\n"), ConfigService(tmp_path)
+        )
+
+    async with AsyncTestClient(app=Litestar(route_handlers=[endpoint])) as client:
+        response = await client.post("/api/validate", content=b"version = 1\n")
+
+    assert response.status_code == 500
 
 
 async def test_nonce_response_returns_nonce(tmp_path):
@@ -56,7 +148,7 @@ def test_non_data_config_app_uses_direct_job_manager_by_default(tmp_path):
     assert not isinstance(app.state.job_manager, StagedJobManager)
 
 
-async def test_auth_error_response_uses_framework_shape(tmp_path):
+async def test_initial_provisioning_with_signers_uses_bootstrap_auth(tmp_path):
     (tmp_path / "admin-signers").write_text("ssh-ed25519 AAAA test\n")
     app = create_app(config_root=tmp_path)
     async with AsyncTestClient(app=app) as client:
@@ -66,13 +158,8 @@ async def test_auth_error_response_uses_framework_shape(tmp_path):
             headers={"x-atomixos-bootstrap-token": app.state.bootstrap_token},
         )
 
-    assert response.status_code == 401
-    body = response.json()
-    body_text = str(body)
-    assert "authentication required" in body_text
-    assert "X-AtomixOS-Nonce" in body_text
-    assert "X-AtomixOS-Signature" in body_text
-    assert "Atomicnix" not in body_text
+    assert response.status_code == 202
+    assert response.headers["location"].startswith("/api/jobs/")
 
 
 async def test_config_submission_includes_job_url(tmp_path, monkeypatch):
@@ -153,8 +240,14 @@ async def test_first_boot_config_submit_accepts_programmatic_upload_without_toke
 
 
 async def test_config_submit_accepts_zstd_magic_without_filename_header(tmp_path, monkeypatch):
-    async def fake_stage_bytes(self, body, filename, progress, allow_reapply=True):
+    """Verify that config submit accepts zstd magic without filename header."""
+
+    async def fake_stage_bytes(
+        self, body, filename, progress, allow_reapply=True, authorization=None
+    ):
+        """Simulate stage bytes for the test."""
         calls.append((body, filename))
+
     manager = StagedJobManager()
     calls = []
 
@@ -173,10 +266,13 @@ async def test_config_submit_accepts_zstd_magic_without_filename_header(tmp_path
     assert calls == [(b"\x28\xb5\x2f\xfdpayload", "config.toml")]
 
 
-async def test_config_submit_records_staging_provision_errors_as_failed_job(
-    tmp_path, monkeypatch
-):
-    async def fake_stage_bytes(self, body, filename, progress, allow_reapply=True):
+async def test_config_submit_records_staging_provision_errors_as_failed_job(tmp_path, monkeypatch):
+    """Verify that config submit records staging provision errors as failed job."""
+
+    async def fake_stage_bytes(
+        self, body, filename, progress, allow_reapply=True, authorization=None
+    ):
+        """Simulate stage bytes for the test."""
         raise ProvisionError("bad bundle")
 
     manager = StagedJobManager()
@@ -339,6 +435,70 @@ async def test_config_export_requires_auth(tmp_path):
     assert response.status_code == 401
 
 
+async def test_authenticated_config_export_returns_complete_bundle(tmp_path, monkeypatch):
+    """Verify that authenticated config export returns complete bundle."""
+
+    class AcceptingNonceStore:
+        """Provide the AcceptingNonceStore test helper."""
+
+        async def consume(self, nonce):
+            """Accept the nonce for this test."""
+            return nonce == "test"
+
+    (tmp_path / "config.toml").write_text("version = 1\n")
+    (tmp_path / "files").mkdir()
+    (tmp_path / "files" / "cert.pem").write_text("CERT\n")
+    (tmp_path / "admin-signers").write_text("ssh-ed25519 AAAA test\n")
+    monkeypatch.setattr(
+        "atomixos_provision.auth.verify_ssh_signature",
+        lambda message, signature_blob, allowed_keys_path: True,
+    )
+    app = create_app(config_root=tmp_path)
+    app.state.nonce_store = AcceptingNonceStore()
+
+    async with AsyncTestClient(app=app) as client:
+        response = await client.get(
+            "/api/config/export",
+            headers={"x-atomixos-nonce": "test", "x-atomixos-signature": "dGVzdA=="},
+        )
+
+    assert response.status_code == 200
+    assert response.content.startswith(b"\x1f\x8b")
+    assert response.headers["content-type"].startswith("application/gzip")
+    assert response.headers["content-disposition"] == (
+        'attachment; filename="config-bundle.tar.gz"'
+    )
+
+
+async def test_config_export_does_not_block_health_request(tmp_path, monkeypatch):
+    """Verify that config export does not block health request."""
+    export_started = threading.Event()
+    release_export = threading.Event()
+
+    def blocked_export(config_root):
+        """Handle blocked export."""
+        assert config_root == tmp_path
+        export_started.set()
+        assert release_export.wait(timeout=2)
+        return b"\x1f\x8bexported-bundle"
+
+    monkeypatch.setattr(
+        "atomixos_provision.provision.locked_export_config_bytes",
+        blocked_export,
+    )
+
+    export_task = asyncio.create_task(export_config.fn(ConfigService(tmp_path)))
+    try:
+        assert await asyncio.to_thread(export_started.wait, 1)
+        health_response = await asyncio.wait_for(health.fn(), timeout=1)
+    finally:
+        release_export.set()
+    export_response = await export_task
+
+    assert health_response == {"status": "ok"}
+    assert export_response.content == b"\x1f\x8bexported-bundle"
+
+
 async def test_partial_config_rejects_unknown_top_level_keys(tmp_path, monkeypatch):
     async def fake_apply_config_operation(operation, config_root, progress=None):
         from atomixos_provision.partial_config import apply_operation
@@ -385,21 +545,33 @@ async def test_partial_config_rejects_unknown_top_level_keys(tmp_path, monkeypat
 
 
 async def test_partial_config_uses_staged_job_manager_when_available(tmp_path, monkeypatch):
+    """Verify that partial config uses staged job manager when available."""
+
     class AcceptingNonceStore:
         async def consume(self, nonce):
             return nonce == "test"
 
     calls = {}
 
-    async def fake_stage_config_operation(job_id, operation, config_root, progress=None):
+    async def fake_stage_config_operation(
+        job_id,
+        operation,
+        config_root,
+        progress=None,
+        request_payload=None,
+        authorization=None,
+    ):
+        """Simulate stage config operation for the test."""
         calls["job_id"] = job_id
         calls["operation"] = operation
         calls["config_root"] = config_root
+        calls["request_payload"] = request_payload
+        calls["authorization"] = authorization
 
     (tmp_path / "admin-signers").write_text("ssh-ed25519 AAAA test\n")
     monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
     monkeypatch.setattr(
-        "atomixos_provision.provision.stage_config_operation",
+        "atomixos_provision.provision.stage_reserved_config_operation",
         fake_stage_config_operation,
     )
     monkeypatch.setattr(
@@ -431,20 +603,40 @@ async def test_partial_config_uses_staged_job_manager_when_available(tmp_path, m
         "name": "alice",
         "payload": {"isAdmin": False, "ssh_key": "ssh-ed25519 AAAA alice"},
     }
+    assert json.loads(calls["request_payload"]) == {
+        "isAdmin": False,
+        "ssh_key": "ssh-ed25519 AAAA alice",
+    }
+    assert calls["authorization"] == {
+        "nonce": "test",
+        "signature": "dGVzdA==",
+        "method": "PUT",
+        "path": "/api/config/users/alice",
+    }
 
 
 async def test_partial_config_reports_full_staged_queue(tmp_path, monkeypatch):
+    """Verify that partial config reports full staged queue."""
+
     class AcceptingNonceStore:
         async def consume(self, nonce):
             return nonce == "test"
 
-    async def fake_stage_config_operation(job_id, operation, config_root, progress=None):
+    async def fake_stage_config_operation(
+        job_id,
+        operation,
+        config_root,
+        progress=None,
+        request_payload=None,
+        authorization=None,
+    ):
+        """Simulate stage config operation for the test."""
         return None
 
     (tmp_path / "admin-signers").write_text("ssh-ed25519 AAAA test\n")
     monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
     monkeypatch.setattr(
-        "atomixos_provision.provision.stage_config_operation",
+        "atomixos_provision.provision.stage_reserved_config_operation",
         fake_stage_config_operation,
     )
     monkeypatch.setattr(
@@ -765,9 +957,8 @@ async def test_apply_form_renders_failure_and_rollback(tmp_path, monkeypatch):
     assert "Rollback status:</strong> completed" in fragment.text
 
 
-async def test_apply_form_can_render_terminal_fragment_after_provisioning(
-    tmp_path, monkeypatch
-):
+async def test_apply_form_can_render_terminal_fragment_after_provisioning(tmp_path, monkeypatch):
+    """Verify that apply form can render terminal fragment after provisioning."""
     started = asyncio.Event()
     finish = asyncio.Event()
 
@@ -887,6 +1078,7 @@ async def test_apply_form_keeps_polling_after_config_appears(tmp_path, monkeypat
 
 
 async def test_job_events_streams_status_fragments(tmp_path, monkeypatch):
+    """Verify that job events streams status fragments."""
     started = asyncio.Event()
     finish = asyncio.Event()
 
@@ -916,7 +1108,7 @@ async def test_job_events_streams_status_fragments(tmp_path, monkeypatch):
     assert response.status_code == 202
     assert stream.status_code == 200
     assert stream.headers["content-type"].startswith("text/event-stream")
-    assert "data: <section id=\"job-status\"" in stream.text
+    assert 'data: <section id="job-status"' in stream.text
     assert "data: data:" not in stream.text
     assert "Configuration applied" in stream.text
     assert "event: done" in stream.text
@@ -1052,7 +1244,8 @@ async def test_apply_form_rejects_malformed_origin(tmp_path):
 
 
 async def test_ui_job_fragment_returns_404_on_provisioned_device(tmp_path):
-    (tmp_path / "admin-signers").write_text("ssh-ed25519 AAAA test\n")
+    """Verify that ui job fragment returns 404 on provisioned device."""
+    (tmp_path / ".first-config").write_text("ok\n")
     async with AsyncTestClient(app=create_app(config_root=tmp_path)) as client:
         response = await client.get("/ui/jobs/missing")
 
@@ -1060,7 +1253,8 @@ async def test_ui_job_fragment_returns_404_on_provisioned_device(tmp_path):
 
 
 async def test_logo_returns_404_on_provisioned_device(tmp_path):
-    (tmp_path / "admin-signers").write_text("ssh-ed25519 AAAA test\n")
+    """Verify that logo returns 404 on provisioned device."""
+    (tmp_path / ".first-config").write_text("ok\n")
     async with AsyncTestClient(app=create_app(config_root=tmp_path)) as client:
         response = await client.get("/assets/atomixos.png")
 
@@ -1068,7 +1262,8 @@ async def test_logo_returns_404_on_provisioned_device(tmp_path):
 
 
 async def test_config_dropzone_image_returns_404_on_provisioned_device(tmp_path):
-    (tmp_path / "admin-signers").write_text("ssh-ed25519 AAAA test\n")
+    """Verify that config dropzone image returns 404 on provisioned device."""
+    (tmp_path / ".first-config").write_text("ok\n")
     async with AsyncTestClient(app=create_app(config_root=tmp_path)) as client:
         response = await client.get("/assets/config_dropzone.png")
 
@@ -1076,7 +1271,8 @@ async def test_config_dropzone_image_returns_404_on_provisioned_device(tmp_path)
 
 
 async def test_apply_form_returns_404_on_provisioned_device(tmp_path):
-    (tmp_path / "admin-signers").write_text("ssh-ed25519 AAAA test\n")
+    """Verify that apply form returns 404 on provisioned device."""
+    (tmp_path / ".first-config").write_text("ok\n")
     async with AsyncTestClient(app=create_app(config_root=tmp_path)) as client:
         response = await client.post("/apply", data={"config": "version = 1\n"})
 
@@ -1084,7 +1280,8 @@ async def test_apply_form_returns_404_on_provisioned_device(tmp_path):
 
 
 async def test_boot_ui_returns_404_on_provisioned_device(tmp_path):
-    (tmp_path / "admin-signers").write_text("ssh-ed25519 AAAA test\n")
+    """Verify that boot ui returns 404 on provisioned device."""
+    (tmp_path / ".first-config").write_text("ok\n")
     async with AsyncTestClient(app=create_app(config_root=tmp_path)) as client:
         response = await client.get("/")
 
@@ -1122,15 +1319,13 @@ async def test_boot_ui_rejects_malformed_terminal_job_after_provisioning(tmp_pat
 
 
 async def test_openapi_documents_public_api_contract(tmp_path):
+    """Verify that openapi documents public api contract."""
     async with AsyncTestClient(app=create_app(config_root=tmp_path)) as client:
         response = await client.get("/schema/openapi.json")
 
     assert response.status_code == 200
     schema = response.json()
-    assert {
-        path: set(methods)
-        for path, methods in schema["paths"].items()
-    } == {
+    assert {path: set(methods) for path, methods in schema["paths"].items()} == {
         "/api/health": {"get"},
         "/api/nonce": {"get"},
         "/api/config": {"post"},
@@ -1177,17 +1372,20 @@ async def test_openapi_documents_public_api_contract(tmp_path):
     assert delete_container_network["operationId"] == "configContainerNetworksDelete"
     assert put_container_volume["operationId"] == "configContainerVolumesPut"
     assert delete_container_volume["operationId"] == "configContainerVolumesDelete"
-    assert {operation["tags"][0] for operation in [
-        put_user,
-        delete_user,
-        patch_network,
-        put_container,
-        delete_container,
-        put_container_network,
-        delete_container_network,
-        put_container_volume,
-        delete_container_volume,
-    ]} == {"config"}
+    assert {
+        operation["tags"][0]
+        for operation in [
+            put_user,
+            delete_user,
+            patch_network,
+            put_container,
+            delete_container,
+            put_container_network,
+            delete_container_network,
+            put_container_volume,
+            delete_container_volume,
+        ]
+    } == {"config"}
     assert validate["operationId"] == "configValidate"
     assert validate["tags"] == ["config"]
     assert get_job["operationId"] == "jobsGet"
@@ -1264,7 +1462,10 @@ async def test_openapi_documents_public_api_contract(tmp_path):
     assert submit["responses"]["202"]["content"]["application/json"]["schema"]["$ref"].endswith(
         "/SubmitConfigResponseBody"
     )
-    assert "application/toml" in export["responses"]["200"]["content"]
+    assert export["responses"]["200"]["content"]["application/gzip"]["schema"] == {
+        "type": "string",
+        "format": "binary",
+    }
     assert validate["responses"]["200"]["content"]["application/json"]["schema"]["$ref"].endswith(
         "/ValidationResponseBody"
     )
@@ -1275,21 +1476,17 @@ async def test_openapi_documents_public_api_contract(tmp_path):
     submit_400_ref = submit["responses"]["400"]["content"]["application/json"]["schema"]["$ref"]
     assert "FrameworkErrorResponseBody" in auth_error_ref
     submit_409_ref = submit["responses"]["409"]["content"]["application/json"]["schema"]["$ref"]
-    validate_400_ref = validate["responses"]["400"]["content"]["application/json"][
-        "schema"
-    ]["$ref"]
+    validate_400_ref = validate["responses"]["400"]["content"]["application/json"]["schema"][
+        "$ref"
+    ]
     get_job_404_ref = get_job["responses"]["404"]["content"]["application/json"]["schema"]["$ref"]
     assert "ApiErrorResponseBody" in submit_400_ref
     assert "ApiErrorResponseBody" in submit_409_ref
     assert "ValidationResponseBody" in validate_400_ref
     assert "ApiErrorResponseBody" in get_job_404_ref
     job_schema = schema["components"]["schemas"]["JobResponseBody"]
-    assert job_schema["properties"]["events"]["items"]["$ref"].endswith(
-        "/JobEventResponseBody"
-    )
-    assert job_schema["properties"]["result"]["$ref"].endswith(
-        "/ProvisionResultResponseBody"
-    )
+    assert job_schema["properties"]["events"]["items"]["$ref"].endswith("/JobEventResponseBody")
+    assert job_schema["properties"]["result"]["$ref"].endswith("/ProvisionResultResponseBody")
     location_header = submit["responses"]["202"]["headers"]["Location"]
     assert location_header["schema"] == {"type": "string"}
 

@@ -5,29 +5,28 @@ experimental = true
 env_shell_expand = true
 
 [tools]
-actionlint = "1.7.12"
-cargo-binstall = "1.17.6"
+"aqua:Mic92/nixfmt-rs" = "latest"
+"cargo:deadnix" = "latest"
 "github:KevinGimbel/mktoc" = "5.1.1"
-"github:badboy/mdbook-mermaid" = "0.17.0"
-"github:joshrotenberg/mdbook-lint" = "0.14.3"
-hk = "1.44.3"
-cocogitto = "latest"
-harper-cli = "latest"
+"github:badboy/mdbook-mermaid" = "0.17.1"
+"github:joshrotenberg/mdbook-lint" = "0.16.1"
+"npm:@commitlint/cli" = "21.2.3"
 "npm:@contextlint/cli" = { version = "latest", aube_args = "--allow-low-downloads" }
-mdbook = "0.5.0"
-node = "lts"
-uv = "latest"
-"npm:@commitlint/cli" = "20.5.3"
 "npm:markdown-table-formatter" = "1.7.0"
-pkl = "0.31.1"
-rumdl = "0.1.69"
-ruff = "0.15.12"
+actionlint = "1.7.12"
+cargo-binstall = "latest"
+cocogitto = "latest"
+hk = "2.0.1"
+node = "lts"
+pkl = "0.32.1"
+ruff = "0.16.8"
+rumdl = "0.2.75"
 shellcheck = "0.11.0"
-shfmt = "3.13.1"
-tombi = "0.9.16"
-"nix:deadnix" = "1.3.1"
-typos = "1.45.0"
-"nix:nixfmt" = "1.3.1"
+shfmt = "3.14.1"
+tombi = "1.5.5"
+typos = "1.50.2"
+uv = "latest"
+"github:rust-lang/mdbook" = "latest"
 
 [env]
 GIT_CONFIG_PARAMETERS = "'merge.ff=only'"
@@ -41,21 +40,11 @@ postinstall = "hk install --mise"
 
 [tasks.check]
 description = "Run repository validation"
-depends = ["nix:check"]
 run = "hk check -a"
 
 [tasks.fix]
 description = "Apply deterministic repository fixes"
 run = "hk fix -a"
-
-[tasks."nix:check"]
-description = "Evaluate Linux target outputs and run host-compatible checks"
-run = """
-# Keep the target-system evaluation separate from optional host-system checks.
-# Evaluating every system in one pass duplicates large NixOS graphs in memory.
-./scripts/nix-with-build-config.sh flake check --no-build --option eval-system aarch64-linux
-./scripts/nix-with-build-config.sh flake check
-"""
 
 [tasks."docs:check"]
 description = "Validate and build the documentation"

@@ -54,7 +54,7 @@ still wired explicitly by the app factory:
 | `GET /api/nonce`                               | Issues a single-use nonce for SSH-signature authentication.                     |
 | `POST /api/validate`                           | Validates a `config.toml` or config bundle without applying it.                 |
 | `POST /api/config`                             | Accepts a config source and returns `202 Accepted` with a job URL.              |
-| `GET /api/config/export`                       | Returns the current canonical `config.toml` bytes.                              |
+| `GET /api/config/export`                       | Returns the complete deterministic `config-bundle.tar.gz` archive.              |
 | `PUT /api/config/users/{name}`                 | Creates or replaces a declared user and applies the full config.                |
 | `DELETE /api/config/users/{name}`              | Removes a declared user and applies the full config.                            |
 | `PATCH /api/config/network`                    | Merges network, LAN, NTP, DNS, and firewall fields and applies the full config. |
@@ -66,6 +66,34 @@ still wired explicitly by the app factory:
 | `DELETE /api/config/container-volumes/{name}`  | Removes a declared Quadlet volume.                                              |
 | `GET /api/jobs/{job_id}`                       | Returns current provisioning job status, events, result, and rollback state.    |
 
+### API authentication and transport
+
+On a provisioned device, `/api/validate`, `/api/config`, all typed partial routes,
+and `/api/config/export` require SSH-signature authentication. Clients request a
+single-use nonce from `GET /api/nonce`, then sign:
+
+```text
+atomixos-reapply-v2
+nonce:{nonce}
+method:{request_method}
+path:{request_path}
+sha256:{payload_sha256_hex}
+```
+
+The request carries the base64 SSH signature in `X-AtomixOS-Signature` and the
+nonce in `X-AtomixOS-Nonce`; nonces expire after five minutes and are single-use.
+The method is uppercase. Nonces are scoped to the current boot so queued work
+cannot carry authorization across a reboot.
+Binary config submissions use `application/octet-stream` and identify the source
+with `x-config-filename` (for example `config.toml` or `config.tar.zst`); the
+server also detects supported archive magic bytes. Signatures cover the exact raw
+request body. JSON partial requests sign their exact JSON body. A `GET` export has
+an empty body, so its signed digest is SHA-256 of zero bytes. The export response is
+`application/gzip` with a `config-bundle.tar.gz` attachment. The deterministic
+archive contains only top-level `config.toml` and managed `files/` payloads; it
+excludes generated runtime state, markers, signer material, and unrelated config
+files. The live transport contract is available at `/schema/openapi.json`.
+
 On production staged systems, mutating apply jobs are accepted into a bounded
 FIFO queue and applied one at a time. Clients receive `409 Conflict` when the
 queue is full, and otherwise poll the returned job URL for progress and final
@@ -76,12 +104,15 @@ and signature headers, while first-boot programmatic config submission remains
 unauthenticated.
 
 On production systems, mutating jobs are staged by the unprivileged API under
-`/run/atomixos-provision` after validation and candidate rendering. A root-owned
+`/run/atomixos-provision` after validation and candidate rendering. The staged
+job also retains the exact request bytes and verified authorization envelope. A root-owned
 `atomixos-provision-apply.path` unit watches ready markers and starts the
 `atomixos-provision-apply.service` oneshot worker. The worker verifies the staged
-manifest and tree before copying verified state into `/data/config-candidate`,
-then performs promotion, activation, rollback, and recovery. This keeps network
-parsing and upload handling unprivileged while preserving the same
+manifest and tree, re-verifies the signature against the active administrator
+keys, consumes the nonce in root-owned state, and reconstructs the requested
+operation from the signed method, path, and body. It then renders verified state
+into `/data/config-candidate` and performs promotion, activation, rollback, and
+recovery. This keeps HTTP parsing unprivileged while preserving the same
 operator-visible API responses and rollback behavior. Result handoff files are
 root-writable/group-readable, and queue claim/abandon operations share a runtime
 lock so timed-out queued jobs cannot race with the root worker claiming them.
@@ -101,8 +132,15 @@ candidate through the same asynchronous validate/render/promote/activate/rollbac
 `POST /api/config`. On staged production systems, partial endpoints require the staged queue to be
 otherwise empty and return `409 Conflict` when another staged job is queued or active. They do not
 mutate derived JSON, Quadlet, firewall, network, or user state
-directly. The generated `config.toml` remains the exported backup artifact; comments and original TOML
-ordering are not preserved after a successful partial update.
+directly. The generated `config.toml` is the canonical desired-state member of the exported backup artifact; comments and
+original TOML ordering are not preserved after a successful partial update. Bundle export also includes managed
+`/data/config/files/` payloads and excludes generated runtime state, markers, signer material, and unrelated config
+files. Managed payloads are installed read-only by default. Trusted integrators may deliberately mount `${FILES_DIR}`
+writable; AtomixOS accepts the Quadlet configuration and emits a warning because any resulting changes are included in
+later config exports. Mutable application data should normally use Podman volumes and is intentionally excluded from
+config export. Use Podman tooling when volume data must be backed up, restored, or transferred; AtomixOS provisioning
+does not own that runtime-data lifecycle. The archive can be imported through the same bundle importer into a clean
+config root.
 
 ## USB Recovery Mode
 

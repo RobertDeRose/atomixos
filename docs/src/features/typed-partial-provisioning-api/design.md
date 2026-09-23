@@ -150,7 +150,8 @@ Each mutating endpoint should:
 Read/export endpoints should be reviewed carefully. They may require authentication on
 provisioned devices because exported config can include operational details and SSH public keys.
 This feature includes `GET /api/config/export`; on provisioned devices it must require SSH
-signature authentication and return the current canonical `config.toml` bytes.
+signature authentication and return a complete `config-bundle.tar.gz` containing the canonical `config.toml`
+and managed `files/` payloads.
 
 Flexible Quadlet sections should use a typed outer API shape with validated resource names and
 resource kinds, while preserving section maps for Quadlet pass-through content. The existing
@@ -184,8 +185,9 @@ values after the partial request is converted to a full config.
 - No endpoint may mutate derived JSON, Quadlet files, systemd drop-ins, firewall state, or user
   state directly.
 - Request bodies must not allow arbitrary systemd unit manipulation or shell command injection.
-- Config export returns the current canonical desired config and must require authentication on
-  provisioned devices. The current config model contains SSH public keys but no private keys or
+- Config export returns the complete canonical desired-state bundle and must require authentication on provisioned
+  devices. The bundle contains SSH public keys only through the canonical config and excludes signer material and
+  generated runtime state. The current config model contains SSH public keys but no private keys or
   generated secrets; if future secret-bearing fields exist, export behavior must redact or
   require explicit design.
 - Partial updates must preserve the existing single-flight job boundary.

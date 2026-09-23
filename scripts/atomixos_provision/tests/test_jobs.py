@@ -6,14 +6,23 @@ from contextlib import suppress
 import pytest
 
 from atomixos_provision.config import ProvisionError
-from atomixos_provision.jobs import Job, JobManager, JobState, StagedJobManager
+from atomixos_provision.jobs import (
+    Job,
+    JobManager,
+    JobState,
+    StagedJobManager,
+)
 from atomixos_provision.staging import (
+    StagedTimeoutState,
+    claim_next_job,
     count_staged_jobs,
     ensure_runtime_layout,
     publish_ready_marker,
+    read_json,
     reserve_staged_job_slot,
     runtime_paths,
     staged_job_presence,
+    write_result,
 )
 
 
@@ -185,12 +194,17 @@ class TestJobManager:
 
 
 class TestStagedJobManager:
+    """Group tests for StagedJobManager."""
+
     @pytest.mark.asyncio
     async def test_staged_job_times_out_waiting_for_worker_result(self, monkeypatch, tmp_path):
+        """Verify that staged job times out waiting for worker result."""
         monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
         mgr = StagedJobManager(result_timeout_seconds=0.01)
         monkeypatch.setattr(mgr, "_refresh_from_result", lambda _job: False)
-        monkeypatch.setattr(mgr, "_handle_staged_timeout", lambda _job: "abandoned")
+        monkeypatch.setattr(
+            mgr, "_handle_staged_timeout", lambda _job: StagedTimeoutState.ABANDONED
+        )
 
         async def work(job):
             return None
@@ -204,38 +218,38 @@ class TestStagedJobManager:
         assert mgr.is_busy is False
 
     @pytest.mark.asyncio
-    async def test_staged_job_keeps_slot_when_worker_has_claimed_job(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
+    async def test_claimed_job_remains_running_until_worker_result(self, monkeypatch, tmp_path):
+        """Verify that claimed job remains running until worker result."""
+        runtime_root = tmp_path / "run"
+        monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(runtime_root))
+        paths = runtime_paths(runtime_root)
+        ensure_runtime_layout(paths, for_worker=True)
         mgr = StagedJobManager(result_timeout_seconds=0.01, max_pending=2)
-        monkeypatch.setattr(mgr, "_refresh_from_result", lambda _job: False)
-        monkeypatch.setattr(mgr, "_handle_staged_timeout", lambda _job: "active")
+        claimed_jobs = []
 
         async def work(job):
-            return None
+            """Run the staged test work."""
+            (paths.queue / job.id).mkdir()
+            publish_ready_marker(paths, job.id)
+            claimed = claim_next_job(paths)
+            assert claimed is not None
+            claimed_jobs.append(claimed)
 
         job = await mgr.submit_staged(work)
         task = mgr._task
         assert task is not None
         assert job is not None
-        await asyncio.sleep(0.05)
+        await asyncio.sleep(0.25)
 
         assert job.state == JobState.RUNNING
-        queued = await mgr.submit_staged(work)
-        queued_task = mgr._task
-        assert queued is not None
-        assert queued.state == JobState.RUNNING
-        assert queued_task is not None
+        assert job.stage == "running"
+        write_result(paths, job.id, {"status": "succeeded", "result": {"warnings": []}})
+        await task
 
-        task.cancel()
-        queued_task.cancel()
-        with suppress(asyncio.CancelledError):
-            await task
-        with suppress(asyncio.CancelledError):
-            await queued_task
-
-        assert job.state == JobState.FAILED
-        assert job.completed_at is not None
-
+        assert job.state == JobState.SUCCEEDED
+        assert job.result == {"warnings": []}
+        for claimed in claimed_jobs:
+            claimed.path.rmdir()
 
     @pytest.mark.asyncio
     async def test_staged_job_cancellation_after_queueing_keeps_monitoring(
@@ -276,10 +290,8 @@ class TestStagedJobManager:
         with suppress(asyncio.CancelledError):
             await mgr._task
 
-
-    def test_staged_timeout_keeps_queued_job_while_worker_is_active(
-        self, monkeypatch, tmp_path
-    ):
+    def test_staged_timeout_keeps_queued_job_while_worker_is_active(self, monkeypatch, tmp_path):
+        """Verify that staged timeout keeps queued job while worker is active."""
         runtime_root = tmp_path / "run"
         monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(runtime_root))
         paths = runtime_paths(runtime_root)
@@ -291,7 +303,7 @@ class TestStagedJobManager:
         job = Job(id="job-2")
         mgr = StagedJobManager(result_timeout_seconds=0.01, max_pending=2)
 
-        assert mgr._handle_staged_timeout(job) == "active"
+        assert mgr._handle_staged_timeout(job) is StagedTimeoutState.WAITING
         assert (paths.queue / "job-2").exists()
         assert (paths.queue / "job-2.ready").exists()
 
@@ -321,11 +333,12 @@ class TestStagedJobManager:
     async def test_staged_runner_does_not_release_reservation_before_cancelled_work_finishes(
         self, monkeypatch, tmp_path
     ):
+        """Verify reservation release waits for cancelled staging work to finish."""
         monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
         mgr = StagedJobManager(result_timeout_seconds=0.01)
         finish = asyncio.Event()
         monkeypatch.setattr(mgr, "_refresh_from_result", lambda _job: False)
-        monkeypatch.setattr(mgr, "_handle_staged_timeout", lambda _job: "missing")
+        monkeypatch.setattr(mgr, "_handle_staged_timeout", lambda _job: StagedTimeoutState.MISSING)
 
         async def work(job):
             await finish.wait()
@@ -382,10 +395,11 @@ class TestStagedJobManager:
 
     @pytest.mark.asyncio
     async def test_staged_submit_returns_after_staging_before_result(self, monkeypatch, tmp_path):
+        """Verify that staged submit returns after staging before result."""
         monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
         mgr = StagedJobManager(result_timeout_seconds=0.01)
         monkeypatch.setattr(mgr, "_refresh_from_result", lambda _job: False)
-        monkeypatch.setattr(mgr, "_handle_staged_timeout", lambda _job: "missing")
+        monkeypatch.setattr(mgr, "_handle_staged_timeout", lambda _job: StagedTimeoutState.MISSING)
 
         async def work(job):
             return None
@@ -442,6 +456,45 @@ class TestStagedJobManager:
         assert mgr._jobs == {}
         assert count_staged_jobs(runtime_paths(tmp_path / "run")) == 0
 
+    def test_staged_reservation_refresh_surfaces_permission_errors(self, monkeypatch):
+        """Verify that staged reservation refresh surfaces permission errors."""
+        manager = StagedJobManager()
+
+        def fail_refresh(*_args, **_kwargs):
+            """Raise the simulated refresh failure."""
+            raise PermissionError("permission denied")
+
+        monkeypatch.setattr("atomixos_provision.staging.refresh_staged_job_slot", fail_refresh)
+
+        with pytest.raises(PermissionError, match="permission denied"):
+            manager._refresh_reservation(Job(id="job-1"))
+
+    def test_staged_reservation_release_surfaces_permission_errors(self, monkeypatch):
+        """Verify that staged reservation release surfaces permission errors."""
+        manager = StagedJobManager()
+
+        def fail_release(*_args, **_kwargs):
+            """Raise the simulated release failure."""
+            raise PermissionError("permission denied")
+
+        monkeypatch.setattr("atomixos_provision.staging.release_staged_job_slot", fail_release)
+
+        with pytest.raises(PermissionError, match="permission denied"):
+            manager._release_reservation(Job(id="job-1"))
+
+    def test_staged_result_read_surfaces_permission_errors(self, monkeypatch):
+        """Verify that staged result read surfaces permission errors."""
+        manager = StagedJobManager()
+
+        def fail_read(*_args, **_kwargs):
+            """Raise the simulated read failure."""
+            raise PermissionError("permission denied")
+
+        monkeypatch.setattr("atomixos_provision.staging.read_result", fail_read)
+
+        with pytest.raises(PermissionError, match="permission denied"):
+            manager._refresh_from_result(Job(id="job-1"))
+
     @pytest.mark.asyncio
     async def test_staged_submit_returns_failed_job_when_reservation_fails(
         self, monkeypatch, tmp_path
@@ -465,9 +518,8 @@ class TestStagedJobManager:
         assert job.completed_at is not None
 
     @pytest.mark.asyncio
-    async def test_staged_submit_refreshes_reservation_around_staging(
-        self, monkeypatch, tmp_path
-    ):
+    async def test_staged_submit_refreshes_reservation_around_staging(self, monkeypatch, tmp_path):
+        """Verify that staged submit refreshes reservation around staging."""
         monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
         mgr = StagedJobManager(result_timeout_seconds=0.01)
         refreshes = []
@@ -489,9 +541,85 @@ class TestStagedJobManager:
         await mgr._task
 
     @pytest.mark.asyncio
-    async def test_staged_submit_heartbeats_reservation_while_staging(
-        self, monkeypatch, tmp_path
+    async def test_post_publish_refresh_failure_keeps_job_queued_and_monitored(self, monkeypatch):
+        """Verify that post publish refresh failure keeps job queued and monitored."""
+        mgr = StagedJobManager()
+        refreshes = 0
+        monitored = []
+
+        def refresh(_job):
+            """Refresh the test reservation."""
+            nonlocal refreshes
+            refreshes += 1
+            if refreshes == 2:
+                raise PermissionError("permission denied")
+
+        monkeypatch.setattr(mgr, "_refresh_reservation", refresh)
+        monkeypatch.setattr(
+            mgr,
+            "_release_reservation",
+            lambda _job: pytest.fail("published jobs must not release their reservation"),
+        )
+        monkeypatch.setattr(
+            mgr, "_start_monitor_if_possible", lambda job: monitored.append(job.id)
+        )
+
+        async def work(_job):
+            """Run the staged test work."""
+            return None
+
+        job = Job(id="job-1")
+        result = await mgr._stage_and_monitor(job, work)
+
+        assert result is job
+        assert job.state == JobState.RUNNING
+        assert job.stage == "queued"
+        assert job.error is None
+        assert monitored == [job.id]
+        assert job.events[-1]["message"] == (
+            "waiting for privileged apply worker; "
+            "post-publication reservation maintenance failed: permission denied"
+        )
+
+    @pytest.mark.asyncio
+    async def test_post_publish_heartbeat_failure_keeps_job_queued_and_monitored(
+        self, monkeypatch
     ):
+        """Verify that post publish heartbeat failure keeps job queued and monitored."""
+        mgr = StagedJobManager()
+        monitored = []
+
+        async def fail_heartbeat(_job):
+            """Raise the simulated heartbeat failure."""
+            await asyncio.sleep(0)
+            raise PermissionError("heartbeat failed")
+
+        async def work(_job):
+            """Run the staged test work."""
+            await asyncio.sleep(0)
+
+        monkeypatch.setattr(mgr, "_heartbeat_reservation", fail_heartbeat)
+        monkeypatch.setattr(mgr, "_refresh_reservation", lambda _job: None)
+        monkeypatch.setattr(
+            mgr, "_start_monitor_if_possible", lambda job: monitored.append(job.id)
+        )
+
+        job = Job(id="job-1")
+        result = await mgr._stage_and_monitor(job, work)
+
+        assert result is job
+        assert job.state == JobState.RUNNING
+        assert job.stage == "queued"
+        assert job.error is None
+        assert monitored == [job.id]
+        assert job.events[-1]["message"] == (
+            "waiting for privileged apply worker; "
+            "post-publication reservation maintenance failed: heartbeat failed"
+        )
+
+    @pytest.mark.asyncio
+    async def test_staged_submit_heartbeats_reservation_while_staging(self, monkeypatch, tmp_path):
+        """Verify that staged submit heartbeats reservation while staging."""
         monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
         monkeypatch.setattr("atomixos_provision.jobs._STAGED_RESERVATION_HEARTBEAT_SECONDS", 0.01)
         mgr = StagedJobManager(result_timeout_seconds=0.01)
@@ -521,12 +649,52 @@ class TestStagedJobManager:
         await mgr._task
 
     @pytest.mark.asyncio
+    async def test_staged_heartbeat_retries_transient_refresh_failure(self, monkeypatch, tmp_path):
+        """Verify that staged heartbeat retries transient refresh failure."""
+        monkeypatch.setattr("atomixos_provision.jobs._STAGED_RESERVATION_HEARTBEAT_SECONDS", 0.01)
+        runtime_root = tmp_path / "run"
+        monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(runtime_root))
+        paths = runtime_paths(runtime_root)
+        assert reserve_staged_job_slot(paths, "job-1", 1) is True
+        reserve_path = paths.queue / "job-1.reserve"
+        original_sequence = read_json(reserve_path)["sequence"]
+        mgr = StagedJobManager()
+        job = Job(id="job-1")
+        recovered = asyncio.Event()
+        refreshes = 0
+        real_refresh = mgr._refresh_reservation
+
+        def refresh(current_job):
+            """Refresh the test reservation."""
+            nonlocal refreshes
+            refreshes += 1
+            if refreshes == 1:
+                raise PermissionError("temporarily unavailable")
+            real_refresh(current_job)
+            recovered.set()
+
+        monkeypatch.setattr(mgr, "_refresh_reservation", refresh)
+        task = asyncio.create_task(mgr._heartbeat_reservation(job))
+        await asyncio.wait_for(recovered.wait(), timeout=1)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        messages = [event["message"] for event in job.events]
+        assert messages == [
+            "reservation refresh failed; retrying: temporarily unavailable",
+            "reservation refresh recovered",
+        ]
+        assert read_json(reserve_path)["sequence"] == original_sequence
+
+    @pytest.mark.asyncio
     async def test_staged_get_recovers_queued_job_state(self, monkeypatch, tmp_path):
+        """Verify that staged get recovers queued job state."""
         runtime_root = tmp_path / "run"
         monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(runtime_root))
         mgr = StagedJobManager(result_timeout_seconds=0.01)
         monkeypatch.setattr(mgr, "_refresh_from_result", lambda _job: False)
-        monkeypatch.setattr(mgr, "_handle_staged_timeout", lambda _job: "missing")
+        monkeypatch.setattr(mgr, "_handle_staged_timeout", lambda _job: StagedTimeoutState.MISSING)
         paths = runtime_paths(runtime_root)
         ensure_runtime_layout(paths)
         (paths.queue / "job-1").mkdir()
@@ -637,10 +805,11 @@ class TestStagedJobManager:
     async def test_staged_job_fails_if_worker_removes_job_without_result(
         self, monkeypatch, tmp_path
     ):
+        """Verify that staged job fails if worker removes job without result."""
         monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
         mgr = StagedJobManager(result_timeout_seconds=0.01)
         monkeypatch.setattr(mgr, "_refresh_from_result", lambda _job: False)
-        monkeypatch.setattr(mgr, "_handle_staged_timeout", lambda _job: "missing")
+        monkeypatch.setattr(mgr, "_handle_staged_timeout", lambda _job: StagedTimeoutState.MISSING)
 
         async def work(job):
             return None
@@ -655,6 +824,7 @@ class TestStagedJobManager:
 
     @pytest.mark.asyncio
     async def test_staged_job_refreshes_result_before_timeout_failure(self, monkeypatch, tmp_path):
+        """Verify that staged job refreshes result before timeout failure."""
         monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
         mgr = StagedJobManager(result_timeout_seconds=0.01)
         refreshes = {"count": 0}
@@ -668,7 +838,7 @@ class TestStagedJobManager:
             return True
 
         monkeypatch.setattr(mgr, "_refresh_from_result", refresh)
-        monkeypatch.setattr(mgr, "_handle_staged_timeout", lambda _job: "missing")
+        monkeypatch.setattr(mgr, "_handle_staged_timeout", lambda _job: StagedTimeoutState.MISSING)
 
         async def work(job):
             return None

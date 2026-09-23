@@ -15,7 +15,8 @@ not rewrite operator data.
 ## Provisioning Flow
 
 Provisioning imports exactly one operator configuration into `/data/config/` from `/boot/config.toml` on fresh flash, a
-USB seed, a supported seed bundle, or the LAN bootstrap console.
+raw USB `config.toml` seed, or the LAN bootstrap console. The API, Boot UI, and compatibility CLI also accept supported
+compressed config bundles; USB discovery itself does not select bundle archives.
 
 Persisted outputs are:
 
@@ -51,17 +52,29 @@ In production, re-apply is staged by the unprivileged API under
 `/run/atomixos-provision` before root touches `/data`. The API validates the
 submitted source, renders a complete candidate in tmpfs, writes a manifest with
 relative paths, ownership expectations, modes, sizes, and SHA-256 hashes, then
-publishes a ready marker. A root `atomixos-provision-apply.service` worker claims
-ready jobs, verifies the staged tree, re-renders the verified staged
-`config.toml` into `/data/config-candidate/`, and then uses the existing atomic
-promotion flow:
+publishes a ready marker from the same live reservation that assigned its FIFO
+sequence. A root `atomixos-provision-apply.service` worker claims
+ready jobs, verifies the staged tree and authorization, reconstructs the signed
+operation, renders canonical state into `/data/config-candidate/`, and then uses
+the existing atomic promotion flow:
 
 1. Rename active `/data/config` to `/data/config-rollback`.
 2. Rename candidate to `/data/config`.
 3. Run activation services synchronously (user apply, Quadlet sync, LAN/host network apply, firewall), then apply
    `/data/config/activation-policy.json` timing, restart, and health-check policy.
-4. On success, clean up `/data/config-rollback`.
+4. On success, mark the apply receipt `committed`, then clean up
+   `/data/config-rollback`.
 5. On failure, restore `/data/config-rollback` to `/data/config` and re-activate with the restored activation policy.
+
+Before promotion, the worker writes a root-only `promoted` apply receipt into
+the durable candidate. The receipt binds the staged job ID and source digest to
+its eventual success payload but does not yet prove success. After activation
+and health checks pass, the worker atomically rewrites the receipt as
+`committed` before removing rollback state. The worker removes the claimed job
+only after terminal result JSON is written. If the worker stops between
+promotion and result publication, its finalizer rolls back a promoted re-apply,
+discards a promoted initial apply, or preserves a committed apply, then compares
+the receipt with the claimed manifest to publish the authoritative result.
 
 `POST /api/config` is asynchronous for programmatic clients. It returns a typed response with `job_id`, `state`, and
 `job_url`; the `Location` header points to the same job resource. The job records provisioning steps, service
@@ -74,10 +87,28 @@ worker path. Partial updates are accepted only when the staged queue is otherwis
 rendered partial candidates cannot overwrite each other. If validation or activation fails, the previous
 active `/data/config` tree remains active or is restored by the same rollback path used by full re-apply.
 
-First provisioning (no root-written `.first-config` marker) remains unauthenticated, but external writes
-to `/data/config` still stage through the root worker. Direct `/data/config` mutation is limited to the
-privileged worker and bootstrap maintenance commands that explicitly run with
-`ATOMIXOS_PROVISION_WORKER_ACTIVE=1`.
+First provisioning is unauthenticated when neither the root-written `.first-config` marker nor a valid
+`config.toml` exists. The marker-or-config fallback preserves compatibility with state created before the marker was
+introduced; missing signer state fails closed once the root is provisioned. External writes to `/data/config` still stage
+through the root worker. Direct `/data/config` mutation is limited to the privileged worker and bootstrap maintenance
+commands that explicitly run with `ATOMIXOS_PROVISION_WORKER_ACTIVE=1`.
+
+## Bundle Export Flow
+
+Authenticated `GET /api/config/export` takes the provisioning lock and snapshots
+only the canonical `config.toml` plus the managed `/data/config/files/` tree. It
+returns a deterministic `config-bundle.tar.gz` (`application/gzip`) accepted by
+the same importer. Generated JSON, Quadlet output, markers, signer material, the
+apply receipt, and other `/data/config` state are excluded. Missing `files/` is omitted; an existing
+empty directory is represented as an empty `files` archive entry. Archive members
+are relative regular files or directories and remain bounded during snapshotting by
+the import size, member, and count limits, so exporting and importing the bundle
+preserves the canonical config and bundle-managed file contents without exposing
+runtime credentials. Trusted workloads may change a deliberately writable managed
+mount, in which case later config exports contain the changed bytes. Mutable
+application data should normally live in Podman volumes and is not part of the
+bundle; its export and restore use Podman tooling outside AtomixOS provisioning
+ownership.
 
 ## Managed Users Flow
 

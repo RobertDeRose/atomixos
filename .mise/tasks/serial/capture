@@ -38,12 +38,12 @@ if [ "${usage_bg:-false}" = "true" ]; then
 	pkill -f "minicom.*capture" 2>/dev/null || true
 	pkill -f "minicom -D.*cu.usbserial" 2>/dev/null || true
 	sleep 1
-	: > "$SERIAL_LOG"
+	: >"$SERIAL_LOG"
 
 	# Run minicom in background with capture file.
 	# -C = capture file, -o = skip init, no terminal needed via script -q /dev/null
 	nohup script -q /dev/null "$MINICOM" -D "$SERIAL_PORT" -b 1500000 -o -C "$SERIAL_LOG" \
-		> /dev/null 2>&1 &
+		>/dev/null 2>&1 &
 
 	BG_PID=$!
 	echo "Serial capture running in background (PID $BG_PID)"

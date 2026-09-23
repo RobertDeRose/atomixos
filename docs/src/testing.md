@@ -23,6 +23,12 @@ These tests cover the Litestar API, SSH-signature auth helpers, config parsing,
 bundle import, Quadlet rendering/sync, activation, job tracking, and service
 foundation modules.
 
+On macOS, pytest explicitly skips the two staging assertions that require Linux
+setgid directory-mode semantics. Those exact assertions run only when the package
+pytest suite is executed on Linux; the current target VM suite exercises staged
+provisioning but does not duplicate the mode-bit assertions. All other package
+tests run unfiltered on macOS.
+
 ### All tests
 
 ```sh
@@ -69,6 +75,11 @@ nix build .#checks.aarch64-darwin.watchdog-missing-device --no-link
 nix build .#checks.aarch64-linux.watchdog-missing-device --no-link
 nix build .#checks.aarch64-darwin.kernel-security --no-link
 nix build .#checks.aarch64-linux.kernel-security --no-link
+
+# Provisioning checks on the Linux target
+NIX_CONFIG='max-jobs = 1' ./scripts/nix-with-build-config.sh build --no-link --print-build-logs \
+  .#checks.aarch64-linux.first-boot-provision \
+  .#checks.aarch64-linux.first-boot-source-discovery
 ```
 
 The `nixstasis-client` VM check boots AtomixOS with a mock Nixstasis API. It
@@ -174,12 +185,12 @@ state from previous bundle tests is discarded when the VM exits.
 The VM uses the QEMU hardware profile with `eth0` as WAN and a second virtio NIC
 as LAN. Host ports are forwarded for common operator workflows:
 
-| Host URL/Port                  | Guest service        |
-|--------------------------------|----------------------|
-| `ssh -p 10022 admin@127.0.0.1` | SSH                  |
-| `http://127.0.0.1:8080`        | Bootstrap/reapply UI |
-| `http://127.0.0.1:8081`        | Caddy HTTP           |
-| `https://127.0.0.1:8443`       | Caddy HTTPS          |
+| Host URL/Port                  | Guest service                  |
+|--------------------------------|--------------------------------|
+| `ssh -p 10022 admin@127.0.0.1` | SSH                            |
+| `http://127.0.0.1:8080`        | Bootstrap UI (first boot only) |
+| `http://127.0.0.1:8081`        | Caddy HTTP                     |
+| `https://127.0.0.1:8443`       | Caddy HTTPS                    |
 
 Build the runner without launching it:
 
@@ -187,7 +198,7 @@ Build the runner without launching it:
 mise run vm:bundle-test --build-only
 ```
 
-Apply a bundle from the host:
+Apply a bundle from the host during first boot; the browser UI is not a post-provision management console:
 
 ```sh
 tar --zstd -cvf config.tar.zst -C example/caddy-oidc .

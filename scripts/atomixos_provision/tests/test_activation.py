@@ -395,6 +395,27 @@ class TestReportRuntimeDeployStart:
 
 
 class TestCompleteReapply:
+    """Group tests for CompleteReapply."""
+
+    def test_records_commit_before_removing_rollback_state(self, tmp_path, monkeypatch):
+        """Verify that records commit before removing rollback state."""
+        events = []
+        monkeypatch.setattr(
+            "atomixos_provision.activation.run_activation_sequence",
+            lambda _root, _progress=None: [],
+        )
+        monkeypatch.setattr(
+            "atomixos_provision.activation.cleanup_rollback",
+            lambda _root: events.append("cleanup"),
+        )
+
+        result = complete_reapply(
+            tmp_path / "config", before_commit=lambda: events.append("commit")
+        )
+
+        assert result == (True, [], "skipped")
+        assert events == ["commit", "cleanup"]
+
     def test_reports_deploy_status_before_required_health_checks(self, tmp_path, monkeypatch):
         config_root = tmp_path / "config"
         config_root.mkdir()
@@ -476,6 +497,7 @@ class TestCompleteReapply:
         assert (config_root / "config.toml").read_text() == "previous"
 
     def test_activation_runs_before_policy_restart(self, tmp_path, monkeypatch):
+        """Verify that activation runs before policy restart."""
         config_root = tmp_path / "config"
         config_root.mkdir()
         rollback = tmp_path / "config-rollback"
@@ -491,8 +513,9 @@ class TestCompleteReapply:
         )
         monkeypatch.setattr(
             "atomixos_provision.activation._restart_service",
-            lambda _service, _mode, _deadline=None: calls.append("restart")
-            or subprocess.CompletedProcess([], 0),
+            lambda _service, _mode, _deadline=None: (
+                calls.append("restart") or subprocess.CompletedProcess([], 0)
+            ),
         )
         monkeypatch.setattr(
             "atomixos_provision.activation._check_service",
@@ -655,14 +678,13 @@ class TestCompleteReapply:
         assert complete_reapply(config_root) == (True, [], "skipped")
 
     def test_invalid_numeric_activation_policy_rolls_back(self, tmp_path, monkeypatch):
+        """Verify that invalid numeric activation policy rolls back."""
         config_root = tmp_path / "config"
         config_root.mkdir()
         rollback = tmp_path / "config-rollback"
         rollback.mkdir()
         (rollback / "config.toml").write_text("previous")
-        (config_root / "activation-policy.json").write_text(
-            json.dumps({"timeout_seconds": "30"})
-        )
+        (config_root / "activation-policy.json").write_text(json.dumps({"timeout_seconds": "30"}))
         monkeypatch.setattr(
             "atomixos_provision.activation.activate_services", lambda _progress, _timeout=300: []
         )

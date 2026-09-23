@@ -14,7 +14,7 @@ mkdir -p "$host_cockpit_share"
 cp -a /usr/share/cockpit/. "$host_cockpit_share/"
 
 if [ ! -f "$key" ]; then
-  ssh-keygen -q -t ed25519 -N '' -C cockpit-ws@atomixos -f "$key"
+	ssh-keygen -q -t ed25519 -N '' -C cockpit-ws@atomixos -f "$key"
 fi
 
 chmod 700 "$key_dir"
@@ -22,10 +22,10 @@ chmod 600 "$key"
 
 touch "$host_authorized_keys"
 pub=$(cat "$key.pub")
-grep -qxF "$pub" "$host_authorized_keys" || printf '%s\n' "$pub" >> "$host_authorized_keys"
+grep -qxF "$pub" "$host_authorized_keys" || printf '%s\n' "$pub" >>"$host_authorized_keys"
 chmod 600 "$host_authorized_keys"
 
-cat > /etc/cockpit/cockpit.conf <<EOF
+cat >/etc/cockpit/cockpit.conf <<EOF
 [WebService]
 AllowUnencrypted = true
 CustomLoginPage = /usr/local/share/atomixos-cockpit

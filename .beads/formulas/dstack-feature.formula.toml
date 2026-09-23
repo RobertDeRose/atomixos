@@ -43,11 +43,7 @@ id = "review-architecture"
 title = "Review architecture: {{feature_name}}"
 type = "task"
 priority = 1
-labels = [
-  "workflow:feature-lifecycle",
-  "phase:spec-review",
-  "review:architecture"
-]
+labels = ["workflow:feature-lifecycle", "phase:spec-review", "review:architecture"]
 needs = ["design"]
 metadata = { workflow_phase = "spec-review", review_kind = "architecture" }
 description = """
@@ -59,11 +55,7 @@ id = "review-simplicity"
 title = "Review simplicity: {{feature_name}}"
 type = "task"
 priority = 1
-labels = [
-  "workflow:feature-lifecycle",
-  "phase:spec-review",
-  "review:simplicity"
-]
+labels = ["workflow:feature-lifecycle", "phase:spec-review", "review:simplicity"]
 needs = ["design"]
 metadata = { workflow_phase = "spec-review", review_kind = "simplicity" }
 description = """
@@ -75,11 +67,7 @@ id = "review-documentation"
 title = "Review documentation: {{feature_name}}"
 type = "task"
 priority = 1
-labels = [
-  "workflow:feature-lifecycle",
-  "phase:spec-review",
-  "review:documentation"
-]
+labels = ["workflow:feature-lifecycle", "phase:spec-review", "review:documentation"]
 needs = ["design"]
 metadata = { workflow_phase = "spec-review", review_kind = "documentation" }
 description = """
@@ -104,12 +92,7 @@ title = "Reconcile specification: {{feature_name}}"
 type = "task"
 priority = 1
 labels = ["workflow:feature-lifecycle", "phase:spec-ready"]
-needs = [
-  "review-architecture",
-  "review-simplicity",
-  "review-documentation",
-  "review-execution"
-]
+needs = ["review-architecture", "review-simplicity", "review-documentation", "review-execution"]
 metadata = { workflow_phase = "spec-ready" }
 description = """
 Reconcile review findings into {{design_path}} and the Beads implementation graph. Resolve clear findings directly. Ask the user one blocking design question at a time when policy or intent is genuinely ambiguous. Commit the reviewed design and record the commit SHA before closing this step.
@@ -132,11 +115,7 @@ id = "docs-reconcile"
 title = "Reconcile documentation: {{feature_name}}"
 type = "task"
 priority = 1
-labels = [
-  "workflow:feature-lifecycle",
-  "phase:closeout",
-  "closeout:documentation"
-]
+labels = ["workflow:feature-lifecycle", "phase:closeout", "closeout:documentation"]
 needs = ["implementation"]
 metadata = { workflow_phase = "closeout", closeout_kind = "documentation" }
 description = """
