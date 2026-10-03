@@ -151,7 +151,10 @@ def validate_relative_path(raw_path: str) -> str:
 
 def sha256_file(path: Path, *, max_bytes: int | None = None) -> str:
     """Hash a no-follow regular file, optionally bounding reads of mutable evidence."""
-    fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0))
+    fd = os.open(
+        path,
+        os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0),
+    )
     try:
         path_stat = os.fstat(fd)
         if not stat.S_ISREG(path_stat.st_mode):

@@ -67,13 +67,21 @@ restoring rollback, so fleet recovery does not enable network bootstrap.
 Runtime result files under `/run/atomixos-provision/results` are root-writable and group-readable only. Claim and queued-job
 abandonment share `/run/atomixos-provision/queue.lock`. The worker retains active jobs until terminal result publication.
 Its finalizer discards an interrupted initial promotion, rolls back an interrupted re-apply, or finishes cleanup for a
-committed apply. Rollback merges failed and restored managed-user tracking before removing the failed tree, and
+committed apply. Same-boot recovery retries a committed re-apply's delayed LAN bootstrap rebind when its durable
+result records a forwarding URL, before publishing recovered success. Repeated scheduling requests share the named
+transient unit; completed or failed units are collected so later applies can schedule it again. Boot recovery leaves
+rebinding to its ordered successor services, and Nixstasis transport does not schedule network rebinding.
+Rollback merges failed and restored managed-user tracking before removing the failed tree, and
 same-boot finalization reactivates the restored configuration before publishing results. Rollback activation failures
 are included in the failed result. It then matches the owner-only receipt against the claimed manifest before recording
 authoritative success or failure. Result polling may abandon only an
 unclaimed queued job; a claimed job remains nonterminal until the worker or its
 finalizer publishes the authoritative result. The monitor retries result I/O errors without inferring terminal apply
 failure; direct result readers still receive those errors.
+
+The apply service allows 3900 seconds for stop/finalization, covering the supported 3600-second activation budget
+plus recovery overhead. Privileged staged-file hashing opens nonblocking and rejects non-regular descriptors, so a
+raced-in FIFO cannot block the worker before validation.
 
 The first-boot Boot UI is a browser-only wrapper around that same boundary. It
 submits uploaded or dropped `config.toml` or supported bundle sources through `/apply`, uses the bootstrap CSRF
@@ -275,6 +283,7 @@ Bundle imports may include `files/`; Quadlet values may reference `${CONFIG_DIR}
 default. A trusted integrator may request writable `Volume`, `Mount`, or `PodmanArgs` behavior; AtomixOS preserves that
 Quadlet configuration and warns when a `${FILES_DIR}` mount is not clearly read-only. `PodmanArgs` analysis supports
 combined argument strings and quoted paths as well as separate entries, retaining directive indices in warnings.
+This includes attached short-option volume arguments such as `-v${FILES_DIR}/state:/state:rw`.
 Writable application state should
 normally use Podman named volumes. Operators who need to back up, restore, or transfer that runtime data should use
 Podman tooling; that lifecycle is outside this feature and AtomixOS provisioning ownership.

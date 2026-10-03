@@ -35,6 +35,7 @@ from atomixos_provision.activation import (
 )
 from atomixos_provision.apply_transaction import (
     APPLY_RECEIPT_FILENAME,
+    ApplyReceiptPhase,
     ApplyRecovery,
     StagedApplyTransaction,
     committed_result_for_manifest,
@@ -976,12 +977,19 @@ def _uses_network_bootstrap() -> bool:
 
 def schedule_bootstrap_rebind(parsed: dict[str, Any]) -> None:
     """Restart bootstrap socket after apply has completed."""
-    if not _uses_network_bootstrap() or provisioning_forwarding_url(parsed) is None:
+    if provisioning_forwarding_url(parsed) is not None:
+        _schedule_bootstrap_rebind()
+
+
+def _schedule_bootstrap_rebind() -> None:
+    """Queue the transport follow-up, sharing one pending transient rebind unit."""
+    if not _uses_network_bootstrap():
         return
     try:
         subprocess.run(
             [
                 "systemd-run",
+                "--collect",
                 "--unit=atomixos-bootstrap-rebind-delayed",
                 "--on-active=30s",
                 "--property=Type=oneshot",
@@ -1634,6 +1642,16 @@ def _recover_staged_apply(config_root: Path, *, boot_recovery: bool = False) -> 
     # Waiting for those units from their prerequisite recovery unit would deadlock.
     if boot_recovery:
         return recovery
+    receipt = recovery.receipt
+    if (
+        receipt is not None
+        and receipt.phase is ApplyReceiptPhase.COMMITTED
+        and receipt.result.get("reapply") is True
+        and isinstance(receipt.result.get("forwarding_url"), str)
+    ):
+        # The durable result records whether the committed apply needs LAN rebinding.
+        # Replay that follow-up before publishing a recovered success.
+        _schedule_bootstrap_rebind()
     if recovery.restored_rollback:
         recovery = replace(recovery, rollback_failures=tuple(run_activation_sequence(config_root)))
     if recovery.discarded_initial or recovery.restored_rollback:

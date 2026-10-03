@@ -188,6 +188,7 @@ in
       ExecStart = provisionApplyScript;
       ExecStopPost = provisionApplyFinalizeScript;
       TimeoutStartSec = 7500;
+      TimeoutStopSec = 3900;
       PrivateTmp = true;
       NoNewPrivileges = true;
       ProtectSystem = "strict";

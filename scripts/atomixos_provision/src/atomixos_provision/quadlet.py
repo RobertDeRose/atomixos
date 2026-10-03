@@ -243,6 +243,9 @@ def _podman_mount_values(values: list[str]):
                 yield option.rstrip("=").lstrip("-"), value[len(option) :], index
                 break
         else:
+            if value.startswith("-v") and len(value) > 2:
+                yield "v", value[2:], index
+                continue
             for option in ("--volume", "-v", "--mount"):
                 if value == option and position + 1 < len(tokens):
                     mount_value, mount_index = tokens[position + 1]
