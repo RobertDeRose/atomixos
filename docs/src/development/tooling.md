@@ -37,7 +37,8 @@ No recognized language profile is active; only the universal tooling baseline ru
 
 `.github/workflows/hk.yml` is the single quality workflow for every push and pull request. It installs Nix and the
 committed tool lock, then runs `hk check -a`, which owns formatting, linting, documentation, and Nix validation. CI
-does not regenerate the lock or maintain a separate validation policy. Tests remain separate from this gate.
+does not regenerate the lock or maintain a separate validation policy. Dependency-update branches and fork PRs are
+not excluded from the pull-request gate. Tests remain separate from this gate.
 
 ## Hooks and recovery
 
