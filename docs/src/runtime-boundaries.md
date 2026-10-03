@@ -58,16 +58,22 @@ generated runtime state and Podman volume contents. Initial promotion also write
 shared provisioning predicate treats a regular, non-symlink marker or `config.toml` as the compatibility signal across
 provisioning, authentication, and Boot UI guards, while missing signer state fails closed.
 
-Both the recovery CLI and staged worker reconcile bootstrap WAN state after discarding an interrupted initial promotion.
-The recovery service receives the configured bootstrap transport, so fleet recovery does not enable network bootstrap.
+The WAN firewall uses the same non-symlink marker-or-config state, except that pending promotion preserves bootstrap
+access. Signer-only state does not mark a device provisioned.
+Boot recovery leaves runtime and WAN reconciliation to its ordered successor services; it never synchronously waits for
+those units. Same-boot worker recovery reconciles the configured transport after discarding an initial promotion or
+restoring rollback, so fleet recovery does not enable network bootstrap.
 
 Runtime result files under `/run/atomixos-provision/results` are root-writable and group-readable only. Claim and queued-job
 abandonment share `/run/atomixos-provision/queue.lock`. The worker retains active jobs until terminal result publication.
 Its finalizer discards an interrupted initial promotion, rolls back an interrupted re-apply, or finishes cleanup for a
-committed apply. It then matches the owner-only receipt against the claimed manifest before recording authoritative
-success or failure. Result polling may abandon only an
+committed apply. Rollback merges failed and restored managed-user tracking before removing the failed tree, and
+same-boot finalization reactivates the restored configuration before publishing results. Rollback activation failures
+are included in the failed result. It then matches the owner-only receipt against the claimed manifest before recording
+authoritative success or failure. Result polling may abandon only an
 unclaimed queued job; a claimed job remains nonterminal until the worker or its
-finalizer publishes the authoritative result.
+finalizer publishes the authoritative result. The monitor retries result I/O errors without inferring terminal apply
+failure; direct result readers still receive those errors.
 
 The first-boot Boot UI is a browser-only wrapper around that same boundary. It
 submits uploaded or dropped `config.toml` or supported bundle sources through `/apply`, uses the bootstrap CSRF
@@ -267,7 +273,9 @@ user, are forced onto `Network=pasta`, and non-loopback `PublishPort` binds are 
 Bundle imports may include `files/`; Quadlet values may reference `${CONFIG_DIR}` and `${FILES_DIR}` to bind files from
 `/data/config/` without embedding host-specific absolute paths in the seed. Managed inputs are installed read-only by
 default. A trusted integrator may request writable `Volume`, `Mount`, or `PodmanArgs` behavior; AtomixOS preserves that
-Quadlet configuration and warns when a `${FILES_DIR}` mount is not clearly read-only. Writable application state should
+Quadlet configuration and warns when a `${FILES_DIR}` mount is not clearly read-only. `PodmanArgs` analysis supports
+combined argument strings and quoted paths as well as separate entries, retaining directive indices in warnings.
+Writable application state should
 normally use Podman named volumes. Operators who need to back up, restore, or transfer that runtime data should use
 Podman tooling; that lifecycle is outside this feature and AtomixOS provisioning ownership.
 

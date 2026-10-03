@@ -139,18 +139,9 @@ def recover_config_root(config_root: Path) -> None:
     marker_path = promotion_marker_path(config_root)
 
     if marker_path.exists() and rollback_root.exists():
-        if config_root.exists():
-            shutil.rmtree(config_root)
-            rollback_root.rename(config_root)
-            if candidate_root.exists():
-                shutil.rmtree(candidate_root)
-            marker_path.unlink(missing_ok=True)
-            _fsync_directory(config_root.parent)
-            return
-        rollback_root.rename(config_root)
+        restore_rollback(config_root)
         if candidate_root.exists():
             shutil.rmtree(candidate_root)
-        marker_path.unlink(missing_ok=True)
         _fsync_directory(config_root.parent)
         return
 

@@ -33,8 +33,13 @@ let
         nft delete rule inet filter input handle "$handle"
       done
 
+    is_regular_file() {
+      [ -f "$1" ] && [ ! -L "$1" ]
+    }
+
     if [ -f /data/config.atomixos-promotion-pending ] \
-      || { [ ! -f /data/config/config.toml ] && [ ! -f /data/config/admin-signers ]; }; then
+      || { ! is_regular_file /data/config/.first-config \
+        && ! is_regular_file /data/config/config.toml; }; then
       nft add rule inet filter input iifname "${cfg.wanInterface}" tcp dport 8080 accept comment "ATOMIXOS_BOOTSTRAP_WAN"
     fi
   '';

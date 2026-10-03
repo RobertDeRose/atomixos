@@ -188,7 +188,7 @@ def recover(config_root: Path) -> None:
     config_root = validate_config_root(config_root)
     require_worker_for_data_config(config_root, "recover")
     with provisioning_lock(config_root):
-        _recover_staged_apply(config_root)
+        _recover_staged_apply(config_root, boot_recovery=True)
         if config_root.exists():
             grant_service_read_access(config_root)
 

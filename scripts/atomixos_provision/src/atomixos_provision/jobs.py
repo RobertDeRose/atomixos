@@ -464,26 +464,39 @@ class StagedJobManager(JobManager):
         """Monitor a published staged job for worker results."""
         try:
             deadline = time.monotonic() + self._result_timeout_seconds
+            last_io_error = None
             while job.state in (JobState.SUBMITTED, JobState.RUNNING):
-                if self._refresh_from_result(job):
-                    break
-                if time.monotonic() >= deadline:
-                    timeout_state = self._handle_staged_timeout(job)
+                try:
                     if self._refresh_from_result(job):
                         break
-                    if timeout_state in {
-                        StagedTimeoutState.WAITING,
-                        StagedTimeoutState.CLAIMED,
-                    }:
-                        deadline = time.monotonic() + self._result_timeout_seconds
-                        if timeout_state is StagedTimeoutState.CLAIMED:
-                            job.set_stage("running", "privileged apply worker is running")
+                    if time.monotonic() >= deadline:
+                        timeout_state = self._handle_staged_timeout(job)
+                        if self._refresh_from_result(job):
+                            break
+                        if timeout_state in {
+                            StagedTimeoutState.WAITING,
+                            StagedTimeoutState.CLAIMED,
+                        }:
+                            deadline = time.monotonic() + self._result_timeout_seconds
+                            if timeout_state is StagedTimeoutState.CLAIMED:
+                                job.set_stage("running", "privileged apply worker is running")
+                            else:
+                                job.set_stage("queued", "waiting for privileged apply worker")
+                        elif timeout_state is StagedTimeoutState.MISSING:
+                            raise ProvisionError(
+                                "privileged apply worker did not publish a result"
+                            )
                         else:
-                            job.set_stage("queued", "waiting for privileged apply worker")
-                        continue
-                    if timeout_state is StagedTimeoutState.MISSING:
-                        raise ProvisionError("privileged apply worker did not publish a result")
-                    raise ProvisionError("timed out waiting for privileged apply worker")
+                            raise ProvisionError("timed out waiting for privileged apply worker")
+                except OSError as exc:
+                    if str(exc) != last_io_error:
+                        job.set_stage(
+                            "running" if job.state is JobState.RUNNING else "queued",
+                            f"worker result I/O failed; retrying: {exc}",
+                        )
+                    last_io_error = str(exc)
+                else:
+                    last_io_error = None
                 await asyncio.sleep(0.2)
         except asyncio.CancelledError:
             with job._lock:

@@ -85,6 +85,7 @@ let
   '';
   provisionApplyFinalizeScript = pkgs.writeShellScript "atomixos-provision-apply-finalize" ''
     set -euo pipefail
+    export ATOMIXOS_BOOTSTRAP_ACTIVATION=${bootstrapActivationScript}
     export ATOMIXOS_PROVISION_WORKER_ACTIVE=1
     exec ${provisionCli}/bin/atomixos-provision finalize-staged /data/config --runtime-root /run/atomixos-provision
   '';
@@ -171,6 +172,7 @@ in
       pkgs.coreutils
       pkgs.gzip
       pkgs.jq
+      pkgs.openssh
       pkgs.procps
       pkgs.python3Minimal
       pkgs.systemd

@@ -15,6 +15,7 @@ import subprocess
 import tempfile
 import time
 import uuid
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Protocol
 from urllib.parse import unquote
@@ -30,10 +31,11 @@ from atomixos_provision.activation import (
     discard_initial_config,
     promotion_marker_path,
     recover_config_root,
+    run_activation_sequence,
 )
 from atomixos_provision.apply_transaction import (
     APPLY_RECEIPT_FILENAME,
-    StagedApplyReceipt,
+    ApplyRecovery,
     StagedApplyTransaction,
     committed_result_for_manifest,
     finalize_abandoned_active_jobs,
@@ -1625,12 +1627,18 @@ def _claimed_job_is_locally_trusted(job: ClaimedJob, paths: RuntimePaths) -> boo
     return owner_uid == os.geteuid()
 
 
-def _recover_staged_apply(config_root: Path) -> StagedApplyReceipt | None:
+def _recover_staged_apply(config_root: Path, *, boot_recovery: bool = False) -> ApplyRecovery:
     """Recover an interrupted staged apply from its transaction receipt."""
     recovery = recover_interrupted_apply(config_root)
-    if recovery.discarded_initial:
+    # Ordered boot services reconcile WAN, users, networking, and Quadlet units.
+    # Waiting for those units from their prerequisite recovery unit would deadlock.
+    if boot_recovery:
+        return recovery
+    if recovery.restored_rollback:
+        recovery = replace(recovery, rollback_failures=tuple(run_activation_sequence(config_root)))
+    if recovery.discarded_initial or recovery.restored_rollback:
         reconcile_bootstrap_wan()
-    return recovery.receipt
+    return recovery
 
 
 def apply_staged_job(config_root: Path, runtime_root: Path | None = None) -> dict[str, Any] | None:
@@ -1670,9 +1678,9 @@ def apply_staged_job(config_root: Path, runtime_root: Path | None = None) -> dic
             except Exception as exc:
                 try:
                     with provisioning_lock(config_root):
-                        receipt = _recover_staged_apply(config_root)
+                        recovery = _recover_staged_apply(config_root)
                     committed_result = committed_result_for_manifest(
-                        receipt, claimed.job_id, manifest
+                        recovery.receipt, claimed.job_id, manifest
                     )
                     if committed_result is not None:
                         payload: dict[str, Any] = {
@@ -1681,8 +1689,13 @@ def apply_staged_job(config_root: Path, runtime_root: Path | None = None) -> dic
                         }
                     else:
                         payload = {"status": "failed", "error": str(exc)}
+                        if recovery.rollback_failures:
+                            payload["error"] += "; rollback: " + "; ".join(
+                                recovery.rollback_failures
+                            )
+                            payload["rollback_status"] = "failed"
                         rollback_status = getattr(exc, "rollback_status", None)
-                        if isinstance(rollback_status, str):
+                        if isinstance(rollback_status, str) and not recovery.rollback_failures:
                             payload["rollback_status"] = rollback_status
                     write_result(paths, claimed.job_id, payload)
                 except Exception as reconciliation_error:
@@ -1715,11 +1728,14 @@ def finalize_staged_jobs(
     require_worker_for_data_config(config_root, "finalize staged jobs")
     paths = runtime_paths(runtime_root or _runtime_paths().root)
     with provisioning_lock(config_root):
-        receipt = _recover_staged_apply(config_root)
+        recovery = _recover_staged_apply(config_root)
+        failure_reason = reason or "privileged apply worker stopped before writing a result"
+        if recovery.rollback_failures:
+            failure_reason += "; rollback: " + "; ".join(recovery.rollback_failures)
         return finalize_abandoned_active_jobs(
             paths,
-            reason or "privileged apply worker stopped before writing a result",
-            receipt,
+            failure_reason,
+            recovery.receipt,
         )
 
 

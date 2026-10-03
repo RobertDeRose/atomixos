@@ -57,8 +57,8 @@ def test_request_hash_is_bounded_when_evidence_grows(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("transport", ["network", "fleet"])
-def test_cli_reconciles_discarded_initial_recovery(tmp_path, monkeypatch, transport):
-    """CLI recovery uses the same transport-aware reconciliation as the worker."""
+def test_boot_defers_wan_recovery_while_worker_reconciles(tmp_path, monkeypatch, transport):
+    """Boot recovery defers ordered units; same-boot recovery honors the transport."""
     monkeypatch.setenv("ATOMIXOS_BOOTSTRAP_TRANSPORT", transport)
     monkeypatch.setattr(
         provision, "recover_interrupted_apply", lambda _root: ApplyRecovery(None, True)
@@ -67,6 +67,8 @@ def test_cli_reconciles_discarded_initial_recovery(tmp_path, monkeypatch, transp
     monkeypatch.setattr(provision.subprocess, "run", lambda *args, **kwargs: calls.append(args))
     result = CliRunner().invoke(server.cli, ["recover", str(tmp_path / "config")])
     assert result.exit_code == 0, result.exception
+    assert calls == []
+    provision._recover_staged_apply(tmp_path / "config")
     assert bool(calls) == (transport == "network")
 
 

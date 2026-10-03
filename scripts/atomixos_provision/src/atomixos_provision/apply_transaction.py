@@ -12,6 +12,7 @@ from typing import Any
 from atomixos_provision.activation import (
     cleanup_rollback,
     discard_initial_config,
+    promotion_marker_path,
     recover_config_root,
     rollback_root_path,
 )
@@ -56,6 +57,8 @@ class ApplyRecovery:
 
     receipt: StagedApplyReceipt | None
     discarded_initial: bool = False
+    restored_rollback: bool = False
+    rollback_failures: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -165,8 +168,11 @@ def recover_interrupted_apply(config_root: Path) -> ApplyRecovery:
     ):
         discard_initial_config(config_root)
         return ApplyRecovery(None, discarded_initial=True)
+    restored_rollback = (
+        promotion_marker_path(config_root).exists() and rollback_root_path(config_root).exists()
+    )
     recover_config_root(config_root)
-    return ApplyRecovery(read_apply_receipt(config_root))
+    return ApplyRecovery(read_apply_receipt(config_root), restored_rollback=restored_rollback)
 
 
 def finalize_abandoned_active_jobs(

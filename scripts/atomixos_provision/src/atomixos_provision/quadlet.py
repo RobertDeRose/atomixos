@@ -1,6 +1,7 @@
 """Quadlet unit rendering (container, network, volume, build)."""
 
 import re
+import shlex
 from pathlib import Path
 from typing import Any
 
@@ -230,16 +231,22 @@ def managed_file_mount_is_read_only(directive: str, value: str) -> bool:
 
 def _podman_mount_values(values: list[str]):
     """Yield mount arguments carried by PodmanArgs."""
+    tokens: list[tuple[str, int]] = []
     for index, raw_value in enumerate(values):
-        value = raw_value.strip()
+        try:
+            tokens.extend((token, index) for token in shlex.split(raw_value))
+        except ValueError as exc:
+            raise provision_error(f"invalid PodmanArgs[{index}] quoting: {exc}") from exc
+    for position, (value, index) in enumerate(tokens):
         for option in ("--volume=", "-v=", "--mount="):
             if value.startswith(option):
                 yield option.rstrip("=").lstrip("-"), value[len(option) :], index
                 break
         else:
             for option in ("--volume", "-v", "--mount"):
-                if value == option and index + 1 < len(values):
-                    yield option.lstrip("-"), values[index + 1], index + 1
+                if value == option and position + 1 < len(tokens):
+                    mount_value, mount_index = tokens[position + 1]
+                    yield option.lstrip("-"), mount_value, mount_index
                     break
 
 
