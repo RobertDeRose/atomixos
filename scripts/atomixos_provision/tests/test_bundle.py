@@ -136,6 +136,10 @@ class TestCopyBundleFiles:
             "atomixos_provision.bundle.os.chown",
             lambda path, uid, gid, **_kwargs: chowns.append((str(path), uid, gid)),
         )
+        monkeypatch.setattr(
+            "atomixos_provision.bundle.os.fchown",
+            lambda fd, uid, gid: chowns.append((f"fd:{fd}", uid, gid)),
+        )
         return chowns
 
     def test_copies_files(self, tmp_path, monkeypatch):
@@ -158,15 +162,9 @@ class TestCopyBundleFiles:
         assert (config_root / "files" / "subdir").stat().st_mode & 0o777 == 0o550
         assert (config_root / "files" / "cert.pem").stat().st_mode & 0o777 == 0o440
         assert (config_root / "files" / "subdir" / "key.pem").stat().st_mode & 0o777 == 0o440
-        assert any(
-            path.endswith("/files/cert.pem")
-            for path, uid, gid in chowns
-            if (uid, gid) == (1000, 2000)
-        )
-        assert any(
-            path.endswith("/files/subdir/key.pem")
-            for path, uid, gid in chowns
-            if (uid, gid) == (1000, 2000)
+        assert (
+            sum(path.startswith("fd:") for path, uid, gid in chowns if (uid, gid) == (1000, 2000))
+            == 3
         )
 
     def test_reconciles_existing_files_for_writable_mount(self, tmp_path, monkeypatch):
@@ -180,7 +178,8 @@ class TestCopyBundleFiles:
         grant_managed_file_access(files_root, writable=True)
 
         assert files_root.stat().st_mode & 0o777 == 0o750
-        assert (str(files_root), 1000, 2000) in chowns
+        assert len(chowns) == 2
+        assert all((uid, gid) == (1000, 2000) for _path, uid, gid in chowns)
         assert files_root.joinpath("state.json").stat().st_mode & 0o777 == 0o640
 
     def test_rejects_symlinked_files_root_during_reconciliation(self, tmp_path, monkeypatch):
@@ -379,16 +378,18 @@ class TestExportBundle:
         (tmp_path / "files" / "a.txt").write_text("a\n")
         (tmp_path / "files" / "b.txt").write_text("b\n")
         copied_members = 0
-        copyfileobj = bundle_module.shutil.copyfileobj
+        source_inodes = {(tmp_path / "files" / name).stat().st_ino for name in ("a.txt", "b.txt")}
+        fdopen = bundle_module.os.fdopen
 
-        def counting_copyfileobj(*args, **kwargs):
-            """Copy a file while counting exported archive members."""
+        def counting_fdopen(fd, *args, **kwargs):
+            """Count snapshot files opened before the member limit is reached."""
             nonlocal copied_members
-            copied_members += 1
-            return copyfileobj(*args, **kwargs)
+            if bundle_module.os.fstat(fd).st_ino in source_inodes:
+                copied_members += 1
+            return fdopen(fd, *args, **kwargs)
 
         monkeypatch.setattr(bundle_module, "MAX_BUNDLE_MEMBERS", 3)
-        monkeypatch.setattr(bundle_module.shutil, "copyfileobj", counting_copyfileobj)
+        monkeypatch.setattr(bundle_module.os, "fdopen", counting_fdopen)
 
         with pytest.raises(ProvisionError, match="member limit"):
             export_bundle_bytes(tmp_path)

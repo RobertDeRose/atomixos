@@ -130,6 +130,8 @@ in
     ];
     wantedBy = [ "multi-user.target" ];
 
+    environment.ATOMIXOS_BOOTSTRAP_TRANSPORT = bootstrapTransport;
+
     unitConfig.RequiresMountsFor = [ "/data" ];
 
     path = [

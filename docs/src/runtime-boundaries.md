@@ -43,17 +43,23 @@ The staging boundary uses `/run/atomixos-provision`. The API writes a complete c
 and a manifest with relative paths, modes, sizes, and SHA-256 hashes, then publishes a ready marker using the same
 live capacity reservation that assigned its FIFO sequence. Expired reservations remove incomplete unpublished staging.
 The root `atomixos-provision-apply.service` claims queued jobs, verifies manifest paths, owners, modes, symlinks,
-hashes, and expected entries, then re-renders the verified staged `config.toml` into `/data/config-candidate`. It runs
+hashes, expected entries, and the source-size limit before reading staged request evidence, then re-renders the verified
+staged `config.toml` into `/data/config-candidate`. It runs
 the existing promotion, activation, rollback, and recovery protocol. Root-written `/data/config` state is
 group-readable by `atomixos-provision` so the unprivileged API can authenticate and export approved state, except for
 the owner-only apply receipt that binds a job and source digest to its transaction phase and result. Only its
 `committed` phase proves success. Bundle `files/` payloads are
 owned by `appsvc`, group-readable by `atomixos-provision`, and installed as read-only files and directories. They are
-preserved through a no-symlink snapshot path. Export is allowlisted to
+preserved through a no-symlink snapshot path; privileged access reconciliation changes verified file descriptors rather
+than following mutable paths. Export bounds snapshot writes as files are read, including files that grow during copying.
+Export is allowlisted to
 `config.toml` and `files/`, returns a deterministic `config-bundle.tar.gz` under the provisioning lock, and excludes
 generated runtime state and Podman volume contents. Initial promotion also writes `/data/config/.first-config`; the
-shared provisioning predicate treats that marker or a valid `config.toml` as the compatibility signal across
+shared provisioning predicate treats a regular, non-symlink marker or `config.toml` as the compatibility signal across
 provisioning, authentication, and Boot UI guards, while missing signer state fails closed.
+
+Both the recovery CLI and staged worker reconcile bootstrap WAN state after discarding an interrupted initial promotion.
+The recovery service receives the configured bootstrap transport, so fleet recovery does not enable network bootstrap.
 
 Runtime result files under `/run/atomixos-provision/results` are root-writable and group-readable only. Claim and queued-job
 abandonment share `/run/atomixos-provision/queue.lock`. The worker retains active jobs until terminal result publication.

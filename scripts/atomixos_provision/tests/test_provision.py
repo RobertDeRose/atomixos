@@ -836,6 +836,7 @@ async def test_apply_config_transform_preserves_bundle_files(tmp_path, monkeypat
         lambda _name: type("Gr", (), {"gr_gid": 2000})(),
     )
     monkeypatch.setattr("atomixos_provision.bundle.os.chown", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("atomixos_provision.bundle.os.fchown", lambda *_args: None)
 
     config_root = tmp_path / "config"
     bundle_root = tmp_path / "bundle-src"
@@ -905,6 +906,7 @@ async def test_staged_partial_apply_preserves_bundle_files(tmp_path, monkeypatch
         lambda _name: type("Gr", (), {"gr_gid": 2000})(),
     )
     monkeypatch.setattr("atomixos_provision.bundle.os.chown", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("atomixos_provision.bundle.os.fchown", lambda *_args: None)
     monkeypatch.setattr("atomixos_provision.provision.os.chown", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         provision,
@@ -1180,6 +1182,7 @@ def test_write_imported_state_grants_bundle_files_read_only_service_access(tmp_p
     (files_path / "app.txt").write_text("app\n")
     config_root = tmp_path / "config"
     calls = []
+    descriptor_calls = []
     parsed = {
         "ssh_keys": ["ssh-ed25519 AAAA admin@example"],
         "users": {"admin": {"isAdmin": True, "ssh_key": "ssh-ed25519 AAAA admin@example"}},
@@ -1208,11 +1211,16 @@ def test_write_imported_state_grants_bundle_files_read_only_service_access(tmp_p
         "atomixos_provision.bundle.os.chown",
         lambda path, uid, gid, **_kwargs: calls.append((path, uid, gid)),
     )
+    monkeypatch.setattr(
+        "atomixos_provision.bundle.os.fchown",
+        lambda fd, uid, gid: descriptor_calls.append((fd, uid, gid)),
+    )
 
     write_imported_state(parsed, config_path, files_path, config_root)
 
     assert (config_root / "files", 1000, 2000) in calls
-    assert any(path.name == "app.txt" and (uid, gid) == (1000, 2000) for path, uid, gid in calls)
+    assert descriptor_calls
+    assert all((uid, gid) == (1000, 2000) for _fd, uid, gid in descriptor_calls)
     assert (config_root / "files").stat().st_mode & 0o777 == 0o550
     assert (config_root / "files" / "app.txt").stat().st_mode & 0o777 == 0o440
 

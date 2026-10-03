@@ -9,7 +9,7 @@ FIRST_CONFIG_MARKER = ".first-config"
 def _is_regular_file(path: Path) -> bool:
     """Return whether a path is a regular file without following symlinks."""
     try:
-        mode = path.stat().st_mode
+        mode = path.lstat().st_mode
     except FileNotFoundError:
         return False
     return stat.S_ISREG(mode)

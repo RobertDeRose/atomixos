@@ -184,16 +184,31 @@ def _snapshot_dir(
                 raise provision_error(f"bundle files entry must be a regular file: {child_path}")
             with os.fdopen(file_fd, "rb") as source_file, target_path.open("wb") as output:
                 file_fd = -1
-                shutil.copyfileobj(source_file, output)
+                copied = 0
+                while True:
+                    remaining = 64 * 1024
+                    if max_file_bytes is not None:
+                        remaining = min(remaining, max_file_bytes - copied)
+                    if max_total_bytes is not None:
+                        remaining = min(remaining, max_total_bytes - total_bytes[0] - copied)
+                    chunk = source_file.read(max(0, remaining) + 1)
+                    if not chunk:
+                        break
+                    if max_file_bytes is not None and copied + len(chunk) > max_file_bytes:
+                        raise provision_error(
+                            f"bundle member {child_path!r} exceeds {max_file_bytes} byte limit"
+                        )
+                    if (
+                        max_total_bytes is not None
+                        and total_bytes[0] + copied + len(chunk) > max_total_bytes
+                    ):
+                        raise provision_error(
+                            f"bundle exceeds {max_total_bytes} byte decompressed limit"
+                        )
+                    output.write(chunk)
+                    copied += len(chunk)
             target_path.chmod(0o644)
-            actual_size = target_path.stat().st_size
-            if max_file_bytes is not None and actual_size > max_file_bytes:
-                raise provision_error(
-                    f"bundle member {child_path!r} exceeds {max_file_bytes} byte limit"
-                )
-            total_bytes[0] += actual_size
-            if max_total_bytes is not None and total_bytes[0] > max_total_bytes:
-                raise provision_error(f"bundle exceeds {max_total_bytes} byte decompressed limit")
+            total_bytes[0] += copied
         finally:
             if file_fd >= 0:
                 os.close(file_fd)
@@ -524,20 +539,51 @@ def _grant_managed_file_access(
     staging: bool = False,
 ) -> None:
     """Install managed payloads for appsvc and the provisioning API."""
-    # Keep the top-level staging directory writable until it is atomically
-    # renamed into place; the final target is tightened by the caller.
-    path.chmod(0o750 if staging or writable else 0o550)
-    for current in path.rglob("*"):
-        current_stat = current.lstat()
+    root_fd = _open_dir_no_follow(path)
+    try:
+        # The new-copy caller retains root ownership until promotion.
+        os.fchmod(root_fd, 0o750 if staging or writable else 0o550)
+        _grant_managed_dir_access(root_fd, path, app_uid, reader_gid, writable=writable)
+    finally:
+        os.close(root_fd)
+
+
+def _grant_managed_dir_access(
+    parent_fd: int, path: Path, app_uid: int, reader_gid: int, *, writable: bool
+) -> None:
+    """Change only verified inodes reached through no-follow directory descriptors."""
+    for name in os.listdir(parent_fd):
+        current = path / name
+        current_stat = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
         if stat.S_ISLNK(current_stat.st_mode):
             raise provision_error(f"bundle files entry must not be a symlink: {current}")
-        os.chown(current, app_uid, reader_gid, follow_symlinks=False)
-        if stat.S_ISDIR(current_stat.st_mode):
-            current.chmod(0o750 if writable else 0o550)
-        elif stat.S_ISREG(current_stat.st_mode):
-            current.chmod(0o640 if writable else 0o440)
-        else:
+        if not (stat.S_ISDIR(current_stat.st_mode) or stat.S_ISREG(current_stat.st_mode)):
             raise provision_error(f"bundle files entry must be a regular file: {current}")
+        flags = os.O_RDONLY | OPEN_NOFOLLOW | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0)
+        if stat.S_ISDIR(current_stat.st_mode):
+            flags |= getattr(os, "O_DIRECTORY", 0)
+        child_fd = os.open(name, flags, dir_fd=parent_fd)
+        try:
+            confirmed = os.fstat(child_fd)
+            if (confirmed.st_dev, confirmed.st_ino) != (
+                current_stat.st_dev,
+                current_stat.st_ino,
+            ):
+                raise provision_error(
+                    f"bundle files entry changed during reconciliation: {current}"
+                )
+            os.fchown(child_fd, app_uid, reader_gid)
+            if stat.S_ISDIR(confirmed.st_mode):
+                os.fchmod(child_fd, 0o750 if writable else 0o550)
+                _grant_managed_dir_access(
+                    child_fd, current, app_uid, reader_gid, writable=writable
+                )
+            elif stat.S_ISREG(confirmed.st_mode):
+                os.fchmod(child_fd, 0o640 if writable else 0o440)
+            else:
+                raise provision_error(f"bundle files entry must be a regular file: {current}")
+        finally:
+            os.close(child_fd)
 
 
 def grant_managed_file_access(path: Path, *, writable: bool = False) -> None:
@@ -557,8 +603,13 @@ def grant_managed_file_access(path: Path, *, writable: bool = False) -> None:
             f"user={APP_RUNTIME_USER}, group={PROVISION_READER_GROUP}"
         )
         raise provision_error(message) from exc
-    os.chown(path, app_uid, reader_gid, follow_symlinks=False)
-    _grant_managed_file_access(path, app_uid, reader_gid, writable=writable)
+    root_fd = _open_dir_no_follow(path)
+    try:
+        os.fchown(root_fd, app_uid, reader_gid)
+        os.fchmod(root_fd, 0o750 if writable else 0o550)
+        _grant_managed_dir_access(root_fd, path, app_uid, reader_gid, writable=writable)
+    finally:
+        os.close(root_fd)
 
 
 # --- Extraction ---

@@ -19,6 +19,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from atomixos_provision import bundle
 from atomixos_provision.config import ProvisionError
 
 MANIFEST_VERSION = 1
@@ -148,7 +149,8 @@ def validate_relative_path(raw_path: str) -> str:
     return normalized
 
 
-def sha256_file(path: Path) -> str:
+def sha256_file(path: Path, *, max_bytes: int | None = None) -> str:
+    """Hash a no-follow regular file, optionally bounding reads of mutable evidence."""
     fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0))
     try:
         path_stat = os.fstat(fd)
@@ -157,7 +159,17 @@ def sha256_file(path: Path) -> str:
         digest = hashlib.sha256()
         with os.fdopen(fd, "rb") as source:
             fd = -1
-            for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            total = 0
+            while True:
+                read_size = 1024 * 1024
+                if max_bytes is not None:
+                    read_size = min(read_size, max_bytes - total + 1)
+                chunk = source.read(read_size)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if max_bytes is not None and total > max_bytes:
+                    raise ProvisionError(f"staged request exceeds {max_bytes} byte limit")
                 digest.update(chunk)
         return digest.hexdigest()
     finally:
@@ -891,11 +903,13 @@ def _verify_staged_request(
     digest = request.get("sha256")
     if not isinstance(size, int) or isinstance(size, bool) or size < 0:
         raise ProvisionError("staged request size must be a non-negative integer")
+    if size > bundle.MAX_SOURCE_BYTES or request_stat.st_size > bundle.MAX_SOURCE_BYTES:
+        raise ProvisionError(f"staged request exceeds {bundle.MAX_SOURCE_BYTES} byte limit")
     if request_stat.st_size != size:
         raise ProvisionError("staged request size changed")
     if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
         raise ProvisionError("staged request hash is invalid")
-    if sha256_file(request_path) != digest:
+    if sha256_file(request_path, max_bytes=bundle.MAX_SOURCE_BYTES) != digest:
         raise ProvisionError("staged request hash changed")
 
 
