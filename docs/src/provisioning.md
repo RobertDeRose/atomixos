@@ -137,7 +137,9 @@ original TOML ordering are not preserved after a successful partial update. Bund
 `/data/config/files/` payloads and excludes generated runtime state, markers, signer material, and unrelated config
 files. Managed payloads are installed read-only by default. Trusted integrators may deliberately mount `${FILES_DIR}`
 writable; AtomixOS accepts the Quadlet configuration and emits a warning because any resulting changes are included in
-later config exports. Mutable application data should normally use Podman volumes and is intentionally excluded from
+later config exports. Managed-file `Volume` and `PodmanArgs --volume` options must use Podman's accepted casing
+(for example, `ro`, `rw`, `U`, `z`, or `Z`); invalid options such as `RO` are rejected before host permissions are derived.
+Mutable application data should normally use Podman volumes and is intentionally excluded from
 config export. Use Podman tooling when volume data must be backed up, restored, or transferred; AtomixOS provisioning
 does not own that runtime-data lifecycle. The archive can be imported through the same bundle importer into a clean
 config root.

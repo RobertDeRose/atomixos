@@ -35,6 +35,38 @@ QUADLET_SUFFIXES = frozenset(
     {".build", ".container", ".image", ".kube", ".network", ".pod", ".volume"}
 )
 DIRECTIVE_NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]*$")
+VOLUME_OPTIONS = frozenset(
+    {
+        "ro",
+        "rw",
+        "z",
+        "Z",
+        "O",
+        "U",
+        "noexec",
+        "exec",
+        "nodev",
+        "dev",
+        "nosuid",
+        "suid",
+        "private",
+        "rprivate",
+        "shared",
+        "rshared",
+        "slave",
+        "rslave",
+        "unbindable",
+        "runbindable",
+        "bind",
+        "rbind",
+        "cached",
+        "delegated",
+        "copy",
+        "nocopy",
+        "no-dereference",
+        "idmap",
+    }
+)
 
 
 # --- Helpers ---
@@ -164,8 +196,13 @@ def managed_file_mount_warning(directive: str, value: str, path: str) -> str | N
 def managed_file_mount_is_read_only(directive: str, value: str) -> bool:
     """Return whether a managed-file mount explicitly requests read-only access."""
     if directive in {"Volume", "PodmanArgsVolume"}:
-        parts = value.rsplit(":", 1)
-        volume_options = set(parts[1].split(",")) if len(parts) == 2 else set()
+        parts = value.split(":", 2)
+        volume_options = set(parts[2].split(",")) if len(parts) == 3 else set()
+        for option in volume_options:
+            if option not in VOLUME_OPTIONS and not option.startswith(
+                ("idmap=", "upperdir=", "workdir=")
+            ):
+                raise provision_error(f"invalid Podman volume option: {option!r}")
         return "ro" in volume_options and not {"rw", "U"}.intersection(volume_options)
 
     mount_options: dict[str, str] = {}
@@ -208,6 +245,7 @@ def _podman_mount_values(values: list[str]):
 
 def managed_files_are_writable(container_table: dict[str, Any]) -> bool:
     """Return whether any configured managed-file mount needs host write access."""
+    writable = False
     for raw_sections in container_table.values():
         if not isinstance(raw_sections, dict):
             continue
@@ -224,7 +262,7 @@ def managed_files_are_writable(container_table: dict[str, Any]) -> bool:
                     and FILES_DIR_TOKEN in value
                     and not managed_file_mount_is_read_only(directive, value)
                 ):
-                    return True
+                    writable = True
         raw_podman_args = container.get("PodmanArgs", [])
         if isinstance(raw_podman_args, str):
             raw_podman_args = [raw_podman_args]
@@ -233,8 +271,8 @@ def managed_files_are_writable(container_table: dict[str, Any]) -> bool:
             if FILES_DIR_TOKEN in mount_value and not managed_file_mount_is_read_only(
                 "Volume" if value in {"volume", "v"} else "Mount", mount_value
             ):
-                return True
-    return False
+                writable = True
+    return writable
 
 
 # --- Main Render Functions ---

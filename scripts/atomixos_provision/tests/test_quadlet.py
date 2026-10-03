@@ -333,6 +333,60 @@ class TestRenderContainers:
         assert len(warnings) == 1
 
 
+class TestManagedFilePermissions:
+    @staticmethod
+    def container_table(option, form):
+        volume = f"${{FILES_DIR}}/state:/state:{option}"
+        if form == "Volume":
+            mount = {"Volume": volume}
+        elif form.endswith("="):
+            mount = {"PodmanArgs": [f"{form}{volume}"]}
+        else:
+            mount = {"PodmanArgs": [form, volume]}
+        return {"app": {"privileged": False, "Container": {"Image": "alpine", **mount}}}
+
+    @pytest.mark.parametrize("form", ["Volume", "--volume=", "--volume", "-v=", "-v"])
+    @pytest.mark.parametrize("option", ["RO", "RW", "Ro", "ro,u", "ro,unknown", ""])
+    def test_invalid_volume_options_are_rejected(self, option, form):
+        table = self.container_table(option, form)
+
+        with pytest.raises(ProvisionError, match="invalid Podman volume option"):
+            managed_files_are_writable(table)
+        with pytest.raises(ProvisionError, match="invalid Podman volume option"):
+            render_containers(table, Path("/data/config"))
+
+    @pytest.mark.parametrize("form", ["Volume", "--volume="])
+    @pytest.mark.parametrize(
+        ("option", "writable"),
+        [
+            ("ro", False),
+            ("ro,z", False),
+            ("ro,Z", False),
+            ("ro,idmap=uids=0-1-10;gids=0-1-10", False),
+            ("ro,idmap=uids=0-1-10:100-200-10", False),
+            ("rw", True),
+            ("ro,U", True),
+            ("O,upperdir=/upper,workdir=/work", True),
+        ],
+    )
+    def test_valid_volume_options_preserve_casing(self, option, writable, form):
+        table = self.container_table(option, form)
+
+        assert managed_files_are_writable(table) is writable
+        rendered, _runtime, _warnings = render_containers(table, Path("/data/config"))
+        assert f"/state:{option}" in rendered["app.container"]
+
+    @pytest.mark.parametrize("form", ["Volume", "--volume="])
+    def test_writable_mount_does_not_bypass_later_validation(self, form):
+        table = self.container_table("RO", form)
+        table["app"]["Container"]["Volume"] = ["${FILES_DIR}/cache:/cache:rw"] + (
+            ["${FILES_DIR}/state:/state:RO"] if form == "Volume" else []
+        )
+
+        with pytest.raises(ProvisionError, match="invalid Podman volume option"):
+            managed_files_are_writable(table)
+
+
 class TestRenderNetworks:
     def test_basic(self):
         table = {"mynet": {"Network": {"Driver": "bridge"}}}
