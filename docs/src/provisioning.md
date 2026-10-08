@@ -144,6 +144,28 @@ config export. Use Podman tooling when volume data must be backed up, restored, 
 does not own that runtime-data lifecycle. The archive can be imported through the same bundle importer into a clean
 config root.
 
+### Privileged bundle export
+
+Production export uses a dedicated root worker, so private files and workload-remapped ownership do not prevent backup.
+The API remains unprivileged and authenticates every export before publishing an empty UUID-named request under
+`/run/atomixos-provision/export/requests`. `atomixos-provision-export.path` starts the corresponding oneshot service,
+which reads only `config.toml` and `files/` under the provisioning lock. It does not change source ownership or modes.
+It rejects symbolic links, hard-linked files, and special files rather than following them or returning a partial backup.
+
+The worker atomically publishes `<uuid>.tar.gz` or `<uuid>.error` in the root-owned, API-group-readable `results`
+directory. The API serves only its matching completed archive, then publishes an acknowledgement for worker cleanup.
+At most four pending, active, or retained exports are admitted; a full queue returns JSON `409`. Worker failures return
+JSON `500`, and an API wait exceeding 130 seconds returns JSON `504`. The worker has a 120-second service timeout;
+its finalizer has a separate 60-second limit to record interrupted requests as failures. A timer runs cleanup every
+minute while idle, expiring abandoned
+requests and results after five minutes. All export state is boot-local under `/run`.
+
+For failures, inspect `journalctl -u atomixos-provision-export.service` and
+`systemctl status atomixos-provision-export.path atomixos-provision-export.timer`. Export waits for any active config
+apply to release the provisioning lock. This lock does not stop workload writes; quiesce workloads first when an
+application-consistent backup of writable managed files is required. Direct test/development config roots retain the
+in-process exporter.
+
 ## USB Recovery Mode
 
 If the reset button is held from power-on for 5 seconds, U-Boot enters USB

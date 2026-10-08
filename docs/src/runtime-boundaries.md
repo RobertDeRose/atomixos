@@ -46,7 +46,7 @@ The root `atomixos-provision-apply.service` claims queued jobs, verifies manifes
 hashes, expected entries, and the source-size limit before reading staged request evidence, then re-renders the verified
 staged `config.toml` into `/data/config-candidate`. It runs
 the existing promotion, activation, rollback, and recovery protocol. Root-written `/data/config` state is
-group-readable by `atomixos-provision` so the unprivileged API can authenticate and export approved state, except for
+group-readable by `atomixos-provision` so the unprivileged API can authenticate and stage approved state, except for
 the owner-only apply receipt that binds a job and source digest to its transaction phase and result. Only its
 `committed` phase proves success. Bundle `files/` payloads are
 owned by `appsvc`, group-readable by `atomixos-provision`, and installed as read-only files and directories. They are
@@ -54,7 +54,16 @@ preserved through a no-symlink snapshot path; privileged access reconciliation c
 than following mutable paths. Export bounds snapshot writes as files are read, including files that grow during copying.
 Export is allowlisted to
 `config.toml` and `files/`, returns a deterministic `config-bundle.tar.gz` under the provisioning lock, and excludes
-generated runtime state and Podman volume contents. Initial promotion also writes `/data/config/.first-config`; the
+generated runtime state and Podman volume contents. Production exports run in the separate root
+`atomixos-provision-export.service`, triggered by `atomixos-provision-export.path`. The API submits empty UUID-named
+markers, never source paths or commands. The root worker claims them into a root-controlled directory and atomically
+publishes UUID-correlated archives or errors readable by the API group. This preserves export access even after a
+workload changes file ownership or permissions, without granting the API root privileges or modifying payload access.
+The worker cannot write `/data`, has no network access, and rejects symlinks, hard-linked files, and special files.
+Results and acknowledgements are bounded and expired; see [Privileged bundle export](provisioning.md#privileged-bundle-export).
+The provisioning lock serializes exports against applies, not concurrent workload writes.
+
+Initial promotion also writes `/data/config/.first-config`; the
 shared provisioning predicate treats a regular, non-symlink marker or `config.toml` as the compatibility signal across
 provisioning, authentication, and Boot UI guards, while missing signer state fails closed.
 

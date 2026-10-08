@@ -44,10 +44,20 @@ uses the staged unprivileged API plus root-owned worker boundary.
   managed-file ownership/mode policy after import. Managed `files/` are installed read-only by default for the `appsvc`
   owner and `atomixos-provision` reader group. A trusted integrator may deliberately grant a workload write access; the
   renderer warns but does not reject that Podman configuration, and later exports contain the resulting file bytes.
-  Archive members must be deterministic, relative, regular files or directories, and bounded during snapshotting by
-  the existing upload/member/decompressed-size limits.
-- Export reads a consistent active snapshot under the provisioning lock. Bundle export and import round-trip tests are
-  required before the feature is delivered.
+  Archive members must be deterministic, relative, single-link regular files or directories, and bounded during
+  snapshotting by the existing upload/member/decompressed-size limits.
+- Production export uses a dedicated root `systemd.path`/oneshot worker. The authenticated unprivileged API publishes
+  an empty UUID request; only canonical `/data/config/config.toml` and managed `files/` may be read. No request-supplied
+  source path, destination path, or command is accepted. File ownership and permissions are not changed.
+- The worker holds the provisioning lock and atomically publishes a UUID-named archive or error in a root-owned,
+  API-group-readable directory. Four pending/active/retained exports are admitted; the API waits up to 130 seconds,
+  and the service times out after 120 seconds. Full admission returns `409`, worker failure `500`, and wait expiry `504`.
+  Acknowledgements release results; a one-minute idle timer expires abandoned state after five minutes. A finalizer
+  has a separate 60-second limit to fail interrupted claims and discard partial output. Direct development roots
+  retain in-process export.
+- Export is serialized against config applies, not workload writes. Application-consistent backups require workload
+  quiescence. Symlinks, hard links, special files, and inode substitutions during snapshot opens are rejected, and
+  growing files are bounded while read. Bundle export and import round-trip tests are required before delivery.
 - Mutable application data belongs in Podman volumes. Its backup, restore, and export use Podman tooling and remain
   outside this feature and AtomixOS provisioning ownership.
 
@@ -69,7 +79,8 @@ layout and flows remain below.
 
 The design preserves one `config.toml` authority, immutable rootfs, mutable `/data/config`, systemd activation, SSH
 signatures, first-boot exceptions, bounded admission, root-owned promotion, and rollback. The unprivileged service may
-parse, validate, render, stage, and export approved state; only the root worker may promote `/data/config`, activate
+parse, validate, render, stage, and serve approved export results; a dedicated root export worker reads managed files
+regardless of workload ownership. Only the apply worker may promote `/data/config`, activate
 runtime services, or publish privileged results. Managed `files/` are read-only by default without limiting what an
 authenticated integrator may deploy through Podman. Writable application state should normally live in Podman volumes.
 It avoids SQL, Redis, auto-discovery, and fleet concerns.
@@ -662,6 +673,7 @@ Explicitly avoid adding these until there is a concrete need:
 ## Affected Files and Modules
 
 - `scripts/first-boot-provision.py` — compatibility entry point / legacy wrapper behavior aligned with the new package
+- `scripts/atomixos_provision/src/atomixos_provision/export_worker.py` — UUID-correlated privileged export and cleanup
 - `scripts/atomixos_provision/src/atomixos_provision/bundle.py` — safe archive export and managed-file snapshot
 - `scripts/atomixos_provision/src/atomixos_provision/domain/config/controller.py` — export response contract
 - `scripts/atomixos_provision/tests/test_bundle.py` and `tests/test_config_service.py` — archive and service tests

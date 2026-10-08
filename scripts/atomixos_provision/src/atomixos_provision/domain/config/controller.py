@@ -25,7 +25,12 @@ from atomixos_provision.bootstrap_security import enforce_bootstrap_browser_orig
 from atomixos_provision.config import ProvisionError, ProvisionSystemError
 from atomixos_provision.domain.config.coordinator import ProvisionCoordinator
 from atomixos_provision.domain.config.service import ConfigService
-from atomixos_provision.exceptions import ConflictError, ValidationApiError, api_error_response
+from atomixos_provision.exceptions import (
+    ApiError,
+    ConflictError,
+    ValidationApiError,
+    api_error_response,
+)
 from atomixos_provision.schemas import (
     ApiErrorResponseBody,
     FrameworkErrorResponseBody,
@@ -322,13 +327,22 @@ async def submit_config(
     operation_id="configExport",
     summary="Export the complete canonical config bundle",
     operation_class=ConfigOperation,
-    responses={**_API_ERROR_RESPONSES},
+    responses={
+        **_API_ERROR_RESPONSES,
+        409: ResponseSpec(ApiErrorResponseBody, description="The export queue is busy"),
+        500: ResponseSpec(ApiErrorResponseBody, description="The export worker failed"),
+        504: ResponseSpec(ApiErrorResponseBody, description="The export worker timed out"),
+    },
     tags=["config"],
 )
 async def export_config(config_service: ConfigService) -> Response[bytes]:
     """Return the current configuration as a gzip bundle."""
+    try:
+        archive = await config_service.export_config()
+    except ApiError as exc:
+        return api_error_response(exc)
     return Response(
-        await config_service.export_config(),
+        archive,
         media_type="application/gzip",
         headers={"content-disposition": 'attachment; filename="config-bundle.tar.gz"'},
     )

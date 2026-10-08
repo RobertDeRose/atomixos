@@ -114,6 +114,12 @@ execution, validation ordering, and retained-link preservation.
 Direct flake checks use committed policy. To test a local overlay, create `build.dev.toml` and run `mise run check`; the
 warning must appear before effective-policy evaluation.
 
+The `provisioning-export` VM check runs the production export path/service and unprivileged API. It verifies real
+UID-separated access, private-file backups without permission changes, concurrent authenticated downloads, root-owned
+results, acknowledgement cleanup, and rejection of symlinks and hard links. Package tests additionally cover UUID
+correlation, bounded admission, timeouts, cancellation, interrupted-worker finalization, expiry, atomic output,
+malformed requests, bounded snapshot reads, and JSON error responses.
+
 ## Test Descriptions
 
 | Test                | Nodes | What it validates                                                                                         |
@@ -130,22 +136,23 @@ warning must appear before effective-policy evaluation.
 
 Additional flake-only checks:
 
-| Test                          | Nodes | What it validates                                                                                         |
-|-------------------------------|-------|-----------------------------------------------------------------------------------------------------------|
-| `nixstasis-client`            | 1     | Nixstasis registration, identity reuse, polling, FRP launch-boundary, and post-enrollment API outage path |
-| `fleet-bootstrap`             | 1     | Loopback fleet socket, named AtomixOS route profile, Host rewrite, withdrawal, and token secrecy          |
-| `watchdog-module`             | 0     | Watchdog option defaults and opt-in systemd manager settings                                              |
-| `build-configuration`         | 0     | Schema, canonical policy, provenance, module mapping, and sidecar inputs                                  |
-| `build-config-workflow`       | 0     | Local override wrapper, task matrix, Lima behavior, and atomic retained links                             |
-| `watchdog-missing-device`     | 1     | Enabled policy without hardware boots, preserves RAUC state, and emits an actionable warning              |
-| `kernel-security`             | 1     | BPF LSM/BTF support is active and unsupported hardware/sysctl startup diagnostics are absent              |
-| `first-boot-provision`        | 1     | Provisioning import, validation, apply, auth, rollback, and LAN transport behavior                        |
-| `first-boot-source-discovery` | 1     | Boot/USB/bootstrap source precedence, marker behavior, and fleet rebind suppression                       |
-| `initrd-fresh-flash-marker`   | 1     | Initrd repartitioning creates slot B/data and persists the fresh-flash marker                             |
-| `forensics-podman-log-path`   | 1     | Podman journald output reaches the persistent `/data/logs` path                                           |
-| `forensics-rsyslog-path`      | 1     | Buffered rsyslog output is written to persistent `/data/logs`                                             |
-| `forensics-rsyslog-buffering` | 1     | Rsyslog batches writes instead of synchronously writing every message                                     |
-| `forensics-shutdown-flush`    | 1     | The logging shutdown-flush service persists buffered log output                                           |
+| Test                          | Nodes | What it validates                                                                                                  |
+|-------------------------------|-------|--------------------------------------------------------------------------------------------------------------------|
+| `nixstasis-client`            | 1     | Nixstasis registration, identity reuse, polling, FRP launch-boundary, and post-enrollment API outage path          |
+| `fleet-bootstrap`             | 1     | Loopback fleet socket, named AtomixOS route profile, Host rewrite, withdrawal, and token secrecy                   |
+| `watchdog-module`             | 0     | Watchdog option defaults and opt-in systemd manager settings                                                       |
+| `build-configuration`         | 0     | Schema, canonical policy, provenance, module mapping, and sidecar inputs                                           |
+| `build-config-workflow`       | 0     | Local override wrapper, task matrix, Lima behavior, and atomic retained links                                      |
+| `watchdog-missing-device`     | 1     | Enabled policy without hardware boots, preserves RAUC state, and emits an actionable warning                       |
+| `kernel-security`             | 1     | BPF LSM/BTF support is active and unsupported hardware/sysctl startup diagnostics are absent                       |
+| `first-boot-provision`        | 1     | Provisioning import, validation, apply, auth, rollback, and LAN transport behavior                                 |
+| `first-boot-source-discovery` | 1     | Boot/USB/bootstrap source precedence, marker behavior, and fleet rebind suppression                                |
+| `provisioning-export`         | 1     | Authenticated root-worker export of private workload-owned files, concurrent requests, cleanup, and link rejection |
+| `initrd-fresh-flash-marker`   | 1     | Initrd repartitioning creates slot B/data and persists the fresh-flash marker                                      |
+| `forensics-podman-log-path`   | 1     | Podman journald output reaches the persistent `/data/logs` path                                                    |
+| `forensics-rsyslog-path`      | 1     | Buffered rsyslog output is written to persistent `/data/logs`                                                      |
+| `forensics-rsyslog-buffering` | 1     | Rsyslog batches writes instead of synchronously writing every message                                              |
+| `forensics-shutdown-flush`    | 1     | The logging shutdown-flush service persists buffered log output                                                    |
 
 ## Platform Performance
 

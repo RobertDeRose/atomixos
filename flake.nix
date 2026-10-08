@@ -371,6 +371,7 @@
               inherit pkgs self;
             };
             first-boot-provision = import ./nix/tests/first-boot-provision.nix netTestArgs;
+            provisioning-export = import ./nix/tests/provisioning-export.nix netTestArgs;
             first-boot-source-discovery = import ./nix/tests/first-boot-source-discovery.nix netTestArgs;
             nixstasis-module = import ./nix/tests/nixstasis-module.nix netTestArgs;
             nixstasis-client = import ./nix/tests/nixstasis-client.nix netTestArgs;
@@ -434,6 +435,7 @@
               hostPkgs = darwinPkgs;
             };
             first-boot-provision = import ./nix/tests/first-boot-provision.nix darwinNetTestArgs;
+            provisioning-export = import ./nix/tests/provisioning-export.nix darwinNetTestArgs;
             first-boot-source-discovery = import ./nix/tests/first-boot-source-discovery.nix darwinNetTestArgs;
             nixstasis-module = import ./nix/tests/nixstasis-module.nix darwinNetTestArgs;
             nixstasis-client = import ./nix/tests/nixstasis-client.nix darwinNetTestArgs;

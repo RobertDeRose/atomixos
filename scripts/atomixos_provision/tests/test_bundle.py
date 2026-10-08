@@ -397,6 +397,55 @@ class TestExportBundle:
         assert copied_members == 1
 
 
+@pytest.mark.parametrize("member", ["config.toml", "files/private.txt"])
+def test_export_rejects_hard_links(tmp_path, member):
+    """A privileged snapshot must not export unrelated state through hard links."""
+    (tmp_path / "config.toml").write_text("version = 1\n")
+    (tmp_path / "files").mkdir()
+    secret = tmp_path / "admin-signers"
+    secret.write_text("not part of the export\n")
+    target = tmp_path / member
+    target.unlink(missing_ok=True)
+    target.hardlink_to(secret)
+    with pytest.raises(ProvisionError, match="single-link"):
+        export_bundle_bytes(tmp_path)
+
+
+@pytest.mark.parametrize("member", ["config.toml", "files/private.txt"])
+@pytest.mark.parametrize("replacement", ["regular", "fifo"])
+def test_export_rejects_inode_substitution(tmp_path, monkeypatch, member, replacement):
+    """A file replaced between inspection and open is rejected without FIFO blocking."""
+    import os
+
+    import atomixos_provision.bundle as bundle_module
+
+    (tmp_path / "config.toml").write_text("version = 1\n")
+    (tmp_path / "files").mkdir()
+    target = tmp_path / member
+    if not target.exists():
+        target.write_text("original\n")
+    other = tmp_path / "replacement"
+    if replacement == "regular":
+        other.write_text("substituted\n")
+    else:
+        os.mkfifo(other)
+    open_file = os.open
+    swapped = False
+
+    def swap_before_open(path, flags, *args, **kwargs):
+        nonlocal swapped
+        if not swapped and (path == target or (path == target.name and "dir_fd" in kwargs)):
+            swapped = True
+            os.replace(other, target)
+            assert flags & os.O_NONBLOCK
+        return open_file(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(bundle_module.os, "open", swap_before_open)
+    with pytest.raises(ProvisionError, match=r"changed during snapshot|single-link regular"):
+        export_bundle_bytes(tmp_path)
+    assert swapped
+
+
 class TestPrepareSourcePath:
     def test_toml_file(self, tmp_path):
         config = tmp_path / "config.toml"

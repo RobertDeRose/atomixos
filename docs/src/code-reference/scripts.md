@@ -181,6 +181,7 @@ Litestar provisioning service package used by first boot and re-apply flows.
 7. `schemas.py` defines typed API response shapes
 8. `exceptions.py` maps domain errors to API response bodies
 9. `provision.py`, `bundle.py`, `quadlet.py`, and `activation.py` implement the safe apply pipeline
+10. `export_worker.py` handles UUID export requests, privileged snapshots, atomic results, and expiry
 
 `POST /api/config` is asynchronous and returns a job URL. The job endpoint
 reports provisioning steps, service deployment/status events, final result, and
@@ -188,19 +189,23 @@ rollback status.
 
 The `atomixos-provision` CLI also exposes these maintenance commands:
 
-| Command                                               | Purpose                                                 |
-|-------------------------------------------------------|---------------------------------------------------------|
-| `serve`                                               | Run the socket-activated Litestar service               |
-| `validate PATH`                                       | Validate a TOML file or supported bundle                |
-| `import SOURCE CONFIG_ROOT`                           | Import a source through the maintenance path            |
-| `apply-staged CONFIG_ROOT`                            | Consume one or all queued jobs as the root worker       |
-| `finalize-staged CONFIG_ROOT`                         | Recover and finalize jobs left by an interrupted worker |
-| `recover CONFIG_ROOT`                                 | Recover an interrupted atomic promotion                 |
-| `sync-quadlet CONFIG_ROOT QUADLET_DIR [ROOTLESS_DIR]` | Sync rendered Quadlet units                             |
-| `check-health CONFIG_ROOT`                            | Check required provisioned services                     |
-| `complete-initial CONFIG_ROOT`                        | Finish initial promotion after first-boot checks        |
+| Command                                               | Purpose                                                                  |
+|-------------------------------------------------------|--------------------------------------------------------------------------|
+| `serve`                                               | Run the socket-activated Litestar service                                |
+| `validate PATH`                                       | Validate a TOML file or supported bundle                                 |
+| `import SOURCE CONFIG_ROOT`                           | Import a source through the maintenance path                             |
+| `apply-staged CONFIG_ROOT`                            | Consume one or all queued jobs as the root worker                        |
+| `finalize-staged CONFIG_ROOT`                         | Recover and finalize jobs left by an interrupted worker                  |
+| `export-worker [--finalize]`                          | Drain fixed-path export requests or finalize interrupted exports as root |
+| `recover CONFIG_ROOT`                                 | Recover an interrupted atomic promotion                                  |
+| `sync-quadlet CONFIG_ROOT QUADLET_DIR [ROOTLESS_DIR]` | Sync rendered Quadlet units                                              |
+| `check-health CONFIG_ROOT`                            | Check required provisioned services                                      |
+| `complete-initial CONFIG_ROOT`                        | Finish initial promotion after first-boot checks                         |
 
-Bundle export is an authenticated API operation at `GET /api/config/export`, not a CLI command. The exported bundle
+Operator-facing bundle export is the authenticated `GET /api/config/export` operation. The internal root-only
+`export-worker` command is invoked by systemd and accepts no config, request-directory, or output-path arguments.
+It delegates to the existing locked exporter and publishes UUID-correlated results; `--finalize` records interrupted
+exports without starting new work. The exported bundle
 contains desired configuration and bundle-managed files. Those files are installed read-only by default, but a trusted
 integrator may deliberately grant a workload write access; later exports then contain the changed bytes. Mutable
 application data should normally live in Podman volumes; use Podman tooling for its backup, restore, or transfer outside

@@ -95,20 +95,26 @@ commands that explicitly run with `ATOMIXOS_PROVISION_WORKER_ACTIVE=1`.
 
 ## Bundle Export Flow
 
-Authenticated `GET /api/config/export` takes the provisioning lock and snapshots
-only the canonical `config.toml` plus the managed `/data/config/files/` tree. It
+Authenticated `GET /api/config/export` publishes an empty UUID request under
+`/run/atomixos-provision/export/requests`. A dedicated `systemd.path` activates the root export worker, which takes the
+provisioning lock and snapshots only the canonical `config.toml` plus the managed `/data/config/files/` tree. The worker
+atomically publishes an archive or error under the same UUID in a root-owned, API-readable results directory. The API
+waits for its own result and acknowledges it for cleanup; abandoned requests and results expire. No source path or
+command comes from the request, and workload-owned private files do not need permission changes for export. The API
 returns a deterministic `config-bundle.tar.gz` (`application/gzip`) accepted by
 the same importer. Generated JSON, Quadlet output, markers, signer material, the
 apply receipt, and other `/data/config` state are excluded. Missing `files/` is omitted; an existing
 empty directory is represented as an empty `files` archive entry. Archive members
-are relative regular files or directories and remain bounded during snapshotting by
+are relative single-link regular files or directories; symbolic links, hard links, and special files are rejected.
+Contents remain bounded during snapshotting by
 the import size, member, and count limits, so exporting and importing the bundle
 preserves the canonical config and bundle-managed file contents without exposing
 runtime credentials. Trusted workloads may change a deliberately writable managed
 mount, in which case later config exports contain the changed bytes. Mutable
 application data should normally live in Podman volumes and is not part of the
 bundle; its export and restore use Podman tooling outside AtomixOS provisioning
-ownership.
+ownership. The provisioning lock excludes config applies but does not freeze container writes; workload quiescence
+is required for an application-consistent backup.
 
 ## Managed Users Flow
 

@@ -36,14 +36,17 @@ for progress and completion.
 Bundle export downloads `config-bundle.tar.gz`, which can be validated and imported through the existing CLI. Fleet
 bootstrap keeps ownership of its transport and does not invoke the local network-source reconciliation path. Managed
 files are installed read-only by default, while trusted integrators retain full Podman configuration control and receive
-an advisory warning for writable `${FILES_DIR}` mounts. Mutable application data should normally live in Podman volumes
-and remains outside config export.
+an advisory warning for writable `${FILES_DIR}` mounts. Production exports use a dedicated UUID-correlated root worker
+so workload-owned private files remain exportable without changing their permissions. Mutable application data should
+normally live in Podman volumes and remains outside config export.
 
 ## Design Integration
 
 The service preserves `config.toml` as the desired-state authority and reuses validation, rendering, candidate
 promotion, activation, health checking, and rollback for every mutation path. The network-facing process remains
-unprivileged; the root worker alone performs durable promotion and activation. Systemd socket activation and the
+unprivileged; the apply worker alone performs durable promotion and activation. A separate fixed-purpose export worker
+reads only the bundle allowlist and atomically publishes API-readable results through a `systemd.path` request boundary.
+Systemd socket activation and the
 existing first-boot and SSH-signature trust boundaries remain intact. A single staged-apply transaction component owns
 durable receipt phases, interrupted-promotion recovery, and abandoned-job result finalization.
 
@@ -121,3 +124,8 @@ the serialized repository Nix gate, and the closure-budget build passed before d
 verified event-loop responsiveness, server-schema error semantics, the delivered route/layout documentation, and the
 platform-specific package-test boundary. Beads preserves task-level findings, review results, validation commands, and
 artifact paths under the feature root.
+
+Follow-up `atomixos-dhe.7.108` preserves the writable-file export contract with a UUID request/result worker rather than
+loosening source permissions or weakening the backup guarantee. It adds bounded admission, interrupted-export handling,
+expiry, and privilege-boundary tests. Validation and review evidence for this follow-up is tracked in Beads;
+the earlier delivery evidence above does not cover it.

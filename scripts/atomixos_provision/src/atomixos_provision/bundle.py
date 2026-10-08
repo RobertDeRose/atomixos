@@ -150,8 +150,13 @@ def _snapshot_dir(
             )
             try:
                 confirmed = os.fstat(child_fd)
-                if not stat.S_ISDIR(confirmed.st_mode):
-                    raise provision_error(f"bundle files entry must be a directory: {child_path}")
+                if not stat.S_ISDIR(confirmed.st_mode) or (confirmed.st_dev, confirmed.st_ino) != (
+                    child_stat.st_dev,
+                    child_stat.st_ino,
+                ):
+                    raise provision_error(
+                        f"bundle directory changed during snapshot: {child_path}"
+                    )
                 _snapshot_dir(
                     child_fd,
                     child_path,
@@ -175,13 +180,17 @@ def _snapshot_dir(
             raise provision_error(f"bundle exceeds {max_total_bytes} byte decompressed limit")
         file_fd = os.open(
             name,
-            os.O_RDONLY | OPEN_NOFOLLOW | getattr(os, "O_CLOEXEC", 0),
+            os.O_RDONLY | os.O_NONBLOCK | OPEN_NOFOLLOW | getattr(os, "O_CLOEXEC", 0),
             dir_fd=source_fd,
         )
         try:
             confirmed = os.fstat(file_fd)
-            if not stat.S_ISREG(confirmed.st_mode):
-                raise provision_error(f"bundle files entry must be a regular file: {child_path}")
+            if not stat.S_ISREG(confirmed.st_mode) or confirmed.st_nlink != 1:
+                raise provision_error(
+                    f"bundle entry must be a single-link regular file: {child_path}"
+                )
+            if (confirmed.st_dev, confirmed.st_ino) != (child_stat.st_dev, child_stat.st_ino):
+                raise provision_error(f"bundle file changed during snapshot: {child_path}")
             with os.fdopen(file_fd, "rb") as source_file, target_path.open("wb") as output:
                 file_fd = -1
                 copied = 0
@@ -228,7 +237,9 @@ def _read_export_file(path: Path, member_name: str) -> bytes:
     if stat.S_ISLNK(path_stat.st_mode) or not stat.S_ISREG(path_stat.st_mode):
         raise provision_error(f"bundle member must be a regular file: {path}")
     try:
-        fd = os.open(path, os.O_RDONLY | OPEN_NOFOLLOW | getattr(os, "O_CLOEXEC", 0))
+        fd = os.open(
+            path, os.O_RDONLY | os.O_NONBLOCK | OPEN_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+        )
     except FileNotFoundError as exc:
         if member_name == "config.toml":
             raise provision_error("current config.toml not found") from exc
@@ -237,15 +248,17 @@ def _read_export_file(path: Path, member_name: str) -> bytes:
         raise provision_error(f"cannot read managed bundle file: {path}") from exc
     try:
         file_stat = os.fstat(fd)
-        if not stat.S_ISREG(file_stat.st_mode):
-            raise provision_error(f"bundle member must be a regular file: {path}")
+        if not stat.S_ISREG(file_stat.st_mode) or file_stat.st_nlink != 1:
+            raise provision_error(f"bundle member must be a single-link regular file: {path}")
+        if (file_stat.st_dev, file_stat.st_ino) != (path_stat.st_dev, path_stat.st_ino):
+            raise provision_error(f"bundle file changed during snapshot: {path}")
         if file_stat.st_size > MAX_BUNDLE_MEMBER_BYTES:
             raise provision_error(
                 f"bundle member {member_name!r} exceeds {MAX_BUNDLE_MEMBER_BYTES} byte limit"
             )
         with os.fdopen(fd, "rb") as source:
             fd = -1
-            content = source.read()
+            content = source.read(MAX_BUNDLE_MEMBER_BYTES + 1)
         if len(content) > MAX_BUNDLE_MEMBER_BYTES:
             raise provision_error(
                 f"bundle member {member_name!r} exceeds {MAX_BUNDLE_MEMBER_BYTES} byte limit"

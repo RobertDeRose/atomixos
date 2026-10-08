@@ -393,6 +393,10 @@ Mutually exclusive with `os-verification.service` via the sentinel file.
 
 `atomixos-bootstrap.service` runs `atomixos-provision serve` on the socket-activated bootstrap endpoint. The browser
 Boot UI is first-boot-only; after provisioning, authenticated API routes provide re-apply and recovery operations.
+`atomixos-provision-export.path` watches UUID request/acknowledgement markers and activates the dedicated root
+`atomixos-provision-export.service`. That read-only config worker publishes complete archives or errors into an
+API-readable results directory. Its finalizer handles interrupted exports, and `atomixos-provision-export.timer`
+expires abandoned state. See [Privileged bundle export](../provisioning.md#privileged-bundle-export) for limits and recovery.
 
 ---
 

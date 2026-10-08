@@ -105,6 +105,12 @@ in
     "d /run/atomixos-provision/active 2750 root atomixos-provision -"
     "f /run/atomixos-provision/config.lock 0660 root atomixos-provision -"
     "f /run/atomixos-provision/queue.lock 0660 root atomixos-provision -"
+    "d /run/atomixos-provision/export 0755 root root -"
+    "d /run/atomixos-provision/export/requests 2770 root atomixos-provision -"
+    "d /run/atomixos-provision/export/active 2750 root atomixos-provision -"
+    "d /run/atomixos-provision/export/results 2750 root atomixos-provision -"
+    "f /run/atomixos-provision/export/queue.lock 0660 root atomixos-provision -"
+    "f /run/atomixos-provision/export/worker.lock 0600 root root -"
   ];
 
   users.users.atomixos-provision = {
@@ -196,6 +202,55 @@ in
       ReadWritePaths = [
         "/data"
         "/run/atomixos-provision"
+      ];
+    };
+  };
+
+  systemd.paths.atomixos-provision-export = {
+    description = "Watch for UUID-correlated configuration exports";
+    wantedBy = [ "multi-user.target" ];
+    pathConfig = {
+      PathExistsGlob = [
+        "/run/atomixos-provision/export/requests/*.request"
+        "/run/atomixos-provision/export/requests/*.ack"
+      ];
+      Unit = "atomixos-provision-export.service";
+    };
+  };
+
+  systemd.timers.atomixos-provision-export = {
+    description = "Expire abandoned configuration exports";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "1min";
+      OnUnitInactiveSec = "1min";
+    };
+  };
+
+  systemd.services.atomixos-provision-export = {
+    description = "Export allowlisted configuration bundles as root";
+    after = [ "atomixos-config-recover.service" ];
+    requires = [ "atomixos-config-recover.service" ];
+    unitConfig.RequiresMountsFor = [ "/data" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${provisionCli}/bin/atomixos-provision export-worker";
+      ExecStopPost = "${provisionCli}/bin/atomixos-provision export-worker --finalize";
+      TimeoutStartSec = 120;
+      TimeoutStopSec = 60;
+      User = "root";
+      Group = "atomixos-provision";
+      UMask = "0077";
+      NoNewPrivileges = true;
+      PrivateTmp = true;
+      PrivateDevices = true;
+      PrivateNetwork = true;
+      ProtectHome = true;
+      ProtectSystem = "strict";
+      CapabilityBoundingSet = [ "CAP_DAC_OVERRIDE" ];
+      ReadWritePaths = [
+        "/run/atomixos-provision/export"
+        "/run/atomixos-provision/config.lock"
       ];
     };
   };
