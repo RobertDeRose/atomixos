@@ -23,7 +23,7 @@ update always records the exact resolved template commit.
 `check` is read-only and delegates to the hk quality gate. `fix` changes the working tree. Contextlint checks links,
 anchors, and image targets across README and `docs/**/*.md`. The pre-commit hook may fix files while safely stashing
 unrelated unstaged work. The commit-message hook enforces Conventional Commits, required scopes for changelog-visible
-changes, grammar, 72/100-character line limits, and canonical optional `Beads:` footers. Run `cog changelog` to preview
+changes, 72/100-character line limits, and canonical optional `Beads:` footers. Run `cog changelog` to preview
 the concise user-facing changelog. The hk policy uses native built-in steps whenever their behavior matches;
 hk's file locking coordinates independent steps. No dependency chain serializes unrelated checks. Go projects retain two
 output-sensitive edges: `gofumpt` follows `goimports`, then fix-only module tidy observes the final imports.
@@ -38,7 +38,8 @@ No recognized language profile is active; only the universal tooling baseline ru
 `.github/workflows/hk.yml` is the single quality workflow for every push and pull request. It installs Nix and the
 committed tool lock, then runs `hk check -a`, which owns formatting, linting, documentation, and Nix validation. CI
 does not regenerate the lock or maintain a separate validation policy. Dependency-update branches and fork PRs are
-not excluded from the pull-request gate. Tests remain separate from this gate.
+not excluded from the pull-request gate. The gate evaluates Nix configuration and runs flake checks. The provisioning
+package test suite remains separate.
 
 ## Hooks and recovery
 

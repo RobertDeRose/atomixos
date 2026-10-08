@@ -136,7 +136,7 @@ runtime_timeout = "45s"
 
   | `mise` task                 | Applies local overlay | Reason                                              |
   |-----------------------------|-----------------------|-----------------------------------------------------|
-  | `check`                     | Yes                   | Evaluate the effective configuration                |
+  | `check`                     | Yes                   | Evaluate and test the effective configuration       |
   | `build`                     | Yes                   | Build configuration-bearing system/artifact outputs |
   | `build:squashfs`            | Yes                   | Contains immutable system policy                    |
   | `build:rauc-bundle`         | Yes                   | Contains the configured squashfs and audit sidecars |

@@ -43,7 +43,7 @@ selects the newest stable tag; unstable selects the source default-branch HEAD. 
 ## Commit messages and changelogs
 
 Changelog-visible `feat`, `fix`, `perf`, and `refactor` commits require a semantic scope. The commit hook also checks
-Conventional Commit syntax, grammar, a 72-character subject, 100-character body lines, and canonical optional `Beads:`
+Conventional Commit syntax, a 72-character subject, 100-character body lines, and canonical optional `Beads:`
 footers. The other commit validators inspect the unfiltered message. Internal build, chore, CI,
 documentation, release, style, and test commits are omitted from `cog changelog`. Breaking changes render as plain
 Markdown.
