@@ -1076,7 +1076,14 @@ def test_finalize_staged_jobs_keeps_initial_config_committed_before_cleanup(tmp_
         "atomixos_provision.config.load_config_schema",
         lambda: {"type": "object", "additionalProperties": True},
     )
-    monkeypatch.setattr("atomixos_provision.provision.reconcile_bootstrap_wan", lambda: None)
+    wan_calls = []
+
+    def reconcile_wan():
+        """Recovery reconciles WAN before publishing the committed result."""
+        assert read_result(runtime_paths(runtime_root), "job-1") is None
+        wan_calls.append("WAN")
+
+    monkeypatch.setattr("atomixos_provision.provision.reconcile_bootstrap_wan", reconcile_wan)
 
     def interrupt_cleanup(_root, _progress=None, *, before_commit=None):
         """Interrupt cleanup to exercise recovery."""
@@ -1092,7 +1099,9 @@ def test_finalize_staged_jobs_keeps_initial_config_committed_before_cleanup(tmp_
 
     receipt = json.loads((config_root / ".atomixos-apply-receipt.json").read_text())
     assert receipt["phase"] == "committed"
+    assert wan_calls == []
     assert finalize_staged_jobs(config_root, runtime_root, "worker stopped") == 1
+    assert wan_calls == ["WAN"]
 
     result = read_result(runtime_paths(runtime_root), "job-1")
     assert result is not None

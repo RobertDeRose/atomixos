@@ -70,8 +70,9 @@ provisioning, authentication, and Boot UI guards, while missing signer state fai
 The WAN firewall uses the same non-symlink marker-or-config state, except that pending promotion preserves bootstrap
 access. Signer-only state does not mark a device provisioned.
 Boot recovery leaves runtime and WAN reconciliation to its ordered successor services; it never synchronously waits for
-those units. Same-boot worker recovery reconciles the configured transport after discarding an initial promotion or
-restoring rollback, so fleet recovery does not enable network bootstrap.
+those units. Same-boot worker recovery reconciles the configured transport after discarding an initial promotion,
+restoring rollback, or recovering a committed initial apply. It retries the initial apply's WAN firewall reconciliation
+before publishing recovered success. Fleet recovery does not enable network bootstrap.
 
 Runtime result files under `/run/atomixos-provision/results` are root-writable and group-readable only. Claim and queued-job
 abandonment share `/run/atomixos-provision/queue.lock`. The worker retains active jobs until terminal result publication.

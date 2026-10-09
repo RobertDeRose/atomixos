@@ -1654,7 +1654,15 @@ def _recover_staged_apply(config_root: Path, *, boot_recovery: bool = False) -> 
         _schedule_bootstrap_rebind()
     if recovery.restored_rollback:
         recovery = replace(recovery, rollback_failures=tuple(run_activation_sequence(config_root)))
-    if recovery.discarded_initial or recovery.restored_rollback:
+    if (
+        recovery.discarded_initial
+        or recovery.restored_rollback
+        or (
+            receipt is not None
+            and receipt.phase is ApplyReceiptPhase.COMMITTED
+            and receipt.result.get("reapply") is False
+        )
+    ):
         reconcile_bootstrap_wan()
     return recovery
 

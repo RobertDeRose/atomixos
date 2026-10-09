@@ -112,12 +112,15 @@ def test_attached_short_volume_mount_uses_host_policy_and_warning_index(mode, qu
 
 
 @pytest.mark.parametrize("transport", ["network", "nixstasis"])
-def test_committed_finalizer_retries_rebind_before_result(tmp_path, monkeypatch, transport):
+@pytest.mark.parametrize("reapply", [False, True])
+def test_committed_finalizer_retries_transport_followup_before_result(
+    tmp_path, monkeypatch, transport, reapply
+):
     """Recovery replays the durable committed follow-up before publishing success."""
     root = tmp_path / "config"
     root.mkdir()
     (root / "config.toml").write_text("already committed config\n")
-    result = {"reapply": True, "forwarding_url": "http://10.44.0.1:8080", "warnings": []}
+    result = {"reapply": reapply, "forwarding_url": "http://10.44.0.1:8080", "warnings": []}
     manifest = {"job_id": "job-1", "source_sha256": "a" * 64}
     transaction = StagedApplyTransaction.from_manifest(manifest, result)
     transaction.mark_promoted(root)
@@ -149,8 +152,11 @@ def test_committed_finalizer_retries_rebind_before_result(tmp_path, monkeypatch,
     if transport == "network":
         assert len(calls) == 2
         assert calls[0] == calls[1]
-        assert "--unit=atomixos-bootstrap-rebind-delayed" in calls[0]
-        assert "--collect" in calls[0]
+        if reapply:
+            assert "--unit=atomixos-bootstrap-rebind-delayed" in calls[0]
+            assert "--collect" in calls[0]
+        else:
+            assert calls[0] == ["systemctl", "restart", "bootstrap-wan-toggle.service"]
     else:
         assert calls == []
     calls.clear()
