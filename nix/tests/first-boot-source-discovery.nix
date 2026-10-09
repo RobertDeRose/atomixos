@@ -157,7 +157,8 @@ nixos-lib.runTest {
     gateway.succeed("printf '{\"gateway_ip\": true}\n' >/tmp/bootstrap-invalid-lan-root/lan-settings.json")
     gateway.succeed("ATOMIXOS_CONFIG_ROOT=/tmp/bootstrap-invalid-lan-root ATOMIXOS_FIRST_BOOT_SENTINEL=/tmp/bootstrap-invalid-lan-sentinel ATOMIXOS_BOOT_SLOT=boot.0 ATOMIXOS_USB_SEARCH_DIRS='/test-usb' ATOMIXOS_BOOTSTRAP_HOST=127.0.0.1 PATH=/testbin:/run/current-system/sw/bin first-boot >/tmp/bootstrap-invalid-lan.log 2>&1 & echo $! >/tmp/bootstrap-invalid-lan.pid")
     gateway.succeed("first-boot-provision serve /tmp/bootstrap-invalid-lan-root --host 127.0.0.1 --port 18081 >/tmp/bootstrap-invalid-lan-web.log 2>&1 & echo $! >/tmp/bootstrap-invalid-lan-web.pid")
-    gateway.wait_until_succeeds("ss -tln | grep '127.0.0.1:18081'", timeout = 60)
+    # The full check runs several aarch64 VMs concurrently on the remote builder.
+    gateway.wait_until_succeeds("ss -tln | grep '127.0.0.1:18081'", timeout = 120)
     gateway.succeed("curl -fsS http://127.0.0.1:18081/ >/tmp/bootstrap-invalid-lan-page.html")
     gateway.succeed("python3 - <<'PY'\nimport html.parser\nfrom pathlib import Path\n\nclass TokenParser(html.parser.HTMLParser):\n    def __init__(self):\n        super().__init__()\n        self.token = None\n    def handle_starttag(self, tag, attrs):\n        values = dict(attrs)\n        if tag == 'input' and values.get('name') == 'bootstrap_token':\n            self.token = values.get('value')\n\nparser = TokenParser()\nparser.feed(Path('/tmp/bootstrap-invalid-lan-page.html').read_text())\nassert parser.token, 'missing bootstrap token'\nPath('/tmp/bootstrap-invalid-lan-token.txt').write_text(parser.token)\nPY")
     gateway.succeed("curl -fsS -F \"bootstrap_token=$(cat /tmp/bootstrap-invalid-lan-token.txt)\" -F config_file=@/tmp/config-template.toml http://127.0.0.1:18081/apply >/tmp/bootstrap-invalid-lan-response.html")

@@ -155,6 +155,7 @@ async def test_first_boot_config_submit_accepts_programmatic_upload_without_toke
 async def test_config_submit_accepts_zstd_magic_without_filename_header(tmp_path, monkeypatch):
     async def fake_stage_bytes(self, body, filename, progress, allow_reapply=True):
         calls.append((body, filename))
+
     manager = StagedJobManager()
     calls = []
 
@@ -173,9 +174,7 @@ async def test_config_submit_accepts_zstd_magic_without_filename_header(tmp_path
     assert calls == [(b"\x28\xb5\x2f\xfdpayload", "config.toml")]
 
 
-async def test_config_submit_records_staging_provision_errors_as_failed_job(
-    tmp_path, monkeypatch
-):
+async def test_config_submit_records_staging_provision_errors_as_failed_job(tmp_path, monkeypatch):
     async def fake_stage_bytes(self, body, filename, progress, allow_reapply=True):
         raise ProvisionError("bad bundle")
 
@@ -765,9 +764,7 @@ async def test_apply_form_renders_failure_and_rollback(tmp_path, monkeypatch):
     assert "Rollback status:</strong> completed" in fragment.text
 
 
-async def test_apply_form_can_render_terminal_fragment_after_provisioning(
-    tmp_path, monkeypatch
-):
+async def test_apply_form_can_render_terminal_fragment_after_provisioning(tmp_path, monkeypatch):
     started = asyncio.Event()
     finish = asyncio.Event()
 
@@ -916,7 +913,7 @@ async def test_job_events_streams_status_fragments(tmp_path, monkeypatch):
     assert response.status_code == 202
     assert stream.status_code == 200
     assert stream.headers["content-type"].startswith("text/event-stream")
-    assert "data: <section id=\"job-status\"" in stream.text
+    assert 'data: <section id="job-status"' in stream.text
     assert "data: data:" not in stream.text
     assert "Configuration applied" in stream.text
     assert "event: done" in stream.text
@@ -1127,10 +1124,7 @@ async def test_openapi_documents_public_api_contract(tmp_path):
 
     assert response.status_code == 200
     schema = response.json()
-    assert {
-        path: set(methods)
-        for path, methods in schema["paths"].items()
-    } == {
+    assert {path: set(methods) for path, methods in schema["paths"].items()} == {
         "/api/health": {"get"},
         "/api/nonce": {"get"},
         "/api/config": {"post"},
@@ -1177,17 +1171,20 @@ async def test_openapi_documents_public_api_contract(tmp_path):
     assert delete_container_network["operationId"] == "configContainerNetworksDelete"
     assert put_container_volume["operationId"] == "configContainerVolumesPut"
     assert delete_container_volume["operationId"] == "configContainerVolumesDelete"
-    assert {operation["tags"][0] for operation in [
-        put_user,
-        delete_user,
-        patch_network,
-        put_container,
-        delete_container,
-        put_container_network,
-        delete_container_network,
-        put_container_volume,
-        delete_container_volume,
-    ]} == {"config"}
+    assert {
+        operation["tags"][0]
+        for operation in [
+            put_user,
+            delete_user,
+            patch_network,
+            put_container,
+            delete_container,
+            put_container_network,
+            delete_container_network,
+            put_container_volume,
+            delete_container_volume,
+        ]
+    } == {"config"}
     assert validate["operationId"] == "configValidate"
     assert validate["tags"] == ["config"]
     assert get_job["operationId"] == "jobsGet"
@@ -1275,21 +1272,17 @@ async def test_openapi_documents_public_api_contract(tmp_path):
     submit_400_ref = submit["responses"]["400"]["content"]["application/json"]["schema"]["$ref"]
     assert "FrameworkErrorResponseBody" in auth_error_ref
     submit_409_ref = submit["responses"]["409"]["content"]["application/json"]["schema"]["$ref"]
-    validate_400_ref = validate["responses"]["400"]["content"]["application/json"][
-        "schema"
-    ]["$ref"]
+    validate_400_ref = validate["responses"]["400"]["content"]["application/json"]["schema"][
+        "$ref"
+    ]
     get_job_404_ref = get_job["responses"]["404"]["content"]["application/json"]["schema"]["$ref"]
     assert "ApiErrorResponseBody" in submit_400_ref
     assert "ApiErrorResponseBody" in submit_409_ref
     assert "ValidationResponseBody" in validate_400_ref
     assert "ApiErrorResponseBody" in get_job_404_ref
     job_schema = schema["components"]["schemas"]["JobResponseBody"]
-    assert job_schema["properties"]["events"]["items"]["$ref"].endswith(
-        "/JobEventResponseBody"
-    )
-    assert job_schema["properties"]["result"]["$ref"].endswith(
-        "/ProvisionResultResponseBody"
-    )
+    assert job_schema["properties"]["events"]["items"]["$ref"].endswith("/JobEventResponseBody")
+    assert job_schema["properties"]["result"]["$ref"].endswith("/ProvisionResultResponseBody")
     location_header = submit["responses"]["202"]["headers"]["Location"]
     assert location_header["schema"] == {"type": "string"}
 

@@ -209,7 +209,6 @@ class TestCopyBundleFiles:
 
         assert not destination.exists()
 
-
     def test_cleans_existing(self, tmp_path):
         config_root = tmp_path / "config"
         config_root.mkdir()

@@ -271,7 +271,8 @@ for deployment. The detailed contract is defined in the `first-boot-local-provis
 foundational design is now provisioning-aware:
 
 - fresh-flash detection happens in initrd
-- first boot can import from `/boot/config.toml`, USB media, or a LAN-local bootstrap UI
+- first boot can import from `/boot/config.toml`, raw USB `config.toml`, or the bootstrap UI reachable on WAN and LAN
+  until initial provisioning completes; the socket then rebinds to the configured LAN gateway
 - imported operator intent persists under `/data/config/`
 - first boot calls `rauc status mark-good` only after provisioning import/validation succeeds
 

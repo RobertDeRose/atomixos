@@ -100,8 +100,8 @@ bootstrap service, and suppresses the LAN socket rebind. The `build-config-workf
 command to cover automatic fixed-path overrides, warning/transport behavior, the included task matrix, Lima command
 execution, validation ordering, and retained-link preservation.
 
-Direct flake checks use committed policy. To test a local overlay, create `build.dev.toml` and run `mise run check`; the
-warning must appear before effective-policy evaluation.
+Direct flake checks use committed policy. To test a local overlay, create `build.dev.toml` and run
+`./scripts/nix-with-build-config.sh flake check`; the warning must appear before effective-policy evaluation.
 
 ## Test Descriptions
 
@@ -284,3 +284,15 @@ Tests use the NixOS test framework (`nixos-lib.runTest`). Each test:
 The QEMU target uses a custom RAUC backend that simulates U-Boot's slot selection using files instead of environment
 variables, allowing the full A/B update lifecycle to be tested without real hardware. The shared slot mapping for the
 RAUC tests lives in `nix/tests/rauc-qemu-config.nix`.
+
+## Native ARM CI validation
+
+The independent `hk.yml` workflow runs quality checks on `ubuntu-latest` with `mise x -- hk check -a`.
+The `nix.yml` workflow evaluates Nix on `ubuntu-26.04-arm` (`aarch64-linux`) and
+`macos-latest` (`aarch64-darwin`). Each runner evaluates its own Nix platform with
+`flake check --no-build --system <system>`. PR validation does not build packages
+or execute VM tests. Run full build and VM checks locally with `./scripts/nix-with-build-config.sh flake check`
+or the individual `nix build` commands above; `mise run check` runs quality checks only.
+
+The host Python suite skips two Linux setgid directory-mode assertions on macOS.
+Those assertions remain enabled in the Linux package tests.

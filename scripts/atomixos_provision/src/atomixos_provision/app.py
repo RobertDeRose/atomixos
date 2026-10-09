@@ -109,9 +109,7 @@ def create_app(
             "config_service": Provide(provide_config_service, sync_to_thread=False),
             "nonce_store": Provide(provide_nonce_store, sync_to_thread=False),
             "job_manager": Provide(provide_job_manager, sync_to_thread=False),
-            "provision_coordinator": Provide(
-                provide_provision_coordinator, sync_to_thread=False
-            ),
+            "provision_coordinator": Provide(provide_provision_coordinator, sync_to_thread=False),
         },
         request_max_body_size=settings.max_source_bytes,
     )

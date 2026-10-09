@@ -60,10 +60,7 @@ OPEN_NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
 
 def _open_dir_no_follow(path: Path) -> int:
     flags = (
-        os.O_RDONLY
-        | getattr(os, "O_DIRECTORY", 0)
-        | OPEN_NOFOLLOW
-        | getattr(os, "O_CLOEXEC", 0)
+        os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | OPEN_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
     )
     try:
         fd = os.open(path, flags)

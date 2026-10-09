@@ -15,8 +15,11 @@ All build outputs target `aarch64-linux`. Builds require an `aarch64-linux` buil
 # Install tools and hooks
 mise install
 
-# Check the flake evaluates cleanly
+# Run formatting, linting, and documentation checks
 mise run check
+
+# Evaluate the flake without building checks
+./scripts/nix-with-build-config.sh flake check --no-build
 
 # Build individual artifacts
 mise run build:squashfs        # result-squashfs/
@@ -47,7 +50,8 @@ schema, watchdog backend examples, disablement behavior, and task matrix. Local-
 include `-dev`, and their metadata records `local_override` as `true`.
 
 To promote a tested change, copy the intended values into committed `build.toml`, remove `build.dev.toml`, run
-`mise run check`, and rebuild. To abandon or recover from a malformed override, remove or rename `build.dev.toml` and
+`./scripts/nix-with-build-config.sh flake check`, and rebuild. To abandon or recover from a malformed override, remove
+or rename `build.dev.toml` and
 rerun the command. Nix reports TOML syntax errors with source locations and schema errors with field paths; no prior
 retained root is removed by validation failure.
 

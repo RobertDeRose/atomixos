@@ -5,12 +5,12 @@ set -euo pipefail
 cd docs
 
 if command -v mdbook &>/dev/null; then
-  mdbook build
+	mdbook build
 elif command -v nix &>/dev/null; then
-  nix develop --command mdbook build
+	nix develop --command mdbook build
 else
-  echo "Error: mdbook not found. Install via 'nix develop' or 'cargo install mdbook'." >&2
-  exit 1
+	echo "Error: mdbook not found. Install via 'nix develop' or 'cargo install mdbook'." >&2
+	exit 1
 fi
 
 echo ""
