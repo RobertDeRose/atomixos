@@ -249,3 +249,12 @@ user, are forced onto `Network=pasta`, and non-loopback `PublishPort` binds are 
 
 Bundle imports may include `files/`; Quadlet values may reference `${CONFIG_DIR}` and `${FILES_DIR}` to bind files from
 `/data/config/` without embedding host-specific absolute paths in the seed.
+
+## Managed-file access
+
+Bundle `files/` are deployment inputs, installed read-only by default and
+owned by `appsvc`. The provisioning group receives read access. Permission
+reconciliation validates file descriptors and rejects symlinks and special
+files. Trusted integrators may request writable mounts; the renderer warns
+when `${FILES_DIR}` mounts are not clearly read-only. Mutable application
+state belongs in Podman volumes and uses Podman backup and restore tooling.

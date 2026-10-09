@@ -606,3 +606,9 @@ Explicitly avoid adding these until there is a concrete need:
 - **Dynamic partial reconfiguration API**: Add typed PATCH/PUT endpoints for users,
   network, containers, and other desired-state resources, all backed by the same
   candidate promotion and rollback pipeline.
+
+## Managed-file boundary reconciliation
+
+Managed files are read-only deployment inputs by default. Preserve trusted
+integrator Podman options, validate mount syntax, and warn about writable
+`${FILES_DIR}` mounts. Runtime volume data stays outside provisioning ownership.
