@@ -1512,4 +1512,6 @@ def _managed_files_are_writable(config_root: Path) -> bool:
     if not isinstance(containers, dict):
         return False
     container_table = containers.get("container", {})
-    return isinstance(container_table, dict) and managed_files_are_writable(container_table)
+    return isinstance(container_table, dict) and managed_files_are_writable(
+        container_table, config_root
+    )

@@ -1132,6 +1132,29 @@ def test_write_imported_state_grants_bundle_files_read_only_service_access(tmp_p
     assert (config_root / "files" / "app.txt").stat().st_mode & 0o777 == 0o440
 
 
+def test_managed_file_writability_uses_runtime_config_root(tmp_path, monkeypatch):
+    from atomixos_provision import provision
+
+    config_root = tmp_path / "runtime-config"
+    config_root.mkdir()
+    (config_root / "config.toml").write_text("version = 1\n")
+    parsed = {
+        "containers": {
+            "container": {
+                "app": {
+                    "Container": {
+                        "Image": "alpine",
+                        "Volume": f"{config_root}/files/state:/state:rw",
+                    }
+                }
+            }
+        }
+    }
+    monkeypatch.setattr(provision, "load_config", lambda _path: parsed)
+
+    assert provision._managed_files_are_writable(config_root)
+
+
 def test_direct_initial_import_grants_service_read_access(tmp_path, monkeypatch):
     from atomixos_provision import provision
 

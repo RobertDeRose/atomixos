@@ -202,6 +202,59 @@ class TestRenderContainers:
         assert len(warnings) == 2
         assert managed_files_are_writable(table)
 
+    @pytest.mark.parametrize(
+        ("directive", "value"),
+        [
+            ("Volume", "${CONFIG_DIR}/files/state:/state:rw"),
+            ("Volume", "/data/config/files/state:/state:rw"),
+            ("Mount", "type=bind,source=${CONFIG_DIR}/files/cache,target=/cache,rw"),
+            ("PodmanArgs", "--volume=/data/config/files/state:/state:rw"),
+            ("PodmanArgs", "--mount=type=bind,source=${CONFIG_DIR}/files/cache,target=/cache,rw"),
+        ],
+    )
+    def test_equivalent_managed_file_sources_are_detected(self, directive, value):
+        """Resolve tokenized and absolute managed-file sources consistently."""
+        container = {"Image": "alpine:latest"}
+        if directive == "PodmanArgs":
+            container[directive] = [value]
+        else:
+            container[directive] = value
+        table = {"app": {"privileged": False, "Container": container}}
+        config_root = Path("/data/config")
+
+        assert managed_files_are_writable(table, config_root)
+        _rendered, _runtime, warnings = render_containers(table, config_root)
+        assert len(warnings) == 1
+
+    def test_config_dir_files_token_is_detected_without_runtime_context(self):
+        table = {
+            "app": {
+                "privileged": False,
+                "Container": {
+                    "Image": "alpine:latest",
+                    "Volume": "${CONFIG_DIR}/files/state:/state:rw",
+                },
+            }
+        }
+
+        assert managed_files_are_writable(table)
+
+    def test_absolute_source_outside_runtime_files_is_not_managed(self):
+        table = {
+            "app": {
+                "privileged": False,
+                "Container": {
+                    "Image": "alpine:latest",
+                    "Volume": "/other/config/files/state:/state:rw",
+                },
+            }
+        }
+
+        _rendered, _runtime, warnings = render_containers(table, Path("/data/config"))
+
+        assert warnings == []
+        assert not managed_files_are_writable(table, Path("/data/config"))
+
     def test_read_only_podman_args_mounts_do_not_warn(self):
         """Verify that read-only PodmanArgs mounts remain warning-free."""
         table = {

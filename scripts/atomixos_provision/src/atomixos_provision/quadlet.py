@@ -179,9 +179,40 @@ def render_section(section_name: str, directives: dict[str, list], config_root: 
     return lines
 
 
-def managed_file_mount_warning(directive: str, value: str, path: str) -> str | None:
+def _mount_source(directive: str, value: str) -> str | None:
+    """Return the host source path from a supported volume or bind mount."""
+    if directive in {"Volume", "PodmanArgsVolume"}:
+        return value.split(":", 1)[0].strip()
+    if directive in {"Mount", "PodmanArgsMount"}:
+        for option in value.split(","):
+            key, separator, raw_value = option.partition("=")
+            if separator and key.strip().lower() in {"source", "src"}:
+                return raw_value.strip()
+    return None
+
+
+def _managed_file_source(source: str, config_root: Path | None) -> bool:
+    """Return whether a mount source resolves below the managed files root."""
+    if config_root is None:
+        # Preserve detection for tokenized configs for callers that do not have
+        # the runtime root available. Absolute paths require that context.
+        for token in (FILES_DIR_TOKEN, f"{CONFIG_DIR_TOKEN}/files"):
+            if source == token or source.startswith(f"{token}/"):
+                suffix = source[len(token) :].lstrip("/")
+                return ".." not in Path(suffix).parts
+        return False
+
+    files_root = (config_root / "files").resolve(strict=False)
+    resolved_source = Path(substitute_tokens(source, config_root)).resolve(strict=False)
+    return resolved_source == files_root or files_root in resolved_source.parents
+
+
+def managed_file_mount_warning(
+    directive: str, value: str, path: str, config_root: Path | None = None
+) -> str | None:
     """Warn when managed bundle files may be changed by a container."""
-    if FILES_DIR_TOKEN not in value:
+    source = _mount_source(directive, value)
+    if source is None or not _managed_file_source(source, config_root):
         return None
 
     read_only = managed_file_mount_is_read_only(directive, value)
@@ -253,7 +284,9 @@ def _podman_mount_values(values: list[str]):
                     break
 
 
-def managed_files_are_writable(container_table: dict[str, Any]) -> bool:
+def managed_files_are_writable(
+    container_table: dict[str, Any], config_root: Path | None = None
+) -> bool:
     """Return whether any configured managed-file mount needs host write access."""
     writable = False
     for raw_sections in container_table.values():
@@ -269,7 +302,8 @@ def managed_files_are_writable(container_table: dict[str, Any]) -> bool:
             for value in raw_values:
                 if (
                     isinstance(value, str)
-                    and FILES_DIR_TOKEN in value
+                    and (source := _mount_source(directive, value)) is not None
+                    and _managed_file_source(source, config_root)
                     and not managed_file_mount_is_read_only(directive, value)
                 ):
                     writable = True
@@ -278,8 +312,15 @@ def managed_files_are_writable(container_table: dict[str, Any]) -> bool:
             raw_podman_args = [raw_podman_args]
         podman_args = [value for value in raw_podman_args if isinstance(value, str)]
         for value, mount_value, _index in _podman_mount_values(podman_args):
-            if FILES_DIR_TOKEN in mount_value and not managed_file_mount_is_read_only(
-                "Volume" if value in {"volume", "v"} else "Mount", mount_value
+            directive = "Volume" if value in {"volume", "v"} else "Mount"
+            source = _mount_source(
+                "PodmanArgsVolume" if directive == "Volume" else "PodmanArgsMount",
+                mount_value,
+            )
+            if (
+                source is not None
+                and _managed_file_source(source, config_root)
+                and not managed_file_mount_is_read_only(directive, mount_value)
             ):
                 writable = True
     return writable
@@ -323,7 +364,7 @@ def render_containers(
             for idx, value in enumerate(container_directives.get(directive, [])):
                 mount_path = f"{container_path}.Container.{directive}[{idx}]"
                 warning = managed_file_mount_warning(
-                    directive, require_string(value, mount_path), mount_path
+                    directive, require_string(value, mount_path), mount_path, config_root
                 )
                 if warning is not None:
                     warnings.append(warning)
@@ -339,6 +380,7 @@ def render_containers(
                 "PodmanArgsVolume" if directive in {"volume", "v"} else "PodmanArgsMount",
                 value,
                 mount_path,
+                config_root,
             )
             if warning is not None:
                 warnings.append(warning)
