@@ -21,8 +21,9 @@ The user selected a separate reusable build-stage configuration capability inste
 `config.toml`. The committed file is `build.toml`. An ignored `build.dev.toml` is a local staging overlay for testing
 customizations before copying accepted values into `build.toml`.
 
-Supported `mise` build and check tasks will apply the local overlay automatically when it exists. They must make this
-conspicuous before evaluation with:
+Supported `mise` build tasks and explicit `./scripts/nix-with-build-config.sh flake check` validation apply the local
+overlay automatically when it exists. `mise run check` runs quality checks only. Configuration-aware commands must make
+the overlay conspicuous before evaluation with:
 
 ```text
 WARNING: applying local build.dev.toml overrides; outputs will be marked -dev.
@@ -36,7 +37,7 @@ Local-override artifacts must also remain distinguishable after the terminal war
 2. Preserve a committed, reproducible default policy while supporting an ignored partial local overlay.
 3. Map effective watchdog policy into existing `atomixos.watchdog.*` NixOS options.
 4. Embed the normalized effective policy and non-secret provenance into immutable system and artifact outputs.
-5. Keep supported `mise` build and check workflows convenient and explicit about local overrides.
+5. Keep supported `mise` builds and explicit Nix validation convenient and clear about local overrides.
 6. Leave a small, section-oriented contract that future features can extend without a generic key/value mechanism.
 
 ## Non-Goals
@@ -136,7 +137,7 @@ runtime_timeout = "45s"
 
   | `mise` task                 | Applies local overlay | Reason                                              |
   |-----------------------------|-----------------------|-----------------------------------------------------|
-  | `check`                     | Yes                   | Evaluate and test the effective configuration       |
+  | `check`                     | No                    | Formatting, linting, and documentation only         |
   | `build`                     | Yes                   | Build configuration-bearing system/artifact outputs |
   | `build:squashfs`            | Yes                   | Contains immutable system policy                    |
   | `build:rauc-bundle`         | Yes                   | Contains the configured squashfs and audit sidecars |
@@ -145,6 +146,8 @@ runtime_timeout = "45s"
   | `e2e`, `e2e:*`, `e2e:debug` | No                    | Test fixtures own explicit isolated configuration   |
   | `serial:*`, `_lima`, `gc`   | No                    | Do not construct AtomixOS configured outputs        |
 
+  Use `./scripts/nix-with-build-config.sh flake check` to evaluate and test effective configuration, including a local
+  overlay. The hk quality gate does not evaluate Nix or apply build policy.
 - Each included Nix evaluation must print the exact warning before evaluation when the local overlay exists. A
   multi-evaluation task such as `build` may print it before each evaluation rather than hide later override use.
 - Direct `nix build .#...`, `nix flake check`, external `nixpkgs` helper builds, and excluded `mise` tasks remain pure
@@ -394,7 +397,9 @@ None required for implementation.
 - Automatic override scope: supported `mise` workflows; direct Git-backed Nix commands use committed policy.
 - Embed effective policy and sidecars: approved.
 - Mark local-override artifacts: approved with `-dev` and immutable provenance.
-- Apply the same behavior to `mise run check`: approved with the same warning.
+- Apply the same behavior to `mise run check`: originally approved with the same warning; superseded by the
+  user-approved independent hk/Nix workflow split. Use `./scripts/nix-with-build-config.sh flake check` for
+  configuration-aware validation; `mise run check` is now quality-only.
 
 ### Assumptions
 
