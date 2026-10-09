@@ -7,6 +7,7 @@ import pytest
 from atomixos_provision.config import ProvisionError
 from atomixos_provision.quadlet import (
     format_scalar,
+    managed_file_mount_is_read_only,
     managed_files_are_writable,
     normalize_directives,
     render_builds,
@@ -406,6 +407,29 @@ class TestRenderContainers:
         _rendered, _runtime, warnings = render_containers(table, Path("/data/config"))
 
         assert warnings == []
+
+    @pytest.mark.parametrize(
+        ("options", "read_only"),
+        [
+            ("rw=false", True),
+            ("readwrite=false", True),
+            ("ro=false", False),
+            ("readonly=false", False),
+            ("ro=true,rw=false", True),
+            ("ro=false,rw=true", False),
+            ("ro=true,readonly=false", False),
+            ("readonly=true,ro=false", False),
+            ("ro=false,rw=false", False),
+            ("readonly=false,readwrite=false", False),
+            ("readonly=true,readwrite=false", True),
+            ("readonly=false,readwrite=true", False),
+        ],
+    )
+    def test_managed_file_structured_mount_boolean_options(self, options, read_only):
+        """Interpret structured mount read-only aliases and boolean values."""
+        value = f"type=bind,source=${{FILES_DIR}}/config.yaml,target=/app/config.yaml,{options}"
+
+        assert managed_file_mount_is_read_only("Mount", value) is read_only
 
     @pytest.mark.parametrize("mutating_option", ["rw", "readwrite", "U", "chown"])
     def test_managed_file_structured_mount_warns_about_mutating_flags(self, mutating_option):

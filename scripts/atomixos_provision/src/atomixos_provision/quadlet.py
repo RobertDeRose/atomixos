@@ -232,7 +232,14 @@ def managed_file_mount_warning(
 
 
 def managed_file_mount_is_read_only(directive: str, value: str) -> bool:
-    """Return whether a managed-file mount explicitly requests read-only access."""
+    """Return whether a managed-file mount explicitly requests read-only access.
+
+    Podman's structured mount syntax treats ``ro``/``readonly`` and
+    ``rw``/``readwrite`` as boolean aliases.  Track both sides explicitly so
+    that false values are meaningful rather than being mistaken for an absent
+    option.  An explicit writable request remains dominant for this safety
+    check when contradictory options are supplied.
+    """
     if directive in {"Volume", "PodmanArgsVolume"}:
         parts = value.split(":", 2)
         volume_options = set(parts[2].split(",")) if len(parts) == 3 else set()
@@ -243,27 +250,27 @@ def managed_file_mount_is_read_only(directive: str, value: str) -> bool:
                 raise provision_error(f"invalid Podman volume option: {option!r}")
         return "ro" in volume_options and not {"rw", "U"}.intersection(volume_options)
 
-    mount_options: dict[str, str] = {}
-    flags: set[str] = set()
+    read_only = False
+    writable = False
     for option in value.split(","):
         key, separator, raw_value = option.partition("=")
         normalized_key = key.strip().lower()
-        if separator:
-            mount_options[normalized_key] = raw_value.strip().lower()
-        else:
-            flags.add(normalized_key)
-    return (
-        "ro" in flags
-        or "readonly" in flags
-        or mount_options.get("ro") == "true"
-        or mount_options.get("readonly") == "true"
-    ) and not (
-        {"rw", "readwrite", "u", "chown"}.intersection(flags)
-        or mount_options.get("rw") == "true"
-        or mount_options.get("readwrite") == "true"
-        or mount_options.get("u") == "true"
-        or mount_options.get("chown") == "true"
-    )
+        if normalized_key in {"ro", "readonly"}:
+            if not separator or raw_value.strip().lower() == "true":
+                read_only = True
+            elif raw_value.strip().lower() == "false":
+                writable = True
+        elif normalized_key in {"rw", "readwrite"}:
+            if not separator or raw_value.strip().lower() == "true":
+                writable = True
+            elif raw_value.strip().lower() == "false":
+                read_only = True
+        elif normalized_key in {"u", "chown"} and (
+            not separator or raw_value.strip().lower() == "true"
+        ):
+            writable = True
+
+    return read_only and not writable
 
 
 def _podman_mount_values(values: list[str]):
