@@ -181,6 +181,72 @@ class TestCopyBundleFiles:
         assert all((uid, gid) == (1000, 2000) for _path, uid, gid in chowns)
         assert files_root.joinpath("state.json").stat().st_mode & 0o777 == 0o640
 
+    def test_rejects_hardlinked_managed_file_before_chown_or_chmod(self, tmp_path, monkeypatch):
+        chowns = self._mock_appsvc(monkeypatch)
+        chmods: list[tuple[int, int]] = []
+        monkeypatch.setattr(
+            "atomixos_provision.bundle.os.fchmod",
+            lambda fd, mode: chmods.append((fd, mode)),
+        )
+        files_root = tmp_path / "files"
+        files_root.mkdir()
+        outside = tmp_path / "outside.json"
+        outside.write_text("{}\n")
+        outside_stat = outside.stat()
+        (files_root / "state.json").hardlink_to(outside)
+
+        with pytest.raises(ProvisionError, match="single-link regular file"):
+            grant_managed_file_access(files_root)
+
+        after_stat = outside.stat()
+        assert (after_stat.st_uid, after_stat.st_gid, after_stat.st_mode) == (
+            outside_stat.st_uid,
+            outside_stat.st_gid,
+            outside_stat.st_mode,
+        )
+        assert len(chowns) == 1
+        assert len(chmods) == 1
+
+    @pytest.mark.parametrize(
+        ("limit_name", "limit", "pattern"),
+        [
+            ("MAX_BUNDLE_MEMBERS", 1, "bundle exceeds 1 member limit"),
+            ("MAX_BUNDLE_MEMBER_BYTES", 2, "exceeds 2 byte limit"),
+            ("MAX_DECOMPRESSED_BYTES", 5, "exceeds 5 byte decompressed limit"),
+        ],
+    )
+    def test_stage_bundle_files_enforces_snapshot_limits(
+        self, tmp_path, monkeypatch, limit_name, limit, pattern
+    ):
+        import atomixos_provision.bundle as bundle_module
+
+        monkeypatch.setattr(bundle_module, "MAX_BUNDLE_MEMBERS", 100)
+        monkeypatch.setattr(bundle_module, "MAX_BUNDLE_MEMBER_BYTES", 100)
+        monkeypatch.setattr(bundle_module, "MAX_DECOMPRESSED_BYTES", 100)
+        monkeypatch.setattr(bundle_module, limit_name, limit)
+        source = tmp_path / "source-files"
+        source.mkdir()
+        (source / "first.txt").write_bytes(b"abc")
+        (source / "second.txt").write_bytes(b"def")
+
+        with pytest.raises(ProvisionError, match=pattern):
+            stage_bundle_files(source, tmp_path / "destination")
+
+    def test_copy_bundle_files_enforces_snapshot_limits(self, tmp_path, monkeypatch):
+        import atomixos_provision.bundle as bundle_module
+
+        self._mock_appsvc(monkeypatch)
+        monkeypatch.setattr(bundle_module, "MAX_BUNDLE_MEMBERS", 100)
+        monkeypatch.setattr(bundle_module, "MAX_BUNDLE_MEMBER_BYTES", 100)
+        monkeypatch.setattr(bundle_module, "MAX_DECOMPRESSED_BYTES", 5)
+        source = tmp_path / "source-files"
+        source.mkdir()
+        (source / "first.txt").write_bytes(b"abc")
+        (source / "second.txt").write_bytes(b"def")
+
+        with pytest.raises(ProvisionError, match="exceeds 5 byte decompressed limit"):
+            copy_bundle_files(source, tmp_path / "config")
+
     def test_rejects_symlinked_files_root_during_reconciliation(self, tmp_path, monkeypatch):
         """Verify that reconciliation never follows a files-root symlink."""
         self._mock_appsvc(monkeypatch)

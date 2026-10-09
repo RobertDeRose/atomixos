@@ -127,7 +127,7 @@ def _snapshot_dir(
             raise provision_error(f"invalid bundle files entry: {name!r}")
         member_count[0] += 1
         if max_members is not None and member_count[0] > max_members:
-            raise provision_error(f"bundle exceeds {MAX_BUNDLE_MEMBERS} member limit")
+            raise provision_error(f"bundle exceeds {max_members} member limit")
         child_path = source_path / name
         try:
             child_stat = os.stat(name, dir_fd=source_fd, follow_symlinks=False)
@@ -428,6 +428,10 @@ def _grant_managed_dir_access(
                 raise provision_error(
                     f"bundle files entry changed during reconciliation: {current}"
                 )
+            if stat.S_ISREG(confirmed.st_mode) and confirmed.st_nlink != 1:
+                raise provision_error(
+                    f"bundle entry must be a single-link regular file: {current}"
+                )
             os.fchown(child_fd, app_uid, reader_gid)
             if stat.S_ISDIR(confirmed.st_mode):
                 os.fchmod(child_fd, 0o750 if writable else 0o550)
@@ -604,7 +608,13 @@ def copy_bundle_files(files_source: Path | None, config_root: Path) -> None:
         staging_root = Path(staging_dir)
         staging_root.chmod(0o700)
         staging_target = staging_root / "files"
-        _snapshot_files_source(files_source, staging_target)
+        _snapshot_files_source(
+            files_source,
+            staging_target,
+            max_file_bytes=MAX_BUNDLE_MEMBER_BYTES,
+            max_total_bytes=MAX_DECOMPRESSED_BYTES,
+            max_members=MAX_BUNDLE_MEMBERS,
+        )
         _grant_managed_file_access(staging_target, app_uid, reader_gid, staging=True)
         _remove_bundle_files_target(target)
         os.replace(staging_target, target)
@@ -618,7 +628,13 @@ def stage_bundle_files(files_source: Path | None, destination: Path) -> None:
         _remove_bundle_files_target(destination)
     if files_source is None or not files_source.exists():
         return
-    _snapshot_files_source(files_source, destination)
+    _snapshot_files_source(
+        files_source,
+        destination,
+        max_file_bytes=MAX_BUNDLE_MEMBER_BYTES,
+        max_total_bytes=MAX_DECOMPRESSED_BYTES,
+        max_members=MAX_BUNDLE_MEMBERS,
+    )
 
 
 # --- High-Level Import ---
