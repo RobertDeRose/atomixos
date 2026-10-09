@@ -244,7 +244,7 @@ class TestRenderContainers:
             in rendered["app.container"]
         )
         assert len(warnings) == 1
-        assert "deployment inputs" in warnings[0]
+        assert "included in config export" in warnings[0]
 
     def test_managed_file_mount_accepts_read_only_option(self):
         """Verify that managed file mount accepts read only option."""

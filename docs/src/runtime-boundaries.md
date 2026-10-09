@@ -40,20 +40,63 @@ applies one staged job at a time and returns `409 Conflict` when that queue is f
 resource for final success, failure, rollback status, and service deployment events.
 
 The staging boundary uses `/run/atomixos-provision`. The API writes a complete candidate tree, validated bundle files,
-and a manifest with relative paths, modes, sizes, and SHA-256 hashes, then publishes a ready marker. The root
-`atomixos-provision-apply.service` claims queued jobs, verifies manifest paths, owners, modes, symlinks, hashes, and
-expected entries, re-renders the verified staged `config.toml` into `/data/config-candidate`, and runs the existing
-promotion, activation, rollback, and recovery protocol. Root-written `/data/config` state is group-readable by
-`atomixos-provision` so the unprivileged API can export config and authenticate future requests; bundle `files/` payloads
-remain owned by the application runtime user and are preserved through a no-symlink snapshot path. Initial promotion also
-writes `/data/config/.first-config`; re-apply checks that root-written marker rather than trusting `config.toml` alone.
+and a manifest with relative paths, modes, sizes, and SHA-256 hashes, then publishes a ready marker using the same
+live capacity reservation that assigned its FIFO sequence. Expired reservations remove incomplete unpublished staging.
+The root `atomixos-provision-apply.service` claims queued jobs, verifies manifest paths, owners, modes, symlinks,
+hashes, expected entries, and the source-size limit before reading staged request evidence, then re-renders the verified
+staged `config.toml` into `/data/config-candidate`. It runs
+the existing promotion, activation, rollback, and recovery protocol. Root-written `/data/config` state is
+group-readable by `atomixos-provision` so the unprivileged API can authenticate and stage approved state, except for
+the owner-only apply receipt that binds a job and source digest to its transaction phase and result. Only its
+`committed` phase proves success. Bundle `files/` payloads are
+owned by `appsvc`, group-readable by `atomixos-provision`, and installed as read-only files and directories. They are
+preserved through a no-symlink snapshot path; privileged access reconciliation changes verified file descriptors rather
+than following mutable paths. Export bounds snapshot writes as files are read, including files that grow during copying.
+Export is allowlisted to
+`config.toml` and `files/`, returns a deterministic `config-bundle.tar.gz` under the provisioning lock, and excludes
+generated runtime state and Podman volume contents. Production exports run in the separate root
+`atomixos-provision-export.service`, triggered by `atomixos-provision-export.path`. The API submits empty UUID-named
+markers, never source paths or commands. The root worker claims them into a root-controlled directory and atomically
+publishes UUID-correlated archives or errors readable by the API group. This preserves export access even after a
+workload changes file ownership or permissions, without granting the API root privileges or modifying payload access.
+The worker cannot write `/data`, has no network access, and rejects symlinks, hard-linked files, and special files.
+Results and acknowledgements are bounded and expired; see [Privileged bundle export](provisioning.md#privileged-bundle-export).
+The provisioning lock serializes exports against applies, not concurrent workload writes.
+
+Initial promotion also writes `/data/config/.first-config`; the
+shared provisioning predicate treats a regular, non-symlink marker or `config.toml` as the compatibility signal across
+provisioning, authentication, and Boot UI guards, while missing signer state fails closed.
+
+The WAN firewall uses the same non-symlink marker-or-config state, except that pending promotion preserves bootstrap
+access. Signer-only state does not mark a device provisioned.
+Boot recovery leaves runtime and WAN reconciliation to its ordered successor services; it never synchronously waits for
+those units. Same-boot worker recovery reconciles the configured transport after discarding an initial promotion,
+restoring rollback, or recovering a committed initial apply. It retries the initial apply's WAN firewall reconciliation
+before publishing recovered success. Fleet recovery does not enable network bootstrap.
 
 Runtime result files under `/run/atomixos-provision/results` are root-writable and group-readable only. Claim and queued-job
-abandonment share `/run/atomixos-provision/queue.lock`, and the root worker finalizer records failed results for claimed
-jobs left behind by an interrupted worker.
+abandonment share `/run/atomixos-provision/queue.lock`. The worker retains active jobs until terminal result publication.
+Its finalizer discards an interrupted initial promotion, rolls back an interrupted re-apply, or finishes cleanup for a
+committed apply. Same-boot recovery retries a committed re-apply's delayed LAN bootstrap rebind when its durable
+result records a forwarding URL, before publishing recovered success. Committed-receipt transport follow-ups run only
+while a claimed job with the same job ID and source digest has no published result. Later finalization does not replay
+them after success, including after result acknowledgement or expiry. Retries while a result remains unpublished share
+the named transient unit; completed or failed units are collected so later applies can schedule it again. Boot recovery
+leaves rebinding to its ordered successor services, and Nixstasis transport does not schedule network rebinding.
+Rollback merges failed and restored managed-user tracking before removing the failed tree, and
+same-boot finalization reactivates the restored configuration before publishing results. Rollback activation failures
+are included in the failed result. It then matches the owner-only receipt against the claimed manifest before recording
+authoritative success or failure. Result polling may abandon only an
+unclaimed queued job; a claimed job remains nonterminal until the worker or its
+finalizer publishes the authoritative result. The monitor retries result I/O errors without inferring terminal apply
+failure; direct result readers still receive those errors.
+
+The apply service allows 3900 seconds for stop/finalization, covering the supported 3600-second activation budget
+plus recovery overhead. Privileged staged-file hashing opens nonblocking and rejects non-regular descriptors, so a
+raced-in FIFO cannot block the worker before validation.
 
 The first-boot Boot UI is a browser-only wrapper around that same boundary. It
-submits uploaded or dropped config sources through `/apply`, uses the bootstrap CSRF
+submits uploaded or dropped `config.toml` or supported bundle sources through `/apply`, uses the bootstrap CSRF
 token plus browser origin checks, and renders first-boot-only HTML job fragments
 from the in-memory job state. It is not a post-provision management UI and does
 not add a durable polling token or unauthenticated mutation path after
@@ -248,29 +291,16 @@ Rootful containers require `privileged = true` and are forced onto `Network=host
 user, are forced onto `Network=pasta`, and non-loopback `PublishPort` binds are rewritten to `127.0.0.1`.
 
 Bundle imports may include `files/`; Quadlet values may reference `${CONFIG_DIR}` and `${FILES_DIR}` to bind files from
-`/data/config/` without embedding host-specific absolute paths in the seed.
+`/data/config/` without embedding host-specific absolute paths in the seed. Managed inputs are installed read-only by
+default. A trusted integrator may request writable `Volume`, `Mount`, or `PodmanArgs` behavior; AtomixOS preserves that
+Quadlet configuration and warns when a `${FILES_DIR}` mount is not clearly read-only. `PodmanArgs` analysis supports
+combined argument strings and quoted paths as well as separate entries, retaining directive indices in warnings.
+This includes attached short-option volume arguments such as `-v${FILES_DIR}/state:/state:rw`.
+Writable application state should
+normally use Podman named volumes. Operators who need to back up, restore, or transfer that runtime data should use
+Podman tooling; that lifecycle is outside this feature and AtomixOS provisioning ownership.
 
-## Managed-file access
-
-Bundle `files/` are deployment inputs, installed read-only by default and
-owned by `appsvc`. The provisioning group receives read access. Permission
-reconciliation validates file descriptors and rejects symlinks and special
-files. Trusted integrators may request writable mounts; the renderer warns
-when `${FILES_DIR}` mounts are not clearly read-only. Mutable application
-state belongs in Podman volumes and uses Podman backup and restore tooling.
-
-## Worker request trust
-
-The root worker verifies signed request evidence and re-renders from those
-verified bytes rather than trusting the API-rendered candidate. Staged reads
-are bounded, nonblocking, and reject symlinks and non-regular descriptors.
-Ready publication requires a live capacity reservation and preserves FIFO order.
-
-## Apply transactions and finalization
-
-The receipt binds the staged job ID and source digest to its durable phase and
-result. Activation precedes commit; finalization preserves published results
-and retries unfinished work. Boot recovery leaves WAN and runtime activation
-to ordered successor services. Same-boot recovery completes transport and
-rollback activation before publishing results. The apply service stop timeout
-covers the supported activation budget plus recovery overhead.
+An authorized post-provisioning signer is a device administrator. A signed configuration may intentionally define
+rootful or rootless workloads and use arbitrary supported Quadlet and Podman options, including privileged container
+behavior. Authentication controls who may exercise that authority; renderer validation enforces structural correctness
+and platform invariants rather than imposing workload policy on a trusted integrator.

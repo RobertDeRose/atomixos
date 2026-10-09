@@ -54,7 +54,7 @@ still wired explicitly by the app factory:
 | `GET /api/nonce`                               | Issues a single-use nonce for SSH-signature authentication.                     |
 | `POST /api/validate`                           | Validates a `config.toml` or config bundle without applying it.                 |
 | `POST /api/config`                             | Accepts a config source and returns `202 Accepted` with a job URL.              |
-| `GET /api/config/export`                       | Returns the current canonical `config.toml` bytes.                              |
+| `GET /api/config/export`                       | Returns the complete deterministic `config-bundle.tar.gz` archive.              |
 | `PUT /api/config/users/{name}`                 | Creates or replaces a declared user and applies the full config.                |
 | `DELETE /api/config/users/{name}`              | Removes a declared user and applies the full config.                            |
 | `PATCH /api/config/network`                    | Merges network, LAN, NTP, DNS, and firewall fields and applies the full config. |
@@ -88,8 +88,11 @@ Binary config submissions use `application/octet-stream` and identify the source
 with `x-config-filename` (for example `config.toml` or `config.tar.zst`); the
 server also detects supported archive magic bytes. Signatures cover the exact raw
 request body. JSON partial requests sign their exact JSON body. A `GET` export has
-an empty body, so its signed digest is SHA-256 of zero bytes. The export response remains canonical `config.toml` bytes.
-The live transport contract is available at `/schema/openapi.json`.
+an empty body, so its signed digest is SHA-256 of zero bytes. The export response is
+`application/gzip` with a `config-bundle.tar.gz` attachment. The deterministic
+archive contains only top-level `config.toml` and managed `files/` payloads; it
+excludes generated runtime state, markers, signer material, and unrelated config
+files. The live transport contract is available at `/schema/openapi.json`.
 
 On production staged systems, mutating apply jobs are accepted into a bounded
 FIFO queue and applied one at a time. Clients receive `409 Conflict` when the
@@ -101,12 +104,15 @@ and signature headers, while first-boot programmatic config submission remains
 unauthenticated.
 
 On production systems, mutating jobs are staged by the unprivileged API under
-`/run/atomixos-provision` after validation and candidate rendering. A root-owned
+`/run/atomixos-provision` after validation and candidate rendering. The staged
+job also retains the exact request bytes and verified authorization envelope. A root-owned
 `atomixos-provision-apply.path` unit watches ready markers and starts the
 `atomixos-provision-apply.service` oneshot worker. The worker verifies the staged
-manifest and tree before copying verified state into `/data/config-candidate`,
-then performs promotion, activation, rollback, and recovery. This keeps network
-parsing and upload handling unprivileged while preserving the same
+manifest and tree, re-verifies the signature against the active administrator
+keys, consumes the nonce in root-owned state, and reconstructs the requested
+operation from the signed method, path, and body. It then renders verified state
+into `/data/config-candidate` and performs promotion, activation, rollback, and
+recovery. This keeps HTTP parsing unprivileged while preserving the same
 operator-visible API responses and rollback behavior. Result handoff files are
 root-writable/group-readable, and queue claim/abandon operations share a runtime
 lock so timed-out queued jobs cannot race with the root worker claiming them.
@@ -126,31 +132,43 @@ candidate through the same asynchronous validate/render/promote/activate/rollbac
 `POST /api/config`. On staged production systems, partial endpoints require the staged queue to be
 otherwise empty and return `409 Conflict` when another staged job is queued or active. They do not
 mutate derived JSON, Quadlet, firewall, network, or user state
-directly. The generated `config.toml` remains the exported backup artifact; comments and original TOML
-ordering are not preserved after a successful partial update.
+directly. The generated `config.toml` is the canonical desired-state member of the exported backup artifact; comments and
+original TOML ordering are not preserved after a successful partial update. Bundle export also includes managed
+`/data/config/files/` payloads and excludes generated runtime state, markers, signer material, and unrelated config
+files. Managed payloads are installed read-only by default. Trusted integrators may deliberately mount `${FILES_DIR}`
+writable; AtomixOS accepts the Quadlet configuration and emits a warning because any resulting changes are included in
+later config exports. Managed-file `Volume` and `PodmanArgs --volume` options must use Podman's accepted casing
+(for example, `ro`, `rw`, `U`, `z`, or `Z`); invalid options such as `RO` are rejected before host permissions are derived.
+Mutable application data should normally use Podman volumes and is intentionally excluded from
+config export. Use Podman tooling when volume data must be backed up, restored, or transferred; AtomixOS provisioning
+does not own that runtime-data lifecycle. The archive can be imported through the same bundle importer into a clean
+config root.
+
+### Privileged bundle export
+
+Production export uses a dedicated root worker, so private files and workload-remapped ownership do not prevent backup.
+The API remains unprivileged and authenticates every export before publishing an empty UUID-named request under
+`/run/atomixos-provision/export/requests`. `atomixos-provision-export.path` starts the corresponding oneshot service,
+which reads only `config.toml` and `files/` under the provisioning lock. It does not change source ownership or modes.
+It rejects symbolic links, hard-linked files, and special files rather than following them or returning a partial backup.
+
+The worker atomically publishes `<uuid>.tar.gz` or `<uuid>.error` in the root-owned, API-group-readable `results`
+directory. The API serves only its matching completed archive, then publishes an acknowledgement for worker cleanup.
+At most four pending, active, or retained export UUIDs are admitted, including unprocessed acknowledgements; a full
+queue returns JSON `409`. Worker failures return
+JSON `500`, and an API wait exceeding 130 seconds returns JSON `504`. The worker has a 120-second service timeout;
+its finalizer has a separate 60-second limit to record interrupted requests as failures. A timer runs cleanup every
+minute while idle, expiring abandoned
+requests, acknowledgements, and results after five minutes. All export state is boot-local under `/run`.
+
+For failures, inspect `journalctl -u atomixos-provision-export.service` and
+`systemctl status atomixos-provision-export.path atomixos-provision-export.timer`. Export waits for any active config
+apply to release the provisioning lock. This lock does not stop workload writes; quiesce workloads first when an
+application-consistent backup of writable managed files is required. Direct test/development config roots retain the
+in-process exporter.
 
 ## USB Recovery Mode
 
 If the reset button is held from power-on for 5 seconds, U-Boot enters USB
 mass storage mode instead of booting Linux. The
 Rock64 OTG USB port then exposes the full eMMC as a removable disk, allowing the host to write a fresh image directly.
-
-## Privileged request verification
-
-Re-apply signatures bind the HTTP method, path, nonce, and exact request bytes.
-The HTTP service stages that evidence, and the root worker independently
-verifies it against active administrator signers before rendering configuration.
-Boot-scoped nonces are consumed once by the worker. Initial provisioning accepts
-unsigned input only while the device is unprovisioned. A regular, non-symlink
-`.first-config` marker or `config.toml` identifies provisioned state; missing
-signer state fails closed. Invalid submitted configuration returns a client
-error; invalid server-side validation setup remains a server error.
-
-## Interrupted apply recovery
-
-Staged applies persist an owner-only receipt through promoted and committed
-phases. Success is published only after activation commits. Finalization
-discards an uncommitted initial configuration or restores and reactivates
-rollback state. Claimed jobs remain pending until root publishes a terminal
-result, including when result I/O temporarily fails. Transport follow-ups
-require a matching unfinished claimed job and never replay after completion.

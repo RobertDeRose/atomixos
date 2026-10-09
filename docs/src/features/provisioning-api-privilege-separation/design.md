@@ -175,6 +175,7 @@ Use tmpfs-backed runtime state for unprivileged staging:
   queue/
     <job-id>/
       manifest.json
+      request.bin
       candidate/
         config.toml
         users.json
@@ -196,11 +197,14 @@ Use tmpfs-backed runtime state for unprivileged staging:
 
 The API service writes `<job-id>.reserve` while staging to reserve FIFO capacity.
 `queue/.sequence` assigns monotonically increasing order to reservations and
-ready markers. The API writes `<job-id>/manifest.json` and the rendered
-candidate tree first. It creates `<job-id>.ready` only after staging is complete
+ready markers. The API writes `<job-id>/manifest.json`, the exact request bytes,
+authorization metadata, and the rendered candidate tree first. It creates
+`<job-id>.ready` only after staging is complete
 and fsynced as far as practical for tmpfs. The ready marker is the trigger
-contract for systemd. Stale reservations are discarded after the reservation TTL
-and never authorize a worker claim without a ready marker.
+contract for systemd. Publication requires the same live reservation that
+allocated queue capacity and preserves its sequence. A transient heartbeat
+failure is retried while staging. Expired reservations remove their unpublished
+job and temporary staging trees, but never remove a published or active job.
 `queue/` is `02770 root:atomixos-provision`; `results/` is
 `02750 root:atomixos-provision`; result files are `0640 root:atomixos-provision`.
 The API service can create staged queue entries and read terminal results, but
@@ -211,6 +215,13 @@ The root worker claims a job by atomically renaming the staged directory from
 Claim and timeout-abandon operations share `/run/atomixos-provision/queue.lock`
 so the API cannot mark a job failed while the root worker is claiming it. Only
 one apply mutates `/data` at a time under `/run/atomixos-provision/config.lock`.
+Before promotion, the worker adds a root-only
+`/data/config/.atomixos-apply-receipt.json` to the durable candidate. The receipt
+binds the job ID and source digest to the eventual result payload. Its initial
+`promoted` phase records an incomplete transaction. The worker changes it to
+`committed` only after activation and health checks pass and before removing
+rollback state. It is generated runtime control state and is not included in
+config bundle exports.
 
 ### Staging Manifest
 
@@ -279,7 +290,8 @@ rename the tmpfs candidate directly into `/data/config`. The worker should:
 5. Promote `/data/config-candidate` to `/data/config` using the existing
    crash-safe promotion and rollback protocol within `/data`.
 6. Run activation and health checks.
-7. Roll back on activation failure.
+7. Mark the receipt `committed` before removing rollback state, or roll back on
+   activation failure.
 8. Write `/run/atomixos-provision/results/<job-id>.json` as `0640 root:atomixos-provision`.
    Result JSON is versioned and includes `version`, `job_id`, `completed_at`,
    and `status` (`succeeded` or `failed`). Successful results include a
@@ -311,8 +323,10 @@ The design uses systemd as the privilege boundary:
   - verifies staged inputs
   - writes durable candidate state under `/data`
   - promotes, activates, rolls back, and writes result JSON
-  - runs a stop-post finalizer that writes failed results for claimed jobs left
-    behind if the worker is interrupted before terminal result publication
+  - retains the claimed job until terminal result publication succeeds
+  - runs a stop-post finalizer that resolves the receipt phase, restores or
+    discards incomplete promotions, and compares only committed receipts with
+    claimed manifests before publishing success for an interrupted job
 
 The API can poll result files and expose the same `/api/jobs/{id}` contract. If
 the API service restarts, it can reconstruct terminal job state from result JSON
@@ -324,9 +338,9 @@ existing work. When the queue is full, submission returns conflict/backpressure
 instead of evicting existing work. The root worker
 keeps only one staged job active at a time. Polling may abandon a job only if it
 is still queued under the shared queue lock; once the root worker claims a job,
-the API waits up to the configured result timeout for the worker or worker
-finalizer to write a terminal result, then reports a timeout instead of waiting
-indefinitely.
+the configured result timeout becomes a reconciliation interval. A claimed job
+remains nonterminal until the root worker or its stop-post finalizer publishes a
+terminal result.
 
 ### Existing Behavior Preservation
 
@@ -451,9 +465,3 @@ This spec is implementation-ready against the current repository direction. The
 affected runtime-boundary and provisioning docs have been updated alongside the
 spec, and there are no unresolved design questions that should block
 implementation.
-
-## Worker authorization reconciliation
-
-The root worker verifies method/path/payload-bound, boot-scoped administrator
-signatures and consumes nonces independently of the HTTP service. API-generated
-candidates do not establish privileged authorization.

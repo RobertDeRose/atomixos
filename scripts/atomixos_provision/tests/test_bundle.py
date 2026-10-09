@@ -9,6 +9,7 @@ import pytest
 from atomixos_provision.bundle import (
     copy_bundle_files,
     detect_bundle_kind,
+    export_bundle_bytes,
     extract_bundle_archive,
     grant_managed_file_access,
     prepare_source_bytes,
@@ -254,6 +255,195 @@ class TestCopyBundleFiles:
 
         copy_bundle_files(None, config_root)
         assert not files_dir.exists()
+
+
+class TestExportBundle:
+    """Group tests for ExportBundle."""
+
+    @staticmethod
+    def _members(bundle: bytes) -> dict[str, bytes | None]:
+        """Handle members."""
+        tar_bytes = gzip.decompress(bundle)
+        with tarfile.open(fileobj=io.BytesIO(tar_bytes), mode="r:") as archive:
+            members = {}
+            for member in archive.getmembers():
+                extracted = archive.extractfile(member)
+                members[member.name] = extracted.read() if extracted is not None else None
+            return members
+
+    def test_is_deterministic_and_allowlisted(self, tmp_path):
+        """Verify that is deterministic and allowlisted."""
+        (tmp_path / "config.toml").write_bytes(b"version = 1\n")
+        files = tmp_path / "files"
+        (files / "nested").mkdir(parents=True)
+        (files / "z.txt").write_text("z\n")
+        (files / "nested" / "a.txt").write_text("a\n")
+        for excluded in (
+            ".first-config",
+            "admin-signers",
+            ".atomixos-apply-receipt.json",
+            "users.json",
+            "quadlet-runtime.json",
+        ):
+            (tmp_path / excluded).write_text("must not export\n")
+
+        first = export_bundle_bytes(tmp_path)
+        second = export_bundle_bytes(tmp_path)
+
+        assert first == second
+        assert first.startswith(b"\x1f\x8b")
+        assert self._members(first) == {
+            "config.toml": b"version = 1\n",
+            "files": None,
+            "files/nested": None,
+            "files/nested/a.txt": b"a\n",
+            "files/z.txt": b"z\n",
+        }
+
+    def test_omits_missing_files_and_preserves_empty_files_directory(self, tmp_path):
+        """Verify that omits missing files and preserves empty files directory."""
+        (tmp_path / "config.toml").write_bytes(b"version = 1\n")
+
+        assert set(self._members(export_bundle_bytes(tmp_path))) == {"config.toml"}
+
+        (tmp_path / "files").mkdir()
+        assert set(self._members(export_bundle_bytes(tmp_path))) == {"config.toml", "files"}
+
+    def test_round_trips_through_bundle_importer(self, tmp_path):
+        """Verify that round trips through bundle importer."""
+        (tmp_path / "config.toml").write_bytes(b"version = 1\n")
+        (tmp_path / "files").mkdir()
+        (tmp_path / "files" / "cert.pem").write_text("CERT\n")
+
+        bundle = export_bundle_bytes(tmp_path)
+        tmpdir, config_path, files_path = prepare_source_bytes(bundle, "config-bundle.tar.gz")
+        try:
+            assert config_path.read_bytes() == b"version = 1\n"
+            assert files_path is not None
+            imported_files = tmp_path / "imported-files"
+            stage_bundle_files(files_path, imported_files)
+            assert (imported_files / "cert.pem").read_text() == "CERT\n"
+        finally:
+            tmpdir.cleanup()
+
+    def test_rejects_symlinked_export_paths(self, tmp_path):
+        """Verify that rejects symlinked export paths."""
+        target = tmp_path / "target"
+        target.write_text("version = 1\n")
+        (tmp_path / "config.toml").symlink_to(target)
+        with pytest.raises(ProvisionError, match="must be a regular file"):
+            export_bundle_bytes(tmp_path)
+
+        (tmp_path / "config.toml").unlink()
+        (tmp_path / "config.toml").write_text("version = 1\n")
+        (tmp_path / "files").mkdir()
+        (tmp_path / "files" / "linked").symlink_to(target)
+        with pytest.raises(ProvisionError, match="must not be a symlink"):
+            export_bundle_bytes(tmp_path)
+
+    def test_rejects_export_member_over_size_limit(self, tmp_path, monkeypatch):
+        """Verify that rejects export member over size limit."""
+        (tmp_path / "config.toml").write_bytes(b"version = 1\n")
+        (tmp_path / "files").mkdir()
+        (tmp_path / "files" / "large.txt").write_text("large\n")
+        monkeypatch.setattr("atomixos_provision.bundle.MAX_BUNDLE_MEMBER_BYTES", 1)
+
+        with pytest.raises(ProvisionError, match=r"exceeds .* byte limit"):
+            export_bundle_bytes(tmp_path)
+
+    def test_rejects_export_archive_limits(self, tmp_path, monkeypatch):
+        """Verify that rejects export archive limits."""
+        (tmp_path / "config.toml").write_bytes(b"version = 1\n")
+
+        monkeypatch.setattr("atomixos_provision.bundle.MAX_BUNDLE_MEMBERS", 0)
+        with pytest.raises(ProvisionError, match="member limit"):
+            export_bundle_bytes(tmp_path)
+
+        monkeypatch.setattr("atomixos_provision.bundle.MAX_BUNDLE_MEMBERS", 4096)
+        monkeypatch.setattr("atomixos_provision.bundle.MAX_DECOMPRESSED_BYTES", 1)
+        with pytest.raises(ProvisionError, match="decompressed limit"):
+            export_bundle_bytes(tmp_path)
+
+        monkeypatch.setattr("atomixos_provision.bundle.MAX_DECOMPRESSED_BYTES", 256 * 1024 * 1024)
+        monkeypatch.setattr("atomixos_provision.bundle.MAX_SOURCE_BYTES", 1)
+        with pytest.raises(ProvisionError, match="export exceeds"):
+            export_bundle_bytes(tmp_path)
+
+    def test_rejects_member_limit_while_snapshotting(self, tmp_path, monkeypatch):
+        """Verify that rejects member limit while snapshotting."""
+        import atomixos_provision.bundle as bundle_module
+
+        (tmp_path / "config.toml").write_bytes(b"version = 1\n")
+        (tmp_path / "files").mkdir()
+        (tmp_path / "files" / "a.txt").write_text("a\n")
+        (tmp_path / "files" / "b.txt").write_text("b\n")
+        copied_members = 0
+        source_inodes = {(tmp_path / "files" / name).stat().st_ino for name in ("a.txt", "b.txt")}
+        fdopen = bundle_module.os.fdopen
+
+        def counting_fdopen(fd, *args, **kwargs):
+            """Count snapshot files opened before the member limit is reached."""
+            nonlocal copied_members
+            if bundle_module.os.fstat(fd).st_ino in source_inodes:
+                copied_members += 1
+            return fdopen(fd, *args, **kwargs)
+
+        monkeypatch.setattr(bundle_module, "MAX_BUNDLE_MEMBERS", 3)
+        monkeypatch.setattr(bundle_module.os, "fdopen", counting_fdopen)
+
+        with pytest.raises(ProvisionError, match="member limit"):
+            export_bundle_bytes(tmp_path)
+
+        assert copied_members == 1
+
+
+@pytest.mark.parametrize("member", ["config.toml", "files/private.txt"])
+def test_export_rejects_hard_links(tmp_path, member):
+    """A privileged snapshot must not export unrelated state through hard links."""
+    (tmp_path / "config.toml").write_text("version = 1\n")
+    (tmp_path / "files").mkdir()
+    secret = tmp_path / "admin-signers"
+    secret.write_text("not part of the export\n")
+    target = tmp_path / member
+    target.unlink(missing_ok=True)
+    target.hardlink_to(secret)
+    with pytest.raises(ProvisionError, match="single-link"):
+        export_bundle_bytes(tmp_path)
+
+
+@pytest.mark.parametrize("member", ["config.toml", "files/private.txt"])
+@pytest.mark.parametrize("replacement", ["regular", "fifo"])
+def test_export_rejects_inode_substitution(tmp_path, monkeypatch, member, replacement):
+    """A file replaced between inspection and open is rejected without FIFO blocking."""
+    import os
+
+    import atomixos_provision.bundle as bundle_module
+
+    (tmp_path / "config.toml").write_text("version = 1\n")
+    (tmp_path / "files").mkdir()
+    target = tmp_path / member
+    if not target.exists():
+        target.write_text("original\n")
+    other = tmp_path / "replacement"
+    if replacement == "regular":
+        other.write_text("substituted\n")
+    else:
+        os.mkfifo(other)
+    open_file = os.open
+    swapped = False
+
+    def swap_before_open(path, flags, *args, **kwargs):
+        nonlocal swapped
+        if not swapped and (path == target or (path == target.name and "dir_fd" in kwargs)):
+            swapped = True
+            os.replace(other, target)
+            assert flags & os.O_NONBLOCK
+        return open_file(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(bundle_module.os, "open", swap_before_open)
+    with pytest.raises(ProvisionError, match=r"changed during snapshot|single-link regular"):
+        export_bundle_bytes(tmp_path)
+    assert swapped
 
 
 class TestPrepareSourcePath:

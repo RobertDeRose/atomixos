@@ -78,6 +78,7 @@
   - [Activation Options](./features/activation-options/index.md)
   - [Caddy AuthCrunch Cockpit Tutorial](./features/caddy-authcrunch-cockpit-tutorial/index.md)
   - [Nixstasis Client](./features/nixstasis-client/index.md)
+  - [Provisioning API Service](./features/provisioning-api-service/index.md)
   - [Provisioning API Privilege Separation](./features/provisioning-api-privilege-separation/index.md)
   - [Provisioning API Live Schema Contract](./features/provisioning-api-live-schema-contract/index.md)
   - [Typed Partial Provisioning API](./features/typed-partial-provisioning-api/index.md)

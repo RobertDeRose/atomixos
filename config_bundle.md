@@ -573,8 +573,8 @@ Examples:
 
 This avoids hard-coding application-specific configuration structure into
 `config.toml`. A writable `Volume` or `Mount` using `${FILES_DIR}` is accepted
-for trusted integrations, but produces an advisory warning because mutable
-writes change deployment inputs. Mutable application data should normally use
+for trusted integrations, but produces an advisory warning because changes are
+included in later config exports. Mutable application data should normally use
 a Podman volume. Operators use Podman tooling to back up, restore, or transfer
 volume data outside AtomixOS ownership.
 

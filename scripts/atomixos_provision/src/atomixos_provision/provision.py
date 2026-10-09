@@ -49,6 +49,7 @@ from atomixos_provision.auth import (
 )
 from atomixos_provision.bundle import (
     copy_bundle_files,
+    export_bundle_bytes,
     grant_managed_file_access,
     prepare_source_bytes,
     prepare_source_path,
@@ -1980,12 +1981,10 @@ async def apply_config_transform(
 
 
 def locked_export_config_bytes(config_root: Path) -> bytes:
-    """Read active config.toml under the provisioning lock."""
-    from atomixos_provision.partial_config import export_config_bytes
-
+    """Export active config and managed files under the provisioning lock."""
     config_root = validate_config_root(config_root)
     with provisioning_lock(config_root):
-        return export_config_bytes(config_root)
+        return export_bundle_bytes(config_root)
 
 
 async def validate_config_bytes(

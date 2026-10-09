@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import threading
 from pathlib import Path
 
 from litestar import Litestar, post
@@ -10,8 +11,9 @@ from litestar.testing import AsyncTestClient
 
 from atomixos_provision.app import create_app
 from atomixos_provision.config import ProvisionError, ProvisionSystemError
-from atomixos_provision.domain.config.controller import validate_config
+from atomixos_provision.domain.config.controller import export_config, validate_config
 from atomixos_provision.domain.config.service import ConfigService
+from atomixos_provision.domain.system.controller import health
 from atomixos_provision.jobs import Job, JobManager, JobState, StagedJobManager
 from atomixos_provision.staging import reserve_staged_job_slot, runtime_paths
 
@@ -431,6 +433,70 @@ async def test_config_export_requires_auth(tmp_path):
         response = await client.get("/api/config/export")
 
     assert response.status_code == 401
+
+
+async def test_authenticated_config_export_returns_complete_bundle(tmp_path, monkeypatch):
+    """Verify that authenticated config export returns complete bundle."""
+
+    class AcceptingNonceStore:
+        """Provide the AcceptingNonceStore test helper."""
+
+        async def consume(self, nonce):
+            """Accept the nonce for this test."""
+            return nonce == "test"
+
+    (tmp_path / "config.toml").write_text("version = 1\n")
+    (tmp_path / "files").mkdir()
+    (tmp_path / "files" / "cert.pem").write_text("CERT\n")
+    (tmp_path / "admin-signers").write_text("ssh-ed25519 AAAA test\n")
+    monkeypatch.setattr(
+        "atomixos_provision.auth.verify_ssh_signature",
+        lambda message, signature_blob, allowed_keys_path: True,
+    )
+    app = create_app(config_root=tmp_path)
+    app.state.nonce_store = AcceptingNonceStore()
+
+    async with AsyncTestClient(app=app) as client:
+        response = await client.get(
+            "/api/config/export",
+            headers={"x-atomixos-nonce": "test", "x-atomixos-signature": "dGVzdA=="},
+        )
+
+    assert response.status_code == 200
+    assert response.content.startswith(b"\x1f\x8b")
+    assert response.headers["content-type"].startswith("application/gzip")
+    assert response.headers["content-disposition"] == (
+        'attachment; filename="config-bundle.tar.gz"'
+    )
+
+
+async def test_config_export_does_not_block_health_request(tmp_path, monkeypatch):
+    """Verify that config export does not block health request."""
+    export_started = threading.Event()
+    release_export = threading.Event()
+
+    def blocked_export(config_root):
+        """Handle blocked export."""
+        assert config_root == tmp_path
+        export_started.set()
+        assert release_export.wait(timeout=2)
+        return b"\x1f\x8bexported-bundle"
+
+    monkeypatch.setattr(
+        "atomixos_provision.provision.locked_export_config_bytes",
+        blocked_export,
+    )
+
+    export_task = asyncio.create_task(export_config.fn(ConfigService(tmp_path)))
+    try:
+        assert await asyncio.to_thread(export_started.wait, 1)
+        health_response = await asyncio.wait_for(health.fn(), timeout=1)
+    finally:
+        release_export.set()
+    export_response = await export_task
+
+    assert health_response == {"status": "ok"}
+    assert export_response.content == b"\x1f\x8bexported-bundle"
 
 
 async def test_partial_config_rejects_unknown_top_level_keys(tmp_path, monkeypatch):
