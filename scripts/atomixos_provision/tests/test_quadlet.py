@@ -8,6 +8,7 @@ from atomixos_provision.config import ProvisionError
 from atomixos_provision.quadlet import (
     format_scalar,
     managed_file_mount_is_read_only,
+    managed_file_mount_warning,
     managed_files_are_writable,
     normalize_directives,
     render_builds,
@@ -242,14 +243,87 @@ class TestRenderContainers:
 
         assert managed_files_are_writable(table)
 
-    def test_absolute_source_outside_runtime_files_is_not_managed(self):
+    @pytest.mark.parametrize("form", ["Volume", "Mount", "PodmanArgsVolume", "PodmanArgsMount"])
+    @pytest.mark.parametrize("read_only", [False, True])
+    @pytest.mark.parametrize(
+        "source",
+        [
+            "${CONFIG_DIR}",
+            "${CONFIG_DIR}/files/..",
+            "${FILES_DIR}/..",
+            "/data/config",
+            "/data",
+            "/",
+            "//data/config/files/state",
+            "//data/config",
+        ],
+    )
+    def test_overlapping_managed_mount_sources(self, form, read_only, source):
+        """Apply warning and access policy to ancestors and Linux path aliases."""
+        kind = form.removeprefix("PodmanArgs")
+        directive = "PodmanArgs" if form.startswith("PodmanArgs") else form
+        option = "ro" if read_only else "rw"
+        value = (
+            f"{source}:/input:{option}"
+            if kind == "Volume"
+            else f"type=bind,source={source},target=/input,{option}"
+        )
+        if directive == "PodmanArgs":
+            value = f"--{kind.lower()}={value}"
+        table = {
+            "app": {
+                "privileged": True,
+                "Container": {"Image": "alpine:latest", directive: value},
+            }
+        }
+
+        config_root = Path("/data/config")
+        _rendered, _runtime, warnings = render_containers(table, config_root)
+
+        assert len(warnings) == (0 if read_only else 1)
+        assert managed_files_are_writable(table, config_root) is not read_only
+
+    @pytest.mark.parametrize(
+        "source", ["${CONFIG_DIR}", "${CONFIG_DIR}/files/..", "${FILES_DIR}/.."]
+    )
+    @pytest.mark.parametrize("read_only", [False, True])
+    def test_tokenized_ancestor_mount_without_runtime_context(self, source, read_only):
+        """Recognize tokenized ancestors for context-free warning and access APIs."""
+        value = f"{source}:/config:{'ro' if read_only else 'rw'}"
+        table = {"app": {"Container": {"Volume": value}}}
+
+        assert managed_files_are_writable(table) is not read_only
+        warning = managed_file_mount_warning("Volume", value, "container.app.Container.Volume")
+        assert (warning is None) is read_only
+
+    def test_double_slash_runtime_root_matches_single_slash_source(self):
+        """Normalize the runtime root as well as mount sources on Linux."""
+        table = {
+            "app": {
+                "privileged": True,
+                "Container": {
+                    "Image": "alpine:latest",
+                    "Volume": "/data/config/files/state:/state:rw",
+                },
+            }
+        }
+        config_root = Path("//data/config")
+
+        assert managed_files_are_writable(table, config_root)
+        _rendered, _runtime, warnings = render_containers(table, config_root)
+        assert len(warnings) == 1
+
+    @pytest.mark.parametrize(
+        "source", ["/other/config/files/state", "/data/config/files-other", "/data/config-other"]
+    )
+    def test_absolute_source_outside_runtime_files_is_not_managed(self, source):
         """Ignore absolute mount sources outside the active managed files root."""
         table = {
             "app": {
                 "privileged": False,
                 "Container": {
                     "Image": "alpine:latest",
-                    "Volume": "/other/config/files/state:/state:rw",
+                    "Volume": f"{source}:/state:rw",
                 },
             }
         }

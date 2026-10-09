@@ -193,24 +193,37 @@ def _mount_source(directive: str, value: str) -> str | None:
 
 
 def _lexical_absolute_path(path: str | Path) -> Path:
-    """Return a normalized absolute path without following symlinks."""
-    return Path(os.path.abspath(os.fspath(path)))
+    """Normalize a Linux absolute path lexically without following symlinks."""
+    # POSIX abspath preserves exactly two leading slashes; Linux treats them
+    # as the same filesystem root as a single slash.
+    return Path("/" + os.path.abspath(os.fspath(path)).lstrip("/"))
 
 
 def _managed_file_source(source: str, config_root: Path | None) -> bool:
-    """Return whether a mount source is lexically below the managed files root."""
+    """Return whether a mount source lexically overlaps the managed files root."""
     if config_root is None:
         # Preserve detection for tokenized configs for callers that do not have
         # the runtime root available. Absolute paths require that context.
-        for token in (FILES_DIR_TOKEN, f"{CONFIG_DIR_TOKEN}/files"):
+        for token in (FILES_DIR_TOKEN, CONFIG_DIR_TOKEN):
             if source == token or source.startswith(f"{token}/"):
-                suffix = source[len(token) :].lstrip("/")
-                return ".." not in Path(suffix).parts
+                files_root = Path(f"{CONFIG_DIR_TOKEN}/files")
+                source_path = Path(
+                    os.path.normpath(source.replace(FILES_DIR_TOKEN, str(files_root)))
+                )
+                return (
+                    source_path == files_root
+                    or files_root in source_path.parents
+                    or source_path in files_root.parents
+                )
         return False
 
     files_root = _lexical_absolute_path(config_root / "files")
     source_path = _lexical_absolute_path(substitute_tokens(source, config_root))
-    return source_path == files_root or files_root in source_path.parents
+    return (
+        source_path == files_root
+        or files_root in source_path.parents
+        or source_path in files_root.parents
+    )
 
 
 def managed_file_mount_warning(
@@ -225,7 +238,7 @@ def managed_file_mount_warning(
     if read_only:
         return None
     return (
-        f"{path} uses {FILES_DIR_TOKEN} without a clearly read-only mount; "
+        f"{path} mounts managed bundle files without a clearly read-only mount; "
         "managed bundle files are deployment inputs, so use a Podman volume "
         "for mutable runtime data"
     )
