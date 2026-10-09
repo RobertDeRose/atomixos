@@ -681,6 +681,39 @@ Image = "docker.io/library/alpine:latest"
     assert (config_root / "managed-users.json").read_text() == '["admin"]\n'
 
 
+def test_import_config_from_path_reapply_migrates_legacy_config_without_marker(
+    tmp_path, monkeypatch
+):
+    """Reapply an existing config even when it predates the first-config marker."""
+    monkeypatch.setattr(
+        "atomixos_provision.config.load_config_schema",
+        lambda: {"type": "object", "additionalProperties": True},
+    )
+    activated_roots = []
+
+    def complete_reapply(root, _progress=None):
+        activated_roots.append(root)
+        return True, [], "skipped"
+
+    monkeypatch.setattr("atomixos_provision.provision.complete_reapply", complete_reapply)
+    config_root = tmp_path / "config"
+    config_root.mkdir()
+    (config_root / "config.toml").write_text(BASE_PARTIAL_CONFIG)
+    source = tmp_path / "updated.toml"
+    updated_config = BASE_PARTIAL_CONFIG.replace("alpine:latest", "busybox:latest")
+    source.write_text(updated_config)
+    assert not (config_root / ".first-config").exists()
+
+    result = import_config_from_path(source, config_root)
+
+    assert result["reapply"] is True
+    assert result["rolled_back"] is False
+    assert activated_roots == [config_root]
+    assert (config_root / ".first-config").read_text() == "ok\n"
+    assert (config_root / "config.toml").read_text() == updated_config
+    assert (tmp_path / "config-rollback" / "config.toml").read_text() == BASE_PARTIAL_CONFIG
+
+
 def test_durable_reapply_grants_writable_access_using_runtime_root(monkeypatch, tmp_path):
     """Keep absolute writable mounts enabled while reconciling a candidate root."""
     from atomixos_provision import provision
