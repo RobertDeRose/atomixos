@@ -178,14 +178,19 @@ def _write_first_config_marker(candidate_root: Path) -> None:
     marker.chmod(0o600)
 
 
-def _grant_service_read_access(config_root: Path) -> None:
-    """Grant the provisioning service read access to managed configuration."""
+def _grant_service_read_access(
+    config_root: Path, runtime_config_root: Path | None = None
+) -> None:
+    """Grant service access to a config root using the active root for mount paths."""
     identity = _service_identity()
     if identity is None:
         return
     _uid, gid = identity
     files_root = config_root / "files"
-    grant_managed_file_access(files_root, writable=_managed_files_are_writable(config_root))
+    grant_managed_file_access(
+        files_root,
+        writable=_managed_files_are_writable(config_root, runtime_config_root),
+    )
     for path in [config_root, *config_root.rglob("*")]:
         if files_root in path.parents:
             continue
@@ -706,7 +711,7 @@ def write_imported_state(
     metadata_path.chmod(0o600)
 
     if os.geteuid() == 0:
-        _grant_service_read_access(config_root)
+        _grant_service_read_access(config_root, runtime_config_root=render_root)
 
     # Return warnings instead of mutating the input dict
     return warnings
@@ -1204,7 +1209,7 @@ def _promote_pre_rendered_candidate_sync(
             )
         else:
             _write_first_config_marker(durable_candidate)
-        _grant_service_read_access(durable_candidate)
+        _grant_service_read_access(durable_candidate, runtime_config_root=config_root)
         if progress:
             progress.set_stage("promote", "swapping active config root")
         atomic_promote(config_root, durable_candidate)
@@ -1228,7 +1233,7 @@ def _promote_pre_rendered_candidate_sync(
     if progress:
         progress.set_stage("promote", "activating initial config root")
     _write_first_config_marker(durable_candidate)
-    _grant_service_read_access(durable_candidate)
+    _grant_service_read_access(durable_candidate, runtime_config_root=config_root)
     atomic_promote_initial(config_root, durable_candidate)
     if os.environ.get(BOOTSTRAP_ACTIVATION_ENV):
         success, failures, rollback_status = complete_reapply(config_root, progress)
@@ -1499,8 +1504,10 @@ async def validate_config_bytes(
     return await asyncio.to_thread(_validate_sync, payload, filename, config_root)
 
 
-def _managed_files_are_writable(config_root: Path) -> bool:
-    """Return whether the active config requests writable managed-file mounts."""
+def _managed_files_are_writable(
+    config_root: Path, runtime_config_root: Path | None = None
+) -> bool:
+    """Return whether config requests writable mounts resolved against the runtime root."""
     config_path = config_root / "config.toml"
     if not config_path.is_file():
         return False
@@ -1513,5 +1520,5 @@ def _managed_files_are_writable(config_root: Path) -> bool:
         return False
     container_table = containers.get("container", {})
     return isinstance(container_table, dict) and managed_files_are_writable(
-        container_table, config_root
+        container_table, runtime_config_root or config_root
     )

@@ -681,6 +681,52 @@ Image = "docker.io/library/alpine:latest"
     assert (config_root / "managed-users.json").read_text() == '["admin"]\n'
 
 
+def test_durable_reapply_grants_writable_access_using_runtime_root(monkeypatch, tmp_path):
+    from atomixos_provision import provision
+
+    config_root = tmp_path / "config"
+    config_root.mkdir()
+    (config_root / "config.toml").write_text("version = 1\n")
+    candidate_root = tmp_path / "rendered-candidate"
+    files_root = candidate_root / "files"
+    files_root.mkdir(parents=True)
+    (files_root / "state").write_text("state\n")
+    (candidate_root / "config.toml").write_text("version = 1\n")
+    parsed = {
+        "containers": {
+            "container": {
+                "app": {
+                    "Container": {
+                        "Image": "alpine",
+                        "Volume": f"{config_root}/files/state:/state:rw",
+                    }
+                }
+            }
+        }
+    }
+    grants = []
+    monkeypatch.setattr(provision, "validate_config_root", lambda root, **_kwargs: root)
+    monkeypatch.setattr(provision, "recover_config_root", lambda _root: None)
+    monkeypatch.setattr(provision, "load_config", lambda _path: parsed)
+    monkeypatch.setattr(provision, "_service_identity", lambda: (1000, 2000))
+    monkeypatch.setattr(provision.os, "chown", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        provision,
+        "grant_managed_file_access",
+        lambda path, *, writable=False: grants.append((path, writable)),
+    )
+    monkeypatch.setattr(
+        provision, "complete_reapply", lambda _root, _progress=None: (True, [], "skipped")
+    )
+
+    result = provision._promote_pre_rendered_candidate_sync(
+        candidate_root, None, config_root, {"allow_reapply": True}
+    )
+
+    assert result["reapply"] is True
+    assert grants == [(config_root.parent / "config-candidate" / "files", True)]
+
+
 def test_import_config_from_path_stages_data_config_outside_worker(monkeypatch, tmp_path):
     from atomixos_provision import provision
 
