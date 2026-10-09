@@ -120,6 +120,52 @@ async def test_busy_queue_does_not_publish_extra_markers(export_root):
     assert len(list((export_root / "requests").glob("*.request"))) == worker.MAX_EXPORTS - 1
 
 
+async def test_cancelled_exports_hold_slots_until_cleanup(export_root, monkeypatch):
+    """An unavailable worker cannot accumulate unbounded cancellation markers."""
+    monkeypatch.setattr(worker, "WAIT_SECONDS", 0.02)
+    for _ in range(worker.MAX_EXPORTS):
+        request_id = str(uuid4())
+        worker._submit(export_root, request_id)
+        worker._acknowledge(export_root, request_id)
+    before = set((export_root / "requests").iterdir())
+    with pytest.raises(ConflictError, match="export queue"):
+        await worker.request_export(export_root)
+    assert set((export_root / "requests").iterdir()) == before
+    assert len(before) == worker.MAX_EXPORTS
+    assert all(path.suffix == ".ack" for path in before)
+
+
+@pytest.mark.parametrize("expire", [False, True])
+def test_acknowledgement_cleanup_releases_admission(export_root, expire):
+    """Processing or expiring acknowledgements frees their occupied slots."""
+    for _ in range(worker.MAX_EXPORTS):
+        request_id = str(uuid4())
+        worker._submit(export_root, request_id)
+        worker._acknowledge(export_root, request_id)
+    with pytest.raises(ConflictError, match="export queue"):
+        worker._submit(export_root, str(uuid4()))
+    if expire:
+        old = time.time() - worker.RETENTION_SECONDS - 1
+        for path in (export_root / "requests").iterdir():
+            os.utime(path, (old, old))
+    worker.drain_exports(root=export_root, finalize=expire)
+    assert not list((export_root / "requests").iterdir())
+    worker._submit(export_root, str(uuid4()))
+    assert len(list((export_root / "requests").glob("*.request"))) == 1
+
+
+def test_acknowledged_result_occupies_only_one_slot(export_root):
+    """An acknowledgement and retained output for one UUID are not double counted."""
+    request_id = str(uuid4())
+    worker._submit(export_root, request_id)
+    (export_root / "results" / f"{request_id}.tar.gz").write_bytes(b"retained")
+    worker._acknowledge(export_root, request_id)
+    for _ in range(worker.MAX_EXPORTS - 1):
+        worker._submit(export_root, str(uuid4()))
+    with pytest.raises(ConflictError, match="export queue"):
+        worker._submit(export_root, str(uuid4()))
+
+
 def test_finalize_interrupted_claims_and_partial_output(export_root):
     """A killed worker publishes failure while preserving a completed archive."""
     failed, complete = str(uuid4()), str(uuid4())

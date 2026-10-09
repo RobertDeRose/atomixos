@@ -154,11 +154,12 @@ It rejects symbolic links, hard-linked files, and special files rather than foll
 
 The worker atomically publishes `<uuid>.tar.gz` or `<uuid>.error` in the root-owned, API-group-readable `results`
 directory. The API serves only its matching completed archive, then publishes an acknowledgement for worker cleanup.
-At most four pending, active, or retained exports are admitted; a full queue returns JSON `409`. Worker failures return
+At most four pending, active, or retained export UUIDs are admitted, including unprocessed acknowledgements; a full
+queue returns JSON `409`. Worker failures return
 JSON `500`, and an API wait exceeding 130 seconds returns JSON `504`. The worker has a 120-second service timeout;
 its finalizer has a separate 60-second limit to record interrupted requests as failures. A timer runs cleanup every
 minute while idle, expiring abandoned
-requests and results after five minutes. All export state is boot-local under `/run`.
+requests, acknowledgements, and results after five minutes. All export state is boot-local under `/run`.
 
 For failures, inspect `journalctl -u atomixos-provision-export.service` and
 `systemctl status atomixos-provision-export.path atomixos-provision-export.timer`. Export waits for any active config

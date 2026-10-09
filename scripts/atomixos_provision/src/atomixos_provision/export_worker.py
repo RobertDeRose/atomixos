@@ -87,7 +87,7 @@ def _submit(root: Path, request_id: str) -> None:
             path.name.split(".", 1)[0]
             for directory in ("requests", "active", "results")
             for path in (root / directory).iterdir()
-            if path.name.endswith((".request", ".tar.gz", ".error"))
+            if path.name.endswith((".request", ".ack", ".tar.gz", ".error"))
         }
         if len(occupied) >= MAX_EXPORTS:
             raise ConflictError("The export queue is busy; retry shortly")

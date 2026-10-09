@@ -50,8 +50,9 @@ uses the staged unprivileged API plus root-owned worker boundary.
   an empty UUID request; only canonical `/data/config/config.toml` and managed `files/` may be read. No request-supplied
   source path, destination path, or command is accepted. File ownership and permissions are not changed.
 - The worker holds the provisioning lock and atomically publishes a UUID-named archive or error in a root-owned,
-  API-group-readable directory. Four pending/active/retained exports are admitted; the API waits up to 130 seconds,
-  and the service times out after 120 seconds. Full admission returns `409`, worker failure `500`, and wait expiry `504`.
+  API-group-readable directory. Four pending/active/retained export UUIDs are admitted, including unprocessed
+  acknowledgements; the API waits up to 130 seconds, and the service times out after 120 seconds. Full admission
+  returns `409`, worker failure `500`, and wait expiry `504`.
   Acknowledgements release results; a one-minute idle timer expires abandoned state after five minutes. A finalizer
   has a separate 60-second limit to fail interrupted claims and discard partial output. Direct development roots
   retain in-process export.
