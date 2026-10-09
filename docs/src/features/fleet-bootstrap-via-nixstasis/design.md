@@ -476,6 +476,6 @@ rather than choosing a duplicate representation.
 - External tasks `nixstasis-255`, `nixstasis-fss`, and `nixstasis-4gg`
 - Skill version evidence:
 
-  <!--
-  schema=dstack.skill-version.v1 skill=plan-features installed=0.8.4 canonical=unavailable status=unavailable installed_source=/Users/DeRoseR/.agents/skills/plan-features/SKILL.md checked_at=2026-08-06T21:30:23.043246Z
-  -->
+<!--
+schema=dstack.skill-version.v1 skill=plan-features installed=0.8.4 canonical=unavailable status=unavailable installed_source=/Users/DeRoseR/.agents/skills/plan-features/SKILL.md checked_at=2026-08-06T21:30:23.043246Z
+-->

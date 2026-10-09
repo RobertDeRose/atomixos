@@ -64,9 +64,7 @@ _BINARY_CONFIG_BODY = RequestBody(
 )
 
 
-def _object_schema(
-    properties: dict[str, Schema], required: list[str] | None = None
-) -> Schema:
+def _object_schema(properties: dict[str, Schema], required: list[str] | None = None) -> Schema:
     return Schema(
         type=OpenAPIType.OBJECT,
         properties=properties,
@@ -79,9 +77,7 @@ def _json_body(schema: Schema | Reference, description: str) -> RequestBody:
     return RequestBody(
         required=True,
         description=description,
-        content={
-            "application/json": OpenAPIMediaType(schema=schema)
-        },
+        content={"application/json": OpenAPIMediaType(schema=schema)},
     )
 
 

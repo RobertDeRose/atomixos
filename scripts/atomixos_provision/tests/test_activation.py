@@ -491,8 +491,9 @@ class TestCompleteReapply:
         )
         monkeypatch.setattr(
             "atomixos_provision.activation._restart_service",
-            lambda _service, _mode, _deadline=None: calls.append("restart")
-            or subprocess.CompletedProcess([], 0),
+            lambda _service, _mode, _deadline=None: (
+                calls.append("restart") or subprocess.CompletedProcess([], 0)
+            ),
         )
         monkeypatch.setattr(
             "atomixos_provision.activation._check_service",
@@ -660,9 +661,7 @@ class TestCompleteReapply:
         rollback = tmp_path / "config-rollback"
         rollback.mkdir()
         (rollback / "config.toml").write_text("previous")
-        (config_root / "activation-policy.json").write_text(
-            json.dumps({"timeout_seconds": "30"})
-        )
+        (config_root / "activation-policy.json").write_text(json.dumps({"timeout_seconds": "30"}))
         monkeypatch.setattr(
             "atomixos_provision.activation.activate_services", lambda _progress, _timeout=300: []
         )

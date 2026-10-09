@@ -8,17 +8,17 @@ PORT="${usage_port:-3000}"
 cd docs
 
 run_serve() {
-  echo "Serving documentation at http://localhost:${PORT}"
-  echo "Press Ctrl+C to stop."
-  echo ""
-  mdbook serve --port "$PORT"
+	echo "Serving documentation at http://localhost:${PORT}"
+	echo "Press Ctrl+C to stop."
+	echo ""
+	mdbook serve --port "$PORT"
 }
 
 if command -v mdbook &>/dev/null; then
-  run_serve
+	run_serve
 elif command -v nix &>/dev/null; then
-  nix develop --command bash -c "$(declare -f run_serve); PORT=$PORT run_serve"
+	nix develop --command bash -c "$(declare -f run_serve); PORT=$PORT run_serve"
 else
-  echo "Error: mdbook not found. Install via 'nix develop' or 'cargo install mdbook'." >&2
-  exit 1
+	echo "Error: mdbook not found. Install via 'nix develop' or 'cargo install mdbook'." >&2
+	exit 1
 fi

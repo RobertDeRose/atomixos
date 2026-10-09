@@ -30,6 +30,7 @@ def test_serve_reads_environment_when_command_runs(monkeypatch, tmp_path):
     assert captured["log_level"] == "info"
     assert captured["app"].state["config_root"] == tmp_path
 
+
 def test_serve_uses_inherited_systemd_socket(monkeypatch, tmp_path):
     captured = {}
 

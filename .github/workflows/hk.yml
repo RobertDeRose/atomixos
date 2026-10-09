@@ -1,36 +1,60 @@
-name: Lint
+name: Validation
 
 on:
+  push:
   workflow_dispatch:
   pull_request:
     types: [opened, synchronize, reopened]
-  workflow_call:
-    inputs:
-      ref:
-        required: false
-        type: string
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
-  hk-check:
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.ref != 'automation/refresh-flake-lock'
-    runs-on: ubuntu-latest
+  validate:
+    name: Validate (${{ matrix.system }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04-arm
+            system: aarch64-linux
+            timeout: 180
+          - runner: macos-15
+            system: aarch64-darwin
+            timeout: 45
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: ${{ matrix.timeout }}
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Check out repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
-          ref: ${{ inputs.ref != '' && inputs.ref || github.sha }}
-      - uses: cachix/install-nix-action@96951a368ba55167b55f1c916f7d416bac6505fe # v31.10.3
+          persist-credentials: false
+      - name: Configure mise environment
+        run: echo "MISE_IGNORED_CONFIG_PATHS=$HOME/.config/mise/config.toml" >> "$GITHUB_ENV"
+      - name: Set up Nix
+        uses: cachix/install-nix-action@96951a368ba55167b55f1c916f7d416bac6505fe # v31.10.3
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
-      - uses: DeterminateSystems/magic-nix-cache-action@1828eb4e5414b8dfe36daae53ea3e4b8c3fdec7a #main
-      - uses: jdx/mise-action@4444d8fd7a1b92f1821c12f435db40f58b743d26 # v4.0.1
+            max-jobs = 1
+      - name: Verify Nix platform
+        run: test "$(nix eval --impure --raw --expr builtins.currentSystem)" = "${{ matrix.system }}"
+      - name: Configure Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@1828eb4e5414b8dfe36daae53ea3e4b8c3fdec7a # main
+      - name: Set up mise
+        uses: jdx/mise-action@4444d8fd7a1b92f1821c12f435db40f58b743d26 # v4.0.1
         with:
           install: false
-      - name: Install tools and run linter
-        run: |
-          mise plugin install nix https://github.com/jbadeau/mise-nix.git
-          mise install
-          hk check -a
+      - name: Install locked tools
+        run: mise install --locked
+      - name: Run repository checks
+        if: runner.os == 'Linux'
+        run: hk check -a
+      - name: Run macOS quality checks
+        if: runner.os == 'macOS'
+        run: hk check -a --skip-step nix
+      - name: Evaluate macOS Nix checks
+        if: runner.os == 'macOS'
+        # Hosted macOS cannot run the Linux builder or nested Darwin test VMs.
+        run: ./scripts/nix-with-build-config.sh flake check --no-build --all-systems
