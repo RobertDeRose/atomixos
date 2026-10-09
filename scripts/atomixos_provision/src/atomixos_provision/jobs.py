@@ -5,19 +5,22 @@ import threading
 import time
 import uuid
 from collections.abc import Callable, Coroutine
-from contextlib import suppress
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
 from atomixos_provision.config import ProvisionError
-from atomixos_provision.staging import interpret_staged_result, staged_timeout_state
+from atomixos_provision.staging import (
+    DEFAULT_MAX_STAGED_JOBS,
+    StagedTimeoutState,
+    interpret_staged_result,
+    staged_timeout_state,
+)
 
 __all__ = ["Job", "JobManager", "JobState", "StagedJobManager"]
 
 # Maximum number of completed jobs to retain in memory.
 _MAX_RETAINED_JOBS = 64
-_DEFAULT_MAX_STAGED_JOBS = 4
 _STAGED_RESERVATION_HEARTBEAT_SECONDS = 30
 
 
@@ -228,8 +231,9 @@ class StagedJobManager(JobManager):
         self,
         *,
         result_timeout_seconds: float | None = None,
-        max_pending: int = _DEFAULT_MAX_STAGED_JOBS,
+        max_pending: int = DEFAULT_MAX_STAGED_JOBS,
     ) -> None:
+        """Initialize staged job tracking and timeout state."""
         super().__init__()
         if result_timeout_seconds is None:
             from atomixos_provision.provision import STAGED_RESULT_TIMEOUT_SECONDS
@@ -251,6 +255,7 @@ class StagedJobManager(JobManager):
         self,
         work: Callable[[Job], Coroutine[Any, Any, None]],
     ) -> Job | None:
+        """Submit staged work under the normal queue admission policy."""
         return await self._submit_staged(work, exclusive=False)
 
     async def submit_staged_exclusive(
@@ -309,24 +314,29 @@ class StagedJobManager(JobManager):
             return job
 
     def get(self, job_id: str) -> Job | None:
+        """Return the staged job for the requested identifier."""
+        from atomixos_provision.staging import validate_job_id
+
         try:
-            with self._recovery_lock:
-                job = super().get(job_id)
-                if job is not None:
-                    self._refresh_from_result(job)
-                    return job
-                recovered = self._job_from_result(job_id)
-                if recovered is not None:
-                    self._jobs[job_id] = recovered
-                return recovered
+            validate_job_id(job_id)
         except ProvisionError:
             return None
+        with self._recovery_lock:
+            job = super().get(job_id)
+            if job is not None:
+                self._refresh_from_result(job)
+                return job
+            recovered = self._job_from_result(job_id)
+            if recovered is not None:
+                self._jobs[job_id] = recovered
+            return recovered
 
     async def _stage_and_monitor(
         self,
         job: Job,
         work: Callable[[Job], Coroutine[Any, Any, None]],
     ) -> Job:
+        """Stage a reserved job and monitor it through terminal state."""
         with job._lock:
             job.state = JobState.RUNNING
             job.started_at = time.monotonic()
@@ -344,75 +354,149 @@ class StagedJobManager(JobManager):
                 await work_task
             staged = True
             heartbeat_task.cancel()
-            with suppress(asyncio.CancelledError):
+            maintenance_errors: list[BaseException] = []
+            try:
                 await heartbeat_task
+            except asyncio.CancelledError:
+                pass
+            except Exception as exc:
+                maintenance_errors.append(exc)
             heartbeat_task = None
-            self._refresh_reservation(job)
-            job.set_stage("queued", "waiting for privileged apply worker")
+            try:
+                self._refresh_reservation(job)
+            except Exception as exc:
+                maintenance_errors.append(exc)
+            self._mark_queued(job, maintenance_errors)
         except asyncio.CancelledError:
             if staged:
+                maintenance_errors = []
                 if heartbeat_task is not None:
                     heartbeat_task.cancel()
-                    with suppress(asyncio.CancelledError):
+                    try:
                         await heartbeat_task
+                    except asyncio.CancelledError:
+                        pass
+                    except Exception as exc:
+                        maintenance_errors.append(exc)
                     heartbeat_task = None
-                self._refresh_reservation(job)
-                job.set_stage("queued", "waiting for privileged apply worker")
+                try:
+                    self._refresh_reservation(job)
+                except Exception as exc:
+                    maintenance_errors.append(exc)
+                self._mark_queued(job, maintenance_errors)
                 self._start_monitor_if_possible(job)
                 return job
-            self._release_reservation(job)
-            with job._lock:
-                job.state = JobState.FAILED
-                job.error = "staged job manager task was cancelled"
-                job.completed_at = time.monotonic()
+            try:
+                self._release_reservation(job)
+            except Exception as exc:
+                self._mark_failed(job, exc)
+                raise
+            self._mark_failed(job, "staged job manager task was cancelled")
             raise
-        except Exception as exc:
-            self._release_reservation(job)
+        except Exception as original_error:
+            if staged:
+                self._mark_queued(job, [original_error])
+                self._start_monitor_if_possible(job)
+                return job
+            failure: BaseException = original_error
+            try:
+                self._release_reservation(job)
+            except Exception as cleanup_error:
+                failure = cleanup_error
             from atomixos_provision.provision import StagedQueueBusyError
 
-            if isinstance(exc, StagedQueueBusyError):
-                with job._lock:
-                    job.state = JobState.FAILED
-                    job.error = str(exc)
-                    job.completed_at = time.monotonic()
+            self._mark_failed(job, failure)
+            if isinstance(failure, StagedQueueBusyError):
                 raise
-            with job._lock:
-                job.state = JobState.FAILED
-                job.error = str(exc)
-                if hasattr(exc, "rollback_status"):
-                    job.rollback_status = exc.rollback_status
-                job.completed_at = time.monotonic()
             return job
         finally:
             if heartbeat_task is not None:
                 heartbeat_task.cancel()
-                with suppress(asyncio.CancelledError):
+                try:
                     await heartbeat_task
+                except asyncio.CancelledError:
+                    pass
+                except Exception as exc:
+                    self._mark_failed(job, exc)
         self._start_monitor_if_possible(job)
         return job
 
+    @staticmethod
+    def _mark_queued(job: Job, maintenance_errors: list[BaseException]) -> None:
+        """Publish queued state for a staged job."""
+        detail = "waiting for privileged apply worker"
+        if maintenance_errors:
+            detail += "; post-publication reservation maintenance failed: " + "; ".join(
+                str(error) for error in maintenance_errors
+            )
+        job.set_stage("queued", detail)
+
+    @staticmethod
+    def _mark_failed(job: Job, error: BaseException | str) -> None:
+        """Publish terminal failure for a staged job."""
+        with job._lock:
+            job.state = JobState.FAILED
+            job.error = str(error)
+            if hasattr(error, "rollback_status"):
+                job.rollback_status = error.rollback_status
+            job.completed_at = time.monotonic()
+
     async def _heartbeat_reservation(self, job: Job) -> None:
+        """Refresh a reservation until staging finishes."""
+        last_error: OSError | None = None
         while True:
             await asyncio.sleep(_STAGED_RESERVATION_HEARTBEAT_SECONDS)
-            self._refresh_reservation(job)
+            try:
+                self._refresh_reservation(job)
+            except OSError as exc:
+                if last_error is None:
+                    job.set_stage(
+                        "running",
+                        f"reservation refresh failed; retrying: {exc}",
+                    )
+                last_error = exc
+            else:
+                if last_error is not None:
+                    job.set_stage("running", "reservation refresh recovered")
+                last_error = None
 
     async def _monitor_staged(self, job: Job) -> None:
+        """Monitor a published staged job for worker results."""
         try:
             deadline = time.monotonic() + self._result_timeout_seconds
+            last_io_error = None
             while job.state in (JobState.SUBMITTED, JobState.RUNNING):
-                if self._refresh_from_result(job):
-                    break
-                if time.monotonic() >= deadline:
-                    timeout_state = self._handle_staged_timeout(job)
+                try:
                     if self._refresh_from_result(job):
                         break
-                    if timeout_state == "active":
-                        deadline = time.monotonic() + self._result_timeout_seconds
-                        job.set_stage("queued", "waiting for privileged apply worker")
-                        continue
-                    if timeout_state == "missing":
-                        raise ProvisionError("privileged apply worker did not publish a result")
-                    raise ProvisionError("timed out waiting for privileged apply worker")
+                    if time.monotonic() >= deadline:
+                        timeout_state = self._handle_staged_timeout(job)
+                        if self._refresh_from_result(job):
+                            break
+                        if timeout_state in {
+                            StagedTimeoutState.WAITING,
+                            StagedTimeoutState.CLAIMED,
+                        }:
+                            deadline = time.monotonic() + self._result_timeout_seconds
+                            if timeout_state is StagedTimeoutState.CLAIMED:
+                                job.set_stage("running", "privileged apply worker is running")
+                            else:
+                                job.set_stage("queued", "waiting for privileged apply worker")
+                        elif timeout_state is StagedTimeoutState.MISSING:
+                            raise ProvisionError(
+                                "privileged apply worker did not publish a result"
+                            )
+                        else:
+                            raise ProvisionError("timed out waiting for privileged apply worker")
+                except OSError as exc:
+                    if str(exc) != last_io_error:
+                        job.set_stage(
+                            "running" if job.state is JobState.RUNNING else "queued",
+                            f"worker result I/O failed; retrying: {exc}",
+                        )
+                    last_io_error = str(exc)
+                else:
+                    last_io_error = None
                 await asyncio.sleep(0.2)
         except asyncio.CancelledError:
             with job._lock:
@@ -431,14 +515,13 @@ class StagedJobManager(JobManager):
             self._monitored_job_ids.discard(job.id)
 
     def _refresh_from_result(self, job: Job) -> bool:
+        """Refresh job state from a published worker result."""
         try:
             from atomixos_provision.provision import _runtime_paths
             from atomixos_provision.staging import read_result
 
             result = read_result(_runtime_paths(), job.id)
-        except ProvisionError:
-            raise
-        except Exception:
+        except FileNotFoundError:
             return False
         if result is None:
             return False
@@ -458,24 +541,27 @@ class StagedJobManager(JobManager):
         return True
 
     def _release_reservation(self, job: Job) -> None:
+        """Release a job's staging capacity reservation."""
         try:
             from atomixos_provision.provision import _runtime_paths
             from atomixos_provision.staging import release_staged_job_slot
 
             release_staged_job_slot(_runtime_paths(), job.id)
-        except Exception:
-            pass
+        except FileNotFoundError:
+            return
 
     def _refresh_reservation(self, job: Job) -> None:
+        """Refresh a job's staging capacity reservation."""
         try:
             from atomixos_provision.provision import _runtime_paths
             from atomixos_provision.staging import refresh_staged_job_slot
 
             refresh_staged_job_slot(_runtime_paths(), job.id)
-        except Exception:
-            pass
+        except FileNotFoundError:
+            return
 
     def _job_from_result(self, job_id: str) -> Job | None:
+        """Translate a worker result into public job state."""
         job = Job(id=job_id)
         if self._refresh_from_result(job):
             return job
@@ -484,7 +570,7 @@ class StagedJobManager(JobManager):
             from atomixos_provision.staging import staged_job_presence
 
             presence = staged_job_presence(_runtime_paths(), job_id)
-        except Exception:
+        except FileNotFoundError:
             return None
         if presence == "queued":
             job.set_stage("queued", "waiting for privileged apply worker")
@@ -509,7 +595,8 @@ class StagedJobManager(JobManager):
         self._monitored_job_ids.add(job.id)
         self._task = asyncio.create_task(self._monitor_staged(job))
 
-    def _handle_staged_timeout(self, job: Job) -> str:
+    def _handle_staged_timeout(self, job: Job) -> StagedTimeoutState:
+        """Reconcile a staged job after result monitoring times out."""
         try:
             from atomixos_provision.provision import _runtime_paths
 

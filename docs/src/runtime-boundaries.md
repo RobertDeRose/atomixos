@@ -258,3 +258,10 @@ reconciliation validates file descriptors and rejects symlinks and special
 files. Trusted integrators may request writable mounts; the renderer warns
 when `${FILES_DIR}` mounts are not clearly read-only. Mutable application
 state belongs in Podman volumes and uses Podman backup and restore tooling.
+
+## Worker request trust
+
+The root worker verifies signed request evidence and re-renders from those
+verified bytes rather than trusting the API-rendered candidate. Staged reads
+are bounded, nonblocking, and reject symlinks and non-regular descriptors.
+Ready publication requires a live capacity reservation and preserves FIFO order.

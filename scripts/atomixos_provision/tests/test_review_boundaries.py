@@ -1,11 +1,56 @@
 """Regression coverage for PR review privilege and resource boundaries."""
 
+import hashlib
 import os
 
 import pytest
 
-from atomixos_provision import bundle
+from atomixos_provision import bundle, staging
 from atomixos_provision.config import ProvisionError
+from atomixos_provision.state import is_provisioned_config_root
+
+
+@pytest.mark.parametrize("name", [".first-config", "config.toml"])
+def test_state_rejects_symlink_marker(tmp_path, name):
+    """A symlink to a valid file must not mark the device provisioned."""
+    target = tmp_path / "target"
+    target.write_text("version = 1\n")
+    (tmp_path / name).symlink_to(target)
+    assert not is_provisioned_config_root(tmp_path)
+
+
+def test_request_limit_precedes_hashing(tmp_path, monkeypatch):
+    """The privileged verifier rejects oversized evidence before reading it."""
+    payload = b"oversized"
+    (tmp_path / "request.bin").write_bytes(payload)
+    monkeypatch.setattr(bundle, "MAX_SOURCE_BYTES", len(payload) - 1)
+
+    def unexpected_hash(_path):
+        pytest.fail("oversized request must not be hashed")
+
+    monkeypatch.setattr(staging, "sha256_file", unexpected_hash)
+    with pytest.raises(ProvisionError, match=r"exceeds .* byte limit"):
+        staging._verify_staged_request(
+            tmp_path,
+            {"size": len(payload), "sha256": hashlib.sha256(payload).hexdigest()},
+            os.getuid(),
+            os.getgid(),
+        )
+
+
+def test_request_hash_is_bounded_when_evidence_grows(tmp_path, monkeypatch):
+    """Growth after metadata validation must not turn hashing into an unbounded read."""
+    payload = tmp_path / "request.bin"
+    payload.write_bytes(b"x")
+    original_fdopen = os.fdopen
+
+    def growing_fdopen(fd, *args, **kwargs):
+        payload.write_bytes(b"x" * 100)
+        return original_fdopen(fd, *args, **kwargs)
+
+    monkeypatch.setattr(staging.os, "fdopen", growing_fdopen)
+    with pytest.raises(ProvisionError, match=r"exceeds 8 byte limit"):
+        staging.sha256_file(payload, max_bytes=8)
 
 
 @pytest.mark.parametrize("entry_kind", ["file", "directory"])

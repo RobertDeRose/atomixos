@@ -7,14 +7,17 @@ import sys
 
 import pytest
 
+from atomixos_provision.auth import current_boot_id
 from atomixos_provision.config import ProvisionError
 from atomixos_provision.provision import (
     apply_staged_job,
     stage_config_bytes,
     stage_config_operation,
+    stage_reserved_config_bytes,
 )
 from atomixos_provision.staging import (
     ClaimedJob,
+    StagedTimeoutState,
     abandon_queued_job,
     can_abandon_queued_job,
     claim_next_job,
@@ -38,6 +41,7 @@ from atomixos_provision.staging import (
     validate_job_id,
     verify_staged_job,
     write_json_atomic,
+    write_result,
 )
 
 VALID_ED25519_KEY = (
@@ -80,6 +84,16 @@ privileged = false
 [containers.container.app.Container]
 Image = "{image}"
 """.encode()
+
+
+def _complete_staged_apply(root, _progress=None, *, before_commit=None):
+    """Handle complete staged apply."""
+    from atomixos_provision.activation import cleanup_rollback
+
+    if before_commit is not None:
+        before_commit()
+    cleanup_rollback(root)
+    return True, [], "skipped"
 
 
 def test_staged_job_reservations_count_toward_queue_bound(tmp_path, monkeypatch):
@@ -181,13 +195,14 @@ def test_refresh_staged_job_reservation_prevents_stale_cleanup(tmp_path, monkeyp
 
 
 def test_published_staged_jobs_replace_capacity_reservations(tmp_path, monkeypatch):
+    """Verify that published staged jobs replace capacity reservations."""
     runtime_root = tmp_path / "run"
     config_root = tmp_path / "config"
     monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(runtime_root))
     paths = runtime_paths(runtime_root)
 
     assert reserve_staged_job_slot(paths, "job-1", 1) is True
-    stage_config_bytes(
+    stage_reserved_config_bytes(
         "job-1",
         _valid_config(),
         "config.toml",
@@ -200,19 +215,20 @@ def test_published_staged_jobs_replace_capacity_reservations(tmp_path, monkeypat
 
 
 def test_reserved_sequence_controls_fifo_ready_order(tmp_path, monkeypatch):
+    """Verify that reserved sequence controls fifo ready order."""
     runtime_root = tmp_path / "run"
     monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(runtime_root))
     paths = runtime_paths(runtime_root)
 
     assert reserve_staged_job_slot(paths, "job-1", 2) is True
     assert reserve_staged_job_slot(paths, "job-2", 2) is True
-    stage_config_bytes(
+    stage_reserved_config_bytes(
         "job-2",
         _valid_config("docker.io/library/busybox:latest"),
         "config.toml",
         tmp_path / "config",
     )
-    stage_config_bytes("job-1", _valid_config(), "config.toml", tmp_path / "config")
+    stage_reserved_config_bytes("job-1", _valid_config(), "config.toml", tmp_path / "config")
 
     first = claim_next_job(paths)
     assert first is not None
@@ -236,6 +252,7 @@ def test_claim_next_job_waits_for_lower_sequence_reservation(tmp_path):
 
 
 def test_staged_timeout_state_distinguishes_claimed_and_waiting_jobs(tmp_path):
+    """Verify that staged timeout state distinguishes claimed and waiting jobs."""
     paths = runtime_paths(tmp_path / "run")
     ensure_runtime_layout(paths, for_worker=True)
     (paths.active / "job-1").mkdir()
@@ -243,8 +260,8 @@ def test_staged_timeout_state_distinguishes_claimed_and_waiting_jobs(tmp_path):
     (paths.queue / "job-2").mkdir()
     publish_ready_marker(paths, "job-2")
 
-    assert staged_timeout_state(paths, "job-1") == "claimed"
-    assert staged_timeout_state(paths, "job-2") == "active"
+    assert staged_timeout_state(paths, "job-1") is StagedTimeoutState.CLAIMED
+    assert staged_timeout_state(paths, "job-2") is StagedTimeoutState.WAITING
 
 
 def test_claim_next_job_expires_stale_lower_sequence_reservation(tmp_path, monkeypatch):
@@ -283,6 +300,55 @@ def test_waiting_for_turn_expires_stale_lower_sequence_reservation(tmp_path, mon
     os.utime(paths.queue / "job-1.reserve", (1, 1))
 
     assert staged_job_waiting_for_turn(paths, "job-2") is False
+    assert not (paths.queue / "job-1.reserve").exists()
+
+
+def test_publish_ready_marker_requires_live_reservation(tmp_path):
+    """Verify that publish ready marker requires live reservation."""
+    paths = runtime_paths(tmp_path / "run")
+    ensure_runtime_layout(paths)
+    (paths.queue / "job-1").mkdir()
+
+    with pytest.raises(ProvisionError, match="reservation is missing"):
+        publish_ready_marker(paths, "job-1")
+
+    assert not (paths.queue / "job-1.ready").exists()
+
+
+def test_stale_reservation_cleanup_removes_unpublished_staging(tmp_path, monkeypatch):
+    """Verify that stale reservation cleanup removes unpublished staging."""
+    monkeypatch.setattr("atomixos_provision.staging.STAGED_RESERVATION_TTL_SECONDS", 60)
+    paths = runtime_paths(tmp_path / "run")
+    ensure_runtime_layout(paths)
+
+    assert reserve_staged_job_slot(paths, "job-1", 1) is True
+    (paths.queue / "job-1").mkdir()
+    hidden_staging = paths.queue / ".job-1.staging.partial"
+    hidden_staging.mkdir()
+    os.utime(paths.queue / "job-1.reserve", (1, 1))
+
+    assert reserve_staged_job_slot(paths, "job-2", 1) is True
+    assert not (paths.queue / "job-1").exists()
+    assert not hidden_staging.exists()
+    with pytest.raises(ProvisionError, match="reservation is missing"):
+        publish_ready_marker(paths, "job-1")
+
+
+def test_stale_reservation_cleanup_preserves_published_job(tmp_path, monkeypatch):
+    """Verify that stale reservation cleanup preserves published job."""
+    monkeypatch.setattr("atomixos_provision.staging.STAGED_RESERVATION_TTL_SECONDS", 60)
+    paths = runtime_paths(tmp_path / "run")
+    ensure_runtime_layout(paths)
+
+    assert reserve_staged_job_slot(paths, "job-1", 2) is True
+    (paths.queue / "job-1").mkdir()
+    publish_ready_marker(paths, "job-1")
+    assert reserve_staged_job_slot(paths, "job-1", 2) is True
+    os.utime(paths.queue / "job-1.reserve", (1, 1))
+
+    assert count_staged_jobs(paths) == 1
+    assert (paths.queue / "job-1").is_dir()
+    assert (paths.queue / "job-1.ready").is_file()
     assert not (paths.queue / "job-1.reserve").exists()
 
 
@@ -596,6 +662,20 @@ def test_finalize_abandoned_active_jobs_marks_claimed_job_failed(tmp_path, monke
     assert result["error"] == "worker stopped"
 
 
+def test_finalize_abandoned_active_jobs_preserves_existing_result(tmp_path):
+    """Verify that finalize abandoned active jobs preserves existing result."""
+    paths = runtime_paths(tmp_path / "run")
+    ensure_runtime_layout(paths, for_worker=True)
+    (paths.active / "job-1").mkdir()
+    write_result(paths, "job-1", {"status": "failed", "error": "original failure"})
+    original = read_result(paths, "job-1")
+
+    assert finalize_abandoned_active_jobs(paths, "replacement failure") == 1
+
+    assert read_result(paths, "job-1") == original
+    assert not (paths.active / "job-1").exists()
+
+
 @pytest.mark.skipif(
     sys.platform == "darwin",
     reason="macOS filesystems do not preserve Linux setgid directory mode bits",
@@ -611,6 +691,7 @@ def test_runtime_layout_keeps_results_read_only_for_service_group(tmp_path):
 
 
 def test_staged_job_presence_treats_unreadable_active_dir_as_active(tmp_path, monkeypatch):
+    """Verify that staged job presence treats unreadable active dir as active."""
     paths = runtime_paths(tmp_path / "run")
     ensure_runtime_layout(paths, for_worker=True)
     original_lstat = type(paths.active).lstat
@@ -720,6 +801,170 @@ def test_apply_staged_job_promotes_candidate_and_writes_result(tmp_path, monkeyp
     assert result_file["status"] == "succeeded"
 
 
+def test_worker_rejects_manifest_reapply_flag_without_authorization(tmp_path, monkeypatch):
+    """Verify that worker rejects manifest reapply flag without authorization."""
+    runtime_root = tmp_path / "run"
+    config_root = tmp_path / "config"
+    _force_staging(monkeypatch)
+    monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(runtime_root))
+    monkeypatch.setattr(
+        "atomixos_provision.provision.validate_config_root", lambda root, **_: root
+    )
+    monkeypatch.setattr("atomixos_provision.provision.os.chown", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        "atomixos_provision.config.load_config_schema",
+        lambda: {"type": "object", "additionalProperties": True},
+    )
+    monkeypatch.setattr(
+        "atomixos_provision.provision.complete_reapply",
+        _complete_staged_apply,
+    )
+    monkeypatch.setattr("atomixos_provision.provision.reconcile_bootstrap_wan", lambda: None)
+    monkeypatch.setattr(
+        "atomixos_provision.provision._claimed_job_is_locally_trusted",
+        lambda *_args: False,
+    )
+
+    stage_config_bytes("job-1", _valid_config(), "config.toml", config_root, allow_reapply=False)
+    stage_config_bytes(
+        "job-2",
+        _valid_config("docker.io/library/busybox:latest"),
+        "config.toml",
+        config_root,
+        allow_reapply=False,
+    )
+    first = apply_staged_job(config_root, runtime_root)
+    assert first is not None
+    original = (config_root / "config.toml").read_bytes()
+
+    manifest_path = runtime_root / "queue" / "job-2" / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["allow_reapply"] = True
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ProvisionError, match="worker-verifiable authorization"):
+        apply_staged_job(config_root, runtime_root)
+
+    assert (config_root / "config.toml").read_bytes() == original
+    assert read_result(runtime_paths(runtime_root), "job-2")["status"] == "failed"
+
+
+def test_worker_renders_from_signed_request_not_staged_candidate(tmp_path, monkeypatch):
+    """Verify that worker renders from signed request not staged candidate."""
+    runtime_root = tmp_path / "run"
+    config_root = tmp_path / "config"
+    _force_staging(monkeypatch)
+    monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(runtime_root))
+    monkeypatch.setattr(
+        "atomixos_provision.provision.validate_config_root", lambda root, **_: root
+    )
+    monkeypatch.setattr("atomixos_provision.provision.os.chown", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        "atomixos_provision.config.load_config_schema",
+        lambda: {"type": "object", "additionalProperties": True},
+    )
+    monkeypatch.setattr(
+        "atomixos_provision.provision.complete_reapply",
+        _complete_staged_apply,
+    )
+    monkeypatch.setattr("atomixos_provision.provision.reconcile_bootstrap_wan", lambda: None)
+    monkeypatch.setattr(
+        "atomixos_provision.provision._claimed_job_is_locally_trusted",
+        lambda *_args: False,
+    )
+    monkeypatch.setattr("atomixos_provision.provision.verify_ssh_signature", lambda *_args: True)
+
+    stage_config_bytes("job-1", _valid_config(), "config.toml", config_root)
+    assert apply_staged_job(config_root, runtime_root) is not None
+
+    signed_payload = _valid_config("docker.io/library/busybox:latest")
+    authorization = {
+        "nonce": f"{current_boot_id()}:signed-job",
+        "signature": "dGVzdA==",
+        "method": "POST",
+        "path": "/api/config",
+    }
+    stage_config_bytes(
+        "job-2",
+        signed_payload,
+        "config.toml",
+        config_root,
+        authorization=authorization,
+    )
+    candidate_path = runtime_root / "queue" / "job-2" / "candidate" / "config.toml"
+    tampered = candidate_path.read_bytes().replace(b"busybox", b"malicious")
+    candidate_path.write_bytes(tampered)
+    manifest_path = runtime_root / "queue" / "job-2" / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["source_sha256"] = hashlib.sha256(tampered).hexdigest()
+    for entry in manifest["candidate"]:
+        if entry["path"] == "config.toml":
+            entry["size"] = len(tampered)
+            entry["sha256"] = hashlib.sha256(tampered).hexdigest()
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    result = apply_staged_job(config_root, runtime_root)
+
+    assert result is not None
+    active = (config_root / "config.toml").read_text()
+    assert "busybox" in active
+    assert "malicious" not in active
+
+
+def test_worker_rejects_replayed_staged_authorization_nonce(tmp_path, monkeypatch):
+    """Verify that worker rejects replayed staged authorization nonce."""
+    runtime_root = tmp_path / "run"
+    config_root = tmp_path / "config"
+    _force_staging(monkeypatch)
+    monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(runtime_root))
+    monkeypatch.setattr(
+        "atomixos_provision.provision.validate_config_root", lambda root, **_: root
+    )
+    monkeypatch.setattr("atomixos_provision.provision.os.chown", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        "atomixos_provision.config.load_config_schema",
+        lambda: {"type": "object", "additionalProperties": True},
+    )
+    monkeypatch.setattr("atomixos_provision.provision.complete_reapply", _complete_staged_apply)
+    monkeypatch.setattr("atomixos_provision.provision.reconcile_bootstrap_wan", lambda: None)
+    monkeypatch.setattr(
+        "atomixos_provision.provision._claimed_job_is_locally_trusted",
+        lambda *_args: False,
+    )
+    monkeypatch.setattr("atomixos_provision.provision.verify_ssh_signature", lambda *_args: True)
+
+    stage_config_bytes("job-1", _valid_config(), "config.toml", config_root)
+    assert apply_staged_job(config_root, runtime_root) is not None
+    authorization = {
+        "nonce": f"{current_boot_id()}:replay",
+        "signature": "dGVzdA==",
+        "method": "POST",
+        "path": "/api/config",
+    }
+    stage_config_bytes(
+        "job-2",
+        _valid_config("docker.io/library/busybox:latest"),
+        "config.toml",
+        config_root,
+        authorization=authorization,
+    )
+    stage_config_bytes(
+        "job-3",
+        _valid_config("docker.io/library/nginx:latest"),
+        "config.toml",
+        config_root,
+        authorization=authorization,
+    )
+    assert apply_staged_job(config_root, runtime_root) is not None
+
+    with pytest.raises(ProvisionError, match="already consumed"):
+        apply_staged_job(config_root, runtime_root)
+
+    active = (config_root / "config.toml").read_text()
+    assert "busybox" in active
+    assert "nginx" not in active
+
+
 def test_apply_staged_job_verifies_active_source_before_snapshot_copy(tmp_path, monkeypatch):
     runtime_root = tmp_path / "run"
     config_root = tmp_path / "config"
@@ -751,6 +996,7 @@ def test_apply_staged_job_verifies_active_source_before_snapshot_copy(tmp_path, 
 
 
 def test_apply_staged_job_rejects_candidate_root_symlink_before_tree_walk(tmp_path, monkeypatch):
+    """Verify that apply staged job rejects candidate root symlink before tree walk."""
     runtime_root = tmp_path / "run"
     config_root = tmp_path / "config"
     _force_staging(monkeypatch)
@@ -815,6 +1061,7 @@ def test_apply_staged_job_uses_verified_manifest_for_snapshot_copy(tmp_path, mon
 
 
 def test_apply_staged_job_rerenders_derived_state_from_config(tmp_path, monkeypatch):
+    """Verify that apply staged job rerenders derived state from config."""
     runtime_root = tmp_path / "run"
     config_root = tmp_path / "config"
     _force_staging(monkeypatch)
@@ -829,7 +1076,7 @@ def test_apply_staged_job_rerenders_derived_state_from_config(tmp_path, monkeypa
     )
     monkeypatch.setattr(
         "atomixos_provision.provision.complete_reapply",
-        lambda _root, _progress=None: (True, [], "skipped"),
+        _complete_staged_apply,
     )
     monkeypatch.setattr("atomixos_provision.provision.reconcile_bootstrap_wan", lambda: None)
 
@@ -852,6 +1099,7 @@ def test_apply_staged_job_rerenders_derived_state_from_config(tmp_path, monkeypa
 
 
 def test_staged_snapshot_preserves_nested_directory_modes(tmp_path, monkeypatch):
+    """Verify that staged snapshot preserves nested directory modes."""
     runtime_root = tmp_path / "run"
     config_root = tmp_path / "config"
     _force_staging(monkeypatch)
@@ -866,7 +1114,7 @@ def test_staged_snapshot_preserves_nested_directory_modes(tmp_path, monkeypatch)
     )
     monkeypatch.setattr(
         "atomixos_provision.provision.complete_reapply",
-        lambda _root, _progress=None: (True, [], "skipped"),
+        _complete_staged_apply,
     )
     monkeypatch.setattr("atomixos_provision.provision.reconcile_bootstrap_wan", lambda: None)
 
@@ -880,6 +1128,7 @@ def test_staged_snapshot_preserves_nested_directory_modes(tmp_path, monkeypatch)
 
 
 def test_staged_snapshot_reapplies_directory_modes_after_file_copy(tmp_path, monkeypatch):
+    """Verify that staged snapshot reapplies directory modes after file copy."""
     runtime_root = tmp_path / "run"
     config_root = tmp_path / "config"
     _force_staging(monkeypatch)
@@ -894,7 +1143,7 @@ def test_staged_snapshot_reapplies_directory_modes_after_file_copy(tmp_path, mon
     )
     monkeypatch.setattr(
         "atomixos_provision.provision.complete_reapply",
-        lambda _root, _progress=None: (True, [], "skipped"),
+        _complete_staged_apply,
     )
     monkeypatch.setattr("atomixos_provision.provision.reconcile_bootstrap_wan", lambda: None)
 
@@ -923,6 +1172,7 @@ def test_staged_snapshot_reapplies_directory_modes_after_file_copy(tmp_path, mon
     reason="macOS filesystems do not preserve Linux setgid directory mode bits",
 )
 def test_staged_snapshot_normalizes_special_directory_mode_bits(tmp_path, monkeypatch):
+    """Verify that staged snapshot normalizes special directory mode bits."""
     runtime_root = tmp_path / "run"
     config_root = tmp_path / "config"
     _force_staging(monkeypatch)
@@ -937,7 +1187,7 @@ def test_staged_snapshot_normalizes_special_directory_mode_bits(tmp_path, monkey
     )
     monkeypatch.setattr(
         "atomixos_provision.provision.complete_reapply",
-        lambda _root, _progress=None: (True, [], "skipped"),
+        _complete_staged_apply,
     )
     monkeypatch.setattr("atomixos_provision.provision.reconcile_bootstrap_wan", lambda: None)
 
@@ -961,6 +1211,7 @@ def test_staged_snapshot_normalizes_special_directory_mode_bits(tmp_path, monkey
 def test_apply_staged_job_promotes_verified_snapshot_not_mutated_active_tree(
     tmp_path, monkeypatch
 ):
+    """Verify that apply staged job promotes verified snapshot not mutated active tree."""
     runtime_root = tmp_path / "run"
     config_root = tmp_path / "config"
     _force_staging(monkeypatch)
@@ -975,7 +1226,7 @@ def test_apply_staged_job_promotes_verified_snapshot_not_mutated_active_tree(
     )
     monkeypatch.setattr(
         "atomixos_provision.provision.complete_reapply",
-        lambda _root, _progress=None: (True, [], "skipped"),
+        _complete_staged_apply,
     )
     monkeypatch.setattr("atomixos_provision.provision.reconcile_bootstrap_wan", lambda: None)
 
@@ -1002,6 +1253,7 @@ def test_apply_staged_job_promotes_verified_snapshot_not_mutated_active_tree(
 
 @pytest.mark.asyncio
 async def test_apply_staged_partial_renders_against_current_config(tmp_path, monkeypatch):
+    """Verify that apply staged partial renders against current config."""
     runtime_root = tmp_path / "run"
     config_root = tmp_path / "config"
     _force_staging(monkeypatch)
@@ -1016,7 +1268,7 @@ async def test_apply_staged_partial_renders_against_current_config(tmp_path, mon
     )
     monkeypatch.setattr(
         "atomixos_provision.provision.complete_reapply",
-        lambda _root, _progress=None: (True, [], "skipped"),
+        _complete_staged_apply,
     )
     monkeypatch.setattr("atomixos_provision.provision.reconcile_bootstrap_wan", lambda: None)
 
@@ -1047,6 +1299,7 @@ async def test_apply_staged_partial_renders_against_current_config(tmp_path, mon
 
 @pytest.mark.asyncio
 async def test_apply_staged_partial_rejects_tampered_candidate_config(tmp_path, monkeypatch):
+    """Verify that apply staged partial rejects tampered candidate config."""
     runtime_root = tmp_path / "run"
     config_root = tmp_path / "config"
     _force_staging(monkeypatch)
@@ -1061,7 +1314,7 @@ async def test_apply_staged_partial_rejects_tampered_candidate_config(tmp_path, 
     )
     monkeypatch.setattr(
         "atomixos_provision.provision.complete_reapply",
-        lambda _root, _progress=None: (True, [], "skipped"),
+        _complete_staged_apply,
     )
     monkeypatch.setattr("atomixos_provision.provision.reconcile_bootstrap_wan", lambda: None)
 
@@ -1112,6 +1365,7 @@ def test_apply_staged_job_rejects_tampering_without_data_mutation(tmp_path, monk
 
 
 def test_apply_staged_job_rejects_unexpected_top_level_before_snapshot(tmp_path, monkeypatch):
+    """Verify that apply staged job rejects unexpected top level before snapshot."""
     runtime_root = tmp_path / "run"
     config_root = tmp_path / "config"
     copied_paths = []
@@ -1147,6 +1401,7 @@ def test_apply_staged_job_rejects_unexpected_top_level_before_snapshot(tmp_path,
 
 
 def test_apply_staged_job_rejects_size_race_without_snapshot_copy(tmp_path, monkeypatch):
+    """Verify that apply staged job rejects size race without snapshot copy."""
     runtime_root = tmp_path / "run"
     config_root = tmp_path / "config"
     copied_bytes = []

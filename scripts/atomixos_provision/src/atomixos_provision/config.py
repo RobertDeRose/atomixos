@@ -15,6 +15,7 @@ from jsonschema.exceptions import SchemaError, best_match
 __all__ = [
     "DEFAULT_LAN_GATEWAY_IP",
     "ProvisionError",
+    "ProvisionSystemError",
     "load_config",
     "load_config_schema",
     "load_lan_defaults",
@@ -103,10 +104,15 @@ SSH_KEY_TYPES = frozenset(
 
 
 class ProvisionError(RuntimeError):
-    """Raised when config parsing or validation fails."""
+    """Raised when submitted config parsing or validation fails."""
+
+
+class ProvisionSystemError(ProvisionError):
+    """Raised when the appliance's server-side validation setup is invalid."""
 
 
 def provision_error(message: str) -> ProvisionError:
+    """Build a validation error for submitted provisioning data."""
     return ProvisionError(message)
 
 
@@ -148,17 +154,18 @@ def load_config_schema() -> dict[str, Any]:
                 return json.loads(candidate.read_text())
             except json.JSONDecodeError as exc:
                 message = f"invalid config schema in {candidate}: {exc}"
-                raise provision_error(message) from exc
+                raise ProvisionSystemError(message) from exc
 
     searched = ", ".join(str(c) for c in candidates)
     message = f"unable to find config schema (checked: {searched})"
-    raise provision_error(message)
+    raise ProvisionSystemError(message)
 
 
 # --- Schema Validation Engine ---
 
 
 def _schema_error_path(path: str, segments: list[Any]) -> str:
+    """Render a JSON-schema error path from its path segments."""
     rendered = path
     for segment in segments:
         rendered += f"[{segment}]" if isinstance(segment, int) else f".{segment}"
@@ -201,7 +208,7 @@ def validate_against_schema(value: Any, schema: dict, path: str, root_schema: di
         Draft202012Validator.check_schema(root_schema)
         validator = Draft202012Validator(root_schema).evolve(schema=schema)
     except SchemaError as exc:
-        raise provision_error(f"invalid config schema: {exc.message}") from exc
+        raise ProvisionSystemError(f"invalid config schema: {exc.message}") from exc
     error = best_match(validator.iter_errors(value))
     if error is not None:
         raise provision_error(_schema_error_message(error, path))
