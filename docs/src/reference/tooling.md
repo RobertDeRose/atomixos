@@ -15,7 +15,8 @@
 | `.config/cog-changelog.tera`        | Renders plain Markdown changelogs without author noise.                     |
 | `scripts/setup-tooling.py`          | Resolves the lock, installs tools, installs hooks, and returns JSON status. |
 | `scripts/enable-docs-deployment.py` | Configures workflow-built Pages through external `gh`.                      |
-| `.github/workflows/hk.yml`          | Runs the locked hk quality gate on pushes and pull requests.                |
+| `.github/workflows/hk.yml`          | Runs `mise x -- hk check -a` on pull requests and manual dispatches.        |
+| `.github/workflows/nix.yml`         | Evaluates Nix per platform on pull requests and manual dispatches.          |
 | `.github/workflows/docs.yml`        | Builds gated docs from the default branch or manual dispatch.               |
 
 ## Tools
@@ -29,8 +30,9 @@ and fix-only `go-mod` follows `gofumpt` so module metadata observes the final im
 
 Custom steps are limited to behavior hk does not provide equivalently: Contextlint must discover its whole-project
 configuration without a changed-file argument; documentation and Markdown-table checks are project composites or have no
-built-in; rumdl avoids the built-in diff header while discovering `.config/rumdl.toml`; Go, Elixir, and Nix commands
+built-in; rumdl avoids the built-in diff header while discovering `.config/rumdl.toml`; Go and Elixir commands
 lack matching built-ins; and test, compiler, linter, and module checks must remain gated by their project manifests.
+Nix evaluation and builds are separate from hk; hk retains the `nixfmt` and `deadnix` lint steps.
 
 Recorded language profiles: `other`.
 

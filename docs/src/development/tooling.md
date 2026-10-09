@@ -35,15 +35,19 @@ No recognized language profile is active; only the universal tooling baseline ru
 
 ## GitHub validation
 
-`.github/workflows/hk.yml` runs validation on pull requests and manual dispatches. It installs Nix and the
-committed tool lock on `ubuntu-26.04-arm` (`aarch64-linux`) and `macos-latest` (`aarch64-darwin`). Both jobs verify the
-Nix platform and run the shared formatting, linting, and documentation checks with `hk check -a --skip-step nix`.
-Each runner then evaluates its own platform using `flake check --no-build --system <system>`. Evaluating platforms
-separately reduces peak evaluator memory compared with checking both platforms in one process. Both jobs have a
-45-minute limit.
+`.github/workflows/hk.yml` runs formatting, linting, and documentation checks on pull requests and manual dispatches.
+It uses `mise-action` with tool installation disabled, then runs `mise x -- hk check -a` on `ubuntu-latest`.
+Mise provides hk and its tools when executing the command; there is no separate tool-install step or Nix evaluation
+in this workflow.
+
+`.github/workflows/nix.yml` independently evaluates Nix on the same events. It installs Nix on `ubuntu-26.04-arm`
+(`aarch64-linux`) and `macos-latest` (`aarch64-darwin`). Each runner verifies its Nix platform, then evaluates it with
+`flake check --no-build --system <system>`. Evaluating platforms separately reduces peak evaluator memory compared
+with checking both platforms in one process. All validation jobs have a 45-minute limit.
 
 PR validation checks flake evaluation without building packages or executing NixOS VM tests. Full build and VM
-validation remains available locally through `mise run check` or individual `nix build` commands. Darwin VM tests
+validation remains available locally through `./scripts/nix-with-build-config.sh flake check` or individual
+`nix build` commands, separately from `mise run check`. Darwin VM tests
 need a Mac with the Linux builder configured. See [GitHub's runner limitations](https://docs.github.com/en/actions/reference/runners/github-hosted-runners#limitations-for-arm64-macos-runners).
 
 CI does not regenerate the lock. Dependency-update branches and fork PRs are not excluded from the pull-request gate.
