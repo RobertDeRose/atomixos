@@ -277,7 +277,9 @@ def read_json(path: Path) -> dict[str, Any]:
 
 def read_control_file(path: Path, *, max_bytes: int = MAX_CONTROL_JSON_BYTES) -> bytes:
     """Read a small staged control file without following symlinks."""
-    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    flags = (
+        os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    )
     try:
         fd = os.open(path, flags)
     except OSError as exc:

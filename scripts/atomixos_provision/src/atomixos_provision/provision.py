@@ -1490,7 +1490,7 @@ def _copy_staged_file_from_path(
 ) -> None:
     source_fd = os.open(
         source,
-        os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0),
+        os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0),
     )
     try:
         with os.fdopen(source_fd, "rb") as source_file:
