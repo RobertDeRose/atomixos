@@ -73,6 +73,34 @@ async def test_path_and_bytes_validation_report_the_same_schema_error(tmp_path):
     assert str(path_error.value) == "unsupported keys at config: unexpected"
 
 
+def test_reconcile_bootstrap_wan_skips_fleet_transport(monkeypatch):
+    """Verify that reconcile bootstrap wan skips fleet transport."""
+    from atomixos_provision import provision
+
+    monkeypatch.setenv("ATOMIXOS_BOOTSTRAP_TRANSPORT", "nixstasis")
+    monkeypatch.setattr(
+        provision.subprocess,
+        "run",
+        lambda *_args, **_kwargs: pytest.fail("fleet transport must not reconcile WAN access"),
+    )
+
+    provision.reconcile_bootstrap_wan()
+
+
+def test_schedule_bootstrap_rebind_skips_fleet_transport(monkeypatch):
+    """Verify that schedule bootstrap rebind skips fleet transport."""
+    from atomixos_provision import provision
+
+    monkeypatch.setenv("ATOMIXOS_BOOTSTRAP_TRANSPORT", "nixstasis")
+    monkeypatch.setattr(
+        provision.subprocess,
+        "run",
+        lambda *_args, **_kwargs: pytest.fail("fleet transport must not schedule socket rebind"),
+    )
+
+    provision.schedule_bootstrap_rebind({"lan_settings": {"gateway_ip": "10.44.0.1"}})
+
+
 def test_provisioning_lock_blocks_nested_exclusive_lock(tmp_path):
     config_root = tmp_path / "config"
 
@@ -849,12 +877,20 @@ def test_durable_reapply_grants_writable_access_using_runtime_root(monkeypatch, 
         "grant_managed_file_access",
         lambda path, *, writable=False: grants.append((path, writable)),
     )
-    monkeypatch.setattr(
-        provision, "complete_reapply", lambda _root, _progress=None: (True, [], "skipped")
-    )
+
+    def complete_staged_apply(_root, _progress=None, *, before_commit=None):
+        """Commit the staged apply without running activation."""
+        if before_commit is not None:
+            before_commit()
+        return True, [], "skipped"
+
+    monkeypatch.setattr(provision, "complete_reapply", complete_staged_apply)
 
     result = provision._promote_pre_rendered_candidate_sync(
-        candidate_root, None, config_root, {"allow_reapply": True}
+        candidate_root,
+        None,
+        config_root,
+        {"allow_reapply": True, "job_id": "job-1", "source_sha256": "a" * 64},
     )
 
     assert result["reapply"] is True

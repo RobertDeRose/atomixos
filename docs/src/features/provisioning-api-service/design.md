@@ -644,3 +644,11 @@ first wildcard component, since the glob may match the managed tree.
 Slash-containing `Volume=` sources are treated as paths, not named volumes.
 Relative host mount sources are rejected because Quadlet and Podman resolve them
 from the unit directory or service working directory, not the provisioning process.
+
+## Apply recovery reconciliation
+
+Durable promoted/committed receipts bind job identity and source digest. A
+committed receipt establishes success only for the matching job. Keep claimed
+jobs until result publication and gate transport follow-ups on an unfinished
+matching claim. Preserve initial discard, rollback reactivation, and ordered
+boot recovery.

@@ -297,3 +297,12 @@ are bounded, nonblocking, and reject symlinks and non-regular descriptors.
 Ready publication requires a live capacity reservation and preserves FIFO order.
 API jobs and local CLI staging both refresh their reservation while staging, so slow
 imports keep their slot past the reservation TTL.
+
+## Apply transactions and finalization
+
+The receipt binds the staged job ID and source digest to its durable phase and
+result. Activation precedes commit; finalization preserves published results
+and retries unfinished work. Boot recovery leaves WAN and runtime activation
+to ordered successor services. Same-boot recovery completes transport and
+rollback activation before publishing results. The apply service stop timeout
+covers the supported activation budget plus recovery overhead.
