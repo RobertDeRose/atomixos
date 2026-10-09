@@ -182,6 +182,70 @@ class TestCopyBundleFiles:
         assert all((uid, gid) == (1000, 2000) for _path, uid, gid in chowns)
         assert files_root.joinpath("state.json").stat().st_mode & 0o777 == 0o640
 
+    @pytest.mark.parametrize("entrypoint", ["existing", "staging"])
+    def test_reconciliation_stops_enumerating_at_member_limit(
+        self, tmp_path, monkeypatch, entrypoint
+    ):
+        """Stop a large directory before consuming or changing excess entries."""
+        import atomixos_provision.bundle as bundle_module
+
+        chowns = self._mock_appsvc(monkeypatch)
+        root = tmp_path / "files"
+        root.mkdir()
+        for index in range(10):
+            (root / f"entry-{index}").mkdir()
+        monkeypatch.setattr(bundle_module, "MAX_BUNDLE_MEMBERS", 3)
+        real_scandir = os.scandir
+        seen = []
+        closed = []
+
+        class TrackingScandir:
+            def __init__(self, fd):
+                self.iterator = real_scandir(fd)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                self.iterator.close()
+                closed.append(True)
+
+            def __iter__(self):
+                for entry in self.iterator:
+                    seen.append(entry.name)
+                    yield entry
+
+        monkeypatch.setattr(bundle_module.os, "scandir", TrackingScandir)
+        with pytest.raises(ProvisionError, match="bundle exceeds 3 member limit"):
+            if entrypoint == "existing":
+                grant_managed_file_access(root, writable=True)
+            else:
+                bundle_module._grant_managed_file_access(root, 1000, 2000, writable=True)
+
+        assert len(seen) == 4
+        assert len(chowns) == (4 if entrypoint == "existing" else 3)
+        assert len(closed) == 4
+
+    @pytest.mark.parametrize("limit", [2, 3])
+    def test_reconciliation_counts_nested_members_globally(self, tmp_path, monkeypatch, limit):
+        """Share one budget across sibling directories and accept its exact limit."""
+        import atomixos_provision.bundle as bundle_module
+
+        chowns = self._mock_appsvc(monkeypatch)
+        root = tmp_path / "files"
+        (root / "first" / "nested").mkdir(parents=True)
+        (root / "second").mkdir()
+        monkeypatch.setattr(bundle_module, "MAX_BUNDLE_MEMBERS", limit)
+
+        if limit == 2:
+            with pytest.raises(ProvisionError, match="bundle exceeds 2 member limit"):
+                grant_managed_file_access(root, writable=True)
+            assert len(chowns) == 3
+        else:
+            grant_managed_file_access(root, writable=True)
+            assert len(chowns) == 4
+            assert all(path.stat().st_mode & 0o777 == 0o750 for path in root.rglob("*"))
+
     def test_rejects_hardlinked_managed_file_before_chown_or_chmod(self, tmp_path, monkeypatch):
         """Reject hardlinks without mutating their external inode."""
         chowns = self._mock_appsvc(monkeypatch)

@@ -620,3 +620,6 @@ privileged worker open a device or FIFO. Hosts without these Linux facilities
 fail closed for managed-file access; macOS remains a development host.
 Snapshot enumeration reserves every discovered name against the global member
 limit before recursing, including names awaiting processing in ancestor directories.
+Access reconciliation streams directory entries and shares the same global
+member limit across recursive calls, rejecting excess entries before metadata
+changes. Files and subdirectories count as members; the `files/` root does not.

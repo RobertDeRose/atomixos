@@ -466,63 +466,81 @@ def _grant_managed_file_access(
     try:
         # The new-copy caller retains root ownership until promotion.
         os.fchmod(root_fd, 0o750 if staging or writable else 0o550)
-        _grant_managed_dir_access(root_fd, path, app_uid, reader_gid, writable=writable)
+        _grant_managed_dir_access(
+            root_fd, path, app_uid, reader_gid, writable=writable, member_count=[0]
+        )
     finally:
         os.close(root_fd)
 
 
 def _grant_managed_dir_access(
-    parent_fd: int, path: Path, app_uid: int, reader_gid: int, *, writable: bool
+    parent_fd: int,
+    path: Path,
+    app_uid: int,
+    reader_gid: int,
+    *,
+    writable: bool,
+    member_count: list[int],
 ) -> None:
-    """Change only verified inodes reached through no-follow directory descriptors."""
-    for name in os.listdir(parent_fd):
-        current = path / name
-        current_stat = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
-        if stat.S_ISLNK(current_stat.st_mode):
-            raise provision_error(f"bundle files entry must not be a symlink: {current}")
-        if not (stat.S_ISDIR(current_stat.st_mode) or stat.S_ISREG(current_stat.st_mode)):
-            raise provision_error(f"bundle files entry must be a regular file: {current}")
-        if stat.S_ISDIR(current_stat.st_mode):
-            flags = (
-                os.O_RDONLY
-                | OPEN_NOFOLLOW
-                | getattr(os, "O_DIRECTORY", 0)
-                | getattr(os, "O_CLOEXEC", 0)
-            )
-            child_fd = os.open(name, flags, dir_fd=parent_fd)
-        else:
-            child_fd = _open_verified_regular_file(
-                name,
-                parent_fd,
-                current_stat,
-                current,
-                f"bundle files entry changed during reconciliation: {current}",
-            )
-        try:
-            confirmed = os.fstat(child_fd)
-            if (confirmed.st_dev, confirmed.st_ino) != (
-                current_stat.st_dev,
-                current_stat.st_ino,
-            ):
-                raise provision_error(
-                    f"bundle files entry changed during reconciliation: {current}"
-                )
-            if stat.S_ISREG(confirmed.st_mode) and confirmed.st_nlink != 1:
-                raise provision_error(
-                    f"bundle entry must be a single-link regular file: {current}"
-                )
-            os.fchown(child_fd, app_uid, reader_gid)
-            if stat.S_ISDIR(confirmed.st_mode):
-                os.fchmod(child_fd, 0o750 if writable else 0o550)
-                _grant_managed_dir_access(
-                    child_fd, current, app_uid, reader_gid, writable=writable
-                )
-            elif stat.S_ISREG(confirmed.st_mode):
-                os.fchmod(child_fd, 0o640 if writable else 0o440)
-            else:
+    """Stream verified inodes within a shared budget before changing their access."""
+    with os.scandir(parent_fd) as entries:
+        for entry in entries:
+            if member_count[0] >= MAX_BUNDLE_MEMBERS:
+                raise provision_error(f"bundle exceeds {MAX_BUNDLE_MEMBERS} member limit")
+            member_count[0] += 1
+            name = entry.name
+            current = path / name
+            current_stat = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+            if stat.S_ISLNK(current_stat.st_mode):
+                raise provision_error(f"bundle files entry must not be a symlink: {current}")
+            if not (stat.S_ISDIR(current_stat.st_mode) or stat.S_ISREG(current_stat.st_mode)):
                 raise provision_error(f"bundle files entry must be a regular file: {current}")
-        finally:
-            os.close(child_fd)
+            if stat.S_ISDIR(current_stat.st_mode):
+                flags = (
+                    os.O_RDONLY
+                    | OPEN_NOFOLLOW
+                    | getattr(os, "O_DIRECTORY", 0)
+                    | getattr(os, "O_CLOEXEC", 0)
+                )
+                child_fd = os.open(name, flags, dir_fd=parent_fd)
+            else:
+                child_fd = _open_verified_regular_file(
+                    name,
+                    parent_fd,
+                    current_stat,
+                    current,
+                    f"bundle files entry changed during reconciliation: {current}",
+                )
+            try:
+                confirmed = os.fstat(child_fd)
+                if (confirmed.st_dev, confirmed.st_ino) != (
+                    current_stat.st_dev,
+                    current_stat.st_ino,
+                ):
+                    raise provision_error(
+                        f"bundle files entry changed during reconciliation: {current}"
+                    )
+                if stat.S_ISREG(confirmed.st_mode) and confirmed.st_nlink != 1:
+                    raise provision_error(
+                        f"bundle entry must be a single-link regular file: {current}"
+                    )
+                os.fchown(child_fd, app_uid, reader_gid)
+                if stat.S_ISDIR(confirmed.st_mode):
+                    os.fchmod(child_fd, 0o750 if writable else 0o550)
+                    _grant_managed_dir_access(
+                        child_fd,
+                        current,
+                        app_uid,
+                        reader_gid,
+                        writable=writable,
+                        member_count=member_count,
+                    )
+                elif stat.S_ISREG(confirmed.st_mode):
+                    os.fchmod(child_fd, 0o640 if writable else 0o440)
+                else:
+                    raise provision_error(f"bundle files entry must be a regular file: {current}")
+            finally:
+                os.close(child_fd)
 
 
 def grant_managed_file_access(path: Path, *, writable: bool = False) -> None:
@@ -546,7 +564,9 @@ def grant_managed_file_access(path: Path, *, writable: bool = False) -> None:
     try:
         os.fchown(root_fd, app_uid, reader_gid)
         os.fchmod(root_fd, 0o750 if writable else 0o550)
-        _grant_managed_dir_access(root_fd, path, app_uid, reader_gid, writable=writable)
+        _grant_managed_dir_access(
+            root_fd, path, app_uid, reader_gid, writable=writable, member_count=[0]
+        )
     finally:
         os.close(root_fd)
 

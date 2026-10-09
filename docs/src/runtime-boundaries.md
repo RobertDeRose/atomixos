@@ -255,7 +255,11 @@ Bundle imports may include `files/`; Quadlet values may reference `${CONFIG_DIR}
 Bundle `files/` are deployment inputs, installed read-only by default and
 owned by `appsvc`. The provisioning group receives read access. Permission
 reconciliation validates file descriptors and rejects symlinks and special
-files. Trusted integrators may request writable mounts; the renderer warns
+files. It streams directory entries within the bundle's global member limit
+(4096 by default), counting every file and subdirectory beneath `files/` across
+the whole tree. An oversized tree fails reconciliation before excess entries
+have their ownership or permissions changed. Trusted integrators may request
+writable mounts; the renderer warns
 when a mount overlaps managed files and is not clearly read-only. This includes
 mounts of `${CONFIG_DIR}` or other ancestors, as well as `${FILES_DIR}` and its
 descendants. Warning and write-access decisions normalize paths lexically,
