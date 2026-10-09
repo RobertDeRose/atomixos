@@ -623,3 +623,6 @@ limit before recursing, including names awaiting processing in ancestor director
 Access reconciliation streams directory entries and shares the same global
 member limit across recursive calls, rejecting excess entries before metadata
 changes. Files and subdirectories count as members; the `files/` root does not.
+Mount classification excludes named Podman volumes before resolving host paths.
+Named-volume mounts cannot broaden managed-file permissions through the
+provisioning process's working directory; host bind paths keep their access policy.

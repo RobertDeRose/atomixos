@@ -181,14 +181,25 @@ def render_section(section_name: str, directives: dict[str, list], config_root: 
 
 
 def _mount_source(directive: str, value: str) -> str | None:
-    """Return the host source path from a supported volume or bind mount."""
+    """Return a host mount source, excluding Podman named-volume identifiers."""
     if directive in {"Volume", "PodmanArgsVolume"}:
-        return value.split(":", 1)[0].strip()
+        source = value.split(":", 1)[0].strip()
+        if source.startswith(("/", ".", CONFIG_DIR_TOKEN, FILES_DIR_TOKEN)):
+            return source
+        return None
     if directive in {"Mount", "PodmanArgsMount"}:
+        source = None
+        mount_type = None
         for option in value.split(","):
             key, separator, raw_value = option.partition("=")
-            if separator and key.strip().lower() in {"source", "src"}:
-                return raw_value.strip()
+            if not separator:
+                continue
+            normalized_key = key.strip().lower()
+            if normalized_key == "type":
+                mount_type = raw_value.strip().lower()
+            elif normalized_key in {"source", "src"} and source is None:
+                source = raw_value.strip()
+        return source if mount_type in {None, "bind", "glob"} else None
     return None
 
 

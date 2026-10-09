@@ -244,6 +244,58 @@ class TestRenderContainers:
         assert managed_files_are_writable(table)
 
     @pytest.mark.parametrize("form", ["Volume", "Mount", "PodmanArgsVolume", "PodmanArgsMount"])
+    @pytest.mark.parametrize("working_directory", ["root", "config_parent"])
+    def test_named_volume_does_not_enable_managed_file_access(
+        self, tmp_path, monkeypatch, form, working_directory
+    ):
+        """Never resolve a Podman volume identifier against the process cwd."""
+        monkeypatch.chdir("/" if working_directory == "root" else tmp_path)
+        config_root = (
+            Path("/data/config") if working_directory == "root" else tmp_path / "data/config"
+        )
+        kind = form.removeprefix("PodmanArgs")
+        directive = "PodmanArgs" if form.startswith("PodmanArgs") else form
+        value = (
+            "data:/state:rw" if kind == "Volume" else "source=data,type=volume,target=/state,rw"
+        )
+        if directive == "PodmanArgs":
+            value = f"--{kind.lower()}={value}"
+        table = {
+            "app": {
+                "privileged": True,
+                "Container": {"Image": "alpine:latest", directive: value},
+            }
+        }
+
+        rendered, _runtime, warnings = render_containers(table, config_root)
+
+        assert warnings == []
+        assert not managed_files_are_writable(table, config_root)
+        assert value in rendered["app.container"]
+
+    @pytest.mark.parametrize("directive", ["Volume", "Mount", "PodmanArgs"])
+    def test_relative_bind_path_keeps_managed_file_policy(self, monkeypatch, directive):
+        """Keep explicit relative host paths distinct from named volumes."""
+        monkeypatch.chdir("/")
+        value = {
+            "Volume": "./data/config/files/state:/state:rw",
+            "Mount": "type=bind,source=./data/config/files/state,target=/state,rw",
+            "PodmanArgs": "--volume=./data/config/files/state:/state:rw",
+        }[directive]
+        table = {
+            "app": {
+                "privileged": True,
+                "Container": {"Image": "alpine:latest", directive: value},
+            }
+        }
+        config_root = Path("/data/config")
+
+        _rendered, _runtime, warnings = render_containers(table, config_root)
+
+        assert len(warnings) == 1
+        assert managed_files_are_writable(table, config_root)
+
+    @pytest.mark.parametrize("form", ["Volume", "Mount", "PodmanArgsVolume", "PodmanArgsMount"])
     @pytest.mark.parametrize("read_only", [False, True])
     @pytest.mark.parametrize(
         "source",
