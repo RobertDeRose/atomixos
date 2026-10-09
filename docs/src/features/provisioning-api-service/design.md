@@ -612,3 +612,11 @@ Explicitly avoid adding these until there is a concrete need:
 Managed files are read-only deployment inputs by default. Preserve trusted
 integrator Podman options, validate mount syntax, and warn about writable
 `${FILES_DIR}` mounts. Runtime volume data stays outside provisioning ownership.
+
+Snapshots and access reconciliation pin each regular file with Linux `O_PATH`,
+verify its type, single-link count, and inode identity, then open that verified
+inode through `/proc/self/fd`. A concurrent name replacement cannot make the
+privileged worker open a device or FIFO. Hosts without these Linux facilities
+fail closed for managed-file access; macOS remains a development host.
+Snapshot enumeration reserves every discovered name against the global member
+limit before recursing, including names awaiting processing in ancestor directories.

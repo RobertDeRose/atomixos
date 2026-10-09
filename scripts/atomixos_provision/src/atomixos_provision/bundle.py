@@ -81,6 +81,49 @@ def _open_dir_no_follow(path: Path) -> int:
         raise
 
 
+def _open_verified_regular_file(
+    name: str,
+    parent_fd: int,
+    expected: os.stat_result,
+    path: Path,
+    changed_message: str,
+) -> int:
+    """Pin and verify a Linux inode before opening it for reading or mutation."""
+    path_flag = getattr(os, "O_PATH", None)
+    if path_flag is None:
+        raise provision_error("safe managed-file access requires Linux O_PATH and /proc/self/fd")
+    pinned_fd = os.open(
+        name, path_flag | OPEN_NOFOLLOW | getattr(os, "O_CLOEXEC", 0), dir_fd=parent_fd
+    )
+    try:
+        confirmed = os.fstat(pinned_fd)
+        if not stat.S_ISREG(confirmed.st_mode) or confirmed.st_nlink != 1:
+            raise provision_error(f"bundle entry must be a single-link regular file: {path}")
+        if (confirmed.st_dev, confirmed.st_ino) != (expected.st_dev, expected.st_ino):
+            raise provision_error(changed_message)
+        # This procfs link refers to the pinned inode, even if its name is replaced.
+        # O_NOFOLLOW is intentionally absent: procfs supplies the verified fd link.
+        readable_fd = os.open(
+            f"/proc/self/fd/{pinned_fd}",
+            os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0),
+        )
+        try:
+            readable_stat = os.fstat(readable_fd)
+            if not stat.S_ISREG(readable_stat.st_mode) or readable_stat.st_nlink != 1:
+                raise provision_error(f"bundle entry must be a single-link regular file: {path}")
+            if (readable_stat.st_dev, readable_stat.st_ino) != (
+                confirmed.st_dev,
+                confirmed.st_ino,
+            ):
+                raise provision_error(changed_message)
+            return readable_fd
+        except Exception:
+            os.close(readable_fd)
+            raise
+    finally:
+        os.close(pinned_fd)
+
+
 def _snapshot_files_source(
     files_source: Path,
     destination: Path,
@@ -132,13 +175,11 @@ def _snapshot_dir(
             name = entry.name
             if name in {"", ".", ".."}:
                 raise provision_error(f"invalid bundle files entry: {name!r}")
-            if max_members is not None and member_count[0] + len(names) >= max_members:
+            if max_members is not None and member_count[0] >= max_members:
                 raise provision_error(f"bundle exceeds {max_members} member limit")
+            member_count[0] += 1
             names.append(name)
     for name in sorted(names):
-        member_count[0] += 1
-        if max_members is not None and member_count[0] > max_members:
-            raise provision_error(f"bundle exceeds {max_members} member limit")
         child_path = source_path / name
         try:
             child_stat = os.stat(name, dir_fd=source_fd, follow_symlinks=False)
@@ -186,10 +227,12 @@ def _snapshot_dir(
             )
         if max_total_bytes is not None and total_bytes[0] + child_stat.st_size > max_total_bytes:
             raise provision_error(f"bundle exceeds {max_total_bytes} byte decompressed limit")
-        file_fd = os.open(
+        file_fd = _open_verified_regular_file(
             name,
-            os.O_RDONLY | os.O_NONBLOCK | OPEN_NOFOLLOW | getattr(os, "O_CLOEXEC", 0),
-            dir_fd=source_fd,
+            source_fd,
+            child_stat,
+            child_path,
+            f"bundle file changed during snapshot: {child_path}",
         )
         try:
             confirmed = os.fstat(file_fd)
@@ -439,10 +482,22 @@ def _grant_managed_dir_access(
             raise provision_error(f"bundle files entry must not be a symlink: {current}")
         if not (stat.S_ISDIR(current_stat.st_mode) or stat.S_ISREG(current_stat.st_mode)):
             raise provision_error(f"bundle files entry must be a regular file: {current}")
-        flags = os.O_RDONLY | OPEN_NOFOLLOW | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0)
         if stat.S_ISDIR(current_stat.st_mode):
-            flags |= getattr(os, "O_DIRECTORY", 0)
-        child_fd = os.open(name, flags, dir_fd=parent_fd)
+            flags = (
+                os.O_RDONLY
+                | OPEN_NOFOLLOW
+                | getattr(os, "O_DIRECTORY", 0)
+                | getattr(os, "O_CLOEXEC", 0)
+            )
+            child_fd = os.open(name, flags, dir_fd=parent_fd)
+        else:
+            child_fd = _open_verified_regular_file(
+                name,
+                parent_fd,
+                current_stat,
+                current,
+                f"bundle files entry changed during reconciliation: {current}",
+            )
         try:
             confirmed = os.fstat(child_fd)
             if (confirmed.st_dev, confirmed.st_ino) != (

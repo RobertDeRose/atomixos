@@ -296,3 +296,7 @@ or the individual `nix build` commands above; `mise run check` runs quality chec
 
 The host Python suite skips two Linux setgid directory-mode assertions on macOS.
 Those assertions remain enabled in the Linux package tests.
+Managed-file access requires Linux `O_PATH` and `/proc/self/fd` in production.
+Ordinary macOS tests use a test-only file-open stand-in to exercise higher-level
+behavior. Native inode-pinning and special-file race tests run on Linux; macOS
+still tests that the production boundary fails closed when `O_PATH` is absent.

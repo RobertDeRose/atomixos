@@ -2,6 +2,7 @@
 
 import gzip
 import io
+import os
 import tarfile
 
 import pytest
@@ -274,6 +275,147 @@ class TestCopyBundleFiles:
             stage_bundle_files(source, tmp_path / "destination")
 
         assert len(seen) == 2
+
+    def test_snapshot_reserves_pending_ancestor_members(self, tmp_path, monkeypatch):
+        """Keep pending ancestor names within the global enumeration budget."""
+        import atomixos_provision.bundle as bundle_module
+
+        source = tmp_path / "source"
+        source.mkdir()
+        nested = source / "a-directory"
+        nested.mkdir()
+        for index in range(3):
+            (source / f"z-{index}").mkdir()
+            (nested / f"entry-{index}").mkdir()
+        monkeypatch.setattr(bundle_module, "MAX_BUNDLE_MEMBERS", 4)
+        real_scandir = bundle_module.os.scandir
+        seen = []
+
+        class TrackingScandir:
+            def __init__(self, iterator):
+                self.iterator = iterator
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                self.iterator.close()
+
+            def __iter__(self):
+                for entry in self.iterator:
+                    seen.append(entry.name)
+                    yield entry
+
+        monkeypatch.setattr(
+            bundle_module.os, "scandir", lambda path: TrackingScandir(real_scandir(path))
+        )
+        with pytest.raises(ProvisionError, match="bundle exceeds 4 member limit"):
+            stage_bundle_files(source, tmp_path / "destination")
+        assert len(seen) == 5
+
+    @pytest.mark.skipif(not hasattr(os, "O_PATH"), reason="requires Linux O_PATH")
+    @pytest.mark.parametrize("operation", ["snapshot", "reconciliation"])
+    @pytest.mark.parametrize("replacement", ["fifo", "regular"])
+    def test_file_swap_never_opens_for_reading(
+        self, tmp_path, monkeypatch, native_file_open, operation, replacement
+    ):
+        """Reject an unverified replacement before any readable open."""
+        import atomixos_provision.bundle as bundle_module
+
+        self._mock_appsvc(monkeypatch)
+        source = tmp_path / "source"
+        source.mkdir()
+        payload = source / "payload"
+        payload.write_bytes(b"data")
+        real_open = bundle_module.os.open
+        readable_opens = []
+        swapped = False
+
+        def swap_before_open(path, flags, *args, **kwargs):
+            nonlocal swapped
+            if path == "payload" and not swapped:
+                payload.rename(source / "retained")
+                if replacement == "fifo":
+                    os.mkfifo(payload)
+                else:
+                    payload.write_bytes(b"replacement")
+                swapped = True
+            if path == "payload" and not flags & os.O_PATH:
+                readable_opens.append(path)
+                pytest.fail("unverified replacement inode was opened for reading")
+            return real_open(path, flags, *args, **kwargs)
+
+        monkeypatch.setattr(bundle_module.os, "open", swap_before_open)
+        pattern = "single-link regular file" if replacement == "fifo" else "changed during"
+        with pytest.raises(ProvisionError, match=pattern):
+            if operation == "snapshot":
+                stage_bundle_files(source, tmp_path / "destination")
+            else:
+                grant_managed_file_access(source, writable=True)
+        assert swapped
+        assert not readable_opens
+
+    @pytest.mark.skipif(not hasattr(os, "O_PATH"), reason="requires Linux O_PATH")
+    @pytest.mark.parametrize("operation", ["snapshot", "reconciliation"])
+    def test_uses_pinned_inode_after_name_swap(
+        self, tmp_path, monkeypatch, native_file_open, operation
+    ):
+        """Read or reconcile the verified inode after its name is replaced."""
+        import atomixos_provision.bundle as bundle_module
+
+        self._mock_appsvc(monkeypatch)
+        source = tmp_path / "source"
+        source.mkdir()
+        payload = source / "payload"
+        payload.write_bytes(b"original")
+        real_open = bundle_module.os.open
+        swapped = False
+
+        def swap_after_pin(path, flags, *args, **kwargs):
+            nonlocal swapped
+            if str(path).startswith("/proc/self/fd/") and not swapped:
+                payload.rename(source / "retained")
+                payload.write_bytes(b"replacement")
+                payload.chmod(0o600)
+                swapped = True
+            return real_open(path, flags, *args, **kwargs)
+
+        monkeypatch.setattr(bundle_module.os, "open", swap_after_pin)
+        destination = tmp_path / "destination"
+        if operation == "snapshot":
+            stage_bundle_files(source, destination)
+            assert (destination / "payload").read_bytes() == b"original"
+        else:
+            grant_managed_file_access(source, writable=True)
+            assert (source / "retained").stat().st_mode & 0o777 == 0o640
+        assert swapped
+        assert payload.stat().st_mode & 0o777 == 0o600
+
+    @pytest.mark.parametrize("operation", ["snapshot", "reconciliation"])
+    def test_regular_file_open_requires_non_opening_handles(
+        self, tmp_path, monkeypatch, native_file_open, operation
+    ):
+        """Fail closed on hosts without Linux O_PATH before opening a payload."""
+        import atomixos_provision.bundle as bundle_module
+
+        self._mock_appsvc(monkeypatch)
+        monkeypatch.delattr(bundle_module.os, "O_PATH", raising=False)
+        source = tmp_path / "source"
+        source.mkdir()
+        (source / "payload").write_bytes(b"data")
+        real_open = bundle_module.os.open
+
+        def no_payload_open(path, flags, *args, **kwargs):
+            if path == "payload":
+                pytest.fail("payload opened without a non-opening handle")
+            return real_open(path, flags, *args, **kwargs)
+
+        monkeypatch.setattr(bundle_module.os, "open", no_payload_open)
+        with pytest.raises(ProvisionError, match="requires Linux O_PATH"):
+            if operation == "snapshot":
+                stage_bundle_files(source, tmp_path / "destination")
+            else:
+                grant_managed_file_access(source)
 
     def test_copy_bundle_files_enforces_snapshot_limits(self, tmp_path, monkeypatch):
         """Enforce configured total-byte limits during production copies."""
