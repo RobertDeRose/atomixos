@@ -35,7 +35,7 @@ No recognized language profile is active; only the universal tooling baseline ru
 
 ## GitHub validation
 
-`.github/workflows/hk.yml` is the single quality workflow for every push and pull request. It installs Nix and the
+`.github/workflows/hk.yml` runs validation on pull requests and manual dispatches. It installs Nix and the
 committed tool lock on `ubuntu-26.04-arm` (`aarch64-linux`) and `macos-latest` (`aarch64-darwin`). Both jobs verify the
 Nix platform and run the shared formatting, linting, and documentation checks. Linux runs `hk check -a`, including
 evaluation of all flake systems and building the native Linux checks and VM tests. Builds are serialized, with a
