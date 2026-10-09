@@ -64,8 +64,9 @@ python3 scripts/setup-tooling.py --json
 
 The command gives lock, install, and hook stages one temporary `MISE_CONFIG_DIR`, removes inherited global config
 overrides, and deletes the temporary directory on exit. It preserves the scaffold on failure, reports the failed stage,
-and uses the same command above for recovery. A repository created without Git can install hooks after Git
-initialization with:
+and uses the same command above for recovery. Nixfmt lock normalization recognizes the Aqua backend, requires Linux
+x64/ARM64 and macOS ARM64 entries, and removes the unsupported macOS x64 entry. A repository created without Git can
+install hooks after Git initialization with:
 
 ```bash
 python3 scripts/setup-tooling.py --json
