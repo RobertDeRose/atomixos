@@ -31,6 +31,7 @@ from atomixos_provision.activation import (
 )
 from atomixos_provision.bundle import (
     copy_bundle_files,
+    grant_managed_file_access,
     prepare_source_bytes,
     prepare_source_path,
     stage_bundle_files,
@@ -38,6 +39,7 @@ from atomixos_provision.bundle import (
 from atomixos_provision.config import ProvisionError, load_config
 from atomixos_provision.quadlet import (
     RUNTIME_METADATA_FILENAME,
+    managed_files_are_writable,
     render_builds,
     render_containers,
     render_networks,
@@ -177,13 +179,15 @@ def _write_first_config_marker(candidate_root: Path) -> None:
 
 
 def _grant_service_read_access(config_root: Path) -> None:
+    """Grant the provisioning service read access to managed configuration."""
     identity = _service_identity()
     if identity is None:
         return
     _uid, gid = identity
     files_root = config_root / "files"
+    grant_managed_file_access(files_root, writable=_managed_files_are_writable(config_root))
     for path in [config_root, *config_root.rglob("*")]:
-        if path == files_root or files_root in path.parents:
+        if files_root in path.parents:
             continue
         try:
             path_stat = path.lstat()
@@ -200,7 +204,7 @@ def _grant_service_read_access(config_root: Path) -> None:
 
 
 def grant_service_read_access(config_root: Path) -> None:
-    """Migrate a config root so the unprivileged API can read control state."""
+    """Reconcile a config root so the unprivileged API can read control state."""
     _grant_service_read_access(config_root)
 
 
@@ -336,6 +340,7 @@ def _progress_job_id(progress: ProgressReporter | None) -> str:
 
 
 def _copy_current_bundle_files(config_root: Path, destination: Path) -> None:
+    """Copy managed bundle files from the active configuration."""
     files_root = config_root / "files"
     if not files_root.exists():
         return
@@ -1492,3 +1497,19 @@ async def validate_config_bytes(
 ) -> dict[str, Any]:
     """Validate config bytes without applying."""
     return await asyncio.to_thread(_validate_sync, payload, filename, config_root)
+
+
+def _managed_files_are_writable(config_root: Path) -> bool:
+    """Return whether the active config requests writable managed-file mounts."""
+    config_path = config_root / "config.toml"
+    if not config_path.is_file():
+        return False
+    try:
+        parsed = load_config(config_path)
+    except (OSError, ProvisionError):
+        return False
+    containers = parsed.get("containers", {})
+    if not isinstance(containers, dict):
+        return False
+    container_table = containers.get("container", {})
+    return isinstance(container_table, dict) and managed_files_are_writable(container_table)

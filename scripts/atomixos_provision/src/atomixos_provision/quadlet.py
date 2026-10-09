@@ -1,6 +1,7 @@
 """Quadlet unit rendering (container, network, volume, build)."""
 
 import re
+import shlex
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +36,38 @@ QUADLET_SUFFIXES = frozenset(
     {".build", ".container", ".image", ".kube", ".network", ".pod", ".volume"}
 )
 DIRECTIVE_NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]*$")
+VOLUME_OPTIONS = frozenset(
+    {
+        "ro",
+        "rw",
+        "z",
+        "Z",
+        "O",
+        "U",
+        "noexec",
+        "exec",
+        "nodev",
+        "dev",
+        "nosuid",
+        "suid",
+        "private",
+        "rprivate",
+        "shared",
+        "rshared",
+        "slave",
+        "rslave",
+        "unbindable",
+        "runbindable",
+        "bind",
+        "rbind",
+        "cached",
+        "delegated",
+        "copy",
+        "nocopy",
+        "no-dereference",
+        "idmap",
+    }
+)
 
 
 # --- Helpers ---
@@ -146,6 +179,112 @@ def render_section(section_name: str, directives: dict[str, list], config_root: 
     return lines
 
 
+def managed_file_mount_warning(directive: str, value: str, path: str) -> str | None:
+    """Warn when managed bundle files may be changed by a container."""
+    if FILES_DIR_TOKEN not in value:
+        return None
+
+    read_only = managed_file_mount_is_read_only(directive, value)
+    if read_only:
+        return None
+    return (
+        f"{path} uses {FILES_DIR_TOKEN} without a clearly read-only mount; "
+        "managed bundle files are deployment inputs, so use a Podman volume "
+        "for mutable runtime data"
+    )
+
+
+def managed_file_mount_is_read_only(directive: str, value: str) -> bool:
+    """Return whether a managed-file mount explicitly requests read-only access."""
+    if directive in {"Volume", "PodmanArgsVolume"}:
+        parts = value.split(":", 2)
+        volume_options = set(parts[2].split(",")) if len(parts) == 3 else set()
+        for option in volume_options:
+            if option not in VOLUME_OPTIONS and not option.startswith(
+                ("idmap=", "upperdir=", "workdir=")
+            ):
+                raise provision_error(f"invalid Podman volume option: {option!r}")
+        return "ro" in volume_options and not {"rw", "U"}.intersection(volume_options)
+
+    mount_options: dict[str, str] = {}
+    flags: set[str] = set()
+    for option in value.split(","):
+        key, separator, raw_value = option.partition("=")
+        normalized_key = key.strip().lower()
+        if separator:
+            mount_options[normalized_key] = raw_value.strip().lower()
+        else:
+            flags.add(normalized_key)
+    return (
+        "ro" in flags
+        or "readonly" in flags
+        or mount_options.get("ro") == "true"
+        or mount_options.get("readonly") == "true"
+    ) and not (
+        {"rw", "readwrite", "u", "chown"}.intersection(flags)
+        or mount_options.get("rw") == "true"
+        or mount_options.get("readwrite") == "true"
+        or mount_options.get("u") == "true"
+        or mount_options.get("chown") == "true"
+    )
+
+
+def _podman_mount_values(values: list[str]):
+    """Yield mount arguments carried by PodmanArgs."""
+    tokens: list[tuple[str, int]] = []
+    for index, raw_value in enumerate(values):
+        try:
+            tokens.extend((token, index) for token in shlex.split(raw_value))
+        except ValueError as exc:
+            raise provision_error(f"invalid PodmanArgs[{index}] quoting: {exc}") from exc
+    for position, (value, index) in enumerate(tokens):
+        for option in ("--volume=", "-v=", "--mount="):
+            if value.startswith(option):
+                yield option.rstrip("=").lstrip("-"), value[len(option) :], index
+                break
+        else:
+            if value.startswith("-v") and len(value) > 2:
+                yield "v", value[2:], index
+                continue
+            for option in ("--volume", "-v", "--mount"):
+                if value == option and position + 1 < len(tokens):
+                    mount_value, mount_index = tokens[position + 1]
+                    yield option.lstrip("-"), mount_value, mount_index
+                    break
+
+
+def managed_files_are_writable(container_table: dict[str, Any]) -> bool:
+    """Return whether any configured managed-file mount needs host write access."""
+    writable = False
+    for raw_sections in container_table.values():
+        if not isinstance(raw_sections, dict):
+            continue
+        container = raw_sections.get("Container")
+        if not isinstance(container, dict):
+            continue
+        for directive in ("Volume", "Mount"):
+            raw_values = container.get(directive, [])
+            if isinstance(raw_values, str):
+                raw_values = [raw_values]
+            for value in raw_values:
+                if (
+                    isinstance(value, str)
+                    and FILES_DIR_TOKEN in value
+                    and not managed_file_mount_is_read_only(directive, value)
+                ):
+                    writable = True
+        raw_podman_args = container.get("PodmanArgs", [])
+        if isinstance(raw_podman_args, str):
+            raw_podman_args = [raw_podman_args]
+        podman_args = [value for value in raw_podman_args if isinstance(value, str)]
+        for value, mount_value, _index in _podman_mount_values(podman_args):
+            if FILES_DIR_TOKEN in mount_value and not managed_file_mount_is_read_only(
+                "Volume" if value in {"volume", "v"} else "Mount", mount_value
+            ):
+                writable = True
+    return writable
+
+
 # --- Main Render Functions ---
 
 
@@ -180,6 +319,29 @@ def render_containers(
             message = f"{container_path}.Container.Image must be a single string value"
             raise provision_error(message)
         require_string(image_values[0], f"{container_path}.Container.Image")
+        for directive in ("Volume", "Mount"):
+            for idx, value in enumerate(container_directives.get(directive, [])):
+                mount_path = f"{container_path}.Container.{directive}[{idx}]"
+                warning = managed_file_mount_warning(
+                    directive, require_string(value, mount_path), mount_path
+                )
+                if warning is not None:
+                    warnings.append(warning)
+        podman_args = container_directives.get("PodmanArgs", [])
+        for directive, value, idx in _podman_mount_values(
+            [
+                require_string(value, f"{container_path}.Container.PodmanArgs[{idx}]")
+                for idx, value in enumerate(podman_args)
+            ]
+        ):
+            mount_path = f"{container_path}.Container.PodmanArgs[{idx}]"
+            warning = managed_file_mount_warning(
+                "PodmanArgsVolume" if directive in {"volume", "v"} else "PodmanArgsMount",
+                value,
+                mount_path,
+            )
+            if warning is not None:
+                warnings.append(warning)
 
         if privileged:
             if "Network" in container_directives and container_directives["Network"] != ["host"]:

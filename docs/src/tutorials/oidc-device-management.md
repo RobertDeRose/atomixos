@@ -201,7 +201,13 @@ Key points:
 - The `cockpit-ws` build uses `Network = "host"` to avoid Podman build-time
   netavark/nftables setup on constrained device images
 - The `${FILES_DIR}` token is replaced at provision time with the path to
-  the extracted bundle files
+  the extracted bundle files; this example uses `ro` to keep its managed
+  configuration inputs unchanged
+- Mutable application state is stored in the declared Podman volumes. Trusted
+  integrators may choose other Podman mount behavior, but should use volumes for
+  ordinary runtime state. Use
+  Podman tooling if that runtime data needs to be backed up or restored;
+  AtomixOS config export intentionally excludes it
 - `GATEWAY_DOMAIN` is passed to both containers; Caddy uses it for the site
   address and Cockpit uses it to generate the real-device and VM-forwarded
   origins in `/etc/cockpit/cockpit.conf`
