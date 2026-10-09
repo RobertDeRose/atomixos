@@ -1,5 +1,6 @@
 """Quadlet unit rendering (container, network, volume, build)."""
 
+import os
 import re
 import shlex
 from pathlib import Path
@@ -191,8 +192,13 @@ def _mount_source(directive: str, value: str) -> str | None:
     return None
 
 
+def _lexical_absolute_path(path: str | Path) -> Path:
+    """Return a normalized absolute path without following symlinks."""
+    return Path(os.path.abspath(os.fspath(path)))
+
+
 def _managed_file_source(source: str, config_root: Path | None) -> bool:
-    """Return whether a mount source resolves below the managed files root."""
+    """Return whether a mount source is lexically below the managed files root."""
     if config_root is None:
         # Preserve detection for tokenized configs for callers that do not have
         # the runtime root available. Absolute paths require that context.
@@ -202,9 +208,9 @@ def _managed_file_source(source: str, config_root: Path | None) -> bool:
                 return ".." not in Path(suffix).parts
         return False
 
-    files_root = (config_root / "files").resolve(strict=False)
-    resolved_source = Path(substitute_tokens(source, config_root)).resolve(strict=False)
-    return resolved_source == files_root or files_root in resolved_source.parents
+    files_root = _lexical_absolute_path(config_root / "files")
+    source_path = _lexical_absolute_path(substitute_tokens(source, config_root))
+    return source_path == files_root or files_root in source_path.parents
 
 
 def managed_file_mount_warning(

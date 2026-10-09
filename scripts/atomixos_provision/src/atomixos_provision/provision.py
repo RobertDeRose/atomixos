@@ -1185,6 +1185,7 @@ def _promote_pre_rendered_candidate_sync(
     manifest: dict[str, Any],
     progress: ProgressReporter | None = None,
 ) -> dict[str, Any]:
+    """Promote a verified candidate while preserving runtime-root access policy."""
     config_root = validate_config_root(config_root, allow_unsafe_env=False)
     recover_config_root(config_root)
     is_reapply = _is_provisioned_config_root(config_root)

@@ -206,7 +206,8 @@ class TestRenderContainers:
         ("directive", "value"),
         [
             ("Volume", "${CONFIG_DIR}/files/state:/state:rw"),
-            ("Volume", "/data/config/files/state:/state:rw"),
+            ("Volume", "${CONFIG_DIR}/files/nested/../state:/state:rw"),
+            ("Volume", "/data/config/files/./state:/state:rw"),
             ("Mount", "type=bind,source=${CONFIG_DIR}/files/cache,target=/cache,rw"),
             ("PodmanArgs", "--volume=/data/config/files/state:/state:rw"),
             ("PodmanArgs", "--mount=type=bind,source=${CONFIG_DIR}/files/cache,target=/cache,rw"),
@@ -227,6 +228,7 @@ class TestRenderContainers:
         assert len(warnings) == 1
 
     def test_config_dir_files_token_is_detected_without_runtime_context(self):
+        """Recognize CONFIG_DIR files paths for callers without runtime context."""
         table = {
             "app": {
                 "privileged": False,
@@ -240,6 +242,7 @@ class TestRenderContainers:
         assert managed_files_are_writable(table)
 
     def test_absolute_source_outside_runtime_files_is_not_managed(self):
+        """Ignore absolute mount sources outside the active managed files root."""
         table = {
             "app": {
                 "privileged": False,
@@ -254,6 +257,46 @@ class TestRenderContainers:
 
         assert warnings == []
         assert not managed_files_are_writable(table, Path("/data/config"))
+
+    def test_path_traversal_outside_runtime_files_is_not_managed(self):
+        """Reject normalized mount paths that traverse outside managed files."""
+        table = {
+            "app": {
+                "privileged": False,
+                "Container": {
+                    "Image": "alpine:latest",
+                    "Volume": "${FILES_DIR}/../outside/state:/state:rw",
+                },
+            }
+        }
+
+        _rendered, _runtime, warnings = render_containers(table, Path("/data/config"))
+
+        assert warnings == []
+        assert not managed_files_are_writable(table, Path("/data/config"))
+
+    def test_symlinked_source_remains_managed_by_lexical_path(self, tmp_path):
+        """Classify symlinked managed paths lexically without following the link."""
+        config_root = tmp_path / "config"
+        files_root = config_root / "files"
+        files_root.mkdir(parents=True)
+        outside_root = tmp_path / "outside"
+        outside_root.mkdir()
+        (files_root / "escape").symlink_to(outside_root, target_is_directory=True)
+        table = {
+            "app": {
+                "privileged": False,
+                "Container": {
+                    "Image": "alpine:latest",
+                    "Volume": "${FILES_DIR}/escape/state:/state:rw",
+                },
+            }
+        }
+
+        _rendered, _runtime, warnings = render_containers(table, config_root)
+
+        assert len(warnings) == 1
+        assert managed_files_are_writable(table, config_root)
 
     def test_read_only_podman_args_mounts_do_not_warn(self):
         """Verify that read-only PodmanArgs mounts remain warning-free."""
@@ -389,6 +432,7 @@ class TestRenderContainers:
 class TestManagedFilePermissions:
     @staticmethod
     def container_table(option, form):
+        """Build a container mount in the requested directive or PodmanArgs form."""
         volume = f"${{FILES_DIR}}/state:/state:{option}"
         if form == "Volume":
             mount = {"Volume": volume}
@@ -401,6 +445,7 @@ class TestManagedFilePermissions:
     @pytest.mark.parametrize("form", ["Volume", "--volume=", "--volume", "-v=", "-v"])
     @pytest.mark.parametrize("option", ["RO", "RW", "Ro", "ro,u", "ro,unknown", ""])
     def test_invalid_volume_options_are_rejected(self, option, form):
+        """Reject unsupported volume options in every supported argument form."""
         table = self.container_table(option, form)
 
         with pytest.raises(ProvisionError, match="invalid Podman volume option"):
@@ -423,6 +468,7 @@ class TestManagedFilePermissions:
         ],
     )
     def test_valid_volume_options_preserve_casing(self, option, writable, form):
+        """Preserve volume option spelling while deriving managed-file access."""
         table = self.container_table(option, form)
 
         assert managed_files_are_writable(table) is writable
@@ -431,6 +477,7 @@ class TestManagedFilePermissions:
 
     @pytest.mark.parametrize("form", ["Volume", "--volume="])
     def test_writable_mount_does_not_bypass_later_validation(self, form):
+        """Continue validating every mount after detecting a writable one."""
         table = self.container_table("RO", form)
         table["app"]["Container"]["Volume"] = ["${FILES_DIR}/cache:/cache:rw"] + (
             ["${FILES_DIR}/state:/state:RO"] if form == "Volume" else []

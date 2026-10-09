@@ -682,6 +682,7 @@ Image = "docker.io/library/alpine:latest"
 
 
 def test_durable_reapply_grants_writable_access_using_runtime_root(monkeypatch, tmp_path):
+    """Keep absolute writable mounts enabled while reconciling a candidate root."""
     from atomixos_provision import provision
 
     config_root = tmp_path / "config"
@@ -1179,6 +1180,7 @@ def test_write_imported_state_grants_bundle_files_read_only_service_access(tmp_p
 
 
 def test_managed_file_writability_uses_runtime_config_root(tmp_path, monkeypatch):
+    """Resolve absolute managed-file mounts against the supplied runtime root."""
     from atomixos_provision import provision
 
     config_root = tmp_path / "runtime-config"
