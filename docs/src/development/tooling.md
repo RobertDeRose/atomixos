@@ -37,14 +37,14 @@ No recognized language profile is active; only the universal tooling baseline ru
 
 `.github/workflows/hk.yml` runs validation on pull requests and manual dispatches. It installs Nix and the
 committed tool lock on `ubuntu-26.04-arm` (`aarch64-linux`) and `macos-latest` (`aarch64-darwin`). Both jobs verify the
-Nix platform and run the shared formatting, linting, and documentation checks. Linux runs `hk check -a`, including
-evaluation of all flake systems and building the native Linux checks and VM tests. Builds are serialized, with a
-180-minute job limit.
+Nix platform and run the shared formatting, linting, and documentation checks with `hk check -a --skip-step nix`.
+Each runner then evaluates its own platform using `flake check --no-build --system <system>`. Evaluating platforms
+separately reduces peak evaluator memory compared with checking both platforms in one process. Both jobs have a
+45-minute limit.
 
-Hosted macOS runs `hk check -a --skip-step nix` followed by evaluation of all flake systems with `--no-build`; its
-job limit is 45 minutes. GitHub's ARM64 macOS runners do not support nested virtualization, so they cannot run this
-repository's Linux builder or Darwin VM tests. Full Darwin checks remain a local validation step on a Mac with the
-Linux builder configured. See [GitHub's runner limitations](https://docs.github.com/en/actions/reference/runners/github-hosted-runners#limitations-for-arm64-macos-runners).
+PR validation checks flake evaluation without building packages or executing NixOS VM tests. Full build and VM
+validation remains available locally through `mise run check` or individual `nix build` commands. Darwin VM tests
+need a Mac with the Linux builder configured. See [GitHub's runner limitations](https://docs.github.com/en/actions/reference/runners/github-hosted-runners#limitations-for-arm64-macos-runners).
 
 CI does not regenerate the lock. Dependency-update branches and fork PRs are not excluded from the pull-request gate.
 The provisioning package test suite remains separate.

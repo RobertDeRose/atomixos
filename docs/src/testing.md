@@ -287,10 +287,11 @@ RAUC tests lives in `nix/tests/rauc-qemu-config.nix`.
 
 ## Native ARM CI validation
 
-GitHub Actions runs repository checks and Nix builds on `ubuntu-24.04-arm`
-(`aarch64-linux`). The `macos-15` job runs quality checks and evaluates all Nix
-systems with `flake check --no-build --all-systems`. macOS VM checks require
-nested virtualization and remain outside the hosted macOS job.
+GitHub Actions runs quality checks on `ubuntu-26.04-arm` (`aarch64-linux`) and
+`macos-latest` (`aarch64-darwin`). Each runner evaluates its own Nix platform with
+`flake check --no-build --system <system>`. PR validation does not build packages
+or execute VM tests. Run full build and VM checks locally with `mise run check`
+or the individual `nix build` commands above.
 
 The host Python suite skips two Linux setgid directory-mode assertions on macOS.
 Those assertions remain enabled in the Linux package tests.
