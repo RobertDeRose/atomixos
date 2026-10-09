@@ -234,6 +234,47 @@ class TestCopyBundleFiles:
         with pytest.raises(ProvisionError, match=pattern):
             stage_bundle_files(source, tmp_path / "destination")
 
+    def test_snapshot_stops_enumerating_after_member_limit(self, tmp_path, monkeypatch):
+        """Stop reading a directory once its global member limit is exceeded."""
+        import atomixos_provision.bundle as bundle_module
+
+        monkeypatch.setattr(bundle_module, "MAX_BUNDLE_MEMBERS", 1)
+        source = tmp_path / "source-files"
+        source.mkdir()
+        for index in range(10):
+            (source / f"entry-{index:02d}.txt").write_bytes(b"x")
+
+        real_scandir = bundle_module.os.scandir
+        seen: list[str] = []
+
+        class TrackingScandir:
+            def __init__(self, iterator):
+                self.iterator = iterator
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                self.iterator.close()
+
+            def __iter__(self):
+                return self
+
+            def __next__(self):
+                entry = next(self.iterator)
+                seen.append(entry.name)
+                return entry
+
+        def tracking_scandir(path):
+            return TrackingScandir(real_scandir(path))
+
+        monkeypatch.setattr(bundle_module.os, "scandir", tracking_scandir)
+
+        with pytest.raises(ProvisionError, match="bundle exceeds 1 member limit"):
+            stage_bundle_files(source, tmp_path / "destination")
+
+        assert len(seen) == 2
+
     def test_copy_bundle_files_enforces_snapshot_limits(self, tmp_path, monkeypatch):
         """Enforce configured total-byte limits during production copies."""
         import atomixos_provision.bundle as bundle_module

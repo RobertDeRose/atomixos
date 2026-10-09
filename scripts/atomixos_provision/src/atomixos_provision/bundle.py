@@ -119,12 +119,23 @@ def _snapshot_dir(
     max_total_bytes: int | None,
     max_members: int | None,
 ) -> int:
-    """Copy an export directory into the bounded snapshot."""
+    """Copy an export directory into the bounded snapshot.
+
+    Enumerate at most one entry beyond the remaining global member budget before
+    sorting names, so an oversized directory cannot allocate an unbounded list.
+    """
     destination.mkdir(parents=True, exist_ok=True)
     destination.chmod(0o755)
-    for name in sorted(os.listdir(source_fd)):
-        if name in {"", ".", ".."}:
-            raise provision_error(f"invalid bundle files entry: {name!r}")
+    names: list[str] = []
+    with os.scandir(source_fd) as entries:
+        for entry in entries:
+            name = entry.name
+            if name in {"", ".", ".."}:
+                raise provision_error(f"invalid bundle files entry: {name!r}")
+            if max_members is not None and member_count[0] + len(names) >= max_members:
+                raise provision_error(f"bundle exceeds {max_members} member limit")
+            names.append(name)
+    for name in sorted(names):
         member_count[0] += 1
         if max_members is not None and member_count[0] > max_members:
             raise provision_error(f"bundle exceeds {max_members} member limit")
