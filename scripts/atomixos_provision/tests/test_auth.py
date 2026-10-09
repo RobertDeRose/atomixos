@@ -10,6 +10,7 @@ from atomixos_provision.auth import (
     NonceStore,
     SignerState,
     build_allowed_signers,
+    current_boot_id,
     reapply_signature_message,
     ssh_auth_guard,
     verify_ssh_signature,
@@ -22,15 +23,19 @@ class _AcceptingNonceStore:
 
 
 class TestNonceStore:
+    """Group tests for NonceStore."""
+
     @pytest.fixture()
     def store(self):
         return NonceStore(ttl=5)
 
     @pytest.mark.asyncio
     async def test_issue_and_consume(self, store):
+        """Verify that issue and consume."""
         nonce = await store.issue()
         assert isinstance(nonce, str)
         assert len(nonce) > 20
+        assert nonce.startswith(f"{current_boot_id()}:")
         assert await store.consume(nonce) is True
 
     @pytest.mark.asyncio
@@ -86,21 +91,33 @@ class TestNonceStore:
 
 
 class TestReapplySignatureMessage:
+    """Group tests for ReapplySignatureMessage."""
+
     def test_format(self):
-        msg = reapply_signature_message("nonce123", "/api/config", b"hello")
-        assert msg.startswith("atomixos-reapply-v1\n")
+        """Verify that format."""
+        msg = reapply_signature_message("nonce123", "POST", "/api/config", b"hello")
+        assert msg.startswith("atomixos-reapply-v2\n")
         assert "nonce:nonce123\n" in msg
+        assert "method:POST\n" in msg
         assert "path:/api/config\n" in msg
         assert "sha256:" in msg
 
     def test_deterministic(self):
-        msg1 = reapply_signature_message("n", "/p", b"data")
-        msg2 = reapply_signature_message("n", "/p", b"data")
+        """Verify that deterministic."""
+        msg1 = reapply_signature_message("n", "PUT", "/p", b"data")
+        msg2 = reapply_signature_message("n", "PUT", "/p", b"data")
         assert msg1 == msg2
 
     def test_different_payload(self):
-        msg1 = reapply_signature_message("n", "/p", b"a")
-        msg2 = reapply_signature_message("n", "/p", b"b")
+        """Verify that different payload."""
+        msg1 = reapply_signature_message("n", "PUT", "/p", b"a")
+        msg2 = reapply_signature_message("n", "PUT", "/p", b"b")
+        assert msg1 != msg2
+
+    def test_different_method(self):
+        """Verify that different method."""
+        msg1 = reapply_signature_message("n", "PUT", "/p", b"data")
+        msg2 = reapply_signature_message("n", "DELETE", "/p", b"data")
         assert msg1 != msg2
 
 
@@ -142,7 +159,10 @@ class _Headers(dict):
 
 
 class _Connection:
+    """Provide the Connection test helper."""
+
     def __init__(self, tmp_path, signature: str):
+        """Initialize this helper."""
         (tmp_path / "admin-signers").write_text("ssh-ed25519 AAAA test\n")
         self.headers = _Headers(
             {
@@ -151,6 +171,8 @@ class _Connection:
             }
         )
         self.url = type("URL", (), {"path": "/api/config"})()
+        self.method = "POST"
+        self.scope = {}
         self.app = type(
             "App",
             (),
@@ -172,9 +194,14 @@ class _Connection:
 
 
 class _UnsignedConnection:
+    """Provide the UnsignedConnection test helper."""
+
     def __init__(self, tmp_path, initialized: bool = False):
+        """Initialize this helper."""
         self.headers = _Headers({})
         self.url = type("URL", (), {"path": "/api/config"})()
+        self.method = "POST"
+        self.scope = {}
         self.app = type(
             "App",
             (),
@@ -198,9 +225,29 @@ class _UnsignedConnection:
 @pytest.mark.asyncio
 async def test_auth_guard_rejects_non_strict_base64_signature(tmp_path):
     connection = _Connection(tmp_path, "not valid base64!!!!")
+    (tmp_path / "config.toml").write_text("version = 1\n")
 
     with pytest.raises(NotAuthorizedException, match="invalid signature encoding"):
         await ssh_auth_guard(connection, None)
+
+
+@pytest.mark.asyncio
+async def test_auth_guard_preserves_verified_authorization_for_worker(tmp_path, monkeypatch):
+    """Verify that auth guard preserves verified authorization for worker."""
+    nonce = f"{current_boot_id()}:test"
+    connection = _Connection(tmp_path, "dGVzdA==")
+    (tmp_path / "config.toml").write_text("version = 1\n")
+    connection.headers["x-atomixos-nonce"] = nonce
+    monkeypatch.setattr("atomixos_provision.auth.verify_ssh_signature", lambda *args: True)
+
+    await ssh_auth_guard(connection, None)
+
+    assert connection.scope["atomixos_authorization"] == {
+        "nonce": nonce,
+        "signature": "dGVzdA==",
+        "method": "POST",
+        "path": "/api/config",
+    }
 
 
 @pytest.mark.asyncio
@@ -211,8 +258,26 @@ async def test_auth_guard_allows_unprovisioned_without_signers(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_auth_guard_allows_initial_provisioning_with_signers(tmp_path):
+    connection = _UnsignedConnection(tmp_path)
+    (tmp_path / "admin-signers").write_text("ssh-ed25519 AAAA test\n")
+
+    await ssh_auth_guard(connection, None)
+
+
+@pytest.mark.asyncio
 async def test_auth_guard_fails_closed_when_provisioned_signers_missing(tmp_path):
     (tmp_path / "config.toml").write_text("version = 1\n")
+    connection = _UnsignedConnection(tmp_path)
+
+    with pytest.raises(NotAuthorizedException, match="admin signers"):
+        await ssh_auth_guard(connection, None)
+
+
+@pytest.mark.asyncio
+async def test_auth_guard_fails_closed_when_marker_exists_without_signers(tmp_path):
+    """Verify that auth guard fails closed when marker exists without signers."""
+    (tmp_path / ".first-config").write_text("ok\n")
     connection = _UnsignedConnection(tmp_path)
 
     with pytest.raises(NotAuthorizedException, match="admin signers"):

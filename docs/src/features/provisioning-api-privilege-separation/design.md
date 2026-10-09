@@ -78,25 +78,26 @@ foundation.
 
 Split the network-facing provisioning API from privileged host mutation work
 without using setuid Python helpers. The Litestar/uvicorn service runs as an
-unprivileged user and performs HTTP handling, authentication, upload parsing,
-validation, sanitization, and candidate rendering into tmpfs under
+unprivileged user and performs HTTP handling, authentication, early validation,
+sanitization, and candidate rendering into tmpfs under
 `/run/atomixos-provision`.
 
 Root-owned systemd units then consume completed staged jobs. A `systemd.path`
 unit watches for ready markers and starts a root oneshot apply service. The root
-worker verifies the staged source, re-renders canonical state into a durable
+worker re-verifies authorization and the staged request, re-renders canonical state into a durable
 `/data/config-candidate`, promotes it within `/data`, runs activation, performs
 rollback on failure, and writes job results for the API to report.
 
-This design reduces disk churn and keeps untrusted request parsing out of root.
+This design reduces disk churn and keeps network-facing parsing out of root.
 Root still performs the final host mutation, but it consumes a narrow staged
-contract instead of raw HTTP uploads or arbitrary helper commands.
+contract containing exact signed request bytes instead of accepting HTTP traffic
+or arbitrary helper commands.
 
 ## Goals
 
 1. Run the Litestar/uvicorn provisioning service without root privileges.
-2. Parse, validate, sanitize, and render submitted config sources before any root
-   process handles them.
+2. Parse, validate, sanitize, and render submitted config sources before the root
+   worker independently verifies authorization and repeats authoritative parsing.
 3. Stage candidate jobs in tmpfs under `/run/atomixos-provision` to avoid
    persistent writes for failed validation or render attempts.
 4. Trigger privileged apply work with root-owned systemd path and oneshot service
@@ -221,12 +222,13 @@ least:
 - operation type: initial apply, re-apply, or typed partial apply rendered to a
   full candidate
 - source filename and source digest
+- exact request size and digest, plus the verified nonce, signature, method, and
+  path for authenticated requests
 - rendered candidate file list with relative paths, SHA-256 hashes, sizes, and
   expected modes
 - bundle file list with relative paths, SHA-256 hashes, sizes, and expected
   modes when bundle files are present
 - activation policy summary
-- whether re-apply is authorized
 - API service UID/GID expected to own staged files
 - created timestamp
 
@@ -249,8 +251,15 @@ Before touching `/data`, the root worker verifies:
 - staged files and directories are not group/world writable
 - file sizes and SHA-256 hashes match the manifest
 - no unexpected top-level entries are present
-- operation type and re-apply authorization are consistent with current
-  `/data/config` state
+- the exact request digest matches the manifest
+- on re-apply, the request signature verifies against the active administrator
+  keys, its boot-scoped nonce has not been consumed in root-owned state, and the
+  signed method and path map to a supported provisioning operation
+
+The worker derives initial-apply versus re-apply from `/data/config`; it never
+trusts the staged `allow_reapply` flag as authorization. Root-created local
+maintenance jobs remain trusted by filesystem ownership, preserving integrator
+freedom over valid rootful and rootless Podman configuration.
 
 Verification failure writes a failed result and discards the staged job without
 mutating `/data`.
@@ -393,8 +402,8 @@ Root worker responsibilities:
 ## Success Criteria
 
 1. The network-facing API process runs unprivileged.
-2. Root does not parse raw uploads, multipart requests, or unvalidated bundle
-   archives.
+2. Root is not network-facing and authoritatively parses only request bytes whose
+   staged integrity and re-apply authorization it has verified.
 3. Root mutation is available only through the systemd apply worker and verified
    staged manifest contract.
 4. Failed validation and rendering do not write to `/data`.
@@ -442,3 +451,9 @@ This spec is implementation-ready against the current repository direction. The
 affected runtime-boundary and provisioning docs have been updated alongside the
 spec, and there are no unresolved design questions that should block
 implementation.
+
+## Worker authorization reconciliation
+
+The root worker verifies method/path/payload-bound, boot-scoped administrator
+signatures and consumes nonces independently of the HTTP service. API-generated
+candidates do not establish privileged authorization.

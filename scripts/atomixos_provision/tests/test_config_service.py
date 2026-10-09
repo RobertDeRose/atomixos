@@ -51,14 +51,6 @@ async def test_put_user_applies_config_operation(tmp_path, monkeypatch):
     }
 
 
-def test_export_config_reads_current_config_bytes(tmp_path):
-    _write_current_config(tmp_path)
-
-    body = ConfigService(tmp_path).export_config()
-
-    assert body.startswith(b"version = 1\n")
-
-
 def test_export_config_uses_locked_export(tmp_path, monkeypatch):
     captured = {}
 

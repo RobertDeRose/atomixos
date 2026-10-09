@@ -31,19 +31,29 @@ class ProvisionCoordinator:
         filename: str,
         *,
         allow_reapply: bool,
+        authorization: dict[str, str] | None = None,
         on_started: Callable[[str], None] | None = None,
     ) -> SubmissionResult:
+        """Submit raw configuration bytes through the selected job adapter."""
         if isinstance(self._job_manager, StagedJobManager):
 
             async def stage_work(job: Job) -> None:
+                """Stage the prepared provisioning work."""
                 if on_started is not None:
                     on_started(job.id)
-                await self._config_service.stage_bytes(body, filename, job, allow_reapply)
+                await self._config_service.stage_bytes(
+                    body,
+                    filename,
+                    job,
+                    allow_reapply,
+                    authorization,
+                )
 
             job = await self._job_manager.submit_staged(stage_work)
             return SubmissionResult(job, "the provision queue is full", True)
 
         async def apply_work(job: Job) -> dict[str, object]:
+            """Apply raw configuration bytes in the direct job runner."""
             if on_started is not None:
                 on_started(job.id)
             return await self._config_service.apply_bytes(body, filename, job, allow_reapply)
@@ -51,16 +61,30 @@ class ProvisionCoordinator:
         job = await self._job_manager.submit(apply_work)
         return SubmissionResult(job, "a provision job is already running", False)
 
-    async def submit_partial(self, operation: dict[str, object]) -> SubmissionResult:
+    async def submit_partial(
+        self,
+        operation: dict[str, object],
+        *,
+        request_payload: bytes | None = None,
+        authorization: dict[str, str] | None = None,
+    ) -> SubmissionResult:
+        """Submit a typed partial operation through the staged job adapter."""
         if isinstance(self._job_manager, StagedJobManager):
 
             async def stage_work(job: Job) -> None:
-                await self._config_service.stage_partial(operation, job)
+                """Stage the prepared provisioning work."""
+                await self._config_service.stage_partial(
+                    operation,
+                    job,
+                    request_payload,
+                    authorization,
+                )
 
             job = await self._job_manager.submit_staged_exclusive(stage_work)
             return SubmissionResult(job, "the provision queue is busy", True)
 
         async def apply_work(job: Job) -> dict[str, object]:
+            """Apply a partial operation in the direct job runner."""
             return await self._config_service.apply_partial(operation, job)
 
         job = await self._job_manager.submit(apply_work)
