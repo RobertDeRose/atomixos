@@ -221,7 +221,7 @@ parse policy itself. Lima tasks invoke the same wrapper inside the repository mo
 
 | `mise` task                 | Applies local overlay | Contract                                              |
 |-----------------------------|-----------------------|-------------------------------------------------------|
-| `check`, `nix:check`        | Yes                   | Evaluate and test effective policy                    |
+| `check`                     | No                    | Formatting, linting, and documentation only           |
 | `build`                     | Yes                   | Build and retain configured artifacts                 |
 | `build:squashfs`            | Yes                   | Build immutable configured system policy              |
 | `build:rauc-bundle`         | Yes                   | Build configured update and audit sidecars            |
@@ -229,6 +229,9 @@ parse policy itself. Lima tasks invoke the same wrapper inside the repository mo
 | `vm:bundle-test`            | Yes                   | Build an interactive configured-system test           |
 | `e2e`, `e2e:*`, `e2e:debug` | No                    | Fixtures own explicit isolated configuration          |
 | `serial:*`, `_lima`, `gc`   | No                    | Commands do not construct configured AtomixOS outputs |
+
+Use `./scripts/nix-with-build-config.sh flake check` to evaluate and test effective policy, including a local overlay.
+`mise run check` does not invoke Nix or apply build policy.
 
 Direct `nix build .#...` and `nix flake check` remain pure and committed-policy-only. External `nixpkgs` helper builds
 also remain outside this contract. When `mise run build` exports a local-override image with `-o <path>`, the destination

@@ -34,22 +34,26 @@ def read_size(fd):
         if chunk == b"\n":
             return size
         if chunk < b"0" or chunk > b"9":
-            raise ValueError("invalid frame: size contains non-digit")
+            message = "invalid frame: size contains non-digit"
+            raise ValueError(message)
         size = (size * 10) + int(chunk)
         seen += 1
         if seen > 7:
-            raise ValueError("invalid frame: size too long")
+            message = "invalid frame: size too long"
+            raise ValueError(message)
 
 
 def read_frame(fd):
     size = read_size(fd)
     if size is None:
-        raise ValueError("unexpected EOF reading cockpit frame size")
+        message = "unexpected EOF reading cockpit frame size"
+        raise ValueError(message)
     data = b""
     while size > 0:
         chunk = os.read(fd, size)
         if not chunk:
-            raise ValueError("unexpected EOF reading cockpit frame")
+            message = "unexpected EOF reading cockpit frame"
+            raise ValueError(message)
         size -= len(chunk)
         data += chunk
     return json.loads(data.decode())
@@ -158,12 +162,14 @@ send_authorize(response="ssh-agent")
 env = os.environ.copy()
 # Launch the beiboot host bridge via a small wrapper script so the inline
 # code is readable and debuggable.
-os.execlpe(
-    "python3",
-    "python3",
-    "/usr/local/bin/cockpit-beiboot-bridge",
-    "--remote-bridge",
-    "never",
-    f"{user}@127.0.0.1",
+os.execve(  # noqa: S606 - replace this process without invoking a shell
+    sys.executable,
+    [
+        sys.executable,
+        "/usr/local/bin/cockpit-beiboot-bridge",
+        "--remote-bridge",
+        "never",
+        f"{user}@127.0.0.1",
+    ],
     env,
 )

@@ -1,0 +1,4 @@
+# This GitHub-hosted label is newer than the pinned actionlint label catalog.
+self-hosted-runner:
+  labels:
+    - ubuntu-26.04-arm

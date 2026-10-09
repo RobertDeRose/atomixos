@@ -45,7 +45,7 @@ echo "Waiting for USB-serial adapter... (Ctrl-C to abort)"
 echo "Exit minicom with Ctrl-A X"
 echo ""
 
-: > "$SERIAL_LOG"
+: >"$SERIAL_LOG"
 ln -sf "$SERIAL_LOG" "$SERIAL_LOG_LINK"
 
 while true; do

@@ -13,3 +13,5 @@ storaged = "storaged"
 som = "som"
 # Valid hardware and watchdog vendor names.
 Synopsys = "Synopsys"
+# The unified ecosystem's `devlop` package is spelled this way upstream.
+devlop = "devlop"

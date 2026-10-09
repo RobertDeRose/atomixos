@@ -490,13 +490,9 @@ def report_runtime_services(
     return statuses
 
 
-def degraded_service_failures(
-    policy: dict[str, object], statuses: dict[str, str]
-) -> list[str]:
+def degraded_service_failures(policy: dict[str, object], statuses: dict[str, str]) -> list[str]:
     """Return failed non-required services that are not explicitly allowed degraded."""
-    if not policy.get("strict_units", False) or not policy.get(
-        "allow_degraded_configured", False
-    ):
+    if not policy.get("strict_units", False) or not policy.get("allow_degraded_configured", False):
         return []
     required = {service_name(unit) for unit in policy.get("required", []) if isinstance(unit, str)}
     allowed = {
@@ -654,8 +650,10 @@ def run_activation_sequence(
 
     report_runtime_deploy_start(config_root, progress)
     activation_failures = activate_services(progress, timeout_seconds)
-    restart_failures = [] if activation_failures else restart_activation_services(
-        config_root, policy, progress, deadline
+    restart_failures = (
+        []
+        if activation_failures
+        else restart_activation_services(config_root, policy, progress, deadline)
     )
     if not restart_failures and not activation_failures and settle_seconds:
         if settle_seconds > remaining_timeout(deadline):

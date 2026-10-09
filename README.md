@@ -132,10 +132,11 @@ This updates:
 
 - `modules/lan-gateway.nix` (fallback `eth1` address, DHCP pool, DHCP options, gateway hosts, chrony allow subnet)
 
-After changing the range, rebuild:
+After changing the range, run quality checks, validate the flake, and rebuild:
 
 ```sh
 mise run check
+./scripts/nix-with-build-config.sh flake check --no-build
 mise run build
 ```
 
@@ -157,8 +158,11 @@ Builds require an aarch64-linux system (native or cross). All outputs target `aa
 # Install tools and hooks
 mise install
 
-# Check the flake evaluates cleanly
+# Run formatting, linting, and documentation checks
 mise run check
+
+# Evaluate the flake without building checks
+./scripts/nix-with-build-config.sh flake check --no-build
 
 # Build individual artifacts
 mise run build:squashfs        # result-squashfs/

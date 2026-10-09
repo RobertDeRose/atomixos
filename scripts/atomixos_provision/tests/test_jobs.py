@@ -236,7 +236,6 @@ class TestStagedJobManager:
         assert job.state == JobState.FAILED
         assert job.completed_at is not None
 
-
     @pytest.mark.asyncio
     async def test_staged_job_cancellation_after_queueing_keeps_monitoring(
         self, monkeypatch, tmp_path
@@ -276,10 +275,7 @@ class TestStagedJobManager:
         with suppress(asyncio.CancelledError):
             await mgr._task
 
-
-    def test_staged_timeout_keeps_queued_job_while_worker_is_active(
-        self, monkeypatch, tmp_path
-    ):
+    def test_staged_timeout_keeps_queued_job_while_worker_is_active(self, monkeypatch, tmp_path):
         runtime_root = tmp_path / "run"
         monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(runtime_root))
         paths = runtime_paths(runtime_root)
@@ -465,9 +461,7 @@ class TestStagedJobManager:
         assert job.completed_at is not None
 
     @pytest.mark.asyncio
-    async def test_staged_submit_refreshes_reservation_around_staging(
-        self, monkeypatch, tmp_path
-    ):
+    async def test_staged_submit_refreshes_reservation_around_staging(self, monkeypatch, tmp_path):
         monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
         mgr = StagedJobManager(result_timeout_seconds=0.01)
         refreshes = []
@@ -489,9 +483,7 @@ class TestStagedJobManager:
         await mgr._task
 
     @pytest.mark.asyncio
-    async def test_staged_submit_heartbeats_reservation_while_staging(
-        self, monkeypatch, tmp_path
-    ):
+    async def test_staged_submit_heartbeats_reservation_while_staging(self, monkeypatch, tmp_path):
         monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
         monkeypatch.setattr("atomixos_provision.jobs._STAGED_RESERVATION_HEARTBEAT_SECONDS", 0.01)
         mgr = StagedJobManager(result_timeout_seconds=0.01)

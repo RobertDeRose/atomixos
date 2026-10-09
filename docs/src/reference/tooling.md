@@ -15,22 +15,24 @@
 | `.config/cog-changelog.tera`        | Renders plain Markdown changelogs without author noise.                     |
 | `scripts/setup-tooling.py`          | Resolves the lock, installs tools, installs hooks, and returns JSON status. |
 | `scripts/enable-docs-deployment.py` | Configures workflow-built Pages through external `gh`.                      |
-| `.github/workflows/validate.yml`    | Runs locked `mise run check` on pushes and pull requests.                   |
+| `.github/workflows/hk.yml`          | Runs `mise x -- hk check -a` on pull requests and manual dispatches.        |
+| `.github/workflows/nix.yml`         | Evaluates Nix per platform on pull requests and manual dispatches.          |
 | `.github/workflows/docs.yml`        | Builds gated docs from the default branch or manual dispatch.               |
 
 ## Tools
 
-The universal tool set is hk `1.49.0`, Node `lts`, and the `latest` Cocogitto, Harper CLI, Contextlint, mdBook, uv,
-rumdl, typos, and `npm:markdown-table-formatter` releases. Contextlint checks documentation links, anchors, and image
-targets. Its reviewed low-download aube exception applies only to `@contextlint/cli`. Both hk Pkl imports use `1.49.0`.
+The universal tool set is hk, Node, Cocogitto, commitlint, Contextlint, mdBook, uv, rumdl, typos, and
+`npm:markdown-table-formatter`. Contextlint checks documentation links, anchors, and image targets. Its reviewed
+low-download aube exception applies only to `@contextlint/cli`.
 Equivalent native hk steps own matching formatter and linter commands. Independent steps have no explicit `depends`
 edges. Go retains two output-sensitive edges: `gofumpt` follows `goimports` so the stricter formatter owns final source,
 and fix-only `go-mod` follows `gofumpt` so module metadata observes the final imports.
 
 Custom steps are limited to behavior hk does not provide equivalently: Contextlint must discover its whole-project
 configuration without a changed-file argument; documentation and Markdown-table checks are project composites or have no
-built-in; rumdl avoids the built-in diff header while discovering `.config/rumdl.toml`; Go, Elixir, and Nix commands
+built-in; rumdl avoids the built-in diff header while discovering `.config/rumdl.toml`; Go and Elixir commands
 lack matching built-ins; and test, compiler, linter, and module checks must remain gated by their project manifests.
+Nix evaluation and builds are separate from hk; hk retains the `nixfmt` and `deadnix` lint steps.
 
 Recorded language profiles: `other`.
 
@@ -43,9 +45,8 @@ selects the newest stable tag; unstable selects the source default-branch HEAD. 
 ## Commit messages and changelogs
 
 Changelog-visible `feat`, `fix`, `perf`, and `refactor` commits require a semantic scope. The commit hook also checks
-Conventional Commit syntax, grammar, a 72-character subject, 100-character body lines, and canonical optional `Beads:`
-footers. Harper uses its full native rule set after filtering Git comments/diffs, canonical release subjects, and a
-canonical `Beads:` footer; the other commit validators still inspect the unfiltered message. Internal build, chore, CI,
+Conventional Commit syntax, a 72-character subject, 100-character body lines, and canonical optional `Beads:`
+footers. The other commit validators inspect the unfiltered message. Internal build, chore, CI,
 documentation, release, style, and test commits are omitted from `cog changelog`. Breaking changes render as plain
 Markdown.
 

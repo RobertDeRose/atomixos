@@ -165,7 +165,7 @@ let
       overlayText = text;
     };
 in
-pkgs.runCommand "build-configuration-check" { } ''
+pkgs.runCommand "build-configuration-check" { nativeBuildInputs = [ pkgs.diffutils ]; } ''
   set -euo pipefail
 
   test ${builtins.toJSON (defaults.watchdog.enableHardware == false)} = true
@@ -185,12 +185,8 @@ pkgs.runCommand "build-configuration-check" { } ''
   test ${
     builtins.toJSON (defaults.canonicalMetadataJSON == expectedMetadata expectedCanonical false)
   } = true
-  test ${builtins.toJSON (builtins.readFile defaults.tomlFile == expectedCanonical)} = true
-  test ${
-    builtins.toJSON (
-      builtins.readFile defaults.metadataFile == expectedMetadata expectedCanonical false
-    )
-  } = true
+  cmp ${defaults.tomlFile} ${pkgs.writeText "expected-build.toml" expectedCanonical}
+  cmp ${defaults.metadataFile} ${pkgs.writeText "expected-build-metadata.json" (expectedMetadata expectedCanonical false)}
   test ${builtins.toJSON (defaults.artifactSuffix == "")} = true
 
   test ${builtins.toJSON overridden.watchdog.enableHardware} = true
@@ -206,12 +202,8 @@ pkgs.runCommand "build-configuration-check" { } ''
       overridden.canonicalMetadataJSON == expectedMetadata expectedOverrideCanonical true
     )
   } = true
-  test ${builtins.toJSON (builtins.readFile overridden.tomlFile == expectedOverrideCanonical)} = true
-  test ${
-    builtins.toJSON (
-      builtins.readFile overridden.metadataFile == expectedMetadata expectedOverrideCanonical true
-    )
-  } = true
+  cmp ${overridden.tomlFile} ${pkgs.writeText "expected-overridden-build.toml" expectedOverrideCanonical}
+  cmp ${overridden.metadataFile} ${pkgs.writeText "expected-overridden-build-metadata.json" (expectedMetadata expectedOverrideCanonical true)}
   test ${builtins.toJSON (overridden.artifactSuffix == "-dev")} = true
 
   test ${builtins.toJSON (fleet.provisioning.bootstrapTransport == "nixstasis")} = true
