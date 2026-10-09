@@ -4,10 +4,12 @@ from pathlib import Path
 
 
 def _indentation(line: str) -> int:
+    """Return the leading whitespace width of a YAML line."""
     return len(line) - len(line.lstrip())
 
 
 def _job_block(workflow: str, job_name: str) -> list[str]:
+    """Extract one job's lines up to the next sibling job."""
     lines = workflow.splitlines()
     start = next(index for index, line in enumerate(lines) if line.strip() == f"{job_name}:")
     job_indent = _indentation(lines[start])
@@ -23,6 +25,7 @@ def _job_block(workflow: str, job_name: str) -> list[str]:
 
 
 def _has_direct_job_condition(job_block: list[str]) -> bool:
+    """Detect a direct job-level if field without matching nested step fields."""
     job_indent = _indentation(job_block[0])
     child_indents = [
         _indentation(line)
@@ -48,6 +51,7 @@ def test_pr_quality_gate_has_no_branch_exclusion():
 
 
 def test_quality_gate_jobs_have_no_job_level_condition():
+    """Require the current CI quality and evaluation jobs to remain unconditional."""
     root = Path(__file__).resolve().parents[3]
     for workflow_name, job_name in (("hk.yml", "check"), ("nix.yml", "evaluate")):
         workflow = (root / ".github/workflows" / workflow_name).read_text()
@@ -56,6 +60,7 @@ def test_quality_gate_jobs_have_no_job_level_condition():
 
 
 def test_job_condition_detection_uses_relative_indentation():
+    """Detect nested-indented job conditions while permitting conditional steps."""
     workflow = """jobs:
     check:
       if: github.ref == 'main'
