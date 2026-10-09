@@ -78,9 +78,11 @@ Runtime result files under `/run/atomixos-provision/results` are root-writable a
 abandonment share `/run/atomixos-provision/queue.lock`. The worker retains active jobs until terminal result publication.
 Its finalizer discards an interrupted initial promotion, rolls back an interrupted re-apply, or finishes cleanup for a
 committed apply. Same-boot recovery retries a committed re-apply's delayed LAN bootstrap rebind when its durable
-result records a forwarding URL, before publishing recovered success. Repeated scheduling requests share the named
-transient unit; completed or failed units are collected so later applies can schedule it again. Boot recovery leaves
-rebinding to its ordered successor services, and Nixstasis transport does not schedule network rebinding.
+result records a forwarding URL, before publishing recovered success. Committed-receipt transport follow-ups run only
+while a claimed job with the same job ID and source digest has no published result. Later finalization does not replay
+them after success, including after result acknowledgement or expiry. Retries while a result remains unpublished share
+the named transient unit; completed or failed units are collected so later applies can schedule it again. Boot recovery
+leaves rebinding to its ordered successor services, and Nixstasis transport does not schedule network rebinding.
 Rollback merges failed and restored managed-user tracking before removing the failed tree, and
 same-boot finalization reactivates the restored configuration before publishing results. Rollback activation failures
 are included in the failed result. It then matches the owner-only receipt against the claimed manifest before recording

@@ -175,6 +175,23 @@ def recover_interrupted_apply(config_root: Path) -> ApplyRecovery:
     return ApplyRecovery(read_apply_receipt(config_root), restored_rollback=restored_rollback)
 
 
+def unfinished_committed_receipt(
+    paths: RuntimePaths,
+    receipt: StagedApplyReceipt | None,
+) -> StagedApplyReceipt | None:
+    """Return a committed receipt only for a matching claim awaiting its result."""
+    if receipt is None or receipt.phase is not ApplyReceiptPhase.COMMITTED:
+        return None
+    active_path = paths.active / receipt.job_id
+    try:
+        active_stat = active_path.lstat()
+    except FileNotFoundError:
+        return None
+    if not stat.S_ISDIR(active_stat.st_mode) or read_result(paths, receipt.job_id) is not None:
+        return None
+    return _committed_receipt_for_active_job(active_path, receipt.job_id, receipt)
+
+
 def finalize_abandoned_active_jobs(
     paths: RuntimePaths,
     reason: str,

@@ -139,8 +139,7 @@ def test_committed_finalizer_retries_transport_followup_before_result(
         if not calls:
             assert staging.read_result(paths, "job-1") is None
         calls.append(command)
-        # A repeated request may find the same timer already queued.
-        return CompletedProcess(command, 0 if len(calls) == 1 else 1)
+        return CompletedProcess(command, 0)
 
     monkeypatch.setattr(provision.subprocess, "run", schedule)
     assert provision.finalize_staged_jobs(root, paths.root) == 1
@@ -150,8 +149,7 @@ def test_committed_finalizer_retries_transport_followup_before_result(
     assert provision.finalize_staged_jobs(root, paths.root) == 0
     assert (root / ".atomixos-apply-receipt.json").read_bytes() == receipt_before
     if transport == "network":
-        assert len(calls) == 2
-        assert calls[0] == calls[1]
+        assert len(calls) == 1
         if reapply:
             assert "--unit=atomixos-bootstrap-rebind-delayed" in calls[0]
             assert "--collect" in calls[0]
@@ -160,5 +158,90 @@ def test_committed_finalizer_retries_transport_followup_before_result(
     else:
         assert calls == []
     calls.clear()
+    # Result acknowledgement or expiry must not make a completed receipt unfinished.
+    (paths.results / "job-1.json").unlink()
+    assert provision.finalize_staged_jobs(root, paths.root) == 0
+    assert calls == []
     provision._recover_staged_apply(root, boot_recovery=True)
+    assert calls == []
+
+
+@pytest.mark.parametrize("reapply", [False, True])
+@pytest.mark.parametrize("job_state", ["published", "wrong_digest", "wrong_job", "symlink"])
+def test_finalizer_skips_committed_followups_without_unfinished_matching_claim(
+    tmp_path, monkeypatch, reapply, job_state
+):
+    """Published results and mismatched claims cannot replay old transport changes."""
+    root = tmp_path / "config"
+    root.mkdir()
+    result = {"reapply": reapply, "forwarding_url": "http://10.44.0.1:8080"}
+    manifest = {"job_id": "job-1", "source_sha256": "a" * 64}
+    transaction = StagedApplyTransaction.from_manifest(manifest, result)
+    transaction.mark_promoted(root)
+    transaction.mark_committed(root)
+    paths = staging.runtime_paths(tmp_path / "run")
+    staging.ensure_runtime_layout(paths, for_worker=True)
+    active = paths.active / "job-1"
+    if job_state == "symlink":
+        target = tmp_path / "other-job"
+        target.mkdir()
+        active.symlink_to(target, target_is_directory=True)
+    else:
+        active.mkdir()
+    if job_state == "wrong_digest":
+        manifest["source_sha256"] = "b" * 64
+    elif job_state == "wrong_job":
+        manifest["job_id"] = "job-2"
+    staging.write_json_atomic(active / "manifest.json", manifest)
+    published = {"status": "succeeded", "result": result}
+    if job_state == "published":
+        staging.write_result(paths, "job-1", published)
+        published = staging.read_result(paths, "job-1")
+    monkeypatch.setenv("ATOMIXOS_BOOTSTRAP_TRANSPORT", "network")
+    monkeypatch.setattr(provision, "validate_config_root", lambda value, **_: value)
+    calls = []
+    monkeypatch.setattr(provision.subprocess, "run", lambda command, **_: calls.append(command))
+
+    assert provision.finalize_staged_jobs(root, paths.root) == (0 if job_state == "symlink" else 1)
+    assert calls == []
+    assert not active.exists()
+    if job_state == "published":
+        assert staging.read_result(paths, "job-1") == published
+    elif job_state == "symlink":
+        assert staging.read_result(paths, "job-1") is None
+        assert target.is_dir()
+    else:
+        assert staging.read_result(paths, "job-1")["status"] == "failed"
+
+
+@pytest.mark.parametrize("reapply", [False, True])
+def test_unrelated_worker_failure_does_not_replay_completed_followups(
+    tmp_path, monkeypatch, reapply
+):
+    """Rejecting a later job does not reconcile transport for a previous receipt."""
+    root = tmp_path / "config"
+    root.mkdir()
+    transaction = StagedApplyTransaction.from_manifest(
+        {"job_id": "job-1", "source_sha256": "a" * 64},
+        {"reapply": reapply, "forwarding_url": "http://10.44.0.1:8080"},
+    )
+    transaction.mark_promoted(root)
+    transaction.mark_committed(root)
+    paths = staging.runtime_paths(tmp_path / "run")
+    staging.ensure_runtime_layout(paths, for_worker=True)
+    (paths.queue / "job-2").mkdir()
+    staging.write_json_atomic(paths.queue / "job-2.ready", {"sequence": 1})
+    monkeypatch.setenv("ATOMIXOS_BOOTSTRAP_TRANSPORT", "network")
+    monkeypatch.setattr(provision, "validate_config_root", lambda value, **_: value)
+
+    def reject_job(*_args, **_kwargs):
+        raise ProvisionError("invalid staged job")
+
+    monkeypatch.setattr(provision, "verify_staged_job", reject_job)
+    calls = []
+    monkeypatch.setattr(provision.subprocess, "run", lambda command, **_: calls.append(command))
+    with pytest.raises(ProvisionError, match="invalid staged job"):
+        provision.apply_staged_job(root, paths.root)
+
+    assert staging.read_result(paths, "job-2")["status"] == "failed"
     assert calls == []

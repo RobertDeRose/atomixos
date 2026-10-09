@@ -35,12 +35,12 @@ from atomixos_provision.activation import (
 )
 from atomixos_provision.apply_transaction import (
     APPLY_RECEIPT_FILENAME,
-    ApplyReceiptPhase,
     ApplyRecovery,
     StagedApplyTransaction,
     committed_result_for_manifest,
     finalize_abandoned_active_jobs,
     recover_interrupted_apply,
+    unfinished_committed_receipt,
 )
 from atomixos_provision.auth import (
     build_allowed_signers,
@@ -1635,17 +1635,21 @@ def _claimed_job_is_locally_trusted(job: ClaimedJob, paths: RuntimePaths) -> boo
     return owner_uid == os.geteuid()
 
 
-def _recover_staged_apply(config_root: Path, *, boot_recovery: bool = False) -> ApplyRecovery:
+def _recover_staged_apply(
+    config_root: Path,
+    *,
+    boot_recovery: bool = False,
+    paths: RuntimePaths | None = None,
+) -> ApplyRecovery:
     """Recover an interrupted staged apply from its transaction receipt."""
     recovery = recover_interrupted_apply(config_root)
     # Ordered boot services reconcile WAN, users, networking, and Quadlet units.
     # Waiting for those units from their prerequisite recovery unit would deadlock.
     if boot_recovery:
         return recovery
-    receipt = recovery.receipt
+    receipt = unfinished_committed_receipt(paths or _runtime_paths(), recovery.receipt)
     if (
         receipt is not None
-        and receipt.phase is ApplyReceiptPhase.COMMITTED
         and receipt.result.get("reapply") is True
         and isinstance(receipt.result.get("forwarding_url"), str)
     ):
@@ -1657,11 +1661,7 @@ def _recover_staged_apply(config_root: Path, *, boot_recovery: bool = False) -> 
     if (
         recovery.discarded_initial
         or recovery.restored_rollback
-        or (
-            receipt is not None
-            and receipt.phase is ApplyReceiptPhase.COMMITTED
-            and receipt.result.get("reapply") is False
-        )
+        or (receipt is not None and receipt.result.get("reapply") is False)
     ):
         reconcile_bootstrap_wan()
     return recovery
@@ -1704,7 +1704,7 @@ def apply_staged_job(config_root: Path, runtime_root: Path | None = None) -> dic
             except Exception as exc:
                 try:
                     with provisioning_lock(config_root):
-                        recovery = _recover_staged_apply(config_root)
+                        recovery = _recover_staged_apply(config_root, paths=paths)
                     committed_result = committed_result_for_manifest(
                         recovery.receipt, claimed.job_id, manifest
                     )
@@ -1754,7 +1754,7 @@ def finalize_staged_jobs(
     require_worker_for_data_config(config_root, "finalize staged jobs")
     paths = runtime_paths(runtime_root or _runtime_paths().root)
     with provisioning_lock(config_root):
-        recovery = _recover_staged_apply(config_root)
+        recovery = _recover_staged_apply(config_root, paths=paths)
         failure_reason = reason or "privileged apply worker stopped before writing a result"
         if recovery.rollback_failures:
             failure_reason += "; rollback: " + "; ".join(recovery.rollback_failures)
