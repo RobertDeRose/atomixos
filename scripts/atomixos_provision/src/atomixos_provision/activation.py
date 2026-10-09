@@ -6,6 +6,7 @@ import pwd
 import shutil
 import subprocess
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
 
@@ -138,18 +139,9 @@ def recover_config_root(config_root: Path) -> None:
     marker_path = promotion_marker_path(config_root)
 
     if marker_path.exists() and rollback_root.exists():
-        if config_root.exists():
-            shutil.rmtree(config_root)
-            rollback_root.rename(config_root)
-            if candidate_root.exists():
-                shutil.rmtree(candidate_root)
-            marker_path.unlink(missing_ok=True)
-            _fsync_directory(config_root.parent)
-            return
-        rollback_root.rename(config_root)
+        restore_rollback(config_root)
         if candidate_root.exists():
             shutil.rmtree(candidate_root)
-        marker_path.unlink(missing_ok=True)
         _fsync_directory(config_root.parent)
         return
 
@@ -643,6 +635,7 @@ def _restart_rootless_service(
 def run_activation_sequence(
     config_root: Path, progress: ProgressReporter | None = None
 ) -> list[str]:
+    """Run activation commands and restart affected services."""
     policy = load_activation_policy(config_root)
     timeout_seconds = int(policy.get("timeout_seconds", BOOTSTRAP_ACTIVATION_TIMEOUT_SECONDS))
     settle_seconds = int(policy.get("settle_seconds", 0))
@@ -675,7 +668,10 @@ def run_activation_sequence(
 
 
 def complete_reapply(
-    config_root: Path, progress: ProgressReporter | None = None
+    config_root: Path,
+    progress: ProgressReporter | None = None,
+    *,
+    before_commit: Callable[[], None] | None = None,
 ) -> tuple[bool, list[str], str]:
     """Run activation + health checks, rolling back on failure.
 
@@ -706,6 +702,8 @@ def complete_reapply(
                     "failed",
                 )
         return False, failures, "completed" if restored else "skipped"
+    if before_commit is not None:
+        before_commit()
     if progress:
         progress.set_stage("cleanup", "removing rollback state")
     cleanup_rollback(config_root)

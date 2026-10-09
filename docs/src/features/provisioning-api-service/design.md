@@ -612,3 +612,11 @@ Explicitly avoid adding these until there is a concrete need:
 Managed files are read-only deployment inputs by default. Preserve trusted
 integrator Podman options, validate mount syntax, and warn about writable
 `${FILES_DIR}` mounts. Runtime volume data stays outside provisioning ownership.
+
+## Apply recovery reconciliation
+
+Durable promoted/committed receipts bind job identity and source digest. A
+committed receipt establishes success only for the matching job. Keep claimed
+jobs until result publication and gate transport follow-ups on an unfinished
+matching claim. Preserve initial discard, rollback reactivation, and ordered
+boot recovery.
