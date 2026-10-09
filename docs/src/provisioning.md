@@ -145,3 +145,12 @@ unsigned input only while the device is unprovisioned. A regular, non-symlink
 `.first-config` marker or `config.toml` identifies provisioned state; missing
 signer state fails closed. Invalid submitted configuration returns a client
 error; invalid server-side validation setup remains a server error.
+
+## Interrupted apply recovery
+
+Staged applies persist an owner-only receipt through promoted and committed
+phases. Success is published only after activation commits. Finalization
+discards an uncommitted initial configuration or restores and reactivates
+rollback state. Claimed jobs remain pending until root publishes a terminal
+result, including when result I/O temporarily fails. Transport follow-ups
+require a matching unfinished claimed job and never replay after completion.

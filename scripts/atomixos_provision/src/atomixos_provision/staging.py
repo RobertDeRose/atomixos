@@ -990,25 +990,3 @@ def _require_int(payload: dict[str, Any], key: str) -> int:
     if not isinstance(value, int) or isinstance(value, bool) or value < 0:
         raise ProvisionError(f"staged manifest {key} must be a non-negative integer")
     return value
-
-
-def finalize_abandoned_active_jobs(paths: RuntimePaths, reason: str) -> int:
-    """Write failed results for claimed jobs left behind by an interrupted worker."""
-    ensure_runtime_layout(paths, for_worker=True)
-    finalized = 0
-    with queue_operation_lock(paths):
-        for active_path in sorted(paths.active.iterdir()):
-            try:
-                active_stat = active_path.lstat()
-            except FileNotFoundError:
-                continue
-            if stat.S_ISLNK(active_stat.st_mode) or not stat.S_ISDIR(active_stat.st_mode):
-                remove_staged_path(active_path)
-                continue
-            job_id = validate_job_id(active_path.name)
-            if read_result(paths, job_id) is None:
-                write_result(paths, job_id, {"status": "failed", "error": reason})
-            shutil.rmtree(active_path, ignore_errors=True)
-            finalized += 1
-        fsync_directory(paths.active)
-    return finalized

@@ -2,10 +2,13 @@
 
 import hashlib
 import os
+from pathlib import Path
 
 import pytest
+from click.testing import CliRunner
 
-from atomixos_provision import bundle, staging
+from atomixos_provision import bundle, provision, server, staging
+from atomixos_provision.apply_transaction import ApplyRecovery
 from atomixos_provision.config import ProvisionError
 from atomixos_provision.state import is_provisioned_config_root
 
@@ -51,6 +54,22 @@ def test_request_hash_is_bounded_when_evidence_grows(tmp_path, monkeypatch):
     monkeypatch.setattr(staging.os, "fdopen", growing_fdopen)
     with pytest.raises(ProvisionError, match=r"exceeds 8 byte limit"):
         staging.sha256_file(payload, max_bytes=8)
+
+
+@pytest.mark.parametrize("transport", ["network", "fleet"])
+def test_boot_defers_wan_recovery_while_worker_reconciles(tmp_path, monkeypatch, transport):
+    """Boot recovery defers ordered units; same-boot recovery honors the transport."""
+    monkeypatch.setenv("ATOMIXOS_BOOTSTRAP_TRANSPORT", transport)
+    monkeypatch.setattr(
+        provision, "recover_interrupted_apply", lambda _root: ApplyRecovery(None, True)
+    )
+    calls = []
+    monkeypatch.setattr(provision.subprocess, "run", lambda *args, **kwargs: calls.append(args))
+    result = CliRunner().invoke(server.cli, ["recover", str(tmp_path / "config")])
+    assert result.exit_code == 0, result.exception
+    assert calls == []
+    provision._recover_staged_apply(tmp_path / "config")
+    assert bool(calls) == (transport == "network")
 
 
 @pytest.mark.parametrize("entry_kind", ["file", "directory"])
@@ -110,3 +129,11 @@ def test_snapshot_stops_growing_source_before_writing_over_limit(
             max_total_bytes=8 if limit_kind == "total" else None,
         )
     assert (destination / "payload").stat().st_size <= 8
+
+
+def test_recovery_unit_receives_bootstrap_transport():
+    """The recovery service must not default fleet devices to network recovery."""
+    module = Path(__file__).resolve().parents[3] / "modules" / "first-boot.nix"
+    recovery_unit = module.read_text().split("systemd.services.atomixos-config-recover = {")[1]
+    recovery_unit = recovery_unit.split("serviceConfig = {")[0]
+    assert "environment.ATOMIXOS_BOOTSTRAP_TRANSPORT = bootstrapTransport;" in recovery_unit
