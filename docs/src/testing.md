@@ -23,7 +23,19 @@ These tests cover the Litestar API, SSH-signature auth helpers, config parsing,
 bundle import, Quadlet rendering/sync, activation, job tracking, and service
 foundation modules.
 
+On macOS, pytest explicitly skips the two staging assertions that require Linux
+setgid directory-mode semantics. Those exact assertions run only when the package
+pytest suite is executed on Linux; the current target VM suite exercises staged
+provisioning but does not duplicate the mode-bit assertions. All other package
+tests run unfiltered on macOS.
+
 ### All tests
+
+GitHub validation uses native ARM64 `ubuntu-26.04-arm` and `macos-latest` runners. The Linux job builds
+`checks.aarch64-linux`, including the NixOS VM tests under software emulation. Hosted macOS evaluates the flake and
+runs the shared quality checks; it does
+not execute `checks.aarch64-darwin`, because those VM tests need nested virtualization and a Linux builder. Run the
+Darwin VM checks locally on a configured Mac. See [GitHub validation](development/tooling.md#github-validation).
 
 ```sh
 mise run e2e
@@ -69,6 +81,11 @@ nix build .#checks.aarch64-darwin.watchdog-missing-device --no-link
 nix build .#checks.aarch64-linux.watchdog-missing-device --no-link
 nix build .#checks.aarch64-darwin.kernel-security --no-link
 nix build .#checks.aarch64-linux.kernel-security --no-link
+
+# Provisioning checks on the Linux target
+NIX_CONFIG='max-jobs = 1' ./scripts/nix-with-build-config.sh build --no-link --print-build-logs \
+  .#checks.aarch64-linux.first-boot-provision \
+  .#checks.aarch64-linux.first-boot-source-discovery
 ```
 
 The `nixstasis-client` VM check boots AtomixOS with a mock Nixstasis API. It
@@ -103,6 +120,12 @@ execution, validation ordering, and retained-link preservation.
 Direct flake checks use committed policy. To test a local overlay, create `build.dev.toml` and run `mise run check`; the
 warning must appear before effective-policy evaluation.
 
+The `provisioning-export` VM check runs the production export path/service and unprivileged API. It verifies real
+UID-separated access, private-file backups without permission changes, concurrent authenticated downloads, root-owned
+results, acknowledgement cleanup, and rejection of symlinks and hard links. Package tests additionally cover UUID
+correlation, bounded admission, timeouts, cancellation, interrupted-worker finalization, expiry, atomic output,
+malformed requests, bounded snapshot reads, and JSON error responses.
+
 ## Test Descriptions
 
 | Test                | Nodes | What it validates                                                                                         |
@@ -119,22 +142,23 @@ warning must appear before effective-policy evaluation.
 
 Additional flake-only checks:
 
-| Test                          | Nodes | What it validates                                                                                         |
-|-------------------------------|-------|-----------------------------------------------------------------------------------------------------------|
-| `nixstasis-client`            | 1     | Nixstasis registration, identity reuse, polling, FRP launch-boundary, and post-enrollment API outage path |
-| `fleet-bootstrap`             | 1     | Loopback fleet socket, named AtomixOS route profile, Host rewrite, withdrawal, and token secrecy          |
-| `watchdog-module`             | 0     | Watchdog option defaults and opt-in systemd manager settings                                              |
-| `build-configuration`         | 0     | Schema, canonical policy, provenance, module mapping, and sidecar inputs                                  |
-| `build-config-workflow`       | 0     | Local override wrapper, task matrix, Lima behavior, and atomic retained links                             |
-| `watchdog-missing-device`     | 1     | Enabled policy without hardware boots, preserves RAUC state, and emits an actionable warning              |
-| `kernel-security`             | 1     | BPF LSM/BTF support is active and unsupported hardware/sysctl startup diagnostics are absent              |
-| `first-boot-provision`        | 1     | Provisioning import, validation, apply, auth, rollback, and LAN transport behavior                        |
-| `first-boot-source-discovery` | 1     | Boot/USB/bootstrap source precedence, marker behavior, and fleet rebind suppression                       |
-| `initrd-fresh-flash-marker`   | 1     | Initrd repartitioning creates slot B/data and persists the fresh-flash marker                             |
-| `forensics-podman-log-path`   | 1     | Podman journald output reaches the persistent `/data/logs` path                                           |
-| `forensics-rsyslog-path`      | 1     | Buffered rsyslog output is written to persistent `/data/logs`                                             |
-| `forensics-rsyslog-buffering` | 1     | Rsyslog batches writes instead of synchronously writing every message                                     |
-| `forensics-shutdown-flush`    | 1     | The logging shutdown-flush service persists buffered log output                                           |
+| Test                          | Nodes | What it validates                                                                                                  |
+|-------------------------------|-------|--------------------------------------------------------------------------------------------------------------------|
+| `nixstasis-client`            | 1     | Nixstasis registration, identity reuse, polling, FRP launch-boundary, and post-enrollment API outage path          |
+| `fleet-bootstrap`             | 1     | Loopback fleet socket, named AtomixOS route profile, Host rewrite, withdrawal, and token secrecy                   |
+| `watchdog-module`             | 0     | Watchdog option defaults and opt-in systemd manager settings                                                       |
+| `build-configuration`         | 0     | Schema, canonical policy, provenance, module mapping, and sidecar inputs                                           |
+| `build-config-workflow`       | 0     | Local override wrapper, task matrix, Lima behavior, and atomic retained links                                      |
+| `watchdog-missing-device`     | 1     | Enabled policy without hardware boots, preserves RAUC state, and emits an actionable warning                       |
+| `kernel-security`             | 1     | BPF LSM/BTF support is active and unsupported hardware/sysctl startup diagnostics are absent                       |
+| `first-boot-provision`        | 1     | Provisioning import, validation, apply, auth, rollback, and LAN transport behavior                                 |
+| `first-boot-source-discovery` | 1     | Boot/USB/bootstrap source precedence, marker behavior, and fleet rebind suppression                                |
+| `provisioning-export`         | 1     | Authenticated root-worker export of private workload-owned files, concurrent requests, cleanup, and link rejection |
+| `initrd-fresh-flash-marker`   | 1     | Initrd repartitioning creates slot B/data and persists the fresh-flash marker                                      |
+| `forensics-podman-log-path`   | 1     | Podman journald output reaches the persistent `/data/logs` path                                                    |
+| `forensics-rsyslog-path`      | 1     | Buffered rsyslog output is written to persistent `/data/logs`                                                      |
+| `forensics-rsyslog-buffering` | 1     | Rsyslog batches writes instead of synchronously writing every message                                              |
+| `forensics-shutdown-flush`    | 1     | The logging shutdown-flush service persists buffered log output                                                    |
 
 ## Platform Performance
 
@@ -174,12 +198,12 @@ state from previous bundle tests is discarded when the VM exits.
 The VM uses the QEMU hardware profile with `eth0` as WAN and a second virtio NIC
 as LAN. Host ports are forwarded for common operator workflows:
 
-| Host URL/Port                  | Guest service        |
-|--------------------------------|----------------------|
-| `ssh -p 10022 admin@127.0.0.1` | SSH                  |
-| `http://127.0.0.1:8080`        | Bootstrap/reapply UI |
-| `http://127.0.0.1:8081`        | Caddy HTTP           |
-| `https://127.0.0.1:8443`       | Caddy HTTPS          |
+| Host URL/Port                  | Guest service                  |
+|--------------------------------|--------------------------------|
+| `ssh -p 10022 admin@127.0.0.1` | SSH                            |
+| `http://127.0.0.1:8080`        | Bootstrap UI (first boot only) |
+| `http://127.0.0.1:8081`        | Caddy HTTP                     |
+| `https://127.0.0.1:8443`       | Caddy HTTPS                    |
 
 Build the runner without launching it:
 
@@ -187,7 +211,7 @@ Build the runner without launching it:
 mise run vm:bundle-test --build-only
 ```
 
-Apply a bundle from the host:
+Apply a bundle from the host during first boot; the browser UI is not a post-provision management console:
 
 ```sh
 tar --zstd -cvf config.tar.zst -C example/caddy-oidc .
@@ -284,13 +308,3 @@ Tests use the NixOS test framework (`nixos-lib.runTest`). Each test:
 The QEMU target uses a custom RAUC backend that simulates U-Boot's slot selection using files instead of environment
 variables, allowing the full A/B update lifecycle to be tested without real hardware. The shared slot mapping for the
 RAUC tests lives in `nix/tests/rauc-qemu-config.nix`.
-
-## Native ARM CI validation
-
-GitHub Actions runs repository checks and Nix builds on `ubuntu-24.04-arm`
-(`aarch64-linux`). The `macos-15` job runs quality checks and evaluates all Nix
-systems with `flake check --no-build --all-systems`. macOS VM checks require
-nested virtualization and remain outside the hosted macOS job.
-
-The host Python suite skips two Linux setgid directory-mode assertions on macOS.
-Those assertions remain enabled in the Linux package tests.

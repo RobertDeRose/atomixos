@@ -1,6 +1,8 @@
-"""Bundle import, tar extraction, and managed-file placement."""
+"""Bundle import/export, tar extraction, and managed-file placement."""
 
 import grp
+import gzip
+import io
 import os
 import pwd
 import shutil
@@ -19,6 +21,7 @@ PROVISION_READER_GROUP = "atomixos-provision"
 __all__ = [
     "copy_bundle_files",
     "detect_bundle_kind",
+    "export_bundle_bytes",
     "extract_bundle_archive",
     "grant_managed_file_access",
     "import_bundle_bytes",
@@ -219,6 +222,160 @@ def _snapshot_dir(
             if file_fd >= 0:
                 os.close(file_fd)
     return total_bytes[0]
+
+
+def _read_export_file(path: Path, member_name: str) -> bytes:
+    """Read a bounded export file without following symlinks."""
+    try:
+        path_stat = path.lstat()
+    except FileNotFoundError as exc:
+        if member_name == "config.toml":
+            raise provision_error("current config.toml not found") from exc
+        raise provision_error(f"managed bundle file not found: {path}") from exc
+    except OSError as exc:
+        raise provision_error(f"cannot inspect managed bundle file: {path}") from exc
+    if stat.S_ISLNK(path_stat.st_mode) or not stat.S_ISREG(path_stat.st_mode):
+        raise provision_error(f"bundle member must be a regular file: {path}")
+    try:
+        fd = os.open(
+            path, os.O_RDONLY | os.O_NONBLOCK | OPEN_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+        )
+    except FileNotFoundError as exc:
+        if member_name == "config.toml":
+            raise provision_error("current config.toml not found") from exc
+        raise provision_error(f"managed bundle file not found: {path}") from exc
+    except OSError as exc:
+        raise provision_error(f"cannot read managed bundle file: {path}") from exc
+    try:
+        file_stat = os.fstat(fd)
+        if not stat.S_ISREG(file_stat.st_mode) or file_stat.st_nlink != 1:
+            raise provision_error(f"bundle member must be a single-link regular file: {path}")
+        if (file_stat.st_dev, file_stat.st_ino) != (path_stat.st_dev, path_stat.st_ino):
+            raise provision_error(f"bundle file changed during snapshot: {path}")
+        if file_stat.st_size > MAX_BUNDLE_MEMBER_BYTES:
+            raise provision_error(
+                f"bundle member {member_name!r} exceeds {MAX_BUNDLE_MEMBER_BYTES} byte limit"
+            )
+        with os.fdopen(fd, "rb") as source:
+            fd = -1
+            content = source.read(MAX_BUNDLE_MEMBER_BYTES + 1)
+        if len(content) > MAX_BUNDLE_MEMBER_BYTES:
+            raise provision_error(
+                f"bundle member {member_name!r} exceeds {MAX_BUNDLE_MEMBER_BYTES} byte limit"
+            )
+        return content
+    except OSError as exc:
+        raise provision_error(f"cannot read managed bundle file: {path}") from exc
+    finally:
+        if fd >= 0:
+            os.close(fd)
+
+
+def _tar_info(name: str, *, mode: int, size: int = 0, directory: bool = False) -> tarfile.TarInfo:
+    """Create normalized metadata for an exported tar member."""
+    info = tarfile.TarInfo(name)
+    info.mode = mode
+    info.size = size
+    info.mtime = 0
+    info.uid = 0
+    info.gid = 0
+    info.uname = ""
+    info.gname = ""
+    if directory:
+        info.type = tarfile.DIRTYPE
+    return info
+
+
+def _build_export_tar(config_bytes: bytes, files_root: Path | None) -> bytes:
+    """Build a deterministic tar archive from the export snapshot."""
+    output = io.BytesIO()
+    member_count = 0
+
+    with tarfile.open(fileobj=output, mode="w:", format=tarfile.PAX_FORMAT) as archive:
+
+        def add_file(name: str, content: bytes, mode: int) -> None:
+            """Add a file to the deterministic export archive."""
+            nonlocal member_count
+            validate_bundle_member(name)
+            member_count += 1
+            if member_count > MAX_BUNDLE_MEMBERS:
+                raise provision_error(f"bundle exceeds {MAX_BUNDLE_MEMBERS} member limit")
+            if len(content) > MAX_BUNDLE_MEMBER_BYTES:
+                raise provision_error(
+                    f"bundle member {name!r} exceeds {MAX_BUNDLE_MEMBER_BYTES} byte limit"
+                )
+            archive.addfile(_tar_info(name, mode=mode, size=len(content)), io.BytesIO(content))
+
+        def add_directory(name: str) -> None:
+            """Add a directory to the deterministic export archive."""
+            nonlocal member_count
+            validate_bundle_member(name)
+            member_count += 1
+            if member_count > MAX_BUNDLE_MEMBERS:
+                raise provision_error(f"bundle exceeds {MAX_BUNDLE_MEMBERS} member limit")
+            archive.addfile(_tar_info(name, mode=0o755, directory=True))
+
+        add_file("config.toml", config_bytes, 0o600)
+        if files_root is not None:
+            add_directory("files")
+            paths = sorted(
+                files_root.rglob("*"),
+                key=lambda path: path.relative_to(files_root).as_posix(),
+            )
+            for path in paths:
+                relative = path.relative_to(files_root).as_posix()
+                name = f"files/{relative}"
+                path_stat = path.lstat()
+                if stat.S_ISLNK(path_stat.st_mode):
+                    raise provision_error(f"bundle files entry must not be a symlink: {path}")
+                if stat.S_ISDIR(path_stat.st_mode):
+                    add_directory(name)
+                elif stat.S_ISREG(path_stat.st_mode):
+                    add_file(name, _read_export_file(path, name), 0o644)
+                else:
+                    raise provision_error(f"bundle files entry must be a regular file: {path}")
+
+    tar_bytes = output.getvalue()
+    if len(tar_bytes) > MAX_DECOMPRESSED_BYTES:
+        raise provision_error(f"bundle exceeds {MAX_DECOMPRESSED_BYTES} byte decompressed limit")
+    compressed = io.BytesIO()
+    with gzip.GzipFile(fileobj=compressed, mode="wb", compresslevel=9, mtime=0) as gzip_file:
+        gzip_file.write(tar_bytes)
+    result = compressed.getvalue()
+    if len(result) > MAX_SOURCE_BYTES:
+        raise provision_error(f"config bundle export exceeds {MAX_SOURCE_BYTES} byte limit")
+    return result
+
+
+def export_bundle_bytes(config_root: Path) -> bytes:
+    """Export canonical config and managed files as a deterministic gzip tar bundle."""
+    config_path = config_root / "config.toml"
+    config_bytes = _read_export_file(config_path, "config.toml")
+    if len(config_bytes) > MAX_DECOMPRESSED_BYTES:
+        raise provision_error(f"bundle exceeds {MAX_DECOMPRESSED_BYTES} byte decompressed limit")
+
+    files_path = config_root / "files"
+    try:
+        files_stat = files_path.lstat()
+    except FileNotFoundError:
+        return _build_export_tar(config_bytes, None)
+    except OSError as exc:
+        raise provision_error(f"cannot inspect managed bundle files: {files_path}") from exc
+    if stat.S_ISLNK(files_stat.st_mode) or not stat.S_ISDIR(files_stat.st_mode):
+        raise provision_error(f"bundle files entry must be a directory: {files_path}")
+    if MAX_BUNDLE_MEMBERS < 2:
+        raise provision_error(f"bundle exceeds {MAX_BUNDLE_MEMBERS} member limit")
+
+    with tempfile.TemporaryDirectory(prefix=".atomixos-export-") as temporary:
+        snapshot = Path(temporary) / "files"
+        _snapshot_files_source(
+            files_path,
+            snapshot,
+            max_file_bytes=MAX_BUNDLE_MEMBER_BYTES,
+            max_total_bytes=MAX_DECOMPRESSED_BYTES - len(config_bytes),
+            max_members=MAX_BUNDLE_MEMBERS - 2,
+        )
+        return _build_export_tar(config_bytes, snapshot)
 
 
 # --- Detection ---
