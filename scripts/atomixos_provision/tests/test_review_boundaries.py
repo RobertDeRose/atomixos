@@ -26,6 +26,7 @@ def test_permission_reconciliation_rejects_replaced_symlink(tmp_path, monkeypatc
     original_stat = os.stat
 
     def replacing_stat(path, *args, **kwargs):
+        """Replace the checked child after its initial metadata lookup."""
         result = original_stat(path, *args, **kwargs)
         if path == "child" and kwargs.get("dir_fd") is not None:
             child.rmdir() if entry_kind == "directory" else child.unlink()
@@ -53,6 +54,7 @@ def test_snapshot_stops_growing_source_before_writing_over_limit(
     original_fdopen = os.fdopen
 
     def growing_fdopen(fd, *args, **kwargs):
+        """Grow the source after its initial stat and before the read begins."""
         payload.write_bytes(b"x" * 100)
         return original_fdopen(fd, *args, **kwargs)
 
@@ -65,3 +67,68 @@ def test_snapshot_stops_growing_source_before_writing_over_limit(
             max_total_bytes=8 if limit_kind == "total" else None,
         )
     assert (destination / "payload").stat().st_size <= 8
+
+
+@pytest.mark.parametrize(
+    ("mutation_kind", "error_pattern"),
+    [
+        ("metadata", r"bundle file changed during snapshot"),
+        ("truncate", r"bundle file size changed during snapshot"),
+    ],
+)
+def test_snapshot_rejects_source_mutation_during_stream(
+    tmp_path, monkeypatch, mutation_kind, error_pattern
+):
+    """Revalidate source metadata and copied size after streaming its open descriptor."""
+    source = tmp_path / "source"
+    source.mkdir()
+    payload = source / "payload"
+    payload_size = 128 * 1024
+    payload.write_bytes(b"x" * payload_size)
+    destination = tmp_path / "snapshot"
+    original_fdopen = os.fdopen
+    mutation_seen: list[bool] = []
+
+    class MutatingReader:
+        def __init__(self, wrapped):
+            """Retain the underlying reader to inject a mutation after reads."""
+            self.wrapped = wrapped
+
+        def __enter__(self):
+            """Enter the wrapped file context and return this reader."""
+            self.wrapped.__enter__()
+            return self
+
+        def __exit__(self, *args):
+            """Exit the wrapped file context."""
+            return self.wrapped.__exit__(*args)
+
+        def fileno(self):
+            """Expose the open descriptor for final metadata validation."""
+            return self.wrapped.fileno()
+
+        def read(self, size=-1):
+            """Read bytes, then mutate the source once to simulate a writer race."""
+            chunk = self.wrapped.read(size)
+            if chunk and not mutation_seen:
+                mutation_seen.append(True)
+                if mutation_kind == "metadata":
+                    initial = payload.stat()
+                    payload.write_bytes(b"y" * payload_size)
+                    os.utime(
+                        payload,
+                        ns=(initial.st_atime_ns, initial.st_mtime_ns + 1_000_000),
+                    )
+                else:
+                    with payload.open("r+b") as changed:
+                        changed.truncate(1)
+            return chunk
+
+    def mutating_fdopen(fd, *args, **kwargs):
+        """Wrap the source descriptor with a reader that mutates its file."""
+        return MutatingReader(original_fdopen(fd, *args, **kwargs))
+
+    monkeypatch.setattr(bundle.os, "fdopen", mutating_fdopen)
+    with pytest.raises(ProvisionError, match=error_pattern):
+        bundle._snapshot_files_source(source, destination)
+    assert mutation_seen == [True]

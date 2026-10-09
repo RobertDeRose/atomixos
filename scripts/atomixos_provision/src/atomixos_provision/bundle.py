@@ -213,6 +213,19 @@ def _snapshot_dir(
                         )
                     output.write(chunk)
                     copied += len(chunk)
+                final_stat = os.fstat(source_file.fileno())
+                if copied != final_stat.st_size:
+                    raise provision_error(
+                        f"bundle file size changed during snapshot: {child_path}"
+                    )
+                if (
+                    not stat.S_ISREG(final_stat.st_mode)
+                    or final_stat.st_nlink != 1
+                    or final_stat.st_size != confirmed.st_size
+                    or final_stat.st_mtime_ns != confirmed.st_mtime_ns
+                    or final_stat.st_ctime_ns != confirmed.st_ctime_ns
+                ):
+                    raise provision_error(f"bundle file changed during snapshot: {child_path}")
             target_path.chmod(0o644)
             total_bytes[0] += copied
         finally:

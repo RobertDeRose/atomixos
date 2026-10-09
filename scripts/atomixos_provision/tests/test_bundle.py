@@ -182,6 +182,7 @@ class TestCopyBundleFiles:
         assert files_root.joinpath("state.json").stat().st_mode & 0o777 == 0o640
 
     def test_rejects_hardlinked_managed_file_before_chown_or_chmod(self, tmp_path, monkeypatch):
+        """Reject hardlinks without mutating their external inode."""
         chowns = self._mock_appsvc(monkeypatch)
         chmods: list[tuple[int, int]] = []
         monkeypatch.setattr(
@@ -218,6 +219,7 @@ class TestCopyBundleFiles:
     def test_stage_bundle_files_enforces_snapshot_limits(
         self, tmp_path, monkeypatch, limit_name, limit, pattern
     ):
+        """Enforce configured member and byte limits during staging."""
         import atomixos_provision.bundle as bundle_module
 
         monkeypatch.setattr(bundle_module, "MAX_BUNDLE_MEMBERS", 100)
@@ -233,6 +235,7 @@ class TestCopyBundleFiles:
             stage_bundle_files(source, tmp_path / "destination")
 
     def test_copy_bundle_files_enforces_snapshot_limits(self, tmp_path, monkeypatch):
+        """Enforce configured total-byte limits during production copies."""
         import atomixos_provision.bundle as bundle_module
 
         self._mock_appsvc(monkeypatch)
