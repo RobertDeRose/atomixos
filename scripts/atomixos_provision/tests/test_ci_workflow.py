@@ -3,18 +3,39 @@
 from pathlib import Path
 
 
+def _indentation(line: str) -> int:
+    return len(line) - len(line.lstrip())
+
+
 def _job_block(workflow: str, job_name: str) -> list[str]:
     lines = workflow.splitlines()
-    start = lines.index(f"  {job_name}:")
+    start = next(index for index, line in enumerate(lines) if line.strip() == f"{job_name}:")
+    job_indent = _indentation(lines[start])
     end = next(
         (
             index
             for index, line in enumerate(lines[start + 1 :], start + 1)
-            if line.startswith("  ") and not line.startswith("    ")
+            if line.strip() and _indentation(line) <= job_indent
         ),
         len(lines),
     )
     return lines[start:end]
+
+
+def _has_direct_job_condition(job_block: list[str]) -> bool:
+    job_indent = _indentation(job_block[0])
+    child_indents = [
+        _indentation(line)
+        for line in job_block[1:]
+        if line.strip() and not line.lstrip().startswith("#") and _indentation(line) > job_indent
+    ]
+    if not child_indents:
+        return False
+    direct_indent = min(child_indents)
+    return any(
+        _indentation(line) == direct_indent and line.lstrip().startswith("if:")
+        for line in job_block[1:]
+    )
 
 
 def test_pr_quality_gate_has_no_branch_exclusion():
@@ -31,7 +52,32 @@ def test_quality_gate_jobs_have_no_job_level_condition():
     for workflow_name, job_name in (("hk.yml", "check"), ("nix.yml", "evaluate")):
         workflow = (root / ".github/workflows" / workflow_name).read_text()
         job_block = _job_block(workflow, job_name)
-        assert not any(line.startswith("    if:") for line in job_block)
+        assert not _has_direct_job_condition(job_block)
+
+
+def test_job_condition_detection_uses_relative_indentation():
+    workflow = """jobs:
+    check:
+      if: github.ref == 'main'
+      steps:
+        - name: Conditional step
+          if: github.event_name == 'pull_request'
+          run: echo checked
+    next:
+      runs-on: ubuntu-latest
+"""
+    assert _has_direct_job_condition(_job_block(workflow, "check"))
+
+    nested_only = """jobs:
+    check:
+      steps:
+        - name: Conditional step
+          if: github.event_name == 'pull_request'
+          run: echo checked
+    next:
+      runs-on: ubuntu-latest
+"""
+    assert not _has_direct_job_condition(_job_block(nested_only, "check"))
 
 
 def test_hk_quality_gate_is_separate_from_nix_evaluation():
