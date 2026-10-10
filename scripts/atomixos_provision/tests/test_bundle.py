@@ -108,6 +108,30 @@ class TestExtractBundleArchive:
         with pytest.raises(ProvisionError, match=r"exceeds .* byte limit"):
             extract_bundle_archive(bundle, "test.tar.gz", tmp_path)
 
+    def test_member_limit_stops_reading_headers(self, tmp_path, monkeypatch):
+        """Reject an oversized archive without holding every tar header in memory."""
+        import atomixos_provision.bundle as bundle_module
+
+        monkeypatch.setattr(bundle_module, "MAX_BUNDLE_MEMBERS", 3)
+        headers_read = []
+        original_next = tarfile.TarFile.next
+
+        def counting_next(archive):
+            """Count each header the extractor pulls from the archive."""
+            member = original_next(archive)
+            if member is not None:
+                headers_read.append(member.name)
+            return member
+
+        monkeypatch.setattr(tarfile.TarFile, "next", counting_next)
+        bundle = self._make_tar_gz({f"files/{index}": "" for index in range(50)})
+
+        with pytest.raises(ProvisionError, match="bundle exceeds 3 member limit"):
+            extract_bundle_archive(bundle, "test.tar.gz", tmp_path)
+        # tarfile.open reads the first header once to validate the archive.
+        assert sorted(set(headers_read)) == ["files/0", "files/1", "files/2", "files/3"]
+        assert list(tmp_path.iterdir()) == []
+
     def test_rejects_sparse_member_before_writing(self, tmp_path):
         """A tiny archive cannot declare a large sparse member to fill temporary storage."""
         tar_buf = io.BytesIO()

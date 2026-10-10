@@ -635,7 +635,8 @@ Mount classification excludes named Podman volumes and single-field anonymous
 volumes, whose only field is a container path, before resolving host paths.
 Named and anonymous volume mounts cannot broaden managed-file permissions through
 the provisioning process's working directory; host bind paths keep their access policy.
-Archive extraction sums every member's header size and rejects sparse members
+Archive extraction reads tar headers incrementally and rejects the first member
+beyond the member limit, then sums every member's header size and rejects sparse members
 before writing any file, so a small upload cannot expand beyond the decompressed
 limit in temporary storage; the snapshot keeps its own budget for live sources.
 Glob mounts are classified conservatively by the literal prefix before their

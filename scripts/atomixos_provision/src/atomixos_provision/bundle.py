@@ -693,10 +693,14 @@ def extract_bundle_archive(source_bytes: bytes, filename: str, destination: Path
 
     try:
         with tarfile.open(decompressed_path, mode="r:") as archive:
-            members = archive.getmembers()
-            if len(members) > MAX_BUNDLE_MEMBERS:
-                message = f"bundle exceeds {MAX_BUNDLE_MEMBERS} member limit"
-                raise provision_error(message)
+            # Read headers lazily so an archive of many tiny members is rejected
+            # at the limit instead of after every header is held in memory.
+            members: list[tarfile.TarInfo] = []
+            for member in archive:
+                if len(members) >= MAX_BUNDLE_MEMBERS:
+                    message = f"bundle exceeds {MAX_BUNDLE_MEMBERS} member limit"
+                    raise provision_error(message)
+                members.append(member)
             # Tar headers define exactly how many bytes extraction writes, so
             # bound the expanded tree before creating any file. Sparse members
             # can declare far more data than the archive stores.
