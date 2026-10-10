@@ -606,3 +606,41 @@ Explicitly avoid adding these until there is a concrete need:
 - **Dynamic partial reconfiguration API**: Add typed PATCH/PUT endpoints for users,
   network, containers, and other desired-state resources, all backed by the same
   candidate promotion and rollback pipeline.
+
+## Managed-file boundary reconciliation
+
+Managed files are read-only deployment inputs by default. Preserve trusted
+integrator Podman options, validate mount syntax, and warn about writable
+`${FILES_DIR}` mounts. Runtime volume data stays outside provisioning ownership.
+Read-only trees are `root:atomixos-provision` with a POSIX ACL granting `appsvc`
+read access, so the workload cannot `chmod` its inputs even if it remounts a
+bind read-write; only trees needing writable mounts are `appsvc`-owned, and
+their ACL is removed. The images enable f2fs POSIX ACLs for `/data`.
+
+Snapshots and access reconciliation pin each regular file with Linux `O_PATH`,
+verify its type, single-link count, and inode identity, then open that verified
+inode through `/proc/self/fd`. A concurrent name replacement cannot make the
+privileged worker open a device or FIFO. Hosts without these Linux facilities
+fail closed for managed-file access; macOS remains a development host.
+Snapshot enumeration reserves every discovered name against the global member
+limit before recursing, including names awaiting processing in ancestor directories.
+Each snapshotted directory's type, inode, mtime, and ctime are rechecked after its
+entries are copied, so entry creation, deletion, or rename rejects the snapshot.
+Access reconciliation streams directory entries and shares the same global
+member limit across recursive calls, rejecting excess entries before metadata
+changes. Files and subdirectories count as members; the `files/` root does not.
+Both walkers bound nesting at 64 directory levels below `files/`, failing with a
+provisioning error rather than exhausting recursion or open descriptors.
+Mount classification excludes named Podman volumes and single-field anonymous
+volumes, whose only field is a container path, before resolving host paths.
+Named and anonymous volume mounts cannot broaden managed-file permissions through
+the provisioning process's working directory; host bind paths keep their access policy.
+Archive extraction reads tar headers incrementally and rejects the first member
+beyond the member limit, then sums every member's header size and rejects sparse members
+before writing any file, so a small upload cannot expand beyond the decompressed
+limit in temporary storage; the snapshot keeps its own budget for live sources.
+Glob mounts are classified conservatively by the literal prefix before their
+first wildcard component, since the glob may match the managed tree.
+Slash-containing `Volume=` sources are treated as paths, not named volumes.
+Relative host mount sources are rejected because Quadlet and Podman resolve them
+from the unit directory or service working directory, not the provisioning process.

@@ -7,6 +7,9 @@ import pytest
 from atomixos_provision.config import ProvisionError
 from atomixos_provision.quadlet import (
     format_scalar,
+    managed_file_mount_is_read_only,
+    managed_file_mount_warning,
+    managed_files_are_writable,
     normalize_directives,
     render_builds,
     render_containers,
@@ -113,6 +116,8 @@ class TestRenderSection:
 
 
 class TestRenderContainers:
+    """Group tests for RenderContainers."""
+
     def test_minimal_privileged(self):
         table = {
             "myapp": {
@@ -144,6 +149,566 @@ class TestRenderContainers:
         table = {"app": {"privileged": False, "Container": {}}}
         with pytest.raises(ProvisionError, match="Image must be a single string"):
             render_containers(table, Path("/data/config"))
+
+    def test_managed_file_mount_warns_without_read_only_option(self):
+        """Verify that managed file mount warns without read only option."""
+        table = {
+            "app": {
+                "privileged": False,
+                "Container": {
+                    "Image": "alpine:latest",
+                    "Volume": "${FILES_DIR}/config.yaml:/app/config.yaml",
+                },
+            }
+        }
+
+        rendered, _runtime, warnings = render_containers(table, Path("/data/config"))
+
+        assert (
+            "Volume=/data/config/files/config.yaml:/app/config.yaml" in rendered["app.container"]
+        )
+        assert len(warnings) == 1
+        assert "use a Podman volume for mutable runtime data" in warnings[0]
+
+    def test_scalar_managed_file_mount_marks_files_writable(self):
+        """Verify that scalar mount directives drive writable permissions."""
+        table = {
+            "app": {
+                "privileged": False,
+                "Container": {
+                    "Image": "alpine:latest",
+                    "Volume": "${FILES_DIR}/state:/state:rw",
+                },
+            }
+        }
+
+        assert managed_files_are_writable(table)
+
+    def test_managed_file_podman_args_mounts_warn(self):
+        """Verify that PodmanArgs mount forms receive managed-file warnings."""
+        table = {
+            "app": {
+                "privileged": False,
+                "Container": {
+                    "Image": "alpine:latest",
+                    "PodmanArgs": [
+                        "--volume=${FILES_DIR}/state:/state:rw",
+                        "--mount=type=bind,source=${FILES_DIR}/cache,target=/cache,rw",
+                    ],
+                },
+            }
+        }
+
+        _rendered, _runtime, warnings = render_containers(table, Path("/data/config"))
+
+        assert len(warnings) == 2
+        assert managed_files_are_writable(table)
+
+    @pytest.mark.parametrize(
+        ("directive", "value"),
+        [
+            ("Volume", "${CONFIG_DIR}/files/state:/state:rw"),
+            ("Volume", "${CONFIG_DIR}/files/nested/../state:/state:rw"),
+            ("Volume", "/data/config/files/./state:/state:rw"),
+            ("Mount", "type=bind,source=${CONFIG_DIR}/files/cache,target=/cache,rw"),
+            ("PodmanArgs", "--volume=/data/config/files/state:/state:rw"),
+            ("PodmanArgs", "--mount=type=bind,source=${CONFIG_DIR}/files/cache,target=/cache,rw"),
+        ],
+    )
+    def test_equivalent_managed_file_sources_are_detected(self, directive, value):
+        """Resolve tokenized and absolute managed-file sources consistently."""
+        container = {"Image": "alpine:latest"}
+        if directive == "PodmanArgs":
+            container[directive] = [value]
+        else:
+            container[directive] = value
+        table = {"app": {"privileged": False, "Container": container}}
+        config_root = Path("/data/config")
+
+        assert managed_files_are_writable(table, config_root)
+        _rendered, _runtime, warnings = render_containers(table, config_root)
+        assert len(warnings) == 1
+
+    def test_config_dir_files_token_is_detected_without_runtime_context(self):
+        """Recognize CONFIG_DIR files paths for callers without runtime context."""
+        table = {
+            "app": {
+                "privileged": False,
+                "Container": {
+                    "Image": "alpine:latest",
+                    "Volume": "${CONFIG_DIR}/files/state:/state:rw",
+                },
+            }
+        }
+
+        assert managed_files_are_writable(table)
+
+    @pytest.mark.parametrize("form", ["Volume", "Mount", "PodmanArgsVolume", "PodmanArgsMount"])
+    @pytest.mark.parametrize("working_directory", ["root", "config_parent"])
+    def test_named_volume_does_not_enable_managed_file_access(
+        self, tmp_path, monkeypatch, form, working_directory
+    ):
+        """Never resolve a Podman volume identifier against the process cwd."""
+        monkeypatch.chdir("/" if working_directory == "root" else tmp_path)
+        config_root = (
+            Path("/data/config") if working_directory == "root" else tmp_path / "data/config"
+        )
+        kind = form.removeprefix("PodmanArgs")
+        directive = "PodmanArgs" if form.startswith("PodmanArgs") else form
+        value = (
+            "data:/state:rw" if kind == "Volume" else "source=data,type=volume,target=/state,rw"
+        )
+        if directive == "PodmanArgs":
+            value = f"--{kind.lower()}={value}"
+        table = {
+            "app": {
+                "privileged": True,
+                "Container": {"Image": "alpine:latest", directive: value},
+            }
+        }
+
+        rendered, _runtime, warnings = render_containers(table, config_root)
+
+        assert warnings == []
+        assert not managed_files_are_writable(table, config_root)
+        assert value in rendered["app.container"]
+
+    @pytest.mark.parametrize(
+        ("directive", "value", "overlaps"),
+        [
+            ("Mount", "type=glob,src=${CONFIG_DIR}/*,dst=/inputs", True),
+            ("Mount", "type=glob,source=${FILES_DIR}/*.yaml,target=/inputs", True),
+            ("Mount", "type=glob,src=/data/config/fi?es/*,dst=/inputs", True),
+            ("PodmanArgs", "--mount=type=glob,src=/data/*/files,dst=/inputs", True),
+            ("Mount", "type=glob,src=/srv/assets/*,dst=/inputs", False),
+        ],
+    )
+    def test_glob_mount_is_classified_by_literal_prefix(self, directive, value, overlaps):
+        """Treat a writable glob as covering everything beneath its literal prefix."""
+        table = {
+            "app": {
+                "privileged": True,
+                "Container": {"Image": "alpine:latest", directive: value},
+            }
+        }
+        config_root = Path("/data/config")
+
+        _rendered, _runtime, warnings = render_containers(table, config_root)
+
+        assert len(warnings) == int(overlaps)
+        assert managed_files_are_writable(table, config_root) is overlaps
+
+    @pytest.mark.parametrize("source", ["data", "app-data.volume", "cache_1.v2"])
+    def test_slash_free_volume_sources_remain_named_volumes(self, source):
+        """Keep named volumes and .volume units valid while path-like sources are rejected."""
+        value = f"{source}:/state:rw"
+        table = {
+            "app": {
+                "privileged": True,
+                "Container": {"Image": "alpine:latest", "Volume": value},
+            }
+        }
+
+        rendered, _runtime, warnings = render_containers(table, Path("/data/config"))
+
+        assert warnings == []
+        assert f"Volume={value}" in rendered["app.container"]
+
+    @pytest.mark.parametrize(
+        ("directive", "value"),
+        [
+            ("Volume", "/data/config/files"),
+            ("Volume", "${FILES_DIR}"),
+            ("PodmanArgs", "--volume=/data/config/files"),
+            ("PodmanArgs", "-v /data/config"),
+        ],
+    )
+    def test_anonymous_volume_is_not_a_managed_host_source(self, directive, value):
+        """Treat a single-field volume as a container path, not a host bind source."""
+        table = {
+            "app": {
+                "privileged": True,
+                "Container": {"Image": "alpine:latest", directive: value},
+            }
+        }
+        config_root = Path("/data/config")
+
+        rendered, _runtime, warnings = render_containers(table, config_root)
+
+        assert warnings == []
+        assert not managed_files_are_writable(table, config_root)
+        assert f"{directive}=" in rendered["app.container"]
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            ("Volume", "./data/config/files/state:/state:rw"),
+            ("Volume", "../files:/state:ro"),
+            ("Volume", "data/config/files/state:/state:rw"),
+            ("PodmanArgs", "--volume=data/state:/state"),
+            ("Mount", "type=bind,source=./data/config/files/state,target=/state,rw"),
+            ("Mount", "type=bind,src=data/config/files,target=/state,ro"),
+            ("PodmanArgs", "--volume=./data/config/files/state:/state:rw"),
+            ("PodmanArgs", "--mount=type=bind,source=files,target=/state"),
+        ],
+    )
+    def test_relative_host_mount_source_is_rejected(self, monkeypatch, value):
+        """Reject relative host sources Quadlet and Podman resolve from other bases."""
+        monkeypatch.chdir("/")
+        directive, mount = value
+        table = {
+            "app": {
+                "privileged": True,
+                "Container": {"Image": "alpine:latest", directive: mount},
+            }
+        }
+        config_root = Path("/data/config")
+
+        with pytest.raises(ProvisionError, match="relative host mount source"):
+            render_containers(table, config_root)
+        with pytest.raises(ProvisionError, match="relative host mount source"):
+            managed_files_are_writable(table, config_root)
+
+    @pytest.mark.parametrize("form", ["Volume", "Mount", "PodmanArgsVolume", "PodmanArgsMount"])
+    @pytest.mark.parametrize("read_only", [False, True])
+    @pytest.mark.parametrize(
+        "source",
+        [
+            "${CONFIG_DIR}",
+            "${CONFIG_DIR}/files/..",
+            "${FILES_DIR}/..",
+            "/data/config",
+            "/data",
+            "/",
+            "//data/config/files/state",
+            "//data/config",
+        ],
+    )
+    def test_overlapping_managed_mount_sources(self, form, read_only, source):
+        """Apply warning and access policy to ancestors and Linux path aliases."""
+        kind = form.removeprefix("PodmanArgs")
+        directive = "PodmanArgs" if form.startswith("PodmanArgs") else form
+        option = "ro" if read_only else "rw"
+        value = (
+            f"{source}:/input:{option}"
+            if kind == "Volume"
+            else f"type=bind,source={source},target=/input,{option}"
+        )
+        if directive == "PodmanArgs":
+            value = f"--{kind.lower()}={value}"
+        table = {
+            "app": {
+                "privileged": True,
+                "Container": {"Image": "alpine:latest", directive: value},
+            }
+        }
+
+        config_root = Path("/data/config")
+        _rendered, _runtime, warnings = render_containers(table, config_root)
+
+        assert len(warnings) == (0 if read_only else 1)
+        assert managed_files_are_writable(table, config_root) is not read_only
+
+    @pytest.mark.parametrize(
+        "source", ["${CONFIG_DIR}", "${CONFIG_DIR}/files/..", "${FILES_DIR}/.."]
+    )
+    @pytest.mark.parametrize("read_only", [False, True])
+    def test_tokenized_ancestor_mount_without_runtime_context(self, source, read_only):
+        """Recognize tokenized ancestors for context-free warning and access APIs."""
+        value = f"{source}:/config:{'ro' if read_only else 'rw'}"
+        table = {"app": {"Container": {"Volume": value}}}
+
+        assert managed_files_are_writable(table) is not read_only
+        warning = managed_file_mount_warning("Volume", value, "container.app.Container.Volume")
+        assert (warning is None) is read_only
+
+    def test_double_slash_runtime_root_matches_single_slash_source(self):
+        """Normalize the runtime root as well as mount sources on Linux."""
+        table = {
+            "app": {
+                "privileged": True,
+                "Container": {
+                    "Image": "alpine:latest",
+                    "Volume": "/data/config/files/state:/state:rw",
+                },
+            }
+        }
+        config_root = Path("//data/config")
+
+        assert managed_files_are_writable(table, config_root)
+        _rendered, _runtime, warnings = render_containers(table, config_root)
+        assert len(warnings) == 1
+
+    @pytest.mark.parametrize(
+        "source", ["/other/config/files/state", "/data/config/files-other", "/data/config-other"]
+    )
+    def test_absolute_source_outside_runtime_files_is_not_managed(self, source):
+        """Ignore absolute mount sources outside the active managed files root."""
+        table = {
+            "app": {
+                "privileged": False,
+                "Container": {
+                    "Image": "alpine:latest",
+                    "Volume": f"{source}:/state:rw",
+                },
+            }
+        }
+
+        _rendered, _runtime, warnings = render_containers(table, Path("/data/config"))
+
+        assert warnings == []
+        assert not managed_files_are_writable(table, Path("/data/config"))
+
+    def test_path_traversal_outside_runtime_files_is_not_managed(self):
+        """Reject normalized mount paths that traverse outside managed files."""
+        table = {
+            "app": {
+                "privileged": False,
+                "Container": {
+                    "Image": "alpine:latest",
+                    "Volume": "${FILES_DIR}/../outside/state:/state:rw",
+                },
+            }
+        }
+
+        _rendered, _runtime, warnings = render_containers(table, Path("/data/config"))
+
+        assert warnings == []
+        assert not managed_files_are_writable(table, Path("/data/config"))
+
+    def test_symlinked_source_remains_managed_by_lexical_path(self, tmp_path):
+        """Classify symlinked managed paths lexically without following the link."""
+        config_root = tmp_path / "config"
+        files_root = config_root / "files"
+        files_root.mkdir(parents=True)
+        outside_root = tmp_path / "outside"
+        outside_root.mkdir()
+        (files_root / "escape").symlink_to(outside_root, target_is_directory=True)
+        table = {
+            "app": {
+                "privileged": False,
+                "Container": {
+                    "Image": "alpine:latest",
+                    "Volume": "${FILES_DIR}/escape/state:/state:rw",
+                },
+            }
+        }
+
+        _rendered, _runtime, warnings = render_containers(table, config_root)
+
+        assert len(warnings) == 1
+        assert managed_files_are_writable(table, config_root)
+
+    def test_read_only_podman_args_mounts_do_not_warn(self):
+        """Verify that read-only PodmanArgs mounts remain warning-free."""
+        table = {
+            "app": {
+                "privileged": False,
+                "Container": {
+                    "Image": "alpine:latest",
+                    "PodmanArgs": [
+                        "--volume",
+                        "${FILES_DIR}/state:/state:ro",
+                        "--mount",
+                        "type=bind,source=${FILES_DIR}/cache,target=/cache,readonly",
+                    ],
+                },
+            }
+        }
+
+        _rendered, _runtime, warnings = render_containers(table, Path("/data/config"))
+
+        assert warnings == []
+        assert not managed_files_are_writable(table)
+
+    @pytest.mark.parametrize("mutating_option", ["rw", "U"])
+    def test_managed_file_mount_warns_about_mutating_options(self, mutating_option):
+        """Verify that managed file mount warns about mutating options."""
+        table = {
+            "app": {
+                "privileged": False,
+                "Container": {
+                    "Image": "alpine:latest",
+                    "Volume": f"${{FILES_DIR}}/config.yaml:/app/config.yaml:ro,{mutating_option}",
+                },
+            }
+        }
+
+        rendered, _runtime, warnings = render_containers(table, Path("/data/config"))
+
+        assert (
+            f"Volume=/data/config/files/config.yaml:/app/config.yaml:ro,{mutating_option}"
+            in rendered["app.container"]
+        )
+        assert len(warnings) == 1
+        assert "deployment inputs" in warnings[0]
+
+    def test_managed_file_mount_accepts_read_only_option(self):
+        """Verify that managed file mount accepts read only option."""
+        table = {
+            "app": {
+                "privileged": False,
+                "Container": {
+                    "Image": "alpine:latest",
+                    "Volume": "${FILES_DIR}/config.yaml:/app/config.yaml:ro,Z",
+                },
+            }
+        }
+
+        rendered, _runtime, warnings = render_containers(table, Path("/data/config"))
+
+        assert (
+            "Volume=/data/config/files/config.yaml:/app/config.yaml:ro,Z"
+            in rendered["app.container"]
+        )
+        assert warnings == []
+
+    def test_managed_file_structured_mount_warns_but_remains_supported(self):
+        """Verify that managed file structured mount warns but remains supported."""
+        table = {
+            "app": {
+                "privileged": True,
+                "Container": {
+                    "Image": "alpine:latest",
+                    "Mount": "type=bind,source=${FILES_DIR}/config.yaml,target=/app/config.yaml",
+                    "PodmanArgs": ["--pid=host", "--privileged"],
+                },
+            }
+        }
+
+        rendered, runtime, warnings = render_containers(table, Path("/data/config"))
+
+        unit = rendered["app.container"]
+        assert (
+            "Mount=type=bind,source=/data/config/files/config.yaml,target=/app/config.yaml" in unit
+        )
+        assert "PodmanArgs=--pid=host" in unit
+        assert "PodmanArgs=--privileged" in unit
+        assert runtime[0]["mode"] == "rootful"
+        assert len(warnings) == 1
+        assert "use a Podman volume for mutable runtime data" in warnings[0]
+
+    @pytest.mark.parametrize("read_only", ["ro", "readonly", "ro=true", "readonly=true"])
+    def test_managed_file_structured_mount_accepts_read_only_options(self, read_only):
+        """Verify that managed file structured mount accepts read only options."""
+        table = {
+            "app": {
+                "privileged": False,
+                "Container": {
+                    "Image": "alpine:latest",
+                    "Mount": (
+                        "type=bind,source=${FILES_DIR}/config.yaml,"
+                        f"target=/app/config.yaml,{read_only}"
+                    ),
+                },
+            }
+        }
+
+        _rendered, _runtime, warnings = render_containers(table, Path("/data/config"))
+
+        assert warnings == []
+
+    @pytest.mark.parametrize(
+        ("options", "read_only"),
+        [
+            ("rw=false", True),
+            ("readwrite=false", True),
+            ("ro=false", False),
+            ("readonly=false", False),
+            ("ro=true,rw=false", True),
+            ("ro=false,rw=true", False),
+            ("ro=true,readonly=false", False),
+            ("readonly=true,ro=false", False),
+            ("ro=false,rw=false", False),
+            ("readonly=false,readwrite=false", False),
+            ("readonly=true,readwrite=false", True),
+            ("readonly=false,readwrite=true", False),
+        ],
+    )
+    def test_managed_file_structured_mount_boolean_options(self, options, read_only):
+        """Interpret structured mount read-only aliases and boolean values."""
+        value = f"type=bind,source=${{FILES_DIR}}/config.yaml,target=/app/config.yaml,{options}"
+
+        assert managed_file_mount_is_read_only("Mount", value) is read_only
+
+    @pytest.mark.parametrize("mutating_option", ["rw", "readwrite", "U", "chown"])
+    def test_managed_file_structured_mount_warns_about_mutating_flags(self, mutating_option):
+        """Verify that managed file structured mount warns about mutating flags."""
+        table = {
+            "app": {
+                "privileged": False,
+                "Container": {
+                    "Image": "alpine:latest",
+                    "Mount": (
+                        "type=bind,source=${FILES_DIR}/config.yaml,"
+                        f"target=/app/config.yaml,ro,{mutating_option}"
+                    ),
+                },
+            }
+        }
+
+        rendered, _runtime, warnings = render_containers(table, Path("/data/config"))
+
+        assert f",ro,{mutating_option}" in rendered["app.container"]
+        assert len(warnings) == 1
+
+
+class TestManagedFilePermissions:
+    @staticmethod
+    def container_table(option, form):
+        """Build a container mount in the requested directive or PodmanArgs form."""
+        volume = f"${{FILES_DIR}}/state:/state:{option}"
+        if form == "Volume":
+            mount = {"Volume": volume}
+        elif form.endswith("="):
+            mount = {"PodmanArgs": [f"{form}{volume}"]}
+        else:
+            mount = {"PodmanArgs": [form, volume]}
+        return {"app": {"privileged": False, "Container": {"Image": "alpine", **mount}}}
+
+    @pytest.mark.parametrize("form", ["Volume", "--volume=", "--volume", "-v=", "-v"])
+    @pytest.mark.parametrize("option", ["RO", "RW", "Ro", "ro,u", "ro,unknown", ""])
+    def test_invalid_volume_options_are_rejected(self, option, form):
+        """Reject unsupported volume options in every supported argument form."""
+        table = self.container_table(option, form)
+
+        with pytest.raises(ProvisionError, match="invalid Podman volume option"):
+            managed_files_are_writable(table)
+        with pytest.raises(ProvisionError, match="invalid Podman volume option"):
+            render_containers(table, Path("/data/config"))
+
+    @pytest.mark.parametrize("form", ["Volume", "--volume="])
+    @pytest.mark.parametrize(
+        ("option", "writable"),
+        [
+            ("ro", False),
+            ("ro,z", False),
+            ("ro,Z", False),
+            ("ro,idmap=uids=0-1-10;gids=0-1-10", False),
+            ("ro,idmap=uids=0-1-10:100-200-10", False),
+            ("rw", True),
+            ("ro,U", True),
+            ("O,upperdir=/upper,workdir=/work", True),
+        ],
+    )
+    def test_valid_volume_options_preserve_casing(self, option, writable, form):
+        """Preserve volume option spelling while deriving managed-file access."""
+        table = self.container_table(option, form)
+
+        assert managed_files_are_writable(table) is writable
+        rendered, _runtime, _warnings = render_containers(table, Path("/data/config"))
+        assert f"/state:{option}" in rendered["app.container"]
+
+    @pytest.mark.parametrize("form", ["Volume", "--volume="])
+    def test_writable_mount_does_not_bypass_later_validation(self, form):
+        """Continue validating every mount after detecting a writable one."""
+        table = self.container_table("RO", form)
+        table["app"]["Container"]["Volume"] = ["${FILES_DIR}/cache:/cache:rw"] + (
+            ["${FILES_DIR}/state:/state:RO"] if form == "Volume" else []
+        )
+
+        with pytest.raises(ProvisionError, match="invalid Podman volume option"):
+            managed_files_are_writable(table)
 
 
 class TestRenderNetworks:

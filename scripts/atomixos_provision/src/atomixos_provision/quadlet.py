@@ -1,6 +1,8 @@
 """Quadlet unit rendering (container, network, volume, build)."""
 
+import os
 import re
+import shlex
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +37,38 @@ QUADLET_SUFFIXES = frozenset(
     {".build", ".container", ".image", ".kube", ".network", ".pod", ".volume"}
 )
 DIRECTIVE_NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]*$")
+VOLUME_OPTIONS = frozenset(
+    {
+        "ro",
+        "rw",
+        "z",
+        "Z",
+        "O",
+        "U",
+        "noexec",
+        "exec",
+        "nodev",
+        "dev",
+        "nosuid",
+        "suid",
+        "private",
+        "rprivate",
+        "shared",
+        "rshared",
+        "slave",
+        "rslave",
+        "unbindable",
+        "runbindable",
+        "bind",
+        "rbind",
+        "cached",
+        "delegated",
+        "copy",
+        "nocopy",
+        "no-dereference",
+        "idmap",
+    }
+)
 
 
 # --- Helpers ---
@@ -146,6 +180,226 @@ def render_section(section_name: str, directives: dict[str, list], config_root: 
     return lines
 
 
+def _require_absolute_source(source: str, value: str) -> str:
+    """Reject relative host sources whose base directory differs by mount form.
+
+    Quadlet resolves relative ``Volume=``/``Mount=`` sources from the installed
+    unit directory, while ``PodmanArgs`` resolves them from the service working
+    directory, so neither can be classified from the provisioning process.
+    """
+    if not source.startswith(("/", CONFIG_DIR_TOKEN, FILES_DIR_TOKEN)):
+        raise provision_error(
+            f"relative host mount source {source!r} in {value!r} is not supported; "
+            f"use an absolute path, {CONFIG_DIR_TOKEN}, or {FILES_DIR_TOKEN}"
+        )
+    return source
+
+
+def _glob_literal_prefix(source: str) -> str:
+    """Return the directory before a glob source's first wildcard component.
+
+    A glob can match anything beneath that literal prefix, so classifying the
+    prefix conservatively treats ``${CONFIG_DIR}/*`` as covering ``files/``.
+    """
+    parts = source.split("/")
+    for index, part in enumerate(parts):
+        if any(character in part for character in "*?["):
+            return "/".join(parts[:index]) or "/"
+    return source
+
+
+def _mount_source(directive: str, value: str) -> str | None:
+    """Return a host mount source, excluding named and anonymous Podman volumes."""
+    if directive in {"Volume", "PodmanArgsVolume"}:
+        source, separator, _destination = value.partition(":")
+        if not separator:
+            # A single field is the container path of an anonymous volume.
+            return None
+        source = source.strip()
+        # Volume names cannot contain "/", so a slash makes the source path-like
+        # and subject to the absolute-or-token rule rather than a named volume.
+        if "/" in source or source.startswith((".", CONFIG_DIR_TOKEN, FILES_DIR_TOKEN)):
+            return _require_absolute_source(source, value)
+        return None
+    if directive in {"Mount", "PodmanArgsMount"}:
+        source = None
+        mount_type = None
+        for option in value.split(","):
+            key, separator, raw_value = option.partition("=")
+            if not separator:
+                continue
+            normalized_key = key.strip().lower()
+            if normalized_key == "type":
+                mount_type = raw_value.strip().lower()
+            elif normalized_key in {"source", "src"} and source is None:
+                source = raw_value.strip()
+        if mount_type not in {None, "bind", "glob"} or source is None:
+            return None
+        source = _require_absolute_source(source, value)
+        return _glob_literal_prefix(source) if mount_type == "glob" else source
+    return None
+
+
+def _lexical_absolute_path(path: str | Path) -> Path:
+    """Normalize a Linux absolute path lexically without following symlinks."""
+    # POSIX abspath preserves exactly two leading slashes; Linux treats them
+    # as the same filesystem root as a single slash.
+    return Path("/" + os.path.abspath(os.fspath(path)).lstrip("/"))
+
+
+def _managed_file_source(source: str, config_root: Path | None) -> bool:
+    """Return whether a mount source lexically overlaps the managed files root."""
+    if config_root is None:
+        # Preserve detection for tokenized configs for callers that do not have
+        # the runtime root available. Absolute paths require that context.
+        for token in (FILES_DIR_TOKEN, CONFIG_DIR_TOKEN):
+            if source == token or source.startswith(f"{token}/"):
+                files_root = Path(f"{CONFIG_DIR_TOKEN}/files")
+                source_path = Path(
+                    os.path.normpath(source.replace(FILES_DIR_TOKEN, str(files_root)))
+                )
+                return (
+                    source_path == files_root
+                    or files_root in source_path.parents
+                    or source_path in files_root.parents
+                )
+        return False
+
+    files_root = _lexical_absolute_path(config_root / "files")
+    source_path = _lexical_absolute_path(substitute_tokens(source, config_root))
+    return (
+        source_path == files_root
+        or files_root in source_path.parents
+        or source_path in files_root.parents
+    )
+
+
+def managed_file_mount_warning(
+    directive: str, value: str, path: str, config_root: Path | None = None
+) -> str | None:
+    """Warn when managed bundle files may be changed by a container."""
+    source = _mount_source(directive, value)
+    if source is None or not _managed_file_source(source, config_root):
+        return None
+
+    read_only = managed_file_mount_is_read_only(directive, value)
+    if read_only:
+        return None
+    return (
+        f"{path} mounts managed bundle files without a clearly read-only mount; "
+        "managed bundle files are deployment inputs, so use a Podman volume "
+        "for mutable runtime data"
+    )
+
+
+def managed_file_mount_is_read_only(directive: str, value: str) -> bool:
+    """Return whether a managed-file mount explicitly requests read-only access.
+
+    Podman's structured mount syntax treats ``ro``/``readonly`` and
+    ``rw``/``readwrite`` as boolean aliases.  Track both sides explicitly so
+    that false values are meaningful rather than being mistaken for an absent
+    option.  An explicit writable request remains dominant for this safety
+    check when contradictory options are supplied.
+    """
+    if directive in {"Volume", "PodmanArgsVolume"}:
+        parts = value.split(":", 2)
+        volume_options = set(parts[2].split(",")) if len(parts) == 3 else set()
+        for option in volume_options:
+            if option not in VOLUME_OPTIONS and not option.startswith(
+                ("idmap=", "upperdir=", "workdir=")
+            ):
+                raise provision_error(f"invalid Podman volume option: {option!r}")
+        return "ro" in volume_options and not {"rw", "U"}.intersection(volume_options)
+
+    read_only = False
+    writable = False
+    for option in value.split(","):
+        key, separator, raw_value = option.partition("=")
+        normalized_key = key.strip().lower()
+        if normalized_key in {"ro", "readonly"}:
+            if not separator or raw_value.strip().lower() == "true":
+                read_only = True
+            elif raw_value.strip().lower() == "false":
+                writable = True
+        elif normalized_key in {"rw", "readwrite"}:
+            if not separator or raw_value.strip().lower() == "true":
+                writable = True
+            elif raw_value.strip().lower() == "false":
+                read_only = True
+        elif normalized_key in {"u", "chown"} and (
+            not separator or raw_value.strip().lower() == "true"
+        ):
+            writable = True
+
+    return read_only and not writable
+
+
+def _podman_mount_values(values: list[str]):
+    """Yield mount arguments carried by PodmanArgs."""
+    tokens: list[tuple[str, int]] = []
+    for index, raw_value in enumerate(values):
+        try:
+            tokens.extend((token, index) for token in shlex.split(raw_value))
+        except ValueError as exc:
+            raise provision_error(f"invalid PodmanArgs[{index}] quoting: {exc}") from exc
+    for position, (value, index) in enumerate(tokens):
+        for option in ("--volume=", "-v=", "--mount="):
+            if value.startswith(option):
+                yield option.rstrip("=").lstrip("-"), value[len(option) :], index
+                break
+        else:
+            if value.startswith("-v") and len(value) > 2:
+                yield "v", value[2:], index
+                continue
+            for option in ("--volume", "-v", "--mount"):
+                if value == option and position + 1 < len(tokens):
+                    mount_value, mount_index = tokens[position + 1]
+                    yield option.lstrip("-"), mount_value, mount_index
+                    break
+
+
+def managed_files_are_writable(
+    container_table: dict[str, Any], config_root: Path | None = None
+) -> bool:
+    """Return whether any configured managed-file mount needs host write access."""
+    writable = False
+    for raw_sections in container_table.values():
+        if not isinstance(raw_sections, dict):
+            continue
+        container = raw_sections.get("Container")
+        if not isinstance(container, dict):
+            continue
+        for directive in ("Volume", "Mount"):
+            raw_values = container.get(directive, [])
+            if isinstance(raw_values, str):
+                raw_values = [raw_values]
+            for value in raw_values:
+                if (
+                    isinstance(value, str)
+                    and (source := _mount_source(directive, value)) is not None
+                    and _managed_file_source(source, config_root)
+                    and not managed_file_mount_is_read_only(directive, value)
+                ):
+                    writable = True
+        raw_podman_args = container.get("PodmanArgs", [])
+        if isinstance(raw_podman_args, str):
+            raw_podman_args = [raw_podman_args]
+        podman_args = [value for value in raw_podman_args if isinstance(value, str)]
+        for value, mount_value, _index in _podman_mount_values(podman_args):
+            directive = "Volume" if value in {"volume", "v"} else "Mount"
+            source = _mount_source(
+                "PodmanArgsVolume" if directive == "Volume" else "PodmanArgsMount",
+                mount_value,
+            )
+            if (
+                source is not None
+                and _managed_file_source(source, config_root)
+                and not managed_file_mount_is_read_only(directive, mount_value)
+            ):
+                writable = True
+    return writable
+
+
 # --- Main Render Functions ---
 
 
@@ -180,6 +434,30 @@ def render_containers(
             message = f"{container_path}.Container.Image must be a single string value"
             raise provision_error(message)
         require_string(image_values[0], f"{container_path}.Container.Image")
+        for directive in ("Volume", "Mount"):
+            for idx, value in enumerate(container_directives.get(directive, [])):
+                mount_path = f"{container_path}.Container.{directive}[{idx}]"
+                warning = managed_file_mount_warning(
+                    directive, require_string(value, mount_path), mount_path, config_root
+                )
+                if warning is not None:
+                    warnings.append(warning)
+        podman_args = container_directives.get("PodmanArgs", [])
+        for directive, value, idx in _podman_mount_values(
+            [
+                require_string(value, f"{container_path}.Container.PodmanArgs[{idx}]")
+                for idx, value in enumerate(podman_args)
+            ]
+        ):
+            mount_path = f"{container_path}.Container.PodmanArgs[{idx}]"
+            warning = managed_file_mount_warning(
+                "PodmanArgsVolume" if directive in {"volume", "v"} else "PodmanArgsMount",
+                value,
+                mount_path,
+                config_root,
+            )
+            if warning is not None:
+                warnings.append(warning)
 
         if privileged:
             if "Network" in container_directives and container_directives["Network"] != ["host"]:

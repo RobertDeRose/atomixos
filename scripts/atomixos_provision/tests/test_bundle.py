@@ -2,6 +2,7 @@
 
 import gzip
 import io
+import os
 import tarfile
 
 import pytest
@@ -10,6 +11,7 @@ from atomixos_provision.bundle import (
     copy_bundle_files,
     detect_bundle_kind,
     extract_bundle_archive,
+    grant_managed_file_access,
     prepare_source_bytes,
     prepare_source_path,
     stage_bundle_files,
@@ -106,6 +108,68 @@ class TestExtractBundleArchive:
         with pytest.raises(ProvisionError, match=r"exceeds .* byte limit"):
             extract_bundle_archive(bundle, "test.tar.gz", tmp_path)
 
+    def test_member_limit_stops_reading_headers(self, tmp_path, monkeypatch):
+        """Reject an oversized archive without holding every tar header in memory."""
+        import atomixos_provision.bundle as bundle_module
+
+        monkeypatch.setattr(bundle_module, "MAX_BUNDLE_MEMBERS", 3)
+        headers_read = []
+        original_next = tarfile.TarFile.next
+
+        def counting_next(archive):
+            """Count each header the extractor pulls from the archive."""
+            member = original_next(archive)
+            if member is not None:
+                headers_read.append(member.name)
+            return member
+
+        monkeypatch.setattr(tarfile.TarFile, "next", counting_next)
+        bundle = self._make_tar_gz({f"files/{index}": "" for index in range(50)})
+
+        with pytest.raises(ProvisionError, match="bundle exceeds 3 member limit"):
+            extract_bundle_archive(bundle, "test.tar.gz", tmp_path)
+        # tarfile.open reads the first header once to validate the archive.
+        assert sorted(set(headers_read)) == ["files/0", "files/1", "files/2", "files/3"]
+        assert list(tmp_path.iterdir()) == []
+
+    def test_rejects_sparse_member_before_writing(self, tmp_path):
+        """A tiny archive cannot declare a large sparse member to fill temporary storage."""
+        tar_buf = io.BytesIO()
+        with tarfile.open(fileobj=tar_buf, mode="w:", format=tarfile.PAX_FORMAT) as tar:
+            tar.addfile(tarfile.TarInfo("config.toml"), io.BytesIO())
+            # A PAX 1.0 GNU sparse member: a one-block map expands to realsize zeros.
+            info = tarfile.TarInfo("GNUSparseFile.0/files/big")
+            info.size = 512
+            info.pax_headers = {
+                "GNU.sparse.major": "1",
+                "GNU.sparse.minor": "0",
+                "GNU.sparse.name": "files/big",
+                "GNU.sparse.realsize": str(64 * 1024 * 1024),
+            }
+            tar.addfile(info, io.BytesIO(b"1\n0\n0\n".ljust(512, b"\0")))
+
+        with pytest.raises(ProvisionError, match="sparse bundle member is not supported"):
+            extract_bundle_archive(gzip.compress(tar_buf.getvalue()), "test.tar.gz", tmp_path)
+        assert list(tmp_path.iterdir()) == []
+
+    def test_rejects_cumulative_member_size_before_writing(self, tmp_path, monkeypatch):
+        """Bound the extracted tree by summed tar headers, not only the decompressed stream."""
+        import atomixos_provision.bundle as bundle_module
+
+        decompress = bundle_module._decompress_to_tempfile
+
+        def decompress_then_lower_limit(*args):
+            """Allow the stream through, then shrink the budget for the header check."""
+            path = decompress(*args)
+            monkeypatch.setattr(bundle_module, "MAX_DECOMPRESSED_BYTES", 15)
+            return path
+
+        monkeypatch.setattr(bundle_module, "_decompress_to_tempfile", decompress_then_lower_limit)
+        bundle = self._make_tar_gz({"config.toml": "version = 1", "files/a": "123456"})
+        with pytest.raises(ProvisionError, match="15 byte decompressed limit"):
+            extract_bundle_archive(bundle, "test.tar.gz", tmp_path)
+        assert list(tmp_path.iterdir()) == []
+
 
 class TestValidateSourceSize:
     def test_rejects_large_source(self, monkeypatch):
@@ -117,19 +181,31 @@ class TestValidateSourceSize:
 
 
 class TestCopyBundleFiles:
+    """Group tests for CopyBundleFiles."""
+
     def _mock_appsvc(self, monkeypatch):
+        """Handle mock appsvc."""
         chowns: list[tuple[str, int, int]] = []
         monkeypatch.setattr(
             "atomixos_provision.bundle.pwd.getpwnam",
             lambda _name: type("Pw", (), {"pw_uid": 1000, "pw_gid": 1000})(),
         )
         monkeypatch.setattr(
+            "atomixos_provision.bundle.grp.getgrnam",
+            lambda _name: type("Gr", (), {"gr_gid": 2000})(),
+        )
+        monkeypatch.setattr(
             "atomixos_provision.bundle.os.chown",
             lambda path, uid, gid, **_kwargs: chowns.append((str(path), uid, gid)),
         )
+        monkeypatch.setattr(
+            "atomixos_provision.bundle.os.fchown",
+            lambda fd, uid, gid: chowns.append((f"fd:{fd}", uid, gid)),
+        )
         return chowns
 
-    def test_copies_files(self, tmp_path, monkeypatch):
+    def test_copies_files(self, tmp_path, monkeypatch, managed_acl_calls):
+        """Install read-only copies as root-owned with appsvc ACL read access."""
         chowns = self._mock_appsvc(monkeypatch)
         source = tmp_path / "source_files"
         source.mkdir()
@@ -144,18 +220,392 @@ class TestCopyBundleFiles:
 
         assert (config_root / "files" / "cert.pem").read_text() == "CERT"
         assert (config_root / "files" / "subdir" / "key.pem").read_text() == "KEY"
-        assert (config_root / "files" / "cert.pem").stat().st_mode & 0o777 == 0o600
-        assert (config_root / "files" / "subdir" / "key.pem").stat().st_mode & 0o777 == 0o600
-        assert any(
-            path.endswith("/files/cert.pem")
-            for path, uid, gid in chowns
-            if (uid, gid) == (1000, 1000)
+        assert (config_root / "files").stat().st_mode & 0o777 == 0o550
+        assert (config_root / "files" / "subdir").stat().st_mode & 0o777 == 0o550
+        assert (config_root / "files" / "cert.pem").stat().st_mode & 0o777 == 0o440
+        assert (config_root / "files" / "subdir" / "key.pem").stat().st_mode & 0o777 == 0o440
+        assert sum(path.startswith("fd:") for path, _uid, _gid in chowns) == 4
+        assert all((uid, gid) == (0, 2000) for _path, uid, gid in chowns)
+        assert sorted((uid, perm) for uid, perm, _path in managed_acl_calls) == [
+            (1000, 0o4),
+            (1000, 0o4),
+            (1000, 0o5),
+            (1000, 0o5),
+        ]
+
+    def test_read_only_reconciliation_removes_workload_ownership(
+        self, tmp_path, monkeypatch, managed_acl_calls
+    ):
+        """A writable tree becomes root-owned with ACL reads when mounts turn read-only."""
+        import atomixos_provision.bundle as bundle_module
+
+        chowns = self._mock_appsvc(monkeypatch)
+        cleared: list[int] = []
+        monkeypatch.setattr(bundle_module, "_clear_access_acl", cleared.append)
+        files_root = tmp_path / "files"
+        files_root.mkdir()
+        (files_root / "state.json").write_text("{}\n")
+
+        grant_managed_file_access(files_root, writable=True)
+        assert [(uid, gid) for _path, uid, gid in chowns] == [(1000, 2000), (1000, 2000)]
+        assert len(cleared) == 2
+        assert managed_acl_calls == []
+
+        chowns.clear()
+        grant_managed_file_access(files_root)
+
+        assert [(uid, gid) for _path, uid, gid in chowns] == [(0, 2000), (0, 2000)]
+        assert files_root.stat().st_mode & 0o777 == 0o550
+        assert files_root.joinpath("state.json").stat().st_mode & 0o777 == 0o440
+        assert [(uid, perm) for uid, perm, _path in managed_acl_calls] == [
+            (1000, 0o5),
+            (1000, 0o4),
+        ]
+        files_root.chmod(0o750)
+
+    def test_reconciles_existing_files_for_writable_mount(self, tmp_path, monkeypatch):
+        """Verify that recovery reconciliation preserves rootless writable access."""
+        chowns = self._mock_appsvc(monkeypatch)
+        files_root = tmp_path / "files"
+        files_root.mkdir()
+        (files_root / "state.json").write_text("{}\n")
+        (files_root / "state.json").chmod(0o600)
+
+        grant_managed_file_access(files_root, writable=True)
+
+        assert files_root.stat().st_mode & 0o777 == 0o750
+        assert len(chowns) == 2
+        assert all((uid, gid) == (1000, 2000) for _path, uid, gid in chowns)
+        assert files_root.joinpath("state.json").stat().st_mode & 0o777 == 0o640
+
+    @pytest.mark.parametrize("entrypoint", ["existing", "staging"])
+    def test_reconciliation_stops_enumerating_at_member_limit(
+        self, tmp_path, monkeypatch, entrypoint
+    ):
+        """Stop a large directory before consuming or changing excess entries."""
+        import atomixos_provision.bundle as bundle_module
+
+        chowns = self._mock_appsvc(monkeypatch)
+        root = tmp_path / "files"
+        root.mkdir()
+        for index in range(10):
+            (root / f"entry-{index}").mkdir()
+        monkeypatch.setattr(bundle_module, "MAX_BUNDLE_MEMBERS", 3)
+        real_scandir = os.scandir
+        seen = []
+        closed = []
+
+        class TrackingScandir:
+            def __init__(self, fd):
+                self.iterator = real_scandir(fd)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                self.iterator.close()
+                closed.append(True)
+
+            def __iter__(self):
+                for entry in self.iterator:
+                    seen.append(entry.name)
+                    yield entry
+
+        monkeypatch.setattr(bundle_module.os, "scandir", TrackingScandir)
+        with pytest.raises(ProvisionError, match="bundle exceeds 3 member limit"):
+            if entrypoint == "existing":
+                grant_managed_file_access(root, writable=True)
+            else:
+                bundle_module._grant_managed_file_access(root, 1000, 2000, writable=True)
+
+        assert len(seen) == 4
+        assert len(chowns) == (4 if entrypoint == "existing" else 3)
+        assert len(closed) == 4
+
+    @pytest.mark.parametrize("limit", [2, 3])
+    def test_reconciliation_counts_nested_members_globally(self, tmp_path, monkeypatch, limit):
+        """Share one budget across sibling directories and accept its exact limit."""
+        import atomixos_provision.bundle as bundle_module
+
+        chowns = self._mock_appsvc(monkeypatch)
+        root = tmp_path / "files"
+        (root / "first" / "nested").mkdir(parents=True)
+        (root / "second").mkdir()
+        monkeypatch.setattr(bundle_module, "MAX_BUNDLE_MEMBERS", limit)
+
+        if limit == 2:
+            with pytest.raises(ProvisionError, match="bundle exceeds 2 member limit"):
+                grant_managed_file_access(root, writable=True)
+            assert len(chowns) == 3
+        else:
+            grant_managed_file_access(root, writable=True)
+            assert len(chowns) == 4
+            assert all(path.stat().st_mode & 0o777 == 0o750 for path in root.rglob("*"))
+
+    def test_rejects_hardlinked_managed_file_before_chown_or_chmod(self, tmp_path, monkeypatch):
+        """Reject hardlinks without mutating their external inode."""
+        chowns = self._mock_appsvc(monkeypatch)
+        chmods: list[tuple[int, int]] = []
+        monkeypatch.setattr(
+            "atomixos_provision.bundle.os.fchmod",
+            lambda fd, mode: chmods.append((fd, mode)),
         )
-        assert any(
-            path.endswith("/files/subdir/key.pem")
-            for path, uid, gid in chowns
-            if (uid, gid) == (1000, 1000)
+        files_root = tmp_path / "files"
+        files_root.mkdir()
+        outside = tmp_path / "outside.json"
+        outside.write_text("{}\n")
+        outside_stat = outside.stat()
+        (files_root / "state.json").hardlink_to(outside)
+
+        with pytest.raises(ProvisionError, match="single-link regular file"):
+            grant_managed_file_access(files_root)
+
+        after_stat = outside.stat()
+        assert (after_stat.st_uid, after_stat.st_gid, after_stat.st_mode) == (
+            outside_stat.st_uid,
+            outside_stat.st_gid,
+            outside_stat.st_mode,
         )
+        assert len(chowns) == 1
+        assert len(chmods) == 1
+
+    @pytest.mark.parametrize(
+        ("limit_name", "limit", "pattern"),
+        [
+            ("MAX_BUNDLE_MEMBERS", 1, "bundle exceeds 1 member limit"),
+            ("MAX_BUNDLE_MEMBER_BYTES", 2, "exceeds 2 byte limit"),
+            ("MAX_DECOMPRESSED_BYTES", 5, "exceeds 5 byte decompressed limit"),
+        ],
+    )
+    def test_stage_bundle_files_enforces_snapshot_limits(
+        self, tmp_path, monkeypatch, limit_name, limit, pattern
+    ):
+        """Enforce configured member and byte limits during staging."""
+        import atomixos_provision.bundle as bundle_module
+
+        monkeypatch.setattr(bundle_module, "MAX_BUNDLE_MEMBERS", 100)
+        monkeypatch.setattr(bundle_module, "MAX_BUNDLE_MEMBER_BYTES", 100)
+        monkeypatch.setattr(bundle_module, "MAX_DECOMPRESSED_BYTES", 100)
+        monkeypatch.setattr(bundle_module, limit_name, limit)
+        source = tmp_path / "source-files"
+        source.mkdir()
+        (source / "first.txt").write_bytes(b"abc")
+        (source / "second.txt").write_bytes(b"def")
+
+        with pytest.raises(ProvisionError, match=pattern):
+            stage_bundle_files(source, tmp_path / "destination")
+
+    def test_snapshot_stops_enumerating_after_member_limit(self, tmp_path, monkeypatch):
+        """Stop reading a directory once its global member limit is exceeded."""
+        import atomixos_provision.bundle as bundle_module
+
+        monkeypatch.setattr(bundle_module, "MAX_BUNDLE_MEMBERS", 1)
+        source = tmp_path / "source-files"
+        source.mkdir()
+        for index in range(10):
+            (source / f"entry-{index:02d}.txt").write_bytes(b"x")
+
+        real_scandir = bundle_module.os.scandir
+        seen: list[str] = []
+
+        class TrackingScandir:
+            def __init__(self, iterator):
+                self.iterator = iterator
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                self.iterator.close()
+
+            def __iter__(self):
+                return self
+
+            def __next__(self):
+                entry = next(self.iterator)
+                seen.append(entry.name)
+                return entry
+
+        def tracking_scandir(path):
+            return TrackingScandir(real_scandir(path))
+
+        monkeypatch.setattr(bundle_module.os, "scandir", tracking_scandir)
+
+        with pytest.raises(ProvisionError, match="bundle exceeds 1 member limit"):
+            stage_bundle_files(source, tmp_path / "destination")
+
+        assert len(seen) == 2
+
+    def test_snapshot_reserves_pending_ancestor_members(self, tmp_path, monkeypatch):
+        """Keep pending ancestor names within the global enumeration budget."""
+        import atomixos_provision.bundle as bundle_module
+
+        source = tmp_path / "source"
+        source.mkdir()
+        nested = source / "a-directory"
+        nested.mkdir()
+        for index in range(3):
+            (source / f"z-{index}").mkdir()
+            (nested / f"entry-{index}").mkdir()
+        monkeypatch.setattr(bundle_module, "MAX_BUNDLE_MEMBERS", 4)
+        real_scandir = bundle_module.os.scandir
+        seen = []
+
+        class TrackingScandir:
+            def __init__(self, iterator):
+                self.iterator = iterator
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                self.iterator.close()
+
+            def __iter__(self):
+                for entry in self.iterator:
+                    seen.append(entry.name)
+                    yield entry
+
+        monkeypatch.setattr(
+            bundle_module.os, "scandir", lambda path: TrackingScandir(real_scandir(path))
+        )
+        with pytest.raises(ProvisionError, match="bundle exceeds 4 member limit"):
+            stage_bundle_files(source, tmp_path / "destination")
+        assert len(seen) == 5
+
+    @pytest.mark.skipif(not hasattr(os, "O_PATH"), reason="requires Linux O_PATH")
+    @pytest.mark.parametrize("operation", ["snapshot", "reconciliation"])
+    @pytest.mark.parametrize("replacement", ["fifo", "regular"])
+    def test_file_swap_never_opens_for_reading(
+        self, tmp_path, monkeypatch, native_file_open, operation, replacement
+    ):
+        """Reject an unverified replacement before any readable open."""
+        import atomixos_provision.bundle as bundle_module
+
+        self._mock_appsvc(monkeypatch)
+        source = tmp_path / "source"
+        source.mkdir()
+        payload = source / "payload"
+        payload.write_bytes(b"data")
+        real_open = bundle_module.os.open
+        readable_opens = []
+        swapped = False
+
+        def swap_before_open(path, flags, *args, **kwargs):
+            nonlocal swapped
+            if path == "payload" and not swapped:
+                payload.rename(source / "retained")
+                if replacement == "fifo":
+                    os.mkfifo(payload)
+                else:
+                    payload.write_bytes(b"replacement")
+                swapped = True
+            if path == "payload" and not flags & os.O_PATH:
+                readable_opens.append(path)
+                pytest.fail("unverified replacement inode was opened for reading")
+            return real_open(path, flags, *args, **kwargs)
+
+        monkeypatch.setattr(bundle_module.os, "open", swap_before_open)
+        pattern = "single-link regular file" if replacement == "fifo" else "changed during"
+        with pytest.raises(ProvisionError, match=pattern):
+            if operation == "snapshot":
+                stage_bundle_files(source, tmp_path / "destination")
+            else:
+                grant_managed_file_access(source, writable=True)
+        assert swapped
+        assert not readable_opens
+
+    @pytest.mark.skipif(not hasattr(os, "O_PATH"), reason="requires Linux O_PATH")
+    @pytest.mark.parametrize("operation", ["snapshot", "reconciliation"])
+    def test_uses_pinned_inode_after_name_swap(
+        self, tmp_path, monkeypatch, native_file_open, operation
+    ):
+        """Read or reconcile the verified inode after its name is replaced."""
+        import atomixos_provision.bundle as bundle_module
+
+        self._mock_appsvc(monkeypatch)
+        source = tmp_path / "source"
+        source.mkdir()
+        payload = source / "payload"
+        payload.write_bytes(b"original")
+        real_open = bundle_module.os.open
+        swapped = False
+
+        def swap_after_pin(path, flags, *args, **kwargs):
+            nonlocal swapped
+            if str(path).startswith("/proc/self/fd/") and not swapped:
+                payload.rename(source / "retained")
+                payload.write_bytes(b"replacement")
+                payload.chmod(0o600)
+                swapped = True
+            return real_open(path, flags, *args, **kwargs)
+
+        monkeypatch.setattr(bundle_module.os, "open", swap_after_pin)
+        destination = tmp_path / "destination"
+        if operation == "snapshot":
+            # The swap renames directory entries, so the snapshot is rejected
+            # after copying the pinned inode rather than the replacement.
+            with pytest.raises(ProvisionError, match="bundle directory changed during snapshot"):
+                stage_bundle_files(source, destination)
+            assert (destination / "payload").read_bytes() == b"original"
+        else:
+            grant_managed_file_access(source, writable=True)
+            assert (source / "retained").stat().st_mode & 0o777 == 0o640
+        assert swapped
+        assert payload.stat().st_mode & 0o777 == 0o600
+
+    @pytest.mark.parametrize("operation", ["snapshot", "reconciliation"])
+    def test_regular_file_open_requires_non_opening_handles(
+        self, tmp_path, monkeypatch, native_file_open, operation
+    ):
+        """Fail closed on hosts without Linux O_PATH before opening a payload."""
+        import atomixos_provision.bundle as bundle_module
+
+        self._mock_appsvc(monkeypatch)
+        monkeypatch.delattr(bundle_module.os, "O_PATH", raising=False)
+        source = tmp_path / "source"
+        source.mkdir()
+        (source / "payload").write_bytes(b"data")
+        real_open = bundle_module.os.open
+
+        def no_payload_open(path, flags, *args, **kwargs):
+            if path == "payload":
+                pytest.fail("payload opened without a non-opening handle")
+            return real_open(path, flags, *args, **kwargs)
+
+        monkeypatch.setattr(bundle_module.os, "open", no_payload_open)
+        with pytest.raises(ProvisionError, match="requires Linux O_PATH"):
+            if operation == "snapshot":
+                stage_bundle_files(source, tmp_path / "destination")
+            else:
+                grant_managed_file_access(source)
+
+    def test_copy_bundle_files_enforces_snapshot_limits(self, tmp_path, monkeypatch):
+        """Enforce configured total-byte limits during production copies."""
+        import atomixos_provision.bundle as bundle_module
+
+        self._mock_appsvc(monkeypatch)
+        monkeypatch.setattr(bundle_module, "MAX_BUNDLE_MEMBERS", 100)
+        monkeypatch.setattr(bundle_module, "MAX_BUNDLE_MEMBER_BYTES", 100)
+        monkeypatch.setattr(bundle_module, "MAX_DECOMPRESSED_BYTES", 5)
+        source = tmp_path / "source-files"
+        source.mkdir()
+        (source / "first.txt").write_bytes(b"abc")
+        (source / "second.txt").write_bytes(b"def")
+
+        with pytest.raises(ProvisionError, match="exceeds 5 byte decompressed limit"):
+            copy_bundle_files(source, tmp_path / "config")
+
+    def test_rejects_symlinked_files_root_during_reconciliation(self, tmp_path, monkeypatch):
+        """Verify that reconciliation never follows a files-root symlink."""
+        self._mock_appsvc(monkeypatch)
+        target = tmp_path / "target"
+        target.mkdir()
+        files_root = tmp_path / "files"
+        files_root.symlink_to(target, target_is_directory=True)
+
+        with pytest.raises(ProvisionError, match="managed files root must be a directory"):
+            grant_managed_file_access(files_root)
 
     def test_rejects_symlink_source_entries(self, tmp_path, monkeypatch):
         self._mock_appsvc(monkeypatch)
@@ -183,6 +633,7 @@ class TestCopyBundleFiles:
             copy_bundle_files(source, config_root)
 
     def test_creates_empty_files_dir(self, tmp_path, monkeypatch):
+        """Verify that creates empty files dir."""
         self._mock_appsvc(monkeypatch)
         source = tmp_path / "source_files"
         source.mkdir()
@@ -192,7 +643,7 @@ class TestCopyBundleFiles:
         copy_bundle_files(source, config_root)
 
         assert (config_root / "files").is_dir()
-        assert (config_root / "files").stat().st_mode & 0o777 == 0o700
+        assert (config_root / "files").stat().st_mode & 0o777 == 0o550
 
     def test_none_source(self, tmp_path):
         config_root = tmp_path / "config"

@@ -19,7 +19,6 @@ from atomixos_provision.provision import (
     write_imported_state,
 )
 from atomixos_provision.staging import (
-    ensure_runtime_layout,
     reserve_staged_job_slot,
     runtime_paths,
 )
@@ -312,18 +311,6 @@ async def test_apply_config_operation_direct_path_applies_candidate(monkeypatch,
     assert "9.9.9.9" in (config_root / "config.toml").read_text()
 
 
-def test_wait_for_staged_result_times_out_while_worker_active(monkeypatch, tmp_path):
-    from atomixos_provision import provision
-
-    paths = runtime_paths(tmp_path / "run")
-    (paths.active / "job-1").mkdir(parents=True)
-
-    monkeypatch.setattr(provision, "STAGED_RESULT_TIMEOUT_SECONDS", 0.01)
-
-    with pytest.raises(ProvisionError, match="timed out waiting"):
-        provision._wait_for_staged_result(paths, "job-1")
-
-
 def test_wait_for_staged_result_rereads_before_timeout_failure(monkeypatch, tmp_path):
     from atomixos_provision import provision
 
@@ -370,19 +357,15 @@ def test_wait_for_staged_result_times_out_claimed_job_without_result(monkeypatch
 
     paths = runtime_paths(tmp_path / "run")
     (paths.active / "job-1").mkdir(parents=True)
-    calls = {"count": 0}
 
-    def fake_monotonic():
-        calls["count"] += 1
-        return 0 if calls["count"] == 1 else 2
-
+    times = iter([0, 2, 2])
     monkeypatch.setattr(provision, "STAGED_RESULT_TIMEOUT_SECONDS", 1)
-    monkeypatch.setattr(provision.time, "monotonic", fake_monotonic)
-    monkeypatch.setattr(provision.time, "sleep", lambda _seconds: None)
-    monkeypatch.setattr(provision, "read_result", lambda _paths, _job_id: None)
+    monkeypatch.setattr(provision.time, "monotonic", lambda: next(times))
 
     with pytest.raises(ProvisionError, match="timed out waiting"):
         provision._wait_for_staged_result(paths, "job-1")
+
+    assert (paths.active / "job-1").is_dir()
 
 
 def test_wait_for_staged_result_fails_when_worker_removes_job_without_result(
@@ -714,25 +697,84 @@ Image = "docker.io/library/alpine:latest"
     assert (config_root / "managed-users.json").read_text() == '["admin"]\n'
 
 
-def test_import_config_migrates_existing_config_without_first_marker(tmp_path, monkeypatch):
+def test_import_config_from_path_reapply_migrates_legacy_config_without_marker(
+    tmp_path, monkeypatch
+):
+    """Reapply an existing config even when it predates the first-config marker."""
     monkeypatch.setattr(
         "atomixos_provision.config.load_config_schema",
         lambda: {"type": "object", "additionalProperties": True},
     )
-    monkeypatch.setattr(
-        "atomixos_provision.provision.complete_reapply",
-        lambda _root, _progress=None: (True, [], False),
-    )
-    source = tmp_path / "config.toml"
-    source.write_text(BASE_PARTIAL_CONFIG)
+    activated_roots = []
+
+    def complete_reapply(root, _progress=None):
+        activated_roots.append(root)
+        return True, [], "skipped"
+
+    monkeypatch.setattr("atomixos_provision.provision.complete_reapply", complete_reapply)
     config_root = tmp_path / "config"
     config_root.mkdir()
-    (config_root / "config.toml").write_text("version = 1\n")
+    (config_root / "config.toml").write_text(BASE_PARTIAL_CONFIG)
+    source = tmp_path / "updated.toml"
+    updated_config = BASE_PARTIAL_CONFIG.replace("alpine:latest", "busybox:latest")
+    source.write_text(updated_config)
+    assert not (config_root / ".first-config").exists()
 
     result = import_config_from_path(source, config_root)
 
     assert result["reapply"] is True
-    assert (config_root / ".first-config").is_file()
+    assert result["rolled_back"] is False
+    assert activated_roots == [config_root]
+    assert (config_root / ".first-config").read_text() == "ok\n"
+    assert (config_root / "config.toml").read_text() == updated_config
+    assert (tmp_path / "config-rollback" / "config.toml").read_text() == BASE_PARTIAL_CONFIG
+
+
+def test_durable_reapply_grants_writable_access_using_runtime_root(monkeypatch, tmp_path):
+    """Keep absolute writable mounts enabled while reconciling a candidate root."""
+    from atomixos_provision import provision
+
+    config_root = tmp_path / "config"
+    config_root.mkdir()
+    (config_root / "config.toml").write_text("version = 1\n")
+    candidate_root = tmp_path / "rendered-candidate"
+    files_root = candidate_root / "files"
+    files_root.mkdir(parents=True)
+    (files_root / "state").write_text("state\n")
+    (candidate_root / "config.toml").write_text("version = 1\n")
+    parsed = {
+        "containers": {
+            "container": {
+                "app": {
+                    "Container": {
+                        "Image": "alpine",
+                        "Volume": f"{config_root}/files/state:/state:rw",
+                    }
+                }
+            }
+        }
+    }
+    grants = []
+    monkeypatch.setattr(provision, "validate_config_root", lambda root, **_kwargs: root)
+    monkeypatch.setattr(provision, "recover_config_root", lambda _root: None)
+    monkeypatch.setattr(provision, "load_config", lambda _path: parsed)
+    monkeypatch.setattr(provision, "_service_identity", lambda: (1000, 2000))
+    monkeypatch.setattr(provision.os, "chown", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        provision,
+        "grant_managed_file_access",
+        lambda path, *, writable=False: grants.append((path, writable)),
+    )
+    monkeypatch.setattr(
+        provision, "complete_reapply", lambda _root, _progress=None: (True, [], "skipped")
+    )
+
+    result = provision._promote_pre_rendered_candidate_sync(
+        candidate_root, None, config_root, {"allow_reapply": True}
+    )
+
+    assert result["reapply"] is True
+    assert grants == [(config_root.parent / "config-candidate" / "files", True)]
 
 
 def test_import_config_from_path_stages_data_config_outside_worker(monkeypatch, tmp_path):
@@ -781,6 +823,7 @@ def test_import_config_from_path_applies_data_config_in_worker(monkeypatch, tmp_
 
 
 async def test_apply_config_transform_preserves_bundle_files(tmp_path, monkeypatch):
+    """Verify that apply config transform preserves bundle files."""
     monkeypatch.setenv("ATOMIXOS_ALLOW_UNSAFE_CONFIG_ROOT", "1")
     monkeypatch.setattr(
         "atomixos_provision.config.load_config_schema",
@@ -791,7 +834,12 @@ async def test_apply_config_transform_preserves_bundle_files(tmp_path, monkeypat
         lambda _root, _progress=None: (True, [], False),
     )
     monkeypatch.setattr("atomixos_provision.bundle.APP_RUNTIME_USER", "nobody")
+    monkeypatch.setattr(
+        "atomixos_provision.bundle.grp.getgrnam",
+        lambda _name: type("Gr", (), {"gr_gid": 2000})(),
+    )
     monkeypatch.setattr("atomixos_provision.bundle.os.chown", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("atomixos_provision.bundle.os.fchown", lambda *_args: None)
 
     config_root = tmp_path / "config"
     bundle_root = tmp_path / "bundle-src"
@@ -835,7 +883,14 @@ Volume = "${{FILES_DIR}}/app/settings.json:/settings.json:ro"
 
 
 async def test_staged_partial_apply_preserves_bundle_files(tmp_path, monkeypatch):
+    """Verify that staged partial apply preserves bundle files."""
     from atomixos_provision import provision
+
+    def complete_staged_apply(root, _progress=None, *, before_commit=None):
+        """Handle complete staged apply."""
+        if before_commit is not None:
+            before_commit()
+        return True, [], "skipped"
 
     monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
     monkeypatch.setenv("ATOMIXOS_ALLOW_UNSAFE_CONFIG_ROOT", "1")
@@ -845,11 +900,16 @@ async def test_staged_partial_apply_preserves_bundle_files(tmp_path, monkeypatch
     )
     monkeypatch.setattr(
         "atomixos_provision.provision.complete_reapply",
-        lambda _root, _progress=None: (True, [], "skipped"),
+        complete_staged_apply,
     )
     monkeypatch.setattr("atomixos_provision.provision.reconcile_bootstrap_wan", lambda: None)
     monkeypatch.setattr("atomixos_provision.bundle.APP_RUNTIME_USER", "nobody")
+    monkeypatch.setattr(
+        "atomixos_provision.bundle.grp.getgrnam",
+        lambda _name: type("Gr", (), {"gr_gid": 2000})(),
+    )
     monkeypatch.setattr("atomixos_provision.bundle.os.chown", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("atomixos_provision.bundle.os.fchown", lambda *_args: None)
     monkeypatch.setattr("atomixos_provision.provision.os.chown", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         provision,
@@ -907,18 +967,6 @@ async def test_apply_config_transform_rejects_data_config_outside_worker(monkeyp
 
     with pytest.raises(ProvisionError, match="must use staged operations"):
         await apply_config_transform(lambda config: config, Path("/data/config"))
-
-
-def test_wait_for_staged_result_times_out_active_job_without_result(monkeypatch, tmp_path):
-    from atomixos_provision import provision
-
-    paths = runtime_paths(tmp_path / "run")
-    ensure_runtime_layout(paths, for_worker=True)
-    (paths.active / "job-1").mkdir()
-    monkeypatch.setattr(provision, "STAGED_RESULT_TIMEOUT_SECONDS", 0.01)
-
-    with pytest.raises(ProvisionError, match="timed out waiting"):
-        provision._wait_for_staged_result(paths, "job-1")
 
 
 def test_reapply_renders_network_settings_and_rolls_back_on_activation_failure(
@@ -1126,7 +1174,10 @@ def test_write_imported_state_grants_service_read_access_when_root(tmp_path, mon
     assert (config_root / "config.toml").stat().st_mode & 0o040
 
 
-def test_write_imported_state_does_not_grant_service_group_to_bundle_files(tmp_path, monkeypatch):
+def test_write_imported_state_grants_bundle_files_read_only_service_access(
+    tmp_path, monkeypatch, managed_acl_calls
+):
+    """Install read-only bundle files as root-owned with appsvc ACL read access."""
     from atomixos_provision import provision
 
     config_path = tmp_path / "config.toml"
@@ -1136,6 +1187,7 @@ def test_write_imported_state_does_not_grant_service_group_to_bundle_files(tmp_p
     (files_path / "app.txt").write_text("app\n")
     config_root = tmp_path / "config"
     calls = []
+    descriptor_calls = []
     parsed = {
         "ssh_keys": ["ssh-ed25519 AAAA admin@example"],
         "users": {"admin": {"isAdmin": True, "ssh_key": "ssh-ed25519 AAAA admin@example"}},
@@ -1152,6 +1204,10 @@ def test_write_imported_state_does_not_grant_service_group_to_bundle_files(tmp_p
         lambda _name: type("Pw", (), {"pw_uid": 1000, "pw_gid": 1000})(),
     )
     monkeypatch.setattr(
+        "atomixos_provision.bundle.grp.getgrnam",
+        lambda _name: type("Gr", (), {"gr_gid": 2000})(),
+    )
+    monkeypatch.setattr(
         provision.os,
         "chown",
         lambda path, uid, gid, **_kwargs: calls.append((path, uid, gid)),
@@ -1160,11 +1216,44 @@ def test_write_imported_state_does_not_grant_service_group_to_bundle_files(tmp_p
         "atomixos_provision.bundle.os.chown",
         lambda path, uid, gid, **_kwargs: calls.append((path, uid, gid)),
     )
+    monkeypatch.setattr(
+        "atomixos_provision.bundle.os.fchown",
+        lambda fd, uid, gid: descriptor_calls.append((fd, uid, gid)),
+    )
 
     write_imported_state(parsed, config_path, files_path, config_root)
 
-    assert (config_root / "files", -1, 1000) not in calls
-    assert (config_root / "files" / "app.txt", -1, 1000) not in calls
+    assert descriptor_calls
+    assert all((uid, gid) == (0, 2000) for _fd, uid, gid in descriptor_calls)
+    # Install and the following service-access reconciliation each apply the ACL.
+    assert sorted(perm for _uid, perm, _path in managed_acl_calls) == [0o4, 0o4, 0o5, 0o5]
+    assert all(uid == 1000 for uid, _perm, _path in managed_acl_calls)
+    assert (config_root / "files").stat().st_mode & 0o777 == 0o550
+    assert (config_root / "files" / "app.txt").stat().st_mode & 0o777 == 0o440
+
+
+def test_managed_file_writability_uses_runtime_config_root(tmp_path, monkeypatch):
+    """Resolve absolute managed-file mounts against the supplied runtime root."""
+    from atomixos_provision import provision
+
+    config_root = tmp_path / "runtime-config"
+    config_root.mkdir()
+    (config_root / "config.toml").write_text("version = 1\n")
+    parsed = {
+        "containers": {
+            "container": {
+                "app": {
+                    "Container": {
+                        "Image": "alpine",
+                        "Volume": f"{config_root}/files/state:/state:rw",
+                    }
+                }
+            }
+        }
+    }
+    monkeypatch.setattr(provision, "load_config", lambda _path: parsed)
+
+    assert provision._managed_files_are_writable(config_root)
 
 
 def test_direct_initial_import_grants_service_read_access(tmp_path, monkeypatch):

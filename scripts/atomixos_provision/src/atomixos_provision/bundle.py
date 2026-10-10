@@ -1,9 +1,12 @@
-"""Bundle import: tar extraction, file placement, token substitution."""
+"""Bundle import, tar extraction, and managed-file placement."""
 
+import errno
+import grp
 import os
 import pwd
 import shutil
 import stat
+import struct
 import subprocess
 import tarfile
 import tempfile
@@ -13,11 +16,13 @@ from pathlib import Path
 from atomixos_provision.config import provision_error
 
 APP_RUNTIME_USER = "appsvc"
+PROVISION_READER_GROUP = "atomixos-provision"
 
 __all__ = [
     "copy_bundle_files",
     "detect_bundle_kind",
     "extract_bundle_archive",
+    "grant_managed_file_access",
     "import_bundle_bytes",
     "prepare_source_bytes",
     "prepare_source_path",
@@ -45,6 +50,9 @@ MAX_BUNDLE_MEMBERS = (
     if os.geteuid() == os.getuid()
     else 4096
 )
+# Bound recursive traversal so nested directories fail with a provisioning
+# error before exhausting the interpreter stack or descriptor table.
+MAX_BUNDLE_DEPTH = 64
 MAX_BUNDLE_MEMBER_BYTES = (
     int(os.environ.get("ATOMIXOS_MAX_BUNDLE_MEMBER_BYTES", str(64 * 1024 * 1024)))
     if os.geteuid() == os.getuid()
@@ -59,6 +67,7 @@ OPEN_NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
 
 
 def _open_dir_no_follow(path: Path) -> int:
+    """Open a directory without following its final symlink."""
     flags = (
         os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | OPEN_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
     )
@@ -77,20 +86,108 @@ def _open_dir_no_follow(path: Path) -> int:
         raise
 
 
-def _snapshot_files_source(files_source: Path, destination: Path) -> None:
-    root_fd = _open_dir_no_follow(files_source)
+def _open_verified_regular_file(
+    name: str,
+    parent_fd: int,
+    expected: os.stat_result,
+    path: Path,
+    changed_message: str,
+) -> int:
+    """Pin and verify a Linux inode before opening it for reading or mutation."""
+    path_flag = getattr(os, "O_PATH", None)
+    if path_flag is None:
+        raise provision_error("safe managed-file access requires Linux O_PATH and /proc/self/fd")
+    pinned_fd = os.open(
+        name, path_flag | OPEN_NOFOLLOW | getattr(os, "O_CLOEXEC", 0), dir_fd=parent_fd
+    )
     try:
-        _snapshot_dir(root_fd, files_source, destination)
+        confirmed = os.fstat(pinned_fd)
+        if not stat.S_ISREG(confirmed.st_mode) or confirmed.st_nlink != 1:
+            raise provision_error(f"bundle entry must be a single-link regular file: {path}")
+        if (confirmed.st_dev, confirmed.st_ino) != (expected.st_dev, expected.st_ino):
+            raise provision_error(changed_message)
+        # This procfs link refers to the pinned inode, even if its name is replaced.
+        # O_NOFOLLOW is intentionally absent: procfs supplies the verified fd link.
+        readable_fd = os.open(
+            f"/proc/self/fd/{pinned_fd}",
+            os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0),
+        )
+        try:
+            readable_stat = os.fstat(readable_fd)
+            if not stat.S_ISREG(readable_stat.st_mode) or readable_stat.st_nlink != 1:
+                raise provision_error(f"bundle entry must be a single-link regular file: {path}")
+            if (readable_stat.st_dev, readable_stat.st_ino) != (
+                confirmed.st_dev,
+                confirmed.st_ino,
+            ):
+                raise provision_error(changed_message)
+            return readable_fd
+        except Exception:
+            os.close(readable_fd)
+            raise
+    finally:
+        os.close(pinned_fd)
+
+
+def _snapshot_files_source(
+    files_source: Path,
+    destination: Path,
+    *,
+    max_file_bytes: int | None = None,
+    max_total_bytes: int | None = None,
+    max_members: int | None = None,
+) -> int:
+    """Snapshot managed files for deterministic export."""
+    root_fd = _open_dir_no_follow(files_source)
+    total_bytes = [0]
+    member_count = [0]
+    try:
+        return _snapshot_dir(
+            root_fd,
+            files_source,
+            destination,
+            total_bytes=total_bytes,
+            member_count=member_count,
+            max_file_bytes=max_file_bytes,
+            max_total_bytes=max_total_bytes,
+            max_members=max_members,
+        )
     finally:
         os.close(root_fd)
 
 
-def _snapshot_dir(source_fd: int, source_path: Path, destination: Path) -> None:
+def _snapshot_dir(
+    source_fd: int,
+    source_path: Path,
+    destination: Path,
+    *,
+    total_bytes: list[int],
+    member_count: list[int],
+    max_file_bytes: int | None,
+    max_total_bytes: int | None,
+    max_members: int | None,
+    depth: int = 0,
+) -> int:
+    """Copy an export directory into the bounded snapshot.
+
+    Enumerate at most one entry beyond the remaining global member budget before
+    sorting names, so an oversized directory cannot allocate an unbounded list.
+    Reject entry creation, deletion, or rename while the directory is copied.
+    """
     destination.mkdir(parents=True, exist_ok=True)
     destination.chmod(0o755)
-    for name in sorted(os.listdir(source_fd)):
-        if name in {"", ".", ".."}:
-            raise provision_error(f"invalid bundle files entry: {name!r}")
+    initial_dir_stat = os.fstat(source_fd)
+    names: list[str] = []
+    with os.scandir(source_fd) as entries:
+        for entry in entries:
+            name = entry.name
+            if name in {"", ".", ".."}:
+                raise provision_error(f"invalid bundle files entry: {name!r}")
+            if max_members is not None and member_count[0] >= max_members:
+                raise provision_error(f"bundle exceeds {max_members} member limit")
+            member_count[0] += 1
+            names.append(name)
+    for name in sorted(names):
         child_path = source_path / name
         try:
             child_stat = os.stat(name, dir_fd=source_fd, follow_symlinks=False)
@@ -100,6 +197,10 @@ def _snapshot_dir(source_fd: int, source_path: Path, destination: Path) -> None:
         if stat.S_ISLNK(child_stat.st_mode):
             raise provision_error(f"bundle files entry must not be a symlink: {child_path}")
         if stat.S_ISDIR(child_stat.st_mode):
+            if depth >= MAX_BUNDLE_DEPTH:
+                raise provision_error(
+                    f"bundle exceeds {MAX_BUNDLE_DEPTH} directory depth limit: {child_path}"
+                )
             child_fd = os.open(
                 name,
                 os.O_RDONLY
@@ -110,30 +211,103 @@ def _snapshot_dir(source_fd: int, source_path: Path, destination: Path) -> None:
             )
             try:
                 confirmed = os.fstat(child_fd)
-                if not stat.S_ISDIR(confirmed.st_mode):
-                    raise provision_error(f"bundle files entry must be a directory: {child_path}")
-                _snapshot_dir(child_fd, child_path, target_path)
+                if not stat.S_ISDIR(confirmed.st_mode) or (confirmed.st_dev, confirmed.st_ino) != (
+                    child_stat.st_dev,
+                    child_stat.st_ino,
+                ):
+                    raise provision_error(
+                        f"bundle directory changed during snapshot: {child_path}"
+                    )
+                _snapshot_dir(
+                    child_fd,
+                    child_path,
+                    target_path,
+                    total_bytes=total_bytes,
+                    member_count=member_count,
+                    max_file_bytes=max_file_bytes,
+                    max_total_bytes=max_total_bytes,
+                    max_members=max_members,
+                    depth=depth + 1,
+                )
             finally:
                 os.close(child_fd)
             continue
         if not stat.S_ISREG(child_stat.st_mode):
             raise provision_error(f"bundle files entry must be a regular file: {child_path}")
-        file_fd = os.open(
+        if max_file_bytes is not None and child_stat.st_size > max_file_bytes:
+            raise provision_error(
+                f"bundle member {child_path!r} exceeds {max_file_bytes} byte limit"
+            )
+        if max_total_bytes is not None and total_bytes[0] + child_stat.st_size > max_total_bytes:
+            raise provision_error(f"bundle exceeds {max_total_bytes} byte decompressed limit")
+        file_fd = _open_verified_regular_file(
             name,
-            os.O_RDONLY | OPEN_NOFOLLOW | getattr(os, "O_CLOEXEC", 0),
-            dir_fd=source_fd,
+            source_fd,
+            child_stat,
+            child_path,
+            f"bundle file changed during snapshot: {child_path}",
         )
         try:
             confirmed = os.fstat(file_fd)
-            if not stat.S_ISREG(confirmed.st_mode):
-                raise provision_error(f"bundle files entry must be a regular file: {child_path}")
+            if not stat.S_ISREG(confirmed.st_mode) or confirmed.st_nlink != 1:
+                raise provision_error(
+                    f"bundle entry must be a single-link regular file: {child_path}"
+                )
+            if (confirmed.st_dev, confirmed.st_ino) != (child_stat.st_dev, child_stat.st_ino):
+                raise provision_error(f"bundle file changed during snapshot: {child_path}")
             with os.fdopen(file_fd, "rb") as source_file, target_path.open("wb") as output:
                 file_fd = -1
-                shutil.copyfileobj(source_file, output)
+                copied = 0
+                while True:
+                    remaining = 64 * 1024
+                    if max_file_bytes is not None:
+                        remaining = min(remaining, max_file_bytes - copied)
+                    if max_total_bytes is not None:
+                        remaining = min(remaining, max_total_bytes - total_bytes[0] - copied)
+                    chunk = source_file.read(max(0, remaining) + 1)
+                    if not chunk:
+                        break
+                    if max_file_bytes is not None and copied + len(chunk) > max_file_bytes:
+                        raise provision_error(
+                            f"bundle member {child_path!r} exceeds {max_file_bytes} byte limit"
+                        )
+                    if (
+                        max_total_bytes is not None
+                        and total_bytes[0] + copied + len(chunk) > max_total_bytes
+                    ):
+                        raise provision_error(
+                            f"bundle exceeds {max_total_bytes} byte decompressed limit"
+                        )
+                    output.write(chunk)
+                    copied += len(chunk)
+                final_stat = os.fstat(source_file.fileno())
+                if copied != final_stat.st_size:
+                    raise provision_error(
+                        f"bundle file size changed during snapshot: {child_path}"
+                    )
+                if (
+                    not stat.S_ISREG(final_stat.st_mode)
+                    or final_stat.st_nlink != 1
+                    or final_stat.st_size != confirmed.st_size
+                    or final_stat.st_mtime_ns != confirmed.st_mtime_ns
+                    or final_stat.st_ctime_ns != confirmed.st_ctime_ns
+                ):
+                    raise provision_error(f"bundle file changed during snapshot: {child_path}")
             target_path.chmod(0o644)
+            total_bytes[0] += copied
         finally:
             if file_fd >= 0:
                 os.close(file_fd)
+    final_dir_stat = os.fstat(source_fd)
+    if (
+        not stat.S_ISDIR(final_dir_stat.st_mode)
+        or (final_dir_stat.st_dev, final_dir_stat.st_ino)
+        != (initial_dir_stat.st_dev, initial_dir_stat.st_ino)
+        or final_dir_stat.st_mtime_ns != initial_dir_stat.st_mtime_ns
+        or final_dir_stat.st_ctime_ns != initial_dir_stat.st_ctime_ns
+    ):
+        raise provision_error(f"bundle directory changed during snapshot: {source_path}")
+    return total_bytes[0]
 
 
 # --- Detection ---
@@ -301,18 +475,206 @@ def _remove_bundle_files_target(target: Path) -> None:
     target.unlink()
 
 
-def _grant_app_runtime_ownership(path: Path, uid: int, gid: int) -> None:
-    for current in [path, *path.rglob("*")]:
-        current_stat = current.lstat()
-        if stat.S_ISLNK(current_stat.st_mode):
-            raise provision_error(f"bundle files entry must not be a symlink: {current}")
-        os.chown(current, uid, gid, follow_symlinks=False)
-        if stat.S_ISDIR(current_stat.st_mode):
-            current.chmod(0o700)
-        elif stat.S_ISREG(current_stat.st_mode):
-            current.chmod(0o600)
-        else:
-            raise provision_error(f"bundle files entry must be a regular file: {current}")
+ACL_ACCESS_XATTR = "system.posix_acl_access"
+_ACL_XATTR_VERSION = 2
+_ACL_UNDEFINED_ID = 0xFFFFFFFF
+_ACL_USER_OBJ = 0x01
+_ACL_USER = 0x02
+_ACL_GROUP_OBJ = 0x04
+_ACL_MASK = 0x10
+_ACL_OTHER = 0x20
+
+
+def _read_only_access_acl(app_uid: int, perm: int) -> bytes:
+    """Encode a Linux access ACL granting the owner, group, and appsvc ``perm``."""
+    entries = [
+        (_ACL_USER_OBJ, perm, _ACL_UNDEFINED_ID),
+        (_ACL_USER, perm, app_uid),
+        (_ACL_GROUP_OBJ, perm, _ACL_UNDEFINED_ID),
+        (_ACL_MASK, perm, _ACL_UNDEFINED_ID),
+        (_ACL_OTHER, 0, _ACL_UNDEFINED_ID),
+    ]
+    return struct.pack("<I", _ACL_XATTR_VERSION) + b"".join(
+        struct.pack("<HHI", tag, entry_perm, entry_id) for tag, entry_perm, entry_id in entries
+    )
+
+
+def _set_access_acl(fd: int, app_uid: int, perm: int, path: Path) -> None:
+    """Grant appsvc read access to a root-owned inode through its descriptor."""
+    set_xattr = getattr(os, "setxattr", None)
+    if set_xattr is None:
+        raise provision_error("read-only managed files require Linux POSIX ACL support")
+    try:
+        set_xattr(fd, ACL_ACCESS_XATTR, _read_only_access_acl(app_uid, perm))
+    except OSError as exc:
+        message = f"cannot apply managed-file ACL; /data must support POSIX ACLs: {path}"
+        raise provision_error(message) from exc
+
+
+def _clear_access_acl(fd: int) -> None:
+    """Remove a previous read-only ACL before a tree becomes workload-owned."""
+    remove_xattr = getattr(os, "removexattr", None)
+    if remove_xattr is None:
+        return
+    try:
+        remove_xattr(fd, ACL_ACCESS_XATTR)
+    except OSError as exc:
+        if exc.errno not in {errno.ENODATA, errno.ENOTSUP, errno.EOPNOTSUPP}:
+            raise
+
+
+def _apply_managed_access(
+    fd: int,
+    path: Path,
+    app_uid: int,
+    reader_gid: int,
+    *,
+    directory: bool,
+    writable: bool,
+) -> None:
+    """Apply managed-file ownership, mode, and ACL through a verified descriptor.
+
+    Read-only inputs are owned by root so the workload cannot change their mode;
+    appsvc reads them through a named-user ACL entry, which still matches its
+    host uid inside rootless containers. Writable inputs are workload-owned.
+    """
+    if writable:
+        _clear_access_acl(fd)
+        os.fchown(fd, app_uid, reader_gid)
+        os.fchmod(fd, 0o750 if directory else 0o640)
+        return
+    os.fchown(fd, 0, reader_gid)
+    os.fchmod(fd, 0o550 if directory else 0o440)
+    _set_access_acl(fd, app_uid, 0o5 if directory else 0o4, path)
+
+
+def _grant_managed_file_access(
+    path: Path,
+    app_uid: int,
+    reader_gid: int,
+    *,
+    writable: bool = False,
+    staging: bool = False,
+) -> None:
+    """Install managed payloads for appsvc and the provisioning API."""
+    root_fd = _open_dir_no_follow(path)
+    try:
+        # The new-copy caller retains root ownership until promotion.
+        os.fchmod(root_fd, 0o750 if staging or writable else 0o550)
+        _grant_managed_dir_access(
+            root_fd, path, app_uid, reader_gid, writable=writable, member_count=[0]
+        )
+    finally:
+        os.close(root_fd)
+
+
+def _grant_managed_dir_access(
+    parent_fd: int,
+    path: Path,
+    app_uid: int,
+    reader_gid: int,
+    *,
+    writable: bool,
+    member_count: list[int],
+    depth: int = 0,
+) -> None:
+    """Stream verified inodes within a shared budget before changing their access."""
+    with os.scandir(parent_fd) as entries:
+        for entry in entries:
+            if member_count[0] >= MAX_BUNDLE_MEMBERS:
+                raise provision_error(f"bundle exceeds {MAX_BUNDLE_MEMBERS} member limit")
+            member_count[0] += 1
+            name = entry.name
+            current = path / name
+            current_stat = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+            if stat.S_ISLNK(current_stat.st_mode):
+                raise provision_error(f"bundle files entry must not be a symlink: {current}")
+            if not (stat.S_ISDIR(current_stat.st_mode) or stat.S_ISREG(current_stat.st_mode)):
+                raise provision_error(f"bundle files entry must be a regular file: {current}")
+            if stat.S_ISDIR(current_stat.st_mode):
+                if depth >= MAX_BUNDLE_DEPTH:
+                    raise provision_error(
+                        f"bundle exceeds {MAX_BUNDLE_DEPTH} directory depth limit: {current}"
+                    )
+                flags = (
+                    os.O_RDONLY
+                    | OPEN_NOFOLLOW
+                    | getattr(os, "O_DIRECTORY", 0)
+                    | getattr(os, "O_CLOEXEC", 0)
+                )
+                child_fd = os.open(name, flags, dir_fd=parent_fd)
+            else:
+                child_fd = _open_verified_regular_file(
+                    name,
+                    parent_fd,
+                    current_stat,
+                    current,
+                    f"bundle files entry changed during reconciliation: {current}",
+                )
+            try:
+                confirmed = os.fstat(child_fd)
+                if (confirmed.st_dev, confirmed.st_ino) != (
+                    current_stat.st_dev,
+                    current_stat.st_ino,
+                ):
+                    raise provision_error(
+                        f"bundle files entry changed during reconciliation: {current}"
+                    )
+                if stat.S_ISREG(confirmed.st_mode) and confirmed.st_nlink != 1:
+                    raise provision_error(
+                        f"bundle entry must be a single-link regular file: {current}"
+                    )
+                if not (stat.S_ISDIR(confirmed.st_mode) or stat.S_ISREG(confirmed.st_mode)):
+                    raise provision_error(f"bundle files entry must be a regular file: {current}")
+                _apply_managed_access(
+                    child_fd,
+                    current,
+                    app_uid,
+                    reader_gid,
+                    directory=stat.S_ISDIR(confirmed.st_mode),
+                    writable=writable,
+                )
+                if stat.S_ISDIR(confirmed.st_mode):
+                    _grant_managed_dir_access(
+                        child_fd,
+                        current,
+                        app_uid,
+                        reader_gid,
+                        writable=writable,
+                        member_count=member_count,
+                        depth=depth + 1,
+                    )
+            finally:
+                os.close(child_fd)
+
+
+def grant_managed_file_access(path: Path, *, writable: bool = False) -> None:
+    """Reconcile managed files with the requested identities and access mode."""
+    try:
+        path_stat = path.lstat()
+    except FileNotFoundError:
+        return
+    if stat.S_ISLNK(path_stat.st_mode) or not stat.S_ISDIR(path_stat.st_mode):
+        raise provision_error(f"managed files root must be a directory: {path}")
+    try:
+        app_uid = pwd.getpwnam(APP_RUNTIME_USER).pw_uid
+        reader_gid = grp.getgrnam(PROVISION_READER_GROUP).gr_gid
+    except KeyError as exc:
+        message = (
+            "managed-file identity not found: "
+            f"user={APP_RUNTIME_USER}, group={PROVISION_READER_GROUP}"
+        )
+        raise provision_error(message) from exc
+    root_fd = _open_dir_no_follow(path)
+    try:
+        _apply_managed_access(
+            root_fd, path, app_uid, reader_gid, directory=True, writable=writable
+        )
+        _grant_managed_dir_access(
+            root_fd, path, app_uid, reader_gid, writable=writable, member_count=[0]
+        )
+    finally:
+        os.close(root_fd)
 
 
 # --- Extraction ---
@@ -331,9 +693,25 @@ def extract_bundle_archive(source_bytes: bytes, filename: str, destination: Path
 
     try:
         with tarfile.open(decompressed_path, mode="r:") as archive:
-            members = archive.getmembers()
-            if len(members) > MAX_BUNDLE_MEMBERS:
-                message = f"bundle exceeds {MAX_BUNDLE_MEMBERS} member limit"
+            # Read headers lazily so an archive of many tiny members is rejected
+            # at the limit instead of after every header is held in memory.
+            members: list[tarfile.TarInfo] = []
+            for member in archive:
+                if len(members) >= MAX_BUNDLE_MEMBERS:
+                    message = f"bundle exceeds {MAX_BUNDLE_MEMBERS} member limit"
+                    raise provision_error(message)
+                members.append(member)
+            # Tar headers define exactly how many bytes extraction writes, so
+            # bound the expanded tree before creating any file. Sparse members
+            # can declare far more data than the archive stores.
+            extracted_bytes = 0
+            for member in members:
+                if member.issparse():
+                    raise provision_error(f"sparse bundle member is not supported: {member.name}")
+                if member.isfile():
+                    extracted_bytes += member.size
+            if extracted_bytes > MAX_DECOMPRESSED_BYTES:
+                message = f"bundle exceeds {MAX_DECOMPRESSED_BYTES} byte decompressed limit"
                 raise provision_error(message)
             for member in members:
                 validate_bundle_member(member.name)
@@ -439,19 +817,35 @@ def copy_bundle_files(files_source: Path | None, config_root: Path) -> None:
     try:
         app_user = pwd.getpwnam(APP_RUNTIME_USER)
         app_uid = app_user.pw_uid
-        app_gid = app_user.pw_gid
+        reader_gid = grp.getgrnam(PROVISION_READER_GROUP).gr_gid
     except KeyError as exc:
-        message = f"runtime user not found for bundle files: {APP_RUNTIME_USER}"
+        message = (
+            "managed-file identity not found: "
+            f"user={APP_RUNTIME_USER}, group={PROVISION_READER_GROUP}"
+        )
         raise provision_error(message) from exc
     config_root.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=".atomixos-files-", dir=config_root) as staging_dir:
         staging_root = Path(staging_dir)
         staging_root.chmod(0o700)
         staging_target = staging_root / "files"
-        _snapshot_files_source(files_source, staging_target)
-        _grant_app_runtime_ownership(staging_target, app_uid, app_gid)
+        _snapshot_files_source(
+            files_source,
+            staging_target,
+            max_file_bytes=MAX_BUNDLE_MEMBER_BYTES,
+            max_total_bytes=MAX_DECOMPRESSED_BYTES,
+            max_members=MAX_BUNDLE_MEMBERS,
+        )
+        _grant_managed_file_access(staging_target, app_uid, reader_gid, staging=True)
         _remove_bundle_files_target(target)
         os.replace(staging_target, target)
+        target_fd = _open_dir_no_follow(target)
+        try:
+            _apply_managed_access(
+                target_fd, target, app_uid, reader_gid, directory=True, writable=False
+            )
+        finally:
+            os.close(target_fd)
 
 
 def stage_bundle_files(files_source: Path | None, destination: Path) -> None:
@@ -460,7 +854,13 @@ def stage_bundle_files(files_source: Path | None, destination: Path) -> None:
         _remove_bundle_files_target(destination)
     if files_source is None or not files_source.exists():
         return
-    _snapshot_files_source(files_source, destination)
+    _snapshot_files_source(
+        files_source,
+        destination,
+        max_file_bytes=MAX_BUNDLE_MEMBER_BYTES,
+        max_total_bytes=MAX_DECOMPRESSED_BYTES,
+        max_members=MAX_BUNDLE_MEMBERS,
+    )
 
 
 # --- High-Level Import ---

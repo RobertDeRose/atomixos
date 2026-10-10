@@ -220,6 +220,9 @@ let
     SQUASHFS_XZ = lib.mkForce yes;
     SQUASHFS_ZSTD = lib.mkForce yes;
     F2FS_FS = lib.mkForce yes;
+    # Read-only managed bundle files grant appsvc access through POSIX ACLs on /data.
+    F2FS_FS_XATTR = lib.mkForce yes;
+    F2FS_FS_POSIX_ACL = lib.mkForce yes;
     OVERLAY_FS = lib.mkForce yes;
 
     # Systemd's RestrictFileSystems= hardening unconditionally probes and uses

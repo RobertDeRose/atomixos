@@ -263,6 +263,48 @@ def test_recover_grants_service_read_access(monkeypatch, tmp_path):
     assert (config_path, -1, 456) in chowns
 
 
+def test_recover_rejects_hardlinked_managed_file_without_mutating_it(monkeypatch, tmp_path):
+    """Recovery must not change an outside inode hardlinked into files/."""
+    config_root = tmp_path / "config"
+    files_root = config_root / "files"
+    files_root.mkdir(parents=True)
+    (config_root / "config.toml").write_text("version = 1\n", encoding="utf-8")
+    outside = tmp_path / "runtime-state.json"
+    outside.write_text("{}\n", encoding="utf-8")
+    outside.chmod(0o600)
+    (files_root / "state.json").hardlink_to(outside)
+    outside_stat = outside.stat()
+    mutated_fds = []
+    monkeypatch.setattr("atomixos_provision.provision._service_identity", lambda: (123, 456))
+    monkeypatch.setattr(
+        "atomixos_provision.bundle.pwd.getpwnam",
+        lambda _name: type("Pw", (), {"pw_uid": 1000})(),
+    )
+    monkeypatch.setattr(
+        "atomixos_provision.bundle.grp.getgrnam",
+        lambda _name: type("Gr", (), {"gr_gid": 2000})(),
+    )
+    monkeypatch.setattr(
+        "atomixos_provision.bundle.os.fchown", lambda fd, *_args: mutated_fds.append(fd)
+    )
+    monkeypatch.setattr(
+        "atomixos_provision.bundle.os.fchmod", lambda fd, _mode: mutated_fds.append(fd)
+    )
+
+    result = CliRunner().invoke(server.cli, ["recover", str(config_root)])
+
+    assert result.exit_code != 0
+    assert "single-link regular file" in str(result.exception)
+    after_stat = outside.stat()
+    assert (after_stat.st_uid, after_stat.st_gid, after_stat.st_mode) == (
+        outside_stat.st_uid,
+        outside_stat.st_gid,
+        outside_stat.st_mode,
+    )
+    # Only the files/ root is reconciled before the hardlink is rejected.
+    assert len(mutated_fds) == 2
+
+
 def test_complete_initial_data_config_requires_worker_context(monkeypatch):
     monkeypatch.delenv("ATOMIXOS_PROVISION_WORKER_ACTIVE", raising=False)
 

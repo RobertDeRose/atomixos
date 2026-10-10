@@ -560,8 +560,11 @@ The schema should not currently encode Traefik-specific redirect behavior.
 
 ## Generic Files Mounting
 
-Application-specific files are carried under `files/` and may be mounted by
-containers wherever needed.
+Application-specific files are carried under `files/` as bundle-managed
+deployment inputs. AtomixOS installs them read-only by default: owned by
+`root`, with read access for `appsvc` through a POSIX ACL, so a workload cannot
+change them. Trusted integrators may mount them with the access mode their
+Podman workload requires; a writable mount makes the tree `appsvc`-owned.
 
 Examples:
 
@@ -571,7 +574,11 @@ Examples:
 - templated config files
 
 This avoids hard-coding application-specific configuration structure into
-`config.toml`.
+`config.toml`. A writable `Volume` or `Mount` using `${FILES_DIR}` is accepted
+for trusted integrations, but produces an advisory warning because mutable
+writes change deployment inputs. Mutable application data should normally use
+a Podman volume. Operators use Podman tooling to back up, restore, or transfer
+volume data outside AtomixOS ownership.
 
 ## Path Token Preprocessing
 
@@ -606,10 +613,17 @@ The importer should validate:
 - `containers.container` exists and defines at least one container
 - each container defines `privileged`
 - each container defines `[Container]` with `Image`
+- container `Volume` and `Mount` values using `${FILES_DIR}` are rendered as
+  requested; mounts without a clear read-only option produce an advisory warning
 - `activation.required` names correspond to declared containers
 - bundle layout is valid when importing archives
 - bundle top level is limited to `config.toml` and optional `files/`
 - archive member paths are safe
+- archives hold at most 4096 members by default; headers are read incrementally
+  and extraction stops at the first member beyond the limit
+- archive members are regular files or directories; sparse members are rejected
+- the summed size of all file members is checked against the decompressed limit
+  (256 MiB by default) before any file is extracted
 
 The importer should preprocess:
 

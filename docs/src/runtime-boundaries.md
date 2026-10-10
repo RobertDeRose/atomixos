@@ -45,7 +45,7 @@ and a manifest with relative paths, modes, sizes, and SHA-256 hashes, then publi
 expected entries, re-renders the verified staged `config.toml` into `/data/config-candidate`, and runs the existing
 promotion, activation, rollback, and recovery protocol. Root-written `/data/config` state is group-readable by
 `atomixos-provision` so the unprivileged API can export config and authenticate future requests; bundle `files/` payloads
-remain owned by the application runtime user and are preserved through a no-symlink snapshot path. Initial promotion also
+follow the managed-file access policy below and are preserved through a no-symlink snapshot path. Initial promotion also
 writes `/data/config/.first-config`; re-apply checks that root-written marker rather than trusting `config.toml` alone.
 
 Runtime result files under `/run/atomixos-provision/results` are root-writable and group-readable only. Claim and queued-job
@@ -249,3 +249,42 @@ user, are forced onto `Network=pasta`, and non-loopback `PublishPort` binds are 
 
 Bundle imports may include `files/`; Quadlet values may reference `${CONFIG_DIR}` and `${FILES_DIR}` to bind files from
 `/data/config/` without embedding host-specific absolute paths in the seed.
+
+## Managed-file access
+
+Bundle `files/` are deployment inputs, installed read-only by default. A
+read-only tree is owned by `root` with group `atomixos-provision` (directories
+`0550`, files `0440`) and a POSIX access ACL granting the `appsvc` user the same
+read access. The workload therefore cannot change modes or ownership, and the
+named-user ACL entry still matches `appsvc`'s host uid inside rootless
+containers, which drop host supplementary groups. When a container mount needs
+write access, the tree is instead owned by `appsvc` (directories `0750`, files
+`0640`) with the ACL removed. `/data` must support POSIX ACLs; reconciliation
+fails closed when an ACL cannot be applied. Permission
+reconciliation validates file descriptors and rejects symlinks and special
+files. It streams directory entries within the bundle's global member limit
+(4096 by default), counting every file and subdirectory beneath `files/` across
+the whole tree. An oversized tree fails reconciliation before excess entries
+have their ownership or permissions changed. Snapshots and reconciliation also
+reject directories nested more than 64 levels below `files/` with a provisioning
+error, so deep trees cannot exhaust the stack or descriptor table. Trusted integrators may request
+writable mounts; the renderer warns
+when a mount overlaps managed files and is not clearly read-only. This includes
+mounts of `${CONFIG_DIR}` or other ancestors, as well as `${FILES_DIR}` and its
+descendants. Warning and write-access decisions normalize paths lexically,
+including Linux's equivalent single- and double-leading slashes, without
+following symlinks. A `type=glob` mount is classified by the literal directory
+before its first wildcard component, so `${CONFIG_DIR}/*` counts as covering
+`files/`. Mutable application state belongs in Podman volumes and
+uses Podman backup and restore tooling.
+Named-volume identifiers, single-field anonymous volumes such as
+`Volume=/data/config/files` or `--volume=/data/config/files` (a container path,
+not a host source), and explicit `type=volume` mounts do not reference
+managed host files and never enable managed-file write access based on the
+provisioning process's working directory. Host bind paths must be absolute or
+start with `${CONFIG_DIR}` or `${FILES_DIR}`, and they retain managed-file overlap
+detection. Rendering rejects relative host sources in `Volume=`, bind `Mount=`,
+and `PodmanArgs` mounts: Quadlet resolves them from the installed unit directory
+and Podman from the service working directory, so provisioning cannot classify them.
+A `Volume=` source containing `/` is path-like rather than a named volume (volume
+names cannot contain `/`), so `data/state:/state` is rejected under the same rule.
