@@ -161,3 +161,46 @@ def test_snapshot_rejects_directory_entry_mutation(tmp_path, monkeypatch, mutati
     with pytest.raises(ProvisionError, match=r"bundle directory changed during snapshot"):
         bundle._snapshot_files_source(source, destination)
     assert mutation_seen == [True]
+
+
+def _nested_tree(root, depth):
+    """Create ``depth`` nested directories below root and return the deepest one."""
+    current = root
+    for _ in range(depth):
+        current = current / "d"
+        current.mkdir()
+    return current
+
+
+def _mock_managed_identity(monkeypatch):
+    """Resolve managed-file identities without requiring host accounts."""
+    monkeypatch.setattr(
+        bundle.pwd, "getpwnam", lambda _name: type("Pw", (), {"pw_uid": os.getuid()})()
+    )
+    monkeypatch.setattr(
+        bundle.grp, "getgrnam", lambda _name: type("Gr", (), {"gr_gid": os.getgid()})()
+    )
+    monkeypatch.setattr(bundle.os, "fchown", lambda *_args: None)
+
+
+@pytest.mark.parametrize("operation", ["snapshot", "reconciliation"])
+@pytest.mark.parametrize("extra_depth", [0, 1])
+def test_traversal_bounds_directory_depth(tmp_path, monkeypatch, operation, extra_depth):
+    """Fail deep trees with a provisioning error before exhausting stack or descriptors."""
+    _mock_managed_identity(monkeypatch)
+    root = tmp_path / "files"
+    root.mkdir()
+    (_nested_tree(root, bundle.MAX_BUNDLE_DEPTH + extra_depth) / "payload").write_text("x")
+
+    def traverse():
+        """Run the selected recursive walker over the nested tree."""
+        if operation == "snapshot":
+            bundle._snapshot_files_source(root, tmp_path / "snapshot")
+        else:
+            bundle.grant_managed_file_access(root, writable=True)
+
+    if extra_depth:
+        with pytest.raises(ProvisionError, match="directory depth limit"):
+            traverse()
+    else:
+        traverse()

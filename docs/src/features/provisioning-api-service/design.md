@@ -625,6 +625,8 @@ entries are copied, so entry creation, deletion, or rename rejects the snapshot.
 Access reconciliation streams directory entries and shares the same global
 member limit across recursive calls, rejecting excess entries before metadata
 changes. Files and subdirectories count as members; the `files/` root does not.
+Both walkers bound nesting at 64 directory levels below `files/`, failing with a
+provisioning error rather than exhausting recursion or open descriptors.
 Mount classification excludes named Podman volumes and single-field anonymous
 volumes, whose only field is a container path, before resolving host paths.
 Named and anonymous volume mounts cannot broaden managed-file permissions through

@@ -258,7 +258,9 @@ reconciliation validates file descriptors and rejects symlinks and special
 files. It streams directory entries within the bundle's global member limit
 (4096 by default), counting every file and subdirectory beneath `files/` across
 the whole tree. An oversized tree fails reconciliation before excess entries
-have their ownership or permissions changed. Trusted integrators may request
+have their ownership or permissions changed. Snapshots and reconciliation also
+reject directories nested more than 64 levels below `files/` with a provisioning
+error, so deep trees cannot exhaust the stack or descriptor table. Trusted integrators may request
 writable mounts; the renderer warns
 when a mount overlaps managed files and is not clearly read-only. This includes
 mounts of `${CONFIG_DIR}` or other ancestors, as well as `${FILES_DIR}` and its

@@ -48,6 +48,9 @@ MAX_BUNDLE_MEMBERS = (
     if os.geteuid() == os.getuid()
     else 4096
 )
+# Bound recursive traversal so nested directories fail with a provisioning
+# error before exhausting the interpreter stack or descriptor table.
+MAX_BUNDLE_DEPTH = 64
 MAX_BUNDLE_MEMBER_BYTES = (
     int(os.environ.get("ATOMIXOS_MAX_BUNDLE_MEMBER_BYTES", str(64 * 1024 * 1024)))
     if os.geteuid() == os.getuid()
@@ -161,6 +164,7 @@ def _snapshot_dir(
     max_file_bytes: int | None,
     max_total_bytes: int | None,
     max_members: int | None,
+    depth: int = 0,
 ) -> int:
     """Copy an export directory into the bounded snapshot.
 
@@ -191,6 +195,10 @@ def _snapshot_dir(
         if stat.S_ISLNK(child_stat.st_mode):
             raise provision_error(f"bundle files entry must not be a symlink: {child_path}")
         if stat.S_ISDIR(child_stat.st_mode):
+            if depth >= MAX_BUNDLE_DEPTH:
+                raise provision_error(
+                    f"bundle exceeds {MAX_BUNDLE_DEPTH} directory depth limit: {child_path}"
+                )
             child_fd = os.open(
                 name,
                 os.O_RDONLY
@@ -217,6 +225,7 @@ def _snapshot_dir(
                     max_file_bytes=max_file_bytes,
                     max_total_bytes=max_total_bytes,
                     max_members=max_members,
+                    depth=depth + 1,
                 )
             finally:
                 os.close(child_fd)
@@ -492,6 +501,7 @@ def _grant_managed_dir_access(
     *,
     writable: bool,
     member_count: list[int],
+    depth: int = 0,
 ) -> None:
     """Stream verified inodes within a shared budget before changing their access."""
     with os.scandir(parent_fd) as entries:
@@ -507,6 +517,10 @@ def _grant_managed_dir_access(
             if not (stat.S_ISDIR(current_stat.st_mode) or stat.S_ISREG(current_stat.st_mode)):
                 raise provision_error(f"bundle files entry must be a regular file: {current}")
             if stat.S_ISDIR(current_stat.st_mode):
+                if depth >= MAX_BUNDLE_DEPTH:
+                    raise provision_error(
+                        f"bundle exceeds {MAX_BUNDLE_DEPTH} directory depth limit: {current}"
+                    )
                 flags = (
                     os.O_RDONLY
                     | OPEN_NOFOLLOW
@@ -545,6 +559,7 @@ def _grant_managed_dir_access(
                         reader_gid,
                         writable=writable,
                         member_count=member_count,
+                        depth=depth + 1,
                     )
                 elif stat.S_ISREG(confirmed.st_mode):
                     os.fchmod(child_fd, 0o640 if writable else 0o440)
