@@ -640,5 +640,6 @@ before writing any file, so a small upload cannot expand beyond the decompressed
 limit in temporary storage; the snapshot keeps its own budget for live sources.
 Glob mounts are classified conservatively by the literal prefix before their
 first wildcard component, since the glob may match the managed tree.
+Slash-containing `Volume=` sources are treated as paths, not named volumes.
 Relative host mount sources are rejected because Quadlet and Podman resolve them
 from the unit directory or service working directory, not the provisioning process.

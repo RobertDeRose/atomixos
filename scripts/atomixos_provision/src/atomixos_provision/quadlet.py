@@ -216,7 +216,9 @@ def _mount_source(directive: str, value: str) -> str | None:
             # A single field is the container path of an anonymous volume.
             return None
         source = source.strip()
-        if source.startswith(("/", ".", CONFIG_DIR_TOKEN, FILES_DIR_TOKEN)):
+        # Volume names cannot contain "/", so a slash makes the source path-like
+        # and subject to the absolute-or-token rule rather than a named volume.
+        if "/" in source or source.startswith((".", CONFIG_DIR_TOKEN, FILES_DIR_TOKEN)):
             return _require_absolute_source(source, value)
         return None
     if directive in {"Mount", "PodmanArgsMount"}:

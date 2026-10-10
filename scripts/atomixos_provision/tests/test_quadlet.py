@@ -298,6 +298,22 @@ class TestRenderContainers:
         assert len(warnings) == int(overlaps)
         assert managed_files_are_writable(table, config_root) is overlaps
 
+    @pytest.mark.parametrize("source", ["data", "app-data.volume", "cache_1.v2"])
+    def test_slash_free_volume_sources_remain_named_volumes(self, source):
+        """Keep named volumes and .volume units valid while path-like sources are rejected."""
+        value = f"{source}:/state:rw"
+        table = {
+            "app": {
+                "privileged": True,
+                "Container": {"Image": "alpine:latest", "Volume": value},
+            }
+        }
+
+        rendered, _runtime, warnings = render_containers(table, Path("/data/config"))
+
+        assert warnings == []
+        assert f"Volume={value}" in rendered["app.container"]
+
     @pytest.mark.parametrize(
         ("directive", "value"),
         [
@@ -328,6 +344,8 @@ class TestRenderContainers:
         [
             ("Volume", "./data/config/files/state:/state:rw"),
             ("Volume", "../files:/state:ro"),
+            ("Volume", "data/config/files/state:/state:rw"),
+            ("PodmanArgs", "--volume=data/state:/state"),
             ("Mount", "type=bind,source=./data/config/files/state,target=/state,rw"),
             ("Mount", "type=bind,src=data/config/files,target=/state,ro"),
             ("PodmanArgs", "--volume=./data/config/files/state:/state:rw"),

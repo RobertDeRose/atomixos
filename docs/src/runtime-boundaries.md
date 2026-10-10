@@ -286,3 +286,5 @@ start with `${CONFIG_DIR}` or `${FILES_DIR}`, and they retain managed-file overl
 detection. Rendering rejects relative host sources in `Volume=`, bind `Mount=`,
 and `PodmanArgs` mounts: Quadlet resolves them from the installed unit directory
 and Podman from the service working directory, so provisioning cannot classify them.
+A `Volume=` source containing `/` is path-like rather than a named volume (volume
+names cannot contain `/`), so `data/state:/state` is rejected under the same rule.
