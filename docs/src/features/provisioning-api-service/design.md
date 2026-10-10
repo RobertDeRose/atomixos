@@ -628,3 +628,5 @@ changes. Files and subdirectories count as members; the `files/` root does not.
 Mount classification excludes named Podman volumes before resolving host paths.
 Named-volume mounts cannot broaden managed-file permissions through the
 provisioning process's working directory; host bind paths keep their access policy.
+Relative host mount sources are rejected because Quadlet and Podman resolve them
+from the unit directory or service working directory, not the provisioning process.

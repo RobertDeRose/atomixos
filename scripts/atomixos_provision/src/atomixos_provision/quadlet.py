@@ -180,12 +180,27 @@ def render_section(section_name: str, directives: dict[str, list], config_root: 
     return lines
 
 
+def _require_absolute_source(source: str, value: str) -> str:
+    """Reject relative host sources whose base directory differs by mount form.
+
+    Quadlet resolves relative ``Volume=``/``Mount=`` sources from the installed
+    unit directory, while ``PodmanArgs`` resolves them from the service working
+    directory, so neither can be classified from the provisioning process.
+    """
+    if not source.startswith(("/", CONFIG_DIR_TOKEN, FILES_DIR_TOKEN)):
+        raise provision_error(
+            f"relative host mount source {source!r} in {value!r} is not supported; "
+            f"use an absolute path, {CONFIG_DIR_TOKEN}, or {FILES_DIR_TOKEN}"
+        )
+    return source
+
+
 def _mount_source(directive: str, value: str) -> str | None:
     """Return a host mount source, excluding Podman named-volume identifiers."""
     if directive in {"Volume", "PodmanArgsVolume"}:
         source = value.split(":", 1)[0].strip()
         if source.startswith(("/", ".", CONFIG_DIR_TOKEN, FILES_DIR_TOKEN)):
-            return source
+            return _require_absolute_source(source, value)
         return None
     if directive in {"Mount", "PodmanArgsMount"}:
         source = None
@@ -199,7 +214,9 @@ def _mount_source(directive: str, value: str) -> str | None:
                 mount_type = raw_value.strip().lower()
             elif normalized_key in {"source", "src"} and source is None:
                 source = raw_value.strip()
-        return source if mount_type in {None, "bind", "glob"} else None
+        if mount_type not in {None, "bind", "glob"} or source is None:
+            return None
+        return _require_absolute_source(source, value)
     return None
 
 

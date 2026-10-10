@@ -268,5 +268,8 @@ following symlinks. Mutable application state belongs in Podman volumes and
 uses Podman backup and restore tooling.
 Named-volume identifiers and explicit `type=volume` mounts do not reference
 managed host files and never enable managed-file write access based on the
-provisioning process's working directory. Host bind paths, including supported
-tokens and explicit relative paths, retain managed-file overlap detection.
+provisioning process's working directory. Host bind paths must be absolute or
+start with `${CONFIG_DIR}` or `${FILES_DIR}`, and they retain managed-file overlap
+detection. Rendering rejects relative host sources in `Volume=`, bind `Mount=`,
+and `PodmanArgs` mounts: Quadlet resolves them from the installed unit directory
+and Podman from the service working directory, so provisioning cannot classify them.

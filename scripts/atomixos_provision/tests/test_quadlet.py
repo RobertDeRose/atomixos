@@ -273,27 +273,33 @@ class TestRenderContainers:
         assert not managed_files_are_writable(table, config_root)
         assert value in rendered["app.container"]
 
-    @pytest.mark.parametrize("directive", ["Volume", "Mount", "PodmanArgs"])
-    def test_relative_bind_path_keeps_managed_file_policy(self, monkeypatch, directive):
-        """Keep explicit relative host paths distinct from named volumes."""
+    @pytest.mark.parametrize(
+        "value",
+        [
+            ("Volume", "./data/config/files/state:/state:rw"),
+            ("Volume", "../files:/state:ro"),
+            ("Mount", "type=bind,source=./data/config/files/state,target=/state,rw"),
+            ("Mount", "type=bind,src=data/config/files,target=/state,ro"),
+            ("PodmanArgs", "--volume=./data/config/files/state:/state:rw"),
+            ("PodmanArgs", "--mount=type=bind,source=files,target=/state"),
+        ],
+    )
+    def test_relative_host_mount_source_is_rejected(self, monkeypatch, value):
+        """Reject relative host sources Quadlet and Podman resolve from other bases."""
         monkeypatch.chdir("/")
-        value = {
-            "Volume": "./data/config/files/state:/state:rw",
-            "Mount": "type=bind,source=./data/config/files/state,target=/state,rw",
-            "PodmanArgs": "--volume=./data/config/files/state:/state:rw",
-        }[directive]
+        directive, mount = value
         table = {
             "app": {
                 "privileged": True,
-                "Container": {"Image": "alpine:latest", directive: value},
+                "Container": {"Image": "alpine:latest", directive: mount},
             }
         }
         config_root = Path("/data/config")
 
-        _rendered, _runtime, warnings = render_containers(table, config_root)
-
-        assert len(warnings) == 1
-        assert managed_files_are_writable(table, config_root)
+        with pytest.raises(ProvisionError, match="relative host mount source"):
+            render_containers(table, config_root)
+        with pytest.raises(ProvisionError, match="relative host mount source"):
+            managed_files_are_writable(table, config_root)
 
     @pytest.mark.parametrize("form", ["Volume", "Mount", "PodmanArgsVolume", "PodmanArgsMount"])
     @pytest.mark.parametrize("read_only", [False, True])
