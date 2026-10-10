@@ -273,7 +273,9 @@ when a mount overlaps managed files and is not clearly read-only. This includes
 mounts of `${CONFIG_DIR}` or other ancestors, as well as `${FILES_DIR}` and its
 descendants. Warning and write-access decisions normalize paths lexically,
 including Linux's equivalent single- and double-leading slashes, without
-following symlinks. Mutable application state belongs in Podman volumes and
+following symlinks. A `type=glob` mount is classified by the literal directory
+before its first wildcard component, so `${CONFIG_DIR}/*` counts as covering
+`files/`. Mutable application state belongs in Podman volumes and
 uses Podman backup and restore tooling.
 Named-volume identifiers, single-field anonymous volumes such as
 `Volume=/data/config/files` or `--volume=/data/config/files` (a container path,

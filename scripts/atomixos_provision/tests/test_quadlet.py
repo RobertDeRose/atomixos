@@ -274,6 +274,31 @@ class TestRenderContainers:
         assert value in rendered["app.container"]
 
     @pytest.mark.parametrize(
+        ("directive", "value", "overlaps"),
+        [
+            ("Mount", "type=glob,src=${CONFIG_DIR}/*,dst=/inputs", True),
+            ("Mount", "type=glob,source=${FILES_DIR}/*.yaml,target=/inputs", True),
+            ("Mount", "type=glob,src=/data/config/fi?es/*,dst=/inputs", True),
+            ("PodmanArgs", "--mount=type=glob,src=/data/*/files,dst=/inputs", True),
+            ("Mount", "type=glob,src=/srv/assets/*,dst=/inputs", False),
+        ],
+    )
+    def test_glob_mount_is_classified_by_literal_prefix(self, directive, value, overlaps):
+        """Treat a writable glob as covering everything beneath its literal prefix."""
+        table = {
+            "app": {
+                "privileged": True,
+                "Container": {"Image": "alpine:latest", directive: value},
+            }
+        }
+        config_root = Path("/data/config")
+
+        _rendered, _runtime, warnings = render_containers(table, config_root)
+
+        assert len(warnings) == int(overlaps)
+        assert managed_files_are_writable(table, config_root) is overlaps
+
+    @pytest.mark.parametrize(
         ("directive", "value"),
         [
             ("Volume", "/data/config/files"),

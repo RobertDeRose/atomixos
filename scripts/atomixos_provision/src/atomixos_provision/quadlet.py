@@ -195,6 +195,19 @@ def _require_absolute_source(source: str, value: str) -> str:
     return source
 
 
+def _glob_literal_prefix(source: str) -> str:
+    """Return the directory before a glob source's first wildcard component.
+
+    A glob can match anything beneath that literal prefix, so classifying the
+    prefix conservatively treats ``${CONFIG_DIR}/*`` as covering ``files/``.
+    """
+    parts = source.split("/")
+    for index, part in enumerate(parts):
+        if any(character in part for character in "*?["):
+            return "/".join(parts[:index]) or "/"
+    return source
+
+
 def _mount_source(directive: str, value: str) -> str | None:
     """Return a host mount source, excluding named and anonymous Podman volumes."""
     if directive in {"Volume", "PodmanArgsVolume"}:
@@ -220,7 +233,8 @@ def _mount_source(directive: str, value: str) -> str | None:
                 source = raw_value.strip()
         if mount_type not in {None, "bind", "glob"} or source is None:
             return None
-        return _require_absolute_source(source, value)
+        source = _require_absolute_source(source, value)
+        return _glob_literal_prefix(source) if mount_type == "glob" else source
     return None
 
 

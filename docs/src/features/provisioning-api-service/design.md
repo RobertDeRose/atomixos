@@ -635,5 +635,7 @@ Mount classification excludes named Podman volumes and single-field anonymous
 volumes, whose only field is a container path, before resolving host paths.
 Named and anonymous volume mounts cannot broaden managed-file permissions through
 the provisioning process's working directory; host bind paths keep their access policy.
+Glob mounts are classified conservatively by the literal prefix before their
+first wildcard component, since the glob may match the managed tree.
 Relative host mount sources are rejected because Quadlet and Podman resolve them
 from the unit directory or service working directory, not the provisioning process.
