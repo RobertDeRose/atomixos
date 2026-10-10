@@ -274,6 +274,31 @@ class TestRenderContainers:
         assert value in rendered["app.container"]
 
     @pytest.mark.parametrize(
+        ("directive", "value"),
+        [
+            ("Volume", "/data/config/files"),
+            ("Volume", "${FILES_DIR}"),
+            ("PodmanArgs", "--volume=/data/config/files"),
+            ("PodmanArgs", "-v /data/config"),
+        ],
+    )
+    def test_anonymous_volume_is_not_a_managed_host_source(self, directive, value):
+        """Treat a single-field volume as a container path, not a host bind source."""
+        table = {
+            "app": {
+                "privileged": True,
+                "Container": {"Image": "alpine:latest", directive: value},
+            }
+        }
+        config_root = Path("/data/config")
+
+        rendered, _runtime, warnings = render_containers(table, config_root)
+
+        assert warnings == []
+        assert not managed_files_are_writable(table, config_root)
+        assert f"{directive}=" in rendered["app.container"]
+
+    @pytest.mark.parametrize(
         "value",
         [
             ("Volume", "./data/config/files/state:/state:rw"),

@@ -196,9 +196,13 @@ def _require_absolute_source(source: str, value: str) -> str:
 
 
 def _mount_source(directive: str, value: str) -> str | None:
-    """Return a host mount source, excluding Podman named-volume identifiers."""
+    """Return a host mount source, excluding named and anonymous Podman volumes."""
     if directive in {"Volume", "PodmanArgsVolume"}:
-        source = value.split(":", 1)[0].strip()
+        source, separator, _destination = value.partition(":")
+        if not separator:
+            # A single field is the container path of an anonymous volume.
+            return None
+        source = source.strip()
         if source.startswith(("/", ".", CONFIG_DIR_TOKEN, FILES_DIR_TOKEN)):
             return _require_absolute_source(source, value)
         return None
