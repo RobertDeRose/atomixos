@@ -352,6 +352,22 @@ def test_wait_for_staged_result_abandons_queued_job_on_timeout(monkeypatch, tmp_
     assert not (paths.queue / "job-1.ready").exists()
 
 
+def test_wait_for_staged_result_times_out_claimed_job_without_result(monkeypatch, tmp_path):
+    from atomixos_provision import provision
+
+    paths = runtime_paths(tmp_path / "run")
+    (paths.active / "job-1").mkdir(parents=True)
+
+    times = iter([0, 2, 2])
+    monkeypatch.setattr(provision, "STAGED_RESULT_TIMEOUT_SECONDS", 1)
+    monkeypatch.setattr(provision.time, "monotonic", lambda: next(times))
+
+    with pytest.raises(ProvisionError, match="timed out waiting"):
+        provision._wait_for_staged_result(paths, "job-1")
+
+    assert (paths.active / "job-1").is_dir()
+
+
 def test_wait_for_staged_result_fails_when_worker_removes_job_without_result(
     monkeypatch, tmp_path
 ):
