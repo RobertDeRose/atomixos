@@ -1174,8 +1174,10 @@ def test_write_imported_state_grants_service_read_access_when_root(tmp_path, mon
     assert (config_root / "config.toml").stat().st_mode & 0o040
 
 
-def test_write_imported_state_grants_bundle_files_read_only_service_access(tmp_path, monkeypatch):
-    """Verify that write imported state grants bundle files read only service access."""
+def test_write_imported_state_grants_bundle_files_read_only_service_access(
+    tmp_path, monkeypatch, managed_acl_calls
+):
+    """Install read-only bundle files as root-owned with appsvc ACL read access."""
     from atomixos_provision import provision
 
     config_path = tmp_path / "config.toml"
@@ -1221,9 +1223,11 @@ def test_write_imported_state_grants_bundle_files_read_only_service_access(tmp_p
 
     write_imported_state(parsed, config_path, files_path, config_root)
 
-    assert (config_root / "files", 1000, 2000) in calls
     assert descriptor_calls
-    assert all((uid, gid) == (1000, 2000) for _fd, uid, gid in descriptor_calls)
+    assert all((uid, gid) == (0, 2000) for _fd, uid, gid in descriptor_calls)
+    # Install and the following service-access reconciliation each apply the ACL.
+    assert sorted(perm for _uid, perm, _path in managed_acl_calls) == [0o4, 0o4, 0o5, 0o5]
+    assert all(uid == 1000 for uid, _perm, _path in managed_acl_calls)
     assert (config_root / "files").stat().st_mode & 0o777 == 0o550
     assert (config_root / "files" / "app.txt").stat().st_mode & 0o777 == 0o440
 

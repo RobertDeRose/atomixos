@@ -204,3 +204,65 @@ def test_traversal_bounds_directory_depth(tmp_path, monkeypatch, operation, extr
             traverse()
     else:
         traverse()
+
+
+def test_read_only_acl_encodes_named_appsvc_entry():
+    """Encode the Linux xattr ACL with owner, appsvc, group, mask, and no other access."""
+    import struct
+
+    encoded = bundle._read_only_access_acl(1234, 0o4)
+
+    assert struct.unpack("<I", encoded[:4]) == (2,)
+    entries = [struct.unpack("<HHI", encoded[i : i + 8]) for i in range(4, len(encoded), 8)]
+    undefined = 0xFFFFFFFF
+    assert entries == [
+        (0x01, 0o4, undefined),
+        (0x02, 0o4, 1234),
+        (0x04, 0o4, undefined),
+        (0x10, 0o4, undefined),
+        (0x20, 0, undefined),
+    ]
+
+
+def test_read_only_acl_fails_closed_without_filesystem_support(tmp_path, monkeypatch):
+    """Refuse to leave read-only inputs unreadable or unprotected when ACLs fail."""
+    import errno
+
+    set_access_acl = bundle._set_access_acl.__wrapped__
+    target = tmp_path / "payload"
+    target.write_text("x")
+
+    def unsupported(*_args):
+        raise OSError(errno.EOPNOTSUPP, "Operation not supported")
+
+    monkeypatch.setattr(bundle.os, "setxattr", unsupported, raising=False)
+    fd = os.open(target, os.O_RDONLY)
+    try:
+        with pytest.raises(ProvisionError, match="must support POSIX ACLs"):
+            set_access_acl(fd, 1234, 0o4, target)
+    finally:
+        os.close(fd)
+
+
+@pytest.mark.skipif(not hasattr(os, "setxattr"), reason="requires Linux xattrs")
+def test_read_only_acl_round_trips_through_kernel(tmp_path):
+    """The kernel accepts the encoded ACL and clearing it restores plain modes."""
+    import errno
+
+    target = tmp_path / "payload"
+    target.write_text("x")
+    fd = os.open(target, os.O_RDONLY)
+    try:
+        try:
+            bundle._set_access_acl.__wrapped__(fd, os.getuid() + 1, 0o4, target)
+        except ProvisionError:
+            pytest.skip("test filesystem lacks POSIX ACL support")
+        stored = os.getxattr(fd, bundle.ACL_ACCESS_XATTR)
+        assert stored == bundle._read_only_access_acl(os.getuid() + 1, 0o4)
+        assert os.fstat(fd).st_mode & 0o777 == 0o440
+        bundle._clear_access_acl(fd)
+        with pytest.raises(OSError) as missing:
+            os.getxattr(fd, bundle.ACL_ACCESS_XATTR)
+        assert missing.value.errno == errno.ENODATA
+    finally:
+        os.close(fd)

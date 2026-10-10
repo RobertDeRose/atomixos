@@ -1,10 +1,12 @@
 """Bundle import, tar extraction, and managed-file placement."""
 
+import errno
 import grp
 import os
 import pwd
 import shutil
 import stat
+import struct
 import subprocess
 import tarfile
 import tempfile
@@ -473,6 +475,79 @@ def _remove_bundle_files_target(target: Path) -> None:
     target.unlink()
 
 
+ACL_ACCESS_XATTR = "system.posix_acl_access"
+_ACL_XATTR_VERSION = 2
+_ACL_UNDEFINED_ID = 0xFFFFFFFF
+_ACL_USER_OBJ = 0x01
+_ACL_USER = 0x02
+_ACL_GROUP_OBJ = 0x04
+_ACL_MASK = 0x10
+_ACL_OTHER = 0x20
+
+
+def _read_only_access_acl(app_uid: int, perm: int) -> bytes:
+    """Encode a Linux access ACL granting the owner, group, and appsvc ``perm``."""
+    entries = [
+        (_ACL_USER_OBJ, perm, _ACL_UNDEFINED_ID),
+        (_ACL_USER, perm, app_uid),
+        (_ACL_GROUP_OBJ, perm, _ACL_UNDEFINED_ID),
+        (_ACL_MASK, perm, _ACL_UNDEFINED_ID),
+        (_ACL_OTHER, 0, _ACL_UNDEFINED_ID),
+    ]
+    return struct.pack("<I", _ACL_XATTR_VERSION) + b"".join(
+        struct.pack("<HHI", tag, entry_perm, entry_id) for tag, entry_perm, entry_id in entries
+    )
+
+
+def _set_access_acl(fd: int, app_uid: int, perm: int, path: Path) -> None:
+    """Grant appsvc read access to a root-owned inode through its descriptor."""
+    set_xattr = getattr(os, "setxattr", None)
+    if set_xattr is None:
+        raise provision_error("read-only managed files require Linux POSIX ACL support")
+    try:
+        set_xattr(fd, ACL_ACCESS_XATTR, _read_only_access_acl(app_uid, perm))
+    except OSError as exc:
+        message = f"cannot apply managed-file ACL; /data must support POSIX ACLs: {path}"
+        raise provision_error(message) from exc
+
+
+def _clear_access_acl(fd: int) -> None:
+    """Remove a previous read-only ACL before a tree becomes workload-owned."""
+    remove_xattr = getattr(os, "removexattr", None)
+    if remove_xattr is None:
+        return
+    try:
+        remove_xattr(fd, ACL_ACCESS_XATTR)
+    except OSError as exc:
+        if exc.errno not in {errno.ENODATA, errno.ENOTSUP, errno.EOPNOTSUPP}:
+            raise
+
+
+def _apply_managed_access(
+    fd: int,
+    path: Path,
+    app_uid: int,
+    reader_gid: int,
+    *,
+    directory: bool,
+    writable: bool,
+) -> None:
+    """Apply managed-file ownership, mode, and ACL through a verified descriptor.
+
+    Read-only inputs are owned by root so the workload cannot change their mode;
+    appsvc reads them through a named-user ACL entry, which still matches its
+    host uid inside rootless containers. Writable inputs are workload-owned.
+    """
+    if writable:
+        _clear_access_acl(fd)
+        os.fchown(fd, app_uid, reader_gid)
+        os.fchmod(fd, 0o750 if directory else 0o640)
+        return
+    os.fchown(fd, 0, reader_gid)
+    os.fchmod(fd, 0o550 if directory else 0o440)
+    _set_access_acl(fd, app_uid, 0o5 if directory else 0o4, path)
+
+
 def _grant_managed_file_access(
     path: Path,
     app_uid: int,
@@ -549,9 +624,17 @@ def _grant_managed_dir_access(
                     raise provision_error(
                         f"bundle entry must be a single-link regular file: {current}"
                     )
-                os.fchown(child_fd, app_uid, reader_gid)
+                if not (stat.S_ISDIR(confirmed.st_mode) or stat.S_ISREG(confirmed.st_mode)):
+                    raise provision_error(f"bundle files entry must be a regular file: {current}")
+                _apply_managed_access(
+                    child_fd,
+                    current,
+                    app_uid,
+                    reader_gid,
+                    directory=stat.S_ISDIR(confirmed.st_mode),
+                    writable=writable,
+                )
                 if stat.S_ISDIR(confirmed.st_mode):
-                    os.fchmod(child_fd, 0o750 if writable else 0o550)
                     _grant_managed_dir_access(
                         child_fd,
                         current,
@@ -561,10 +644,6 @@ def _grant_managed_dir_access(
                         member_count=member_count,
                         depth=depth + 1,
                     )
-                elif stat.S_ISREG(confirmed.st_mode):
-                    os.fchmod(child_fd, 0o640 if writable else 0o440)
-                else:
-                    raise provision_error(f"bundle files entry must be a regular file: {current}")
             finally:
                 os.close(child_fd)
 
@@ -588,8 +667,9 @@ def grant_managed_file_access(path: Path, *, writable: bool = False) -> None:
         raise provision_error(message) from exc
     root_fd = _open_dir_no_follow(path)
     try:
-        os.fchown(root_fd, app_uid, reader_gid)
-        os.fchmod(root_fd, 0o750 if writable else 0o550)
+        _apply_managed_access(
+            root_fd, path, app_uid, reader_gid, directory=True, writable=writable
+        )
         _grant_managed_dir_access(
             root_fd, path, app_uid, reader_gid, writable=writable, member_count=[0]
         )
@@ -743,8 +823,13 @@ def copy_bundle_files(files_source: Path | None, config_root: Path) -> None:
         _grant_managed_file_access(staging_target, app_uid, reader_gid, staging=True)
         _remove_bundle_files_target(target)
         os.replace(staging_target, target)
-        target.chmod(0o550)
-        os.chown(target, app_uid, reader_gid, follow_symlinks=False)
+        target_fd = _open_dir_no_follow(target)
+        try:
+            _apply_managed_access(
+                target_fd, target, app_uid, reader_gid, directory=True, writable=False
+            )
+        finally:
+            os.close(target_fd)
 
 
 def stage_bundle_files(files_source: Path | None, destination: Path) -> None:

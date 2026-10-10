@@ -142,8 +142,8 @@ class TestCopyBundleFiles:
         )
         return chowns
 
-    def test_copies_files(self, tmp_path, monkeypatch):
-        """Verify that copies files."""
+    def test_copies_files(self, tmp_path, monkeypatch, managed_acl_calls):
+        """Install read-only copies as root-owned with appsvc ACL read access."""
         chowns = self._mock_appsvc(monkeypatch)
         source = tmp_path / "source_files"
         source.mkdir()
@@ -162,10 +162,44 @@ class TestCopyBundleFiles:
         assert (config_root / "files" / "subdir").stat().st_mode & 0o777 == 0o550
         assert (config_root / "files" / "cert.pem").stat().st_mode & 0o777 == 0o440
         assert (config_root / "files" / "subdir" / "key.pem").stat().st_mode & 0o777 == 0o440
-        assert (
-            sum(path.startswith("fd:") for path, uid, gid in chowns if (uid, gid) == (1000, 2000))
-            == 3
-        )
+        assert sum(path.startswith("fd:") for path, _uid, _gid in chowns) == 4
+        assert all((uid, gid) == (0, 2000) for _path, uid, gid in chowns)
+        assert sorted((uid, perm) for uid, perm, _path in managed_acl_calls) == [
+            (1000, 0o4),
+            (1000, 0o4),
+            (1000, 0o5),
+            (1000, 0o5),
+        ]
+
+    def test_read_only_reconciliation_removes_workload_ownership(
+        self, tmp_path, monkeypatch, managed_acl_calls
+    ):
+        """A writable tree becomes root-owned with ACL reads when mounts turn read-only."""
+        import atomixos_provision.bundle as bundle_module
+
+        chowns = self._mock_appsvc(monkeypatch)
+        cleared: list[int] = []
+        monkeypatch.setattr(bundle_module, "_clear_access_acl", cleared.append)
+        files_root = tmp_path / "files"
+        files_root.mkdir()
+        (files_root / "state.json").write_text("{}\n")
+
+        grant_managed_file_access(files_root, writable=True)
+        assert [(uid, gid) for _path, uid, gid in chowns] == [(1000, 2000), (1000, 2000)]
+        assert len(cleared) == 2
+        assert managed_acl_calls == []
+
+        chowns.clear()
+        grant_managed_file_access(files_root)
+
+        assert [(uid, gid) for _path, uid, gid in chowns] == [(0, 2000), (0, 2000)]
+        assert files_root.stat().st_mode & 0o777 == 0o550
+        assert files_root.joinpath("state.json").stat().st_mode & 0o777 == 0o440
+        assert [(uid, perm) for uid, perm, _path in managed_acl_calls] == [
+            (1000, 0o5),
+            (1000, 0o4),
+        ]
+        files_root.chmod(0o750)
 
     def test_reconciles_existing_files_for_writable_mount(self, tmp_path, monkeypatch):
         """Verify that recovery reconciliation preserves rootless writable access."""

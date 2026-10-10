@@ -53,3 +53,22 @@ def host_regular_file_open(monkeypatch):
 def native_file_open(monkeypatch, host_regular_file_open):
     """Use the production Linux boundary, including its unsupported-host error."""
     monkeypatch.setattr(bundle, "_open_verified_regular_file", host_regular_file_open)
+
+
+@pytest.fixture(autouse=True)
+def managed_acl_calls(monkeypatch):
+    """Record read-only ACL grants; Darwin hosts lack Linux ``setxattr``.
+
+    Linux runs still apply the real access ACL so native tests can inspect it.
+    """
+    calls: list[tuple[int, int, str]] = []
+    original = bundle._set_access_acl
+
+    def record_acl(fd, app_uid, perm, path):
+        calls.append((app_uid, perm, str(path)))
+        if hasattr(os, "setxattr"):
+            original(fd, app_uid, perm, path)
+
+    record_acl.__wrapped__ = original
+    monkeypatch.setattr(bundle, "_set_access_acl", record_acl)
+    return calls

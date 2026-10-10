@@ -612,6 +612,10 @@ Explicitly avoid adding these until there is a concrete need:
 Managed files are read-only deployment inputs by default. Preserve trusted
 integrator Podman options, validate mount syntax, and warn about writable
 `${FILES_DIR}` mounts. Runtime volume data stays outside provisioning ownership.
+Read-only trees are `root:atomixos-provision` with a POSIX ACL granting `appsvc`
+read access, so the workload cannot `chmod` its inputs even if it remounts a
+bind read-write; only trees needing writable mounts are `appsvc`-owned, and
+their ACL is removed. The images enable f2fs POSIX ACLs for `/data`.
 
 Snapshots and access reconciliation pin each regular file with Linux `O_PATH`,
 verify its type, single-link count, and inode identity, then open that verified

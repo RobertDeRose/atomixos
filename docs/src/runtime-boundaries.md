@@ -45,7 +45,7 @@ and a manifest with relative paths, modes, sizes, and SHA-256 hashes, then publi
 expected entries, re-renders the verified staged `config.toml` into `/data/config-candidate`, and runs the existing
 promotion, activation, rollback, and recovery protocol. Root-written `/data/config` state is group-readable by
 `atomixos-provision` so the unprivileged API can export config and authenticate future requests; bundle `files/` payloads
-remain owned by the application runtime user and are preserved through a no-symlink snapshot path. Initial promotion also
+follow the managed-file access policy below and are preserved through a no-symlink snapshot path. Initial promotion also
 writes `/data/config/.first-config`; re-apply checks that root-written marker rather than trusting `config.toml` alone.
 
 Runtime result files under `/run/atomixos-provision/results` are root-writable and group-readable only. Claim and queued-job
@@ -252,8 +252,15 @@ Bundle imports may include `files/`; Quadlet values may reference `${CONFIG_DIR}
 
 ## Managed-file access
 
-Bundle `files/` are deployment inputs, installed read-only by default and
-owned by `appsvc`. The provisioning group receives read access. Permission
+Bundle `files/` are deployment inputs, installed read-only by default. A
+read-only tree is owned by `root` with group `atomixos-provision` (directories
+`0550`, files `0440`) and a POSIX access ACL granting the `appsvc` user the same
+read access. The workload therefore cannot change modes or ownership, and the
+named-user ACL entry still matches `appsvc`'s host uid inside rootless
+containers, which drop host supplementary groups. When a container mount needs
+write access, the tree is instead owned by `appsvc` (directories `0750`, files
+`0640`) with the ACL removed. `/data` must support POSIX ACLs; reconciliation
+fails closed when an ACL cannot be applied. Permission
 reconciliation validates file descriptors and rejects symlinks and special
 files. It streams directory entries within the bundle's global member limit
 (4096 by default), counting every file and subdirectory beneath `files/` across

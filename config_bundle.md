@@ -561,8 +561,10 @@ The schema should not currently encode Traefik-specific redirect behavior.
 ## Generic Files Mounting
 
 Application-specific files are carried under `files/` as bundle-managed
-deployment inputs. AtomixOS installs them read-only by default, while trusted
-integrators may mount them with the access mode their Podman workload requires.
+deployment inputs. AtomixOS installs them read-only by default: owned by
+`root`, with read access for `appsvc` through a POSIX ACL, so a workload cannot
+change them. Trusted integrators may mount them with the access mode their
+Podman workload requires; a writable mount makes the tree `appsvc`-owned.
 
 Examples:
 
