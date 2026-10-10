@@ -108,6 +108,44 @@ class TestExtractBundleArchive:
         with pytest.raises(ProvisionError, match=r"exceeds .* byte limit"):
             extract_bundle_archive(bundle, "test.tar.gz", tmp_path)
 
+    def test_rejects_sparse_member_before_writing(self, tmp_path):
+        """A tiny archive cannot declare a large sparse member to fill temporary storage."""
+        tar_buf = io.BytesIO()
+        with tarfile.open(fileobj=tar_buf, mode="w:", format=tarfile.PAX_FORMAT) as tar:
+            tar.addfile(tarfile.TarInfo("config.toml"), io.BytesIO())
+            # A PAX 1.0 GNU sparse member: a one-block map expands to realsize zeros.
+            info = tarfile.TarInfo("GNUSparseFile.0/files/big")
+            info.size = 512
+            info.pax_headers = {
+                "GNU.sparse.major": "1",
+                "GNU.sparse.minor": "0",
+                "GNU.sparse.name": "files/big",
+                "GNU.sparse.realsize": str(64 * 1024 * 1024),
+            }
+            tar.addfile(info, io.BytesIO(b"1\n0\n0\n".ljust(512, b"\0")))
+
+        with pytest.raises(ProvisionError, match="sparse bundle member is not supported"):
+            extract_bundle_archive(gzip.compress(tar_buf.getvalue()), "test.tar.gz", tmp_path)
+        assert list(tmp_path.iterdir()) == []
+
+    def test_rejects_cumulative_member_size_before_writing(self, tmp_path, monkeypatch):
+        """Bound the extracted tree by summed tar headers, not only the decompressed stream."""
+        import atomixos_provision.bundle as bundle_module
+
+        decompress = bundle_module._decompress_to_tempfile
+
+        def decompress_then_lower_limit(*args):
+            """Allow the stream through, then shrink the budget for the header check."""
+            path = decompress(*args)
+            monkeypatch.setattr(bundle_module, "MAX_DECOMPRESSED_BYTES", 15)
+            return path
+
+        monkeypatch.setattr(bundle_module, "_decompress_to_tempfile", decompress_then_lower_limit)
+        bundle = self._make_tar_gz({"config.toml": "version = 1", "files/a": "123456"})
+        with pytest.raises(ProvisionError, match="15 byte decompressed limit"):
+            extract_bundle_archive(bundle, "test.tar.gz", tmp_path)
+        assert list(tmp_path.iterdir()) == []
+
 
 class TestValidateSourceSize:
     def test_rejects_large_source(self, monkeypatch):

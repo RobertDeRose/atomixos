@@ -619,6 +619,9 @@ The importer should validate:
 - bundle layout is valid when importing archives
 - bundle top level is limited to `config.toml` and optional `files/`
 - archive member paths are safe
+- archive members are regular files or directories; sparse members are rejected
+- the summed size of all file members is checked against the decompressed limit
+  (256 MiB by default) before any file is extracted
 
 The importer should preprocess:
 

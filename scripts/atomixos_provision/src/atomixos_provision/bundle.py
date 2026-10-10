@@ -697,6 +697,18 @@ def extract_bundle_archive(source_bytes: bytes, filename: str, destination: Path
             if len(members) > MAX_BUNDLE_MEMBERS:
                 message = f"bundle exceeds {MAX_BUNDLE_MEMBERS} member limit"
                 raise provision_error(message)
+            # Tar headers define exactly how many bytes extraction writes, so
+            # bound the expanded tree before creating any file. Sparse members
+            # can declare far more data than the archive stores.
+            extracted_bytes = 0
+            for member in members:
+                if member.issparse():
+                    raise provision_error(f"sparse bundle member is not supported: {member.name}")
+                if member.isfile():
+                    extracted_bytes += member.size
+            if extracted_bytes > MAX_DECOMPRESSED_BYTES:
+                message = f"bundle exceeds {MAX_DECOMPRESSED_BYTES} byte decompressed limit"
+                raise provision_error(message)
             for member in members:
                 validate_bundle_member(member.name)
                 if member.name == ".":
