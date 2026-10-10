@@ -132,3 +132,32 @@ def test_snapshot_rejects_source_mutation_during_stream(
     with pytest.raises(ProvisionError, match=error_pattern):
         bundle._snapshot_files_source(source, destination)
     assert mutation_seen == [True]
+
+
+@pytest.mark.parametrize("mutation_kind", ["create", "delete", "rename"])
+def test_snapshot_rejects_directory_entry_mutation(tmp_path, monkeypatch, mutation_kind):
+    """Reject entry changes made after a directory's names were enumerated."""
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "a").mkdir()
+    (source / "b").mkdir()
+    destination = tmp_path / "snapshot"
+    original_stat = os.stat
+    mutation_seen: list[bool] = []
+
+    def mutating_stat(path, *args, **kwargs):
+        """Mutate the enumerated directory before its last entry is copied."""
+        if path == "b" and kwargs.get("dir_fd") is not None and not mutation_seen:
+            mutation_seen.append(True)
+            if mutation_kind == "create":
+                (source / "c").mkdir()
+            elif mutation_kind == "delete":
+                (source / "a").rmdir()
+            else:
+                (source / "a").rename(source / "c")
+        return original_stat(path, *args, **kwargs)
+
+    monkeypatch.setattr(bundle.os, "stat", mutating_stat)
+    with pytest.raises(ProvisionError, match=r"bundle directory changed during snapshot"):
+        bundle._snapshot_files_source(source, destination)
+    assert mutation_seen == [True]

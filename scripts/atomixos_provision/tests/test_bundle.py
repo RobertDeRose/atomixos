@@ -447,7 +447,10 @@ class TestCopyBundleFiles:
         monkeypatch.setattr(bundle_module.os, "open", swap_after_pin)
         destination = tmp_path / "destination"
         if operation == "snapshot":
-            stage_bundle_files(source, destination)
+            # The swap renames directory entries, so the snapshot is rejected
+            # after copying the pinned inode rather than the replacement.
+            with pytest.raises(ProvisionError, match="bundle directory changed during snapshot"):
+                stage_bundle_files(source, destination)
             assert (destination / "payload").read_bytes() == b"original"
         else:
             grant_managed_file_access(source, writable=True)

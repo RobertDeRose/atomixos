@@ -166,9 +166,11 @@ def _snapshot_dir(
 
     Enumerate at most one entry beyond the remaining global member budget before
     sorting names, so an oversized directory cannot allocate an unbounded list.
+    Reject entry creation, deletion, or rename while the directory is copied.
     """
     destination.mkdir(parents=True, exist_ok=True)
     destination.chmod(0o755)
+    initial_dir_stat = os.fstat(source_fd)
     names: list[str] = []
     with os.scandir(source_fd) as entries:
         for entry in entries:
@@ -285,6 +287,15 @@ def _snapshot_dir(
         finally:
             if file_fd >= 0:
                 os.close(file_fd)
+    final_dir_stat = os.fstat(source_fd)
+    if (
+        not stat.S_ISDIR(final_dir_stat.st_mode)
+        or (final_dir_stat.st_dev, final_dir_stat.st_ino)
+        != (initial_dir_stat.st_dev, initial_dir_stat.st_ino)
+        or final_dir_stat.st_mtime_ns != initial_dir_stat.st_mtime_ns
+        or final_dir_stat.st_ctime_ns != initial_dir_stat.st_ctime_ns
+    ):
+        raise provision_error(f"bundle directory changed during snapshot: {source_path}")
     return total_bytes[0]
 
 
