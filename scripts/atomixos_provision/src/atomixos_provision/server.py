@@ -148,6 +148,21 @@ def apply_staged(config_root: Path, runtime_root: Path | None, drain: bool) -> N
         sys.exit(1)
 
 
+@cli.command("export-worker")
+@click.option(
+    "--finalize", is_flag=True, help="Fail interrupted exports without accepting new work."
+)
+def export_worker(finalize: bool) -> None:
+    """Drain fixed-path UUID export requests as the root systemd worker."""
+    import os
+
+    from atomixos_provision.export_worker import drain_exports
+
+    if os.geteuid() != 0:
+        raise click.ClickException("export-worker requires root")
+    drain_exports(finalize=finalize)
+
+
 @cli.command("finalize-staged")
 @click.argument("config_root", type=click.Path(path_type=Path))
 @click.option(

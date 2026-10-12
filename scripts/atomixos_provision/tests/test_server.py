@@ -5,6 +5,26 @@ from click.testing import CliRunner
 from atomixos_provision import server
 
 
+def test_export_worker_requires_root(monkeypatch):
+    """The fixed-purpose CLI cannot be run as the network-facing user."""
+    monkeypatch.setattr("os.geteuid", lambda: 1000)
+    result = CliRunner().invoke(server.cli, ["export-worker"])
+    assert result.exit_code != 0
+    assert "requires root" in result.output
+
+
+def test_export_worker_has_no_path_arguments(monkeypatch):
+    """Root exports accept only the fixed operation and optional finalization."""
+    from atomixos_provision import export_worker
+
+    calls = []
+    monkeypatch.setattr("os.geteuid", lambda: 0)
+    monkeypatch.setattr(export_worker, "drain_exports", lambda **kwargs: calls.append(kwargs))
+    assert CliRunner().invoke(server.cli, ["export-worker", "--finalize"]).exit_code == 0
+    assert calls == [{"finalize": True}]
+    assert CliRunner().invoke(server.cli, ["export-worker", "/etc"]).exit_code != 0
+
+
 def test_serve_reads_environment_when_command_runs(monkeypatch, tmp_path):
     captured = {}
 

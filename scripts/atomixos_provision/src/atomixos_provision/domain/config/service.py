@@ -54,10 +54,14 @@ class ConfigService:
 
         return await validate_config_bytes(body, filename, self.config_root)
 
-    def export_config(self) -> bytes:
+    async def export_config(self) -> bytes:
+        """Delegate production exports to the fixed-purpose privileged worker."""
+        from atomixos_provision.export_worker import CONFIG_ROOT, request_export
         from atomixos_provision.provision import locked_export_config_bytes
 
-        return locked_export_config_bytes(self.config_root)
+        if self.config_root == CONFIG_ROOT:
+            return await request_export()
+        return await asyncio.to_thread(locked_export_config_bytes, self.config_root)
 
     async def apply_partial(
         self,
