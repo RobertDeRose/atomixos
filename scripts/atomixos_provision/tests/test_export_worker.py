@@ -181,6 +181,26 @@ def test_finalize_interrupted_claims_and_partial_output(export_root):
     assert not list((export_root / "active").iterdir())
 
 
+def test_failed_result_publication_retains_claim(export_root, config_root, monkeypatch):
+    """A claim survives until an archive or error is published so recovery can finish it."""
+    request_id = str(uuid4())
+    worker._submit(export_root, request_id)
+    publish = worker._publish
+
+    def full_run(_path, _content):
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(worker, "_publish", full_run)
+    with pytest.raises(OSError, match="No space left"):
+        worker.drain_exports(root=export_root, config_root=config_root)
+    assert (export_root / "active" / f"{request_id}.request").is_file()
+
+    monkeypatch.setattr(worker, "_publish", publish)
+    worker.drain_exports(root=export_root, finalize=True)
+    assert (export_root / "results" / f"{request_id}.error").is_file()
+    assert not list((export_root / "active").iterdir())
+
+
 def test_expire_abandoned_requests_and_results(export_root):
     """Periodic cleanup frees expired slots, including abandoned error results."""
     old = time.time() - worker.RETENTION_SECONDS - 1

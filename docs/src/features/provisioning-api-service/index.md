@@ -127,6 +127,6 @@ artifact paths under the feature root.
 
 Follow-up `atomixos-dhe.7.108` preserves the writable-file export contract with a UUID request/result worker rather than
 loosening source permissions or weakening the export guarantee. It adds bounded admission, interrupted-export handling,
-expiry, and privilege-boundary tests. PR #11 review fixes align export accounting with the importer's limits and omit
-implied parent directories from archives. Validation and review
+expiry, and privilege-boundary tests. PR #11 review fixes align export accounting with the importer's limits, omit
+implied parent directories from archives, and retain export claims until a result is published. Validation and review
 evidence for this follow-up is tracked in Beads; the earlier delivery evidence above does not cover it.

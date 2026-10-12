@@ -235,5 +235,5 @@ def drain_exports(
             except Exception:
                 logger.exception("Configuration export %s failed", request_id)
                 _publish(error, b"Configuration export failed; inspect the export service logs")
-            finally:
-                claimed.unlink()
+            # Keep the claim when publication fails so the finalizer can record a failure.
+            claimed.unlink()

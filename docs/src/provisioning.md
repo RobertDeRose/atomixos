@@ -168,9 +168,10 @@ directory. The API serves only its matching completed archive, then publishes an
 At most four pending, active, or retained export UUIDs are admitted, including unprocessed acknowledgements; a full
 queue returns JSON `409`. Worker failures return
 JSON `500`, and an API wait exceeding 130 seconds returns JSON `504`. The worker has a 120-second service timeout;
-its finalizer has a separate 60-second limit to record interrupted requests as failures. A timer runs cleanup every
-minute while idle, expiring abandoned
-requests, acknowledgements, and results after five minutes. All export state is boot-local under `/run`.
+its finalizer has a separate 60-second limit to record interrupted requests as failures. A request stays claimed until
+its archive or error is published, so a failed result write is retried by the finalizer or the next worker run. A timer
+runs cleanup every minute while idle, expiring abandoned requests, acknowledgements, and results after five minutes.
+All export state is boot-local under `/run`.
 
 For failures, inspect `journalctl -u atomixos-provision-export.service` and
 `systemctl status atomixos-provision-export.path atomixos-provision-export.timer`. Export waits for any active config
