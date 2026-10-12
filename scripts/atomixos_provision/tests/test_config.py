@@ -571,6 +571,8 @@ class TestValidateAgainstSchema:
 
 
 class TestLoadConfig:
+    """Group tests for load_config."""
+
     def test_minimal_valid(self, minimal_config_toml: Path, schema_path: Path, monkeypatch):
         monkeypatch.setenv("ATOMIXOS_CONFIG_SCHEMA", str(schema_path))
         result = load_config(minimal_config_toml)
@@ -728,6 +730,7 @@ Image = "docker.io/library/alpine:latest"
             load_config(bad)
 
     def test_invalid_utf8_is_config_error(self, tmp_path: Path, schema_path: Path, monkeypatch):
+        """Verify that non-UTF-8 config bytes raise a submitted-config error."""
         monkeypatch.setenv("ATOMIXOS_CONFIG_SCHEMA", str(schema_path))
         bad = tmp_path / "bad.toml"
         bad.write_bytes(b"version = 1\n\xff\n")

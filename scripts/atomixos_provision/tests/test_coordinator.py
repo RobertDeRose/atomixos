@@ -40,7 +40,7 @@ async def test_staged_submission_uses_staging_and_reports_queue_policy(monkeypat
     staged = []
 
     async def stage_bytes(body, filename, progress, allow_reapply, authorization):
-        """Stage bytes."""
+        """Record the full-config staging call."""
         staged.append((body, filename, progress.id, allow_reapply, authorization))
 
     async def submit_staged(work):
@@ -72,7 +72,7 @@ async def test_partial_submission_uses_exclusive_staged_admission(monkeypatch, t
     calls = []
 
     async def stage_partial(operation, progress, request_payload, authorization):
-        """Stage partial."""
+        """Record the partial staging call."""
         calls.append((operation, progress.id, request_payload, authorization))
 
     async def submit_staged_exclusive(work):

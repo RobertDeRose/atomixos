@@ -26,6 +26,7 @@ def test_request_limit_precedes_hashing(tmp_path, monkeypatch):
     monkeypatch.setattr(bundle, "MAX_SOURCE_BYTES", len(payload) - 1)
 
     def unexpected_hash(_path):
+        """Fail the test if oversized evidence is hashed."""
         pytest.fail("oversized request must not be hashed")
 
     monkeypatch.setattr(staging, "sha256_file", unexpected_hash)
@@ -45,6 +46,7 @@ def test_request_hash_is_bounded_when_evidence_grows(tmp_path, monkeypatch):
     original_fdopen = os.fdopen
 
     def growing_fdopen(fd, *args, **kwargs):
+        """Grow the evidence file after it is opened for hashing."""
         payload.write_bytes(b"x" * 100)
         return original_fdopen(fd, *args, **kwargs)
 

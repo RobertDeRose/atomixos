@@ -50,7 +50,7 @@ class _ValidationService:
         self.error = error
 
     async def validate_bytes(self, body, filename):
-        """Validate bytes."""
+        """Check the expected upload and raise the configured error."""
         assert body == b"invalid"
         assert filename == "config.toml"
         raise self.error
@@ -67,7 +67,7 @@ async def test_validate_maps_known_provision_errors_to_bad_request():
 
 
 def _validation_app(error):
-    """Handle validation app."""
+    """Build an app whose validate endpoint raises the given error."""
 
     @post("/api/validate")
     async def endpoint() -> Response:
@@ -164,6 +164,7 @@ def test_non_data_config_app_uses_direct_job_manager_by_default(tmp_path):
 
 
 async def test_initial_provisioning_with_signers_uses_bootstrap_auth(tmp_path):
+    """Verify that preinstalled signers do not require SSH auth before first provisioning."""
     (tmp_path / "admin-signers").write_text("ssh-ed25519 AAAA test\n")
     app = create_app(config_root=tmp_path)
     async with AsyncTestClient(app=app) as client:

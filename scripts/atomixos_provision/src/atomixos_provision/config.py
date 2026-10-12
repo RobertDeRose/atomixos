@@ -820,6 +820,11 @@ def load_config(
 
     Returns:
         Parsed and validated config dict with all sections normalized.
+
+    Raises:
+        ProvisionError: The file is not valid UTF-8 or TOML, or a value is rejected.
+        ProvisionSystemError: The config schema cannot be loaded or is invalid.
+        OSError: The config file cannot be read.
     """
     try:
         data = tomllib.loads(config_path.read_text(encoding="utf-8"))

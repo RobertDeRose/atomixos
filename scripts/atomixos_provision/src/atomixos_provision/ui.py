@@ -1,7 +1,8 @@
 """Boot UI HTML routes (/, /apply, /assets/*) — Litestar handlers.
 
 The Boot UI is only available before initial provisioning. Once the device
-is provisioned (admin signers exist), all UI routes return 404.
+is provisioned (.first-config or config.toml exists), UI routes return 404,
+except the terminal status fragment for a job the Boot UI started.
 """
 
 # ruff: noqa: E501
@@ -319,7 +320,7 @@ def _render_job_message_html(snapshot: dict[str, Any]) -> str:
 
 
 def _render_job_events(events: list[dict[str, Any]]) -> str:
-    """Render server-sent event data for a job update."""
+    """Render the latest 40 job progress events as an escaped HTML list."""
     recent_events = events[-40:]
     event_items = "".join(
         "<li>"
@@ -348,7 +349,11 @@ async def _require_unprovisioned(connection, _: Any) -> None:
 
 
 async def _require_unprovisioned_or_boot_ui_terminal_job(connection, _: Any) -> None:
-    """Allow bootstrap UI access only while unprovisioned or finishing a job."""
+    """Allow job routes while unprovisioned, or afterward for Boot UI-started jobs.
+
+    A provisioned root requires a job_id tracked in memory or by a job marker;
+    otherwise raise NotFoundException. Job state is not checked here.
+    """
     config_root: Path = connection.app.state.config_root
     if not _device_is_provisioned(config_root):
         return

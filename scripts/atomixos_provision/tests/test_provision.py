@@ -322,10 +322,14 @@ async def test_apply_config_operation_direct_path_applies_candidate(monkeypatch,
 
 
 class _RecordingProgress:
+    """Record progress stages reported by the staged-result wait."""
+
     def __init__(self):
+        """Start with no recorded stages."""
         self.stages = []
 
     def set_stage(self, name, detail=None, **_fields):
+        """Record a stage name and detail."""
         self.stages.append((name, detail))
 
 
@@ -361,6 +365,7 @@ def test_wait_for_staged_result_keeps_claimed_job_nonterminal(monkeypatch, tmp_p
 
 
 def test_wait_for_staged_result_rereads_before_timeout_failure(monkeypatch, tmp_path):
+    """Verify that a result published during timeout handling is returned."""
     from atomixos_provision import provision
 
     paths = runtime_paths(tmp_path / "run")
@@ -380,6 +385,7 @@ def test_wait_for_staged_result_rereads_before_timeout_failure(monkeypatch, tmp_
 
 
 def test_wait_for_staged_result_abandons_queued_job_on_timeout(monkeypatch, tmp_path):
+    """Verify that an unblocked queued job is abandoned and fails as timed out."""
     from atomixos_provision import provision
 
     paths = runtime_paths(tmp_path / "run")
@@ -400,6 +406,7 @@ def test_wait_for_staged_result_abandons_queued_job_on_timeout(monkeypatch, tmp_
 def test_wait_for_staged_result_fails_when_worker_removes_job_without_result(
     monkeypatch, tmp_path
 ):
+    """Verify that a job removed without a result fails as unpublished."""
     from atomixos_provision import provision
 
     paths = runtime_paths(tmp_path / "run")
@@ -805,6 +812,7 @@ def test_durable_reapply_grants_writable_access_using_runtime_root(monkeypatch, 
 
 
 def test_import_config_reconciles_existing_config_without_first_marker(tmp_path, monkeypatch):
+    """Verify that import reapplies an existing config and writes the first-config marker."""
     monkeypatch.setattr(
         "atomixos_provision.config.load_config_schema",
         lambda: {"type": "object", "additionalProperties": True},

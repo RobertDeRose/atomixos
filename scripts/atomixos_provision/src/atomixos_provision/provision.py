@@ -382,7 +382,10 @@ def _stage_request_evidence(
     filename: str,
     authorization: dict[str, str] | None,
 ) -> None:
-    """Persist signed request evidence for privileged worker verification."""
+    """Write request.bin and record its metadata in manifest for worker verification.
+
+    Authorization is recorded only when supplied; the caller persists manifest.
+    """
     request_path = staging_path / "request.bin"
     request_path.write_bytes(payload)
     request_path.chmod(0o600)
@@ -1871,7 +1874,11 @@ async def apply_config_transform(
     config_root: Path,
     progress: ProgressReporter | None = None,
 ) -> dict[str, Any]:
-    """Apply a config transform under the same lock and pipeline as full imports."""
+    """Apply a config transform under the same lock and pipeline as full imports.
+
+    Staged /data/config roots are rejected with ProvisionError; use staged
+    operations there instead.
+    """
 
     def _apply_transform_sync() -> dict[str, Any]:
         """Apply the transformation synchronously under the provision lock."""

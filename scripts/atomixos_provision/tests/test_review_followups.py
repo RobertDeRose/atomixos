@@ -19,6 +19,7 @@ def test_staged_request_rejects_fifo_swapped_before_hash_open(tmp_path, monkeypa
     original_open = os.open
 
     def replace_before_open(path, flags, *args, **kwargs):
+        """Swap the request file for a FIFO just before it is opened."""
         if path == request:
             request.unlink()
             os.mkfifo(request, 0o600)
@@ -44,6 +45,7 @@ def test_staged_snapshot_rejects_fifo_swapped_before_copy_open(tmp_path, monkeyp
     original_open = os.open
 
     def replace_before_open(path, flags, *args, **kwargs):
+        """Swap the staged file for a FIFO just before it is opened."""
         if path == source:
             source.unlink()
             os.mkfifo(source, 0o600)
@@ -68,6 +70,7 @@ def test_fifo_ready_marker_does_not_block_next_job(tmp_path, monkeypatch):
     original_open = os.open
 
     def nonblocking_open(path, flags, *args, **kwargs):
+        """Assert the FIFO ready marker is opened nonblocking."""
         if path == bad_marker:
             # Fail safely on the old implementation rather than hanging the test.
             assert flags & os.O_NONBLOCK

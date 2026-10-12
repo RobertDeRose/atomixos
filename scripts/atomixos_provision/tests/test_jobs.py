@@ -425,11 +425,13 @@ class TestStagedJobManager:
         mgr = StagedJobManager(result_timeout_seconds=0.3)
 
         def failing_refresh(_job):
+            """Fail every worker result read."""
             raise OSError("result unreadable")
 
         monkeypatch.setattr(mgr, "_refresh_from_result", failing_refresh)
 
         async def work(job):
+            """Stage nothing so the monitor starts immediately."""
             return None
 
         job = await mgr.submit_staged(work)
@@ -579,7 +581,7 @@ class TestStagedJobManager:
         monitored = []
 
         def refresh(_job):
-            """Refresh the test reservation."""
+            """Fail the second, post-publication reservation refresh."""
             nonlocal refreshes
             refreshes += 1
             if refreshes == 2:

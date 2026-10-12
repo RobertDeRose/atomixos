@@ -224,6 +224,7 @@ class _UnsignedConnection:
 
 @pytest.mark.asyncio
 async def test_auth_guard_rejects_non_strict_base64_signature(tmp_path):
+    """Verify that the auth guard rejects signatures that are not strict base64."""
     connection = _Connection(tmp_path, "not valid base64!!!!")
     (tmp_path / "config.toml").write_text("version = 1\n")
 
@@ -259,6 +260,7 @@ async def test_auth_guard_allows_unprovisioned_without_signers(tmp_path):
 
 @pytest.mark.asyncio
 async def test_auth_guard_allows_initial_provisioning_with_signers(tmp_path):
+    """Verify that unsigned requests pass before provisioning even when signers exist."""
     connection = _UnsignedConnection(tmp_path)
     (tmp_path / "admin-signers").write_text("ssh-ed25519 AAAA test\n")
 

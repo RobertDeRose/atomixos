@@ -102,7 +102,12 @@ def runtime_paths(root: Path) -> RuntimePaths:
 
 
 def ensure_runtime_layout(paths: RuntimePaths, *, for_worker: bool = False) -> None:
-    """Create runtime directories with their required permissions."""
+    """Create runtime directories and apply their modes best-effort.
+
+    Always create the root and queue. Create active only for the worker, and
+    results for the worker or when it already exists. Mode PermissionErrors are
+    ignored.
+    """
     _ensure_directory(paths.root, RUNTIME_ROOT_MODE)
     _ensure_directory(paths.queue, QUEUE_DIR_MODE)
     if for_worker or paths.results.exists():
@@ -430,7 +435,11 @@ def _is_plain_directory(path: Path) -> bool:
 
 
 def _count_staged_jobs_locked(paths: RuntimePaths, *, exclude_job_id: str | None = None) -> int:
-    """Count active staged jobs while holding the queue lock."""
+    """Count active, queued, and reserved staged jobs while holding the queue lock.
+
+    Each job counts once, excluding exclude_job_id. An unreadable active
+    directory counts as one active job.
+    """
     count = 0
     active_job_ids: set[str] = set()
     try:
@@ -487,7 +496,10 @@ def _reservation_sort_key(path: Path) -> tuple[int, float]:
 
 
 def _cleanup_stale_reservations_locked(paths: RuntimePaths) -> None:
-    """Remove stale capacity reservations while holding the queue lock."""
+    """Remove expired or nonregular reservations while holding the queue lock.
+
+    Also remove each removed reservation's unpublished queue and staging state.
+    """
     deadline = time.time() - STAGED_RESERVATION_TTL_SECONDS
     removed = False
     for reserve_path in paths.queue.glob("*.reserve"):
@@ -544,7 +556,10 @@ def _ready_sequence_for_job_locked(paths: RuntimePaths, job_id: str) -> int | No
 
 
 def _has_lower_sequence_reservation_locked(paths: RuntimePaths, sequence: int) -> bool:
-    """Return whether a lower FIFO reservation exists under the queue lock."""
+    """Return whether a reservation or ready marker has a lower FIFO sequence.
+
+    Call while holding the queue lock. Malformed control files are removed.
+    """
     for control_path in [*paths.queue.glob("*.reserve"), *paths.queue.glob("*.ready")]:
         try:
             control_sequence = (
@@ -831,6 +846,14 @@ class StagedResultWaiter(Generic[_T]):
         stage: str = "queued",
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
+        """Configure result and liveness probes for one staged job.
+
+        ``read`` returns the published result or ``None``; ``timeout_state``
+        reconciles queue state when an interval expires; ``is_claimed`` reports
+        whether the worker holds the job. ``on_stage`` receives progress updates,
+        starting from ``stage``. The first liveness check is due one interval
+        after construction.
+        """
         self._read = read
         self._timeout_state = timeout_state
         self._is_claimed = is_claimed
@@ -874,6 +897,7 @@ class StagedResultWaiter(Generic[_T]):
         raise ProvisionError("timed out waiting for privileged apply worker")
 
     def _check_timeout_state(self) -> StagedTimeoutState:
+        """Return the queue timeout state, wrapping unexpected lookup errors."""
         try:
             return self._timeout_state()
         except ProvisionError:
@@ -882,6 +906,11 @@ class StagedResultWaiter(Generic[_T]):
             raise ProvisionError(f"cannot determine staged job timeout state: {exc}") from exc
 
     def _read_failed(self, now: float, exc: OSError) -> None:
+        """Track a result read error, raising once errors outlast an interval.
+
+        Report an error as a retrying progress update when its message differs
+        from the previously reported one.
+        """
         if self._read_error_since is None:
             self._read_error_since = now
         elif now - self._read_error_since >= self._interval:
@@ -891,11 +920,13 @@ class StagedResultWaiter(Generic[_T]):
             self._emit(self._stage, f"worker result I/O failed; retrying: {exc}")
 
     def _report(self, stage: str) -> None:
+        """Publish a queued/running stage change with its default detail."""
         if stage != self._stage:
             self._stage = stage
             self._emit(stage, _RUNNING_DETAIL if stage == "running" else _QUEUED_DETAIL)
 
     def _emit(self, stage: str, detail: str) -> None:
+        """Forward a progress update to the caller's stage callback, if any."""
         if self._on_stage is not None:
             self._on_stage(stage, detail)
 

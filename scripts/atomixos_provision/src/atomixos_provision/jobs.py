@@ -484,8 +484,8 @@ class StagedJobManager(JobManager):
     async def _monitor_staged(self, job: Job) -> None:
         """Monitor worker results under the shared StagedResultWaiter policy.
 
-        Waiting or claimed jobs keep waiting; result read errors are retried for
-        one interval. Other errors mark the job failed; cancellation also marks
+        Waiting or claimed jobs keep waiting; result OSErrors are retried for up
+        to one interval. Other errors mark the job failed; cancellation also marks
         failure and is re-raised.
         """
         try:

@@ -214,7 +214,7 @@ class ConfigOperation(Operation):
     """Patch generated config operations for binary uploads and auth docs."""
 
     def __post_init__(self) -> None:
-        """Customize OpenAPI bodies, auth parameters, and response headers by operation."""
+        """Customize OpenAPI bodies, auth parameters, and responses by operation."""
         if self.operation_id == "configSubmit":
             self.request_body = _BINARY_CONFIG_BODY
             self.parameters = [

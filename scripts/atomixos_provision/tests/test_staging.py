@@ -88,7 +88,7 @@ Image = "{image}"
 
 
 def _complete_staged_apply(root, _progress=None, *, before_commit=None):
-    """Handle complete staged apply."""
+    """Simulate a successful reapply: run the optional hook and remove rollback state."""
     from atomixos_provision.activation import cleanup_rollback
 
     if before_commit is not None:
@@ -269,6 +269,7 @@ class _WaiterHarness:
     """Script result reads and liveness for StagedResultWaiter on a fake clock."""
 
     def __init__(self, reads, states=(), *, claimed=False, interval=10):
+        """Build a waiter over scripted reads and timeout states."""
         self.now = 0.0
         self.reads = list(reads)
         self.states = list(states)
@@ -284,21 +285,25 @@ class _WaiterHarness:
         )
 
     def _read(self):
+        """Return or raise the next scripted result read."""
         return self._next(self.reads)
 
     @staticmethod
     def _next(script):
+        """Pop the next scripted value, raising it if it is an exception."""
         value = script.pop(0)
         if isinstance(value, Exception):
             raise value
         return value
 
     def poll_at(self, now):
+        """Advance the fake clock to now and poll once."""
         self.now = now
         return self.waiter.poll()
 
 
 def test_staged_result_waiter_returns_published_result():
+    """Verify that the waiter returns a result as soon as it is published."""
     harness = _WaiterHarness([None, {"status": "succeeded"}])
 
     assert harness.poll_at(1) is None
@@ -307,6 +312,7 @@ def test_staged_result_waiter_returns_published_result():
 
 
 def test_staged_result_waiter_reports_claim_once():
+    """Verify that a worker claim is reported once as the running stage."""
     harness = _WaiterHarness([None, None], claimed=True)
 
     assert harness.poll_at(1) is None
@@ -319,6 +325,7 @@ def test_staged_result_waiter_reports_claim_once():
     [(StagedTimeoutState.CLAIMED, "running"), (StagedTimeoutState.WAITING, "queued")],
 )
 def test_staged_result_waiter_keeps_live_jobs_nonterminal(state, stage):
+    """Verify that claimed or waiting jobs keep waiting across intervals."""
     harness = _WaiterHarness(
         [None, None, None, {"ok": True}],
         [state, state],
@@ -341,6 +348,7 @@ def test_staged_result_waiter_keeps_live_jobs_nonterminal(state, stage):
     ],
 )
 def test_staged_result_waiter_fails_terminal_states(state, message):
+    """Verify that abandoned and missing jobs fail with distinct errors."""
     harness = _WaiterHarness([None, None], [state])
 
     with pytest.raises(ProvisionError, match=message):
@@ -348,12 +356,14 @@ def test_staged_result_waiter_fails_terminal_states(state, message):
 
 
 def test_staged_result_waiter_rereads_before_terminal_failure():
+    """Verify that a final reread returns a result published during reconciliation."""
     harness = _WaiterHarness([None, {"ok": True}], [StagedTimeoutState.MISSING])
 
     assert harness.poll_at(10) == {"ok": True}
 
 
 def test_staged_result_waiter_wraps_timeout_state_errors():
+    """Verify that timeout-state lookup errors are wrapped with their cause."""
     harness = _WaiterHarness([None], [RuntimeError("denied")])
 
     with pytest.raises(ProvisionError, match="timeout state: denied"):
@@ -361,6 +371,7 @@ def test_staged_result_waiter_wraps_timeout_state_errors():
 
 
 def test_staged_result_waiter_retries_transient_read_errors():
+    """Verify that transient read errors are reported once and retried."""
     harness = _WaiterHarness([OSError("busy"), OSError("busy"), None, {"ok": True}])
 
     assert harness.poll_at(1) is None
@@ -371,6 +382,7 @@ def test_staged_result_waiter_retries_transient_read_errors():
 
 
 def test_staged_result_waiter_fails_persistent_read_errors_despite_live_worker():
+    """Verify that read errors fail after one interval even while the worker is live."""
     harness = _WaiterHarness(
         [OSError("busy")] * 3, [StagedTimeoutState.CLAIMED], claimed=True, interval=10
     )
@@ -382,6 +394,7 @@ def test_staged_result_waiter_fails_persistent_read_errors_despite_live_worker()
 
 
 def test_staged_result_waiter_resets_read_error_budget_after_success():
+    """Verify that a successful read restarts the read-error budget."""
     harness = _WaiterHarness(
         [OSError("busy"), None, OSError("busy"), None], [StagedTimeoutState.WAITING]
     )

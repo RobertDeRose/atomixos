@@ -43,7 +43,7 @@ def test_combined_quoted_podman_mounts_preserve_warning_indices(args):
 def test_wan_firewall_uses_non_symlink_marker_or_config(
     tmp_path, entry, symlink, pending, open_wan
 ):
-    """Execute the production toggle with a fake nft command and temporary config."""
+    """Verify that only a regular marker or config without pending promotion keeps WAN closed."""
     root = tmp_path / "config"
     root.mkdir()
     target = tmp_path / "target"
