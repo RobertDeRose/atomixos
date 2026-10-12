@@ -892,7 +892,9 @@ def test_export_rejects_inode_substitution(tmp_path, monkeypatch, member, replac
         if not swapped and (path == target or (path == target.name and "dir_fd" in kwargs)):
             swapped = True
             os.replace(other, target)
-            assert flags & os.O_NONBLOCK
+            # Linux first pins the name with a non-opening O_PATH handle; other
+            # hosts open it directly and must not block on a substituted FIFO.
+            assert flags & (getattr(os, "O_PATH", 0) | os.O_NONBLOCK)
         return open_file(path, flags, *args, **kwargs)
 
     monkeypatch.setattr(bundle_module.os, "open", swap_before_open)
