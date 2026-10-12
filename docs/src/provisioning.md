@@ -111,9 +111,11 @@ operator-visible API responses and rollback behavior. Result handoff files are
 root-writable/group-readable, and queue claim/abandon operations share a runtime
 lock so timed-out queued jobs cannot race with the root worker claiming them.
 Each result-timeout interval (`ATOMIXOS_PROVISION_RESULT_TIMEOUT_SECONDS`, 1200 by
-default) the API rechecks the queue: queued or claimed jobs keep waiting, while
-abandoned or vanished jobs fail. Errors reading a result are retried and fail the
-job only after persisting for a full interval without a successful read.
+default) the API rechecks the queue. Jobs the worker has claimed, and queued jobs
+blocked behind an active or earlier job, keep waiting. An unblocked queued job is
+abandoned and fails as timed out, and a job that vanishes without a result fails.
+Errors reading a result are retried and fail the job only after persisting for a
+full interval without a successful read.
 
 Before initial provisioning, browser operators can use the Boot UI at `/` to
 upload or drop a config bundle or `config.toml`. Browser submissions post to
