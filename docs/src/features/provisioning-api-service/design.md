@@ -652,4 +652,6 @@ committed receipt establishes success only for the matching job. Keep claimed
 jobs until result publication and gate transport follow-ups on an unfinished
 matching claim. Preserve initial discard, rollback reactivation, and ordered
 boot recovery. Hold a rollback-activation marker from restore until rollback
-activation finishes so an interrupted reactivation is retried.
+activation finishes so an interrupted reactivation is retried. Rerun the apply
+service on a timer while claims remain, since claiming removes the `.ready`
+trigger.

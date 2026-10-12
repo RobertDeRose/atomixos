@@ -160,5 +160,7 @@ discards an uncommitted initial configuration or restores and reactivates
 rollback state. If the worker stops while reactivating restored rollback state,
 finalization reruns that activation before publishing a result. Claimed jobs
 remain pending until root publishes a terminal result, including when result I/O
-temporarily fails. Transport follow-ups require a matching unfinished claimed
+temporarily fails. While a claim remains, a retry timer restarts the apply
+service 30 seconds after each run so finalization publishes the result once
+result I/O recovers. Transport follow-ups require a matching unfinished claimed
 job and never replay after completion.

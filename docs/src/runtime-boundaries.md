@@ -308,4 +308,7 @@ rollback activation before publishing results. A durable rollback-activation
 marker spans rollback restore through reactivation, so recovery reruns an
 interrupted rollback activation; boot recovery clears it because ordered boot
 units activate the restored config. The apply service stop timeout
-covers the supported activation budget plus recovery overhead.
+covers the supported activation budget plus recovery overhead. Claiming removes
+the job's `.ready` trigger, so `atomixos-provision-apply-retry.timer` restarts
+the apply service 30 seconds after each run; the service starts only while a
+`.ready` job or an active claim exists.

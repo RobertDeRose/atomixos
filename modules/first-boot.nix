@@ -157,6 +157,17 @@ in
     };
   };
 
+  # Claiming removes a job's .ready marker, so a claim retained after a failed
+  # result write needs its own trigger to rerun the finalizer.
+  systemd.timers.atomixos-provision-apply-retry = {
+    description = "Retry finalizing retained AtomixOS provisioning claims";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnUnitInactiveSec = "30s";
+      Unit = "atomixos-provision-apply.service";
+    };
+  };
+
   systemd.services.atomixos-provision-apply = {
     description = "Apply staged AtomixOS provisioning job";
     after = [
@@ -167,6 +178,12 @@ in
     wants = [ "data.mount" ];
 
     unitConfig.RequiresMountsFor = [ "/data" ];
+    # Start only for queued jobs or retained claims, so retry ticks stop once
+    # every claim has a published result.
+    unitConfig.ConditionPathExistsGlob = [
+      "|/run/atomixos-provision/queue/*.ready"
+      "|/run/atomixos-provision/active/*"
+    ];
 
     path = [
       pkgs.coreutils
