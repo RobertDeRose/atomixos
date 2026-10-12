@@ -50,8 +50,11 @@ validation remains available locally through `./scripts/nix-with-build-config.sh
 `nix build` commands, separately from `mise run check`. Darwin VM tests
 need a Mac with the Linux builder configured. See [GitHub's runner limitations](https://docs.github.com/en/actions/reference/runners/github-hosted-runners#limitations-for-arm64-macos-runners).
 
+`.github/workflows/pytest.yml` runs the provisioning package test suite on the same events. It runs on
+`ubuntu-26.04-arm`, matching the device's aarch64 Linux file APIs, which macOS host runs only emulate. It executes
+`uv run --locked --extra dev pytest` through mise in `scripts/atomixos_provision` and has a 15-minute limit.
+
 CI does not regenerate the lock. Dependency-update branches and fork PRs are not excluded from the pull-request gate.
-The provisioning package test suite remains separate.
 
 ## Hooks and recovery
 

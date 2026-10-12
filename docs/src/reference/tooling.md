@@ -18,6 +18,7 @@
 | `.github/workflows/hk.yml`          | Runs `mise x -- hk check -a` on pull requests and manual dispatches.        |
 | `.github/workflows/nix.yml`         | Evaluates Nix per platform on pull requests and manual dispatches.          |
 | `.github/workflows/docs.yml`        | Builds gated docs from the default branch or manual dispatch.               |
+| `.github/workflows/pytest.yml`      | Runs provisioning package tests on aarch64 Linux for PRs and dispatches.    |
 
 ## Tools
 
