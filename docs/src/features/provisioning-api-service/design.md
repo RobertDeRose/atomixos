@@ -8,8 +8,6 @@
 - Feature slug: `provisioning-api-service`
 - Design path: `docs/src/features/provisioning-api-service/design.md`
 - Implemented record: `docs/src/features/provisioning-api-service/index.md`
-- Base branch: `dev`
-- Status: delivered locally
 
 ## Feature Summary
 
@@ -175,9 +173,10 @@ application at `/Users/DeRoseR/workspace/personal/litestar-fullstack`.
 ## Goals
 
 1. Keep `config.toml` and complete compressed-tar config bundles as the canonical
-   import/export format for first boot, backups, restore, and cloning deployments.
+   import/export format for first boot and for moving or cloning deployments.
    A bundle contains only `config.toml` and managed `files/` payloads; generated
-   runtime outputs, Podman volume data, and credentials are not exported.
+   runtime outputs, Podman volume data, and device-generated signer material are not
+   exported. Secrets stored in `config.toml` or managed files are exported with them.
 2. Treat the running provisioning service as the canonical control plane for future
    dynamic changes.
 3. Ensure every mutation path uses the same state machine:

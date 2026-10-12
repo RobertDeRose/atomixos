@@ -3,18 +3,7 @@
 ## Delivery Summary
 
 - Beads feature root: `atomixos-dhe`
-- Status: pull request open
-- Pull request: [#7](https://github.com/RobertDeRose/atomixos/pull/7)
-- Delivery: awaiting review and merge into `dev`
 - Design record: [design.md](design.md)
-- Completion commits: `2a08b9a65be7a92bf5fac3fa125759d5882bc7d0`,
-  `3dd5be205f792f4b75845702be07d86337bbfd9d`, `b498d873222f670b7287e6105a63a974aebcb78c`,
-  `3a6bf5152db2ae2128c7eb9ad94801f062e2d92d`, `f61953d939fcc8efb865524b42713be5c7391e7d`,
-  `0a82f208e3b247e168a49323e82ea0d8ab5aaa3b`, `7c01d8d94e4e18f0db92d9c49ebcff25ca33f055`, and
-  `6bcf58585cc11757aaaf75538c468fbff464b1d3`; pinned formatting was finalized in
-  `92fc15567ba6a129e4595b331dd562bd5044e5a9`. Close-out fixes were completed in
-  `06356ed4ac0bdc5e5850c5323f33d377974ee790`, `6d8fe7ee8d9e8d517bec6912c2c158a55f7fe721`, and
-  `b81a38054198ea6e4263e8bd27d5d3ad3d219bee`.
 
 ## Delivered Capability
 
@@ -23,8 +12,9 @@ pipeline. It supports authenticated config submission, validation, asynchronous 
 flows, maintenance commands, and deterministic complete config-bundle export and import.
 
 The portable bundle contains canonical `config.toml` plus managed `files/` payloads. Export excludes generated runtime
-state and credentials, takes a locked snapshot, enforces archive limits and safe member types, and produces stable bytes
-for equivalent input.
+state and device-generated signer material, takes a locked snapshot, enforces the importer's archive limits and safe
+member types, and produces stable bytes for equivalent input. Bundles can contain secrets stored in `config.toml` or
+managed files, such as TLS private keys, so treat exported bundles as sensitive.
 
 ## User-Facing Behavior
 
@@ -71,14 +61,10 @@ closure budget.
 ## Validation Evidence
 
 - Provisioning package tests cover authentication, typed responses, queue admission, state recovery, bundle safety,
-  deterministic export, and complete import/export round trips. The unfiltered macOS run passes with the two
-  Linux-setgid-specific assertions explicitly skipped. Those exact permission assertions require a Linux package pytest
-  run; the current target VM suite exercises staged provisioning without duplicating them.
-- The exact aarch64 `first-boot-provision` and `first-boot-source-discovery` checks passed on the restored builder.
-- A serialized repository-wide Nix gate passed at `b81a38054198ea6e4263e8bd27d5d3ad3d219bee`, including provisioning,
-  fleet bootstrap, RAUC confirmation, rollback, networking, security, watchdog, and forensics VM checks.
-- The aarch64 squashfs build produced a 418.5 MB result against the 1 GiB budget.
-- Each discovered implementation regression received a focused check and an independent review before commit.
+  deterministic export, export worker admission and recovery, and complete import/export round trips. Two
+  Linux-setgid-specific staging assertions run only on Linux.
+- The `first-boot-provision`, `first-boot-source-discovery`, and `provisioning-export` NixOS VM checks exercise the
+  staged apply path and the production export worker on the target platform.
 
 ## Design Reconciliation
 
@@ -93,6 +79,12 @@ contract were delivered without creating a second desired-state path.
 Target validation exposed stale VM fixtures after LAN defaults were centralized and bundle export became an archive.
 Those fixtures now install the production defaults contract and inspect exported `config.toml` from the bundle. Fleet
 bootstrap also received an explicit transport guard so it cannot invoke local bootstrap reconciliation.
+
+Production export runs through a dedicated root worker with UUID-correlated requests and results, so workload-owned
+private files are exported without loosening their permissions. The worker bounds admission, finalizes interrupted
+requests, keeps a request claimed until its archive or error is published, and expires abandoned state. Export applies
+the importer's limits instead of its own budget and omits parent directories that the importer recreates, so any tree
+the importer accepted can be exported.
 
 ### Deferred Work
 
@@ -118,15 +110,4 @@ generated runtime state, Podman volume data, or signer material remain intention
 
 ## Audit Trail
 
-Specification reconciliation completed in `3dbec928ef18d91f17401edb4a6f9cccc3e3dd73`. The completion commits listed above
-closed bundle, admission, error, packaging, fleet-transport, target-fixture, and formatting gaps. Exact aarch64 checks,
-the serialized repository Nix gate, and the closure-budget build passed before delivery. Final close-out review also
-verified event-loop responsiveness, server-schema error semantics, the delivered route/layout documentation, and the
-platform-specific package-test boundary. Beads preserves task-level findings, review results, validation commands, and
-artifact paths under the feature root.
-
-Follow-up `atomixos-dhe.7.108` preserves the writable-file export contract with a UUID request/result worker rather than
-loosening source permissions or weakening the export guarantee. It adds bounded admission, interrupted-export handling,
-expiry, and privilege-boundary tests. PR #11 review fixes align export accounting with the importer's limits, omit
-implied parent directories from archives, and retain export claims until a result is published. Validation and review
-evidence for this follow-up is tracked in Beads; the earlier delivery evidence above does not cover it.
+Delivery history, review findings, and validation runs are recorded in Beads under `atomixos-dhe`.

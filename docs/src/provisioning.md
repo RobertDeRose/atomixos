@@ -151,6 +151,8 @@ does not own that runtime-data lifecycle. The archive can be imported through th
 config root.
 
 Config export captures portable desired state for another device or a distributable bundle; it is not a backup system.
+Bundles can contain secrets stored in `config.toml` or managed files, such as TLS private keys; treat them as
+sensitive.
 Export applies the importer's member, size, and decompressed-size limits, so every exported bundle imports. A tree that
 exceeds them fails with an error naming the limit. Archives list files and empty directories; the importer recreates
 other parent directories.
