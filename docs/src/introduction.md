@@ -30,6 +30,16 @@ AtomixOS eliminates this class of failure through:
 - **Read-only root filesystem** -- squashfs rootfs with OverlayFS (tmpfs upper layer) prevents runtime drift; every boot
   starts from a known-good state
 
+## Audience and Boundaries
+
+AtomixOS serves developers, device makers, system integrators, and operators building and managing secure,
+reproducible appliances on single-board computers.
+
+AtomixOS owns the immutable base OS, secure provisioning, the update and recovery lifecycle, hardware enablement, and
+platform validation. It is not a general-purpose desktop or server distribution, a container orchestrator, or a
+universal router. Application workloads and external fleet-management infrastructure remain deployment-owned, and
+hardware support is added explicitly per board.
+
 ## Supported Hardware
 
 | Board  | SoC    | Architecture | Storage    |

@@ -34,14 +34,6 @@ built-in; rumdl avoids the built-in diff header while discovering `.config/rumdl
 lack matching built-ins; and test, compiler, linter, and module checks must remain gated by their project manifests.
 Nix evaluation and builds are separate from hk; hk retains the `nixfmt` and `deadnix` lint steps.
 
-Recorded language profiles: `other`.
-
-## Template updates
-
-`.copier-answers.yml` records `dstack_template_channel` and the exact reachable template commit in `_commit`. Stable
-selects the newest stable tag; unstable selects the source default-branch HEAD. `/update-project --stable` and
-`/update-project --unstable` change the persisted channel; `--vcs-ref` is a one-shot reviewed override.
-
 ## Commit messages and changelogs
 
 Changelog-visible `feat`, `fix`, `perf`, and `refactor` commits require a semantic scope. The commit hook also checks

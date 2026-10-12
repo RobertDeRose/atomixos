@@ -11,7 +11,7 @@ docs/src/features/<slug>/index.md          delivered reconciliation and audit re
 ```
 
 Workflow commands are installed from `RobertDeRose/dstack` with the `skills` CLI. The CLI manages the agent-specific
-installation paths and updates; Copier manages this repository scaffold.
+installation paths and updates.
 
 ## Start a session
 

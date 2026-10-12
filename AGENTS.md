@@ -156,8 +156,6 @@ npx skills update
 The workflow commands are:
 
 ```text
-/setup-project
-/update-project
 /plan-features
 /start-feature
 /implement-feature
@@ -165,7 +163,7 @@ The workflow commands are:
 /audit-project
 ```
 
-The Skills CLI manages skill files. Copier manages this repository scaffold through `.copier-answers.yml`.
+The Skills CLI manages skill files.
 
 ### Beads lifecycle
 
