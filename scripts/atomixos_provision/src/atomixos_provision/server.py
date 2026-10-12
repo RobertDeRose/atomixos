@@ -149,6 +149,7 @@ def apply_staged(config_root: Path, runtime_root: Path | None, drain: bool) -> N
 
 
 @cli.command("finalize-staged")
+@click.argument("config_root", type=click.Path(path_type=Path))
 @click.option(
     "--runtime-root",
     default=None,
@@ -160,12 +161,15 @@ def apply_staged(config_root: Path, runtime_root: Path | None, drain: bool) -> N
     default="privileged apply worker stopped before writing a result",
     help="Failure reason to record for abandoned active jobs.",
 )
-def finalize_staged(runtime_root: Path | None, reason: str) -> None:
-    """Finalize claimed staged jobs left behind by an interrupted worker."""
+def finalize_staged(config_root: Path, runtime_root: Path | None, reason: str) -> None:
+    """Recover config state and finalize staged jobs left by an interrupted worker.
+
+    Print a JSON status with the number of finalized jobs; exit 1 on error.
+    """
     from atomixos_provision.provision import finalize_staged_jobs
 
     try:
-        finalized = finalize_staged_jobs(runtime_root, reason)
+        finalized = finalize_staged_jobs(config_root, runtime_root, reason)
         click.echo(json.dumps({"ok": True, "finalized": finalized}))
     except Exception as exc:
         click.echo(json.dumps({"ok": False, "error": str(exc)}))
@@ -175,9 +179,9 @@ def finalize_staged(runtime_root: Path | None, reason: str) -> None:
 @cli.command()
 @click.argument("config_root", type=click.Path(path_type=Path))
 def recover(config_root: Path) -> None:
-    """Recover an interrupted config promotion."""
-    from atomixos_provision.activation import recover_config_root
+    """Recover an interrupted config promotion at boot using its apply receipt."""
     from atomixos_provision.provision import (
+        _recover_staged_apply,
         grant_service_read_access,
         provisioning_lock,
         require_worker_for_data_config,
@@ -187,7 +191,7 @@ def recover(config_root: Path) -> None:
     config_root = validate_config_root(config_root)
     require_worker_for_data_config(config_root, "recover")
     with provisioning_lock(config_root):
-        recover_config_root(config_root)
+        _recover_staged_apply(config_root, boot_recovery=True)
         if config_root.exists():
             grant_service_read_access(config_root)
 

@@ -297,3 +297,18 @@ are bounded, nonblocking, and reject symlinks and non-regular descriptors.
 Ready publication requires a live capacity reservation and preserves FIFO order.
 API jobs and local CLI staging both refresh their reservation while staging, so slow
 imports keep their slot past the reservation TTL.
+
+## Apply transactions and finalization
+
+The receipt binds the staged job ID and source digest to its durable phase and
+result. Activation precedes commit; finalization preserves published results
+and retries unfinished work. Boot recovery leaves WAN and runtime activation
+to ordered successor services. Same-boot recovery completes transport and
+rollback activation before publishing results. A durable rollback-activation
+marker spans rollback restore through reactivation, so recovery reruns an
+interrupted rollback activation; boot recovery clears it because ordered boot
+units activate the restored config. The apply service stop timeout
+covers the supported activation budget plus recovery overhead. Claiming removes
+the job's `.ready` trigger, so `atomixos-provision-apply-retry.timer` restarts
+the apply service 30 seconds after each run; the service starts only while a
+`.ready` job or an active claim exists.

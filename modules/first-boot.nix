@@ -80,12 +80,14 @@ let
     export ATOMIXOS_BOOTSTRAP_ACTIVATION=${bootstrapActivationScript}
     export ATOMIXOS_PROVISION_WORKER_ACTIVE=1
     export ATOMIXOS_PROVISION_RESULT_TIMEOUT_SECONDS=3900
-    ${provisionCli}/bin/atomixos-provision finalize-staged --runtime-root /run/atomixos-provision
+    ${provisionCli}/bin/atomixos-provision finalize-staged /data/config --runtime-root /run/atomixos-provision
     exec ${provisionCli}/bin/atomixos-provision apply-staged /data/config --runtime-root /run/atomixos-provision --drain
   '';
   provisionApplyFinalizeScript = pkgs.writeShellScript "atomixos-provision-apply-finalize" ''
     set -euo pipefail
-    exec ${provisionCli}/bin/atomixos-provision finalize-staged --runtime-root /run/atomixos-provision
+    export ATOMIXOS_BOOTSTRAP_ACTIVATION=${bootstrapActivationScript}
+    export ATOMIXOS_PROVISION_WORKER_ACTIVE=1
+    exec ${provisionCli}/bin/atomixos-provision finalize-staged /data/config --runtime-root /run/atomixos-provision
   '';
   ubootEnvTools = self.packages.${pkgs.stdenv.hostPlatform.system}.uboot-env-tools;
   firstBootEnv = {
@@ -129,6 +131,8 @@ in
     ];
     wantedBy = [ "multi-user.target" ];
 
+    environment.ATOMIXOS_BOOTSTRAP_TRANSPORT = bootstrapTransport;
+
     unitConfig.RequiresMountsFor = [ "/data" ];
 
     path = [
@@ -153,6 +157,17 @@ in
     };
   };
 
+  # Claiming removes a job's .ready marker, so a claim retained after a failed
+  # result write needs its own trigger to rerun the finalizer.
+  systemd.timers.atomixos-provision-apply-retry = {
+    description = "Retry finalizing retained AtomixOS provisioning claims";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnUnitInactiveSec = "30s";
+      Unit = "atomixos-provision-apply.service";
+    };
+  };
+
   systemd.services.atomixos-provision-apply = {
     description = "Apply staged AtomixOS provisioning job";
     after = [
@@ -163,6 +178,12 @@ in
     wants = [ "data.mount" ];
 
     unitConfig.RequiresMountsFor = [ "/data" ];
+    # Start only for queued jobs or retained claims, so retry ticks stop once
+    # every claim has a published result.
+    unitConfig.ConditionPathExistsGlob = [
+      "|/run/atomixos-provision/queue/*.ready"
+      "|/run/atomixos-provision/active/*"
+    ];
 
     path = [
       pkgs.coreutils
@@ -177,11 +198,14 @@ in
       provisionCli
     ];
 
+    environment.ATOMIXOS_BOOTSTRAP_TRANSPORT = bootstrapTransport;
+
     serviceConfig = {
       Type = "oneshot";
       ExecStart = provisionApplyScript;
       ExecStopPost = provisionApplyFinalizeScript;
       TimeoutStartSec = 7500;
+      TimeoutStopSec = 3900;
       PrivateTmp = true;
       NoNewPrivileges = true;
       ProtectSystem = "strict";

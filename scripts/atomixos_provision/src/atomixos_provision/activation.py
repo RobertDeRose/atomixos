@@ -6,6 +6,7 @@ import pwd
 import shutil
 import subprocess
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
 
@@ -49,6 +50,7 @@ class ProgressReporter(Protocol):
 CANDIDATE_SUFFIX = "-candidate"
 ROLLBACK_SUFFIX = "-rollback"
 PROMOTION_MARKER = ".atomixos-promotion-pending"
+ROLLBACK_ACTIVATION_MARKER = ".atomixos-rollback-activation-pending"
 
 
 # --- Path Helpers ---
@@ -84,6 +86,11 @@ def _fsync_tree(path: Path) -> None:
 def promotion_marker_path(config_root: Path) -> Path:
     """Get the path to the promotion marker file."""
     return config_root.parent / f"{config_root.name}{PROMOTION_MARKER}"
+
+
+def rollback_activation_marker_path(config_root: Path) -> Path:
+    """Get the path to the marker held from rollback restore through reactivation."""
+    return config_root.parent / f"{config_root.name}{ROLLBACK_ACTIVATION_MARKER}"
 
 
 def candidate_root_path(config_root: Path) -> Path:
@@ -132,24 +139,20 @@ def write_managed_state(config_root: Path, names: set[str]) -> None:
 
 
 def recover_config_root(config_root: Path) -> None:
-    """Recover from interrupted promotion or activation."""
+    """Leave one complete config root after an interrupted promotion.
+
+    Restore the rollback root while a promotion marker remains, discard an
+    incomplete initial root, and remove leftover candidates. Services are not
+    reactivated here; the apply receipt flow decides when to reactivate.
+    """
     rollback_root = rollback_root_path(config_root)
     candidate_root = candidate_root_path(config_root)
     marker_path = promotion_marker_path(config_root)
 
     if marker_path.exists() and rollback_root.exists():
-        if config_root.exists():
-            shutil.rmtree(config_root)
-            rollback_root.rename(config_root)
-            if candidate_root.exists():
-                shutil.rmtree(candidate_root)
-            marker_path.unlink(missing_ok=True)
-            _fsync_directory(config_root.parent)
-            return
-        rollback_root.rename(config_root)
+        restore_rollback(config_root)
         if candidate_root.exists():
             shutil.rmtree(candidate_root)
-        marker_path.unlink(missing_ok=True)
         _fsync_directory(config_root.parent)
         return
 
@@ -277,6 +280,28 @@ def restore_rollback(config_root: Path) -> bool:
     marker_path.unlink(missing_ok=True)
     _fsync_directory(config_root.parent)
     return True
+
+
+def begin_rollback_activation(config_root: Path) -> None:
+    """Durably mark that the restored rollback config still needs activation."""
+    rollback_activation_marker_path(config_root).write_text("pending\n")
+    _fsync_directory(config_root.parent)
+
+
+def run_rollback_activation(
+    config_root: Path, progress: ProgressReporter | None = None
+) -> list[str]:
+    """Activate a restored rollback config, then clear its pending marker.
+
+    An interruption leaves the marker so recovery reruns the activation.
+    """
+    try:
+        failures = run_activation_sequence(config_root, progress)
+    except ActivationPolicyError as exc:
+        failures = [str(exc)]
+    rollback_activation_marker_path(config_root).unlink(missing_ok=True)
+    _fsync_directory(config_root.parent)
+    return failures
 
 
 # --- Activation ---
@@ -643,6 +668,11 @@ def _restart_rootless_service(
 def run_activation_sequence(
     config_root: Path, progress: ProgressReporter | None = None
 ) -> list[str]:
+    """Activate a config root, restart affected services, and run health checks.
+
+    Return failure messages; an empty list means activation succeeded. Raise
+    ActivationPolicyError when the root's activation policy is invalid.
+    """
     policy = load_activation_policy(config_root)
     timeout_seconds = int(policy.get("timeout_seconds", BOOTSTRAP_ACTIVATION_TIMEOUT_SECONDS))
     settle_seconds = int(policy.get("settle_seconds", 0))
@@ -675,12 +705,20 @@ def run_activation_sequence(
 
 
 def complete_reapply(
-    config_root: Path, progress: ProgressReporter | None = None
+    config_root: Path,
+    progress: ProgressReporter | None = None,
+    *,
+    before_commit: Callable[[], None] | None = None,
 ) -> tuple[bool, list[str], str]:
-    """Run activation + health checks, rolling back on failure.
+    """Activate a promoted config root, restoring the rollback root on failure.
+
+    On success, call ``before_commit`` before removing rollback state, so a
+    durable commit precedes cleanup. On failure, hold the rollback-activation
+    marker from restore until rollback activation finishes.
 
     Returns:
-        (success, failures_list, rollback_status)
+        (success, failures_list, rollback_status), where rollback_status is
+        "skipped", "completed", or "failed".
     """
     try:
         failures = run_activation_sequence(config_root, progress)
@@ -689,12 +727,11 @@ def complete_reapply(
     if failures:
         if progress:
             progress.set_stage("rollback", "restoring previous config")
+        if rollback_root_path(config_root).exists():
+            begin_rollback_activation(config_root)
         restored = restore_rollback(config_root)
         if restored:
-            try:
-                rollback_failures = run_activation_sequence(config_root, progress)
-            except ActivationPolicyError as exc:
-                rollback_failures = [str(exc)]
+            rollback_failures = run_rollback_activation(config_root, progress)
             if rollback_failures:
                 return (
                     False,
@@ -706,6 +743,8 @@ def complete_reapply(
                     "failed",
                 )
         return False, failures, "completed" if restored else "skipped"
+    if before_commit is not None:
+        before_commit()
     if progress:
         progress.set_stage("cleanup", "removing rollback state")
     cleanup_rollback(config_root)

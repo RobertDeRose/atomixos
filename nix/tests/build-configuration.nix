@@ -289,6 +289,34 @@ pkgs.runCommand "build-configuration-check" { nativeBuildInputs = [ pkgs.diffuti
       fleetSystem.systemd.services.first-boot.environment.ATOMIXOS_BOOTSTRAP_TRANSPORT == "nixstasis"
     )
   } = true
+  test ${
+    builtins.toJSON (
+      committedSystem.systemd.services.atomixos-provision-apply.environment.ATOMIXOS_BOOTSTRAP_TRANSPORT
+      == "network"
+    )
+  } = true
+  test ${
+    builtins.toJSON (
+      fleetSystem.systemd.services.atomixos-provision-apply.environment.ATOMIXOS_BOOTSTRAP_TRANSPORT
+      == "nixstasis"
+    )
+  } = true
+  test ${
+    builtins.toJSON (
+      committedSystem.systemd.timers.atomixos-provision-apply-retry.timerConfig == {
+        OnUnitInactiveSec = "30s";
+        Unit = "atomixos-provision-apply.service";
+      }
+    )
+  } = true
+  test ${
+    builtins.toJSON (
+      committedSystem.systemd.services.atomixos-provision-apply.unitConfig.ConditionPathExistsGlob == [
+        "|/run/atomixos-provision/queue/*.ready"
+        "|/run/atomixos-provision/active/*"
+      ]
+    )
+  } = true
   test ${builtins.toJSON (overriddenSystem.atomixos.watchdog.runtimeWatchdogSec == "45s")} = true
   test ${
     builtins.toJSON (overriddenSystem.systemd.settings.Manager.RuntimeWatchdogSec == "45s")
