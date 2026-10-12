@@ -287,7 +287,7 @@ def managed_file_mount_warning(
         return None
     return (
         f"{path} mounts managed bundle files without a clearly read-only mount; "
-        "managed bundle files are deployment inputs, so use a Podman volume "
+        "managed bundle files are included in config export, so use a Podman volume "
         "for mutable runtime data"
     )
 

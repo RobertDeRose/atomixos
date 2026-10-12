@@ -46,10 +46,11 @@ run = "hk check -a"
 description = "Apply deterministic repository fixes"
 run = "hk fix -a"
 
+# scripts/check-docs.py is disabled: it enforces the retired dstack template's feature-record sections and will be
+# removed in a future change. Until then this task only builds the book.
 [tasks."docs:check"]
-description = "Validate and build the documentation"
+description = "Build the documentation"
 depends = ["docs:build"]
-run = "uv run scripts/check-docs.py"
 
 [tasks."docs:deployment:enable"]
 description = "Enable GitHub Pages deployment"
