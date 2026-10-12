@@ -655,3 +655,8 @@ boot recovery. Hold a rollback-activation marker from restore until rollback
 activation finishes so an interrupted reactivation is retried. Rerun the apply
 service on a timer while claims remain, since claiming removes the `.ready`
 trigger.
+
+Reader-facing behavior is documented in:
+
+- `docs/src/runtime-boundaries.md` (Apply transactions and finalization)
+- `docs/src/provisioning.md` (Interrupted apply recovery)
