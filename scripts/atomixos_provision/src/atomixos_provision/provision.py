@@ -1207,7 +1207,8 @@ def _verify_staged_authorization(
     """Return request bytes and verified authorization, consuming its nonce.
 
     Request bytes are None when no request evidence was staged. Initial
-    provisioning rejects supplied authorization and returns None for authorization. On a provisioned root, locally_trusted bypasses signature
+    provisioning rejects supplied authorization and returns None for
+    authorization. On a provisioned root, locally_trusted bypasses signature
     and nonce checks and also returns None for authorization. Other re-applies
     require a signature from active admin signers and an unused current-boot
     nonce. Rejected evidence raises ProvisionError; I/O errors propagate.
