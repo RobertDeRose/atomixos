@@ -1,6 +1,6 @@
 # Provisioning API Service
 
-## Delivery Summary
+## References
 
 - Beads feature root: `atomixos-dhe`
 - Design record: [design.md](design.md)
@@ -58,7 +58,7 @@ closure budget.
 - [Script Reference](../../code-reference/scripts.md)
 - [Flash Image Provisioning](../../provisioning/flash-image.md)
 
-## Validation Evidence
+## Test Coverage
 
 - Provisioning package tests cover authentication, typed responses, queue admission, state recovery, bundle safety,
   deterministic export, export worker admission and recovery, and complete import/export round trips. Two
@@ -107,7 +107,3 @@ generated runtime state, Podman volume data, or signer material remain intention
 - `docs/src/code-reference/modules.md`
 - `docs/src/code-reference/scripts.md`
 - affected feature design records, navigation, and roadmap pages
-
-## Audit Trail
-
-Delivery history, review findings, and validation runs are recorded in Beads under `atomixos-dhe`.

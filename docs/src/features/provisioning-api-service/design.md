@@ -168,7 +168,7 @@ contracts without creating divergent mutation paths.
 `docs/src/planned-features.md` — originally tracked as "Bootstrap provisioning
 subproject" / `provision-restructure`. Reframed as `provisioning-api-service`
 after comparing the implementation against the Litestar fullstack reference
-application at `/Users/DeRoseR/workspace/personal/litestar-fullstack`.
+application at [`litestar-org/litestar-fullstack`](https://github.com/litestar-org/litestar-fullstack).
 
 ## Goals
 
