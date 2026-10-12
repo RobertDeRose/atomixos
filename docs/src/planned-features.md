@@ -136,7 +136,7 @@ the human-readable roadmap.
 
 - Overview: Provides the initial Rock64 reference image, read-only squashfs root, A/B RAUC update path, rollback,
   gateway profile, and validation harness.
-- Remaining work: Physical-device network, update, authentication, and watchdog validation remains open; the generic
+- Remaining work: Validate network, update, authentication, and watchdog behavior on physical devices; the generic
   appliance platform must not assume all future hardware uses the Rock64 layout or gateway profile.
 
 ### Durable Journald Logs (`durable-journald-logs`)
