@@ -7,7 +7,7 @@ Beads                                            executable state and dependenci
 docs/src/features/<slug>/design.md         intended feature behavior and design
 reader-facing docs under docs/src/               current supported behavior
 code and tests                                   implementation evidence
-docs/src/features/<slug>/index.md          delivered reconciliation and audit record
+docs/src/features/<slug>/index.md          delivered capability and design deviations
 ```
 
 Workflow commands are installed from `RobertDeRose/dstack` with the `skills` CLI. The CLI manages the agent-specific

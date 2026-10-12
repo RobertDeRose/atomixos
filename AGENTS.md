@@ -7,6 +7,9 @@ Start here when working in this repository.
 - Prefer the smallest correct change.
 - Keep documentation and implementation aligned in the same unit of work.
 - Do not treat a task as complete if docs, specs, and code disagree.
+- Keep docs durable. Never record transient or variable state in docs: PR numbers or links, commit SHAs, branch
+  names, review-pass notes, delivery or merge status, or validation run results. Beads (or Git history) owns that
+  state. When editing a doc that already contains such state, remove it rather than updating it.
 
 ## Commit Guidance
 
@@ -97,11 +100,13 @@ the skill for mutations, but do not expose an opaque hash as the primary workflo
 
 ### Sources of truth
 
-- **Beads** owns executable work state, dependencies, priorities, claims, findings, and evidence.
+- **Beads** owns executable work state, dependencies, priorities, claims, findings, evidence, and delivery history
+  (PRs, commits, merge status, and validation runs).
 - **`docs/src/features/<slug>/design.md`** owns intended feature behavior, boundaries, decisions, validation, and
   documentation impact.
 - **Reader-facing pages under `docs/src/`** own current supported behavior.
-- **`docs/src/features/<slug>/index.md`** owns delivered-feature reconciliation and audit history.
+- **`docs/src/features/<slug>/index.md`** owns the durable record of what a delivered feature provides and how its
+  delivered behavior differs from its design; it does not record PRs, commits, or delivery status.
 - **`docs/src/planned-features.md`** is the human roadmap; Beads remains authoritative for live state.
 - **Code and tests** provide implementation evidence.
 
@@ -139,7 +144,8 @@ Place documentation by reader intent:
 - **Development Guide**: build, testing, extension, migration, and maintenance.
 - **Reference**: exact commands, configuration, interfaces, schemas, fields, states, defaults, limits, terminology, and
   acceptance contracts.
-- **Implemented Features**: one standalone delivery and audit record per completed feature.
+- **Implemented Features**: one standalone record per completed feature of its delivered capability, behavior,
+  and deviations from design, without transient delivery state.
 
 Create project-specific pages only for durable reader needs. Feature designs name exact pages, not only documentation
 sections.
