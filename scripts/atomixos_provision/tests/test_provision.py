@@ -2,6 +2,8 @@
 
 import json
 import tarfile
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -20,6 +22,7 @@ from atomixos_provision.provision import (
 )
 from atomixos_provision.staging import (
     ensure_runtime_layout,
+    publish_ready_marker,
     reserve_staged_job_slot,
     runtime_paths,
 )
@@ -337,6 +340,53 @@ def _wait_without_sleeping(monkeypatch, provision):
     """Reconcile liveness on every poll without real sleeps."""
     monkeypatch.setattr(provision, "STAGED_RESULT_TIMEOUT_SECONDS", 0)
     monkeypatch.setattr(provision.time, "sleep", lambda _seconds: None)
+
+
+def _short_reservation_ttl(monkeypatch, *, heartbeat_seconds):
+    """Expire reservations after 0.2s and set the local staging heartbeat."""
+    from atomixos_provision import provision
+
+    monkeypatch.setattr("atomixos_provision.staging.STAGED_RESERVATION_TTL_SECONDS", 0.2)
+    monkeypatch.setattr(provision, "STAGED_RESERVATION_HEARTBEAT_SECONDS", heartbeat_seconds)
+
+
+@pytest.mark.parametrize(("heartbeat_seconds", "survives"), [(0.05, True), (60, False)])
+def test_local_staged_reservation_heartbeat_outlives_ttl(
+    monkeypatch, tmp_path, heartbeat_seconds, survives
+):
+    """Verify that slow local staging keeps its reservation only via the heartbeat."""
+    from atomixos_provision import provision
+
+    paths = runtime_paths(tmp_path / "run")
+    ensure_runtime_layout(paths, for_worker=True)
+    _short_reservation_ttl(monkeypatch, heartbeat_seconds=heartbeat_seconds)
+
+    with provision._local_staged_reservation(paths, "job-1"):
+        time.sleep(0.5)
+        if survives:
+            assert publish_ready_marker(paths, "job-1").exists()
+        else:
+            with pytest.raises(ProvisionError, match="reservation is missing"):
+                publish_ready_marker(paths, "job-1")
+
+
+def test_local_staged_reservation_releases_and_stops_heartbeat_on_failure(monkeypatch, tmp_path):
+    """Verify that a staging failure releases the slot and stops the heartbeat."""
+    from atomixos_provision import provision
+
+    paths = runtime_paths(tmp_path / "run")
+    ensure_runtime_layout(paths, for_worker=True)
+    _short_reservation_ttl(monkeypatch, heartbeat_seconds=0.05)
+
+    with (
+        pytest.raises(RuntimeError, match="render failed"),
+        provision._local_staged_reservation(paths, "job-1"),
+    ):
+        assert (paths.queue / "job-1.reserve").exists()
+        raise RuntimeError("render failed")
+
+    assert not (paths.queue / "job-1.reserve").exists()
+    assert not any(thread.name == "staged-reservation-job-1" for thread in threading.enumerate())
 
 
 def test_wait_for_staged_result_keeps_claimed_job_nonterminal(monkeypatch, tmp_path):

@@ -12,6 +12,7 @@ from typing import Any
 from atomixos_provision.config import ProvisionError
 from atomixos_provision.staging import (
     DEFAULT_MAX_STAGED_JOBS,
+    STAGED_RESERVATION_HEARTBEAT_SECONDS,
     STAGED_RESULT_POLL_SECONDS,
     StagedResultWaiter,
     StagedTimeoutState,
@@ -23,7 +24,7 @@ __all__ = ["Job", "JobManager", "JobState", "StagedJobManager"]
 
 # Maximum number of completed jobs to retain in memory.
 _MAX_RETAINED_JOBS = 64
-_STAGED_RESERVATION_HEARTBEAT_SECONDS = 30
+_STAGED_RESERVATION_HEARTBEAT_SECONDS = STAGED_RESERVATION_HEARTBEAT_SECONDS
 
 
 class JobState(StrEnum):

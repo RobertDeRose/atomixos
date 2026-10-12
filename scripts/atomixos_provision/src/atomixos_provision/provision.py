@@ -13,6 +13,7 @@ import shutil
 import stat
 import subprocess
 import tempfile
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -56,6 +57,7 @@ from atomixos_provision.staging import (
     DEFAULT_MAX_STAGED_JOBS,
     DEFAULT_RUNTIME_ROOT,
     MANIFEST_VERSION,
+    STAGED_RESERVATION_HEARTBEAT_SECONDS,
     STAGED_RESULT_POLL_SECONDS,
     ClaimedJob,
     RuntimePaths,
@@ -69,6 +71,7 @@ from atomixos_provision.staging import (
     interpret_staged_result,
     publish_ready_marker,
     read_result,
+    refresh_staged_job_slot,
     release_staged_job_slot,
     reserve_staged_job_slot,
     runtime_paths,
@@ -510,6 +513,46 @@ def _reserve_staged_job_or_raise(paths: RuntimePaths, job_id: str) -> None:
         raise StagedQueueBusyError("the provision queue is full")
 
 
+def _refresh_reservation_until(paths: RuntimePaths, job_id: str, stop: threading.Event) -> None:
+    """Refresh a reservation every heartbeat interval until stop is set.
+
+    Refresh errors are retried on the next interval; a reservation that has
+    already been published or released makes each refresh a no-op.
+    """
+    while not stop.wait(STAGED_RESERVATION_HEARTBEAT_SECONDS):
+        with contextlib.suppress(Exception):
+            refresh_staged_job_slot(paths, job_id)
+
+
+@contextlib.contextmanager
+def _local_staged_reservation(paths: RuntimePaths, job_id: str):
+    """Reserve staging capacity and keep it alive until the block exits.
+
+    Raise StagedQueueBusyError when the queue is full. A background heartbeat
+    refreshes the reservation so slow local staging cannot outlive its TTL, as
+    StagedJobManager does for API jobs. Release the reservation if the block
+    raises.
+    """
+    _reserve_staged_job_or_raise(paths, job_id)
+    stop = threading.Event()
+    heartbeat = threading.Thread(
+        target=_refresh_reservation_until,
+        args=(paths, job_id, stop),
+        name=f"staged-reservation-{job_id}",
+        daemon=True,
+    )
+    heartbeat.start()
+    try:
+        try:
+            yield
+        finally:
+            stop.set()
+            heartbeat.join()
+    except Exception:
+        release_staged_job_slot(paths, job_id)
+        raise
+
+
 def _stage_and_wait_prepared_sync(
     job_id: str,
     config_path: Path,
@@ -519,8 +562,7 @@ def _stage_and_wait_prepared_sync(
 ) -> dict[str, Any]:
     """Stage a prepared candidate and wait for its worker result."""
     paths = _runtime_paths()
-    _reserve_staged_job_or_raise(paths, job_id)
-    try:
+    with _local_staged_reservation(paths, job_id):
         return _stage_prepared_sync(
             job_id,
             config_path,
@@ -528,9 +570,6 @@ def _stage_and_wait_prepared_sync(
             config_root,
             **kwargs,
         )
-    except Exception:
-        release_staged_job_slot(paths, job_id)
-        raise
 
 
 def stage_reserved_config_bytes(
@@ -584,8 +623,7 @@ def stage_config_bytes(
 ) -> None:
     """Reserve capacity and stage bytes outside the API job manager."""
     paths = _runtime_paths()
-    _reserve_staged_job_or_raise(paths, job_id)
-    try:
+    with _local_staged_reservation(paths, job_id):
         stage_reserved_config_bytes(
             job_id,
             payload,
@@ -595,9 +633,6 @@ def stage_config_bytes(
             progress=progress,
             authorization=authorization,
         )
-    except Exception:
-        release_staged_job_slot(paths, job_id)
-        raise
 
 
 def _wait_for_staged_result(
@@ -684,13 +719,9 @@ def _stage_and_wait_operation_sync(
 ) -> dict[str, Any]:
     """Stage a typed operation and wait for its worker result."""
     paths = _runtime_paths()
-    _reserve_staged_job_or_raise(paths, job_id)
-    try:
+    with _local_staged_reservation(paths, job_id):
         _stage_config_operation_sync(job_id, operation, config_root, progress)
         return _wait_for_staged_result(paths, job_id, progress)
-    except Exception:
-        release_staged_job_slot(paths, job_id)
-        raise
 
 
 def write_imported_state(
@@ -1833,8 +1864,7 @@ async def stage_config_operation(
 ) -> None:
     """Reserve capacity and stage a typed operation outside the API job manager."""
     paths = _runtime_paths()
-    _reserve_staged_job_or_raise(paths, job_id)
-    try:
+    with _local_staged_reservation(paths, job_id):
         await asyncio.to_thread(
             _stage_config_operation_sync,
             job_id,
@@ -1844,9 +1874,6 @@ async def stage_config_operation(
             request_payload,
             authorization,
         )
-    except Exception:
-        release_staged_job_slot(paths, job_id)
-        raise
 
 
 async def stage_reserved_config_operation(

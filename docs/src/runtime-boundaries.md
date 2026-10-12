@@ -295,3 +295,5 @@ The root worker verifies signed request evidence and re-renders from those
 verified bytes rather than trusting the API-rendered candidate. Staged reads
 are bounded, nonblocking, and reject symlinks and non-regular descriptors.
 Ready publication requires a live capacity reservation and preserves FIFO order.
+API jobs and local CLI staging both refresh their reservation while staging, so slow
+imports keep their slot past the reservation TTL.
