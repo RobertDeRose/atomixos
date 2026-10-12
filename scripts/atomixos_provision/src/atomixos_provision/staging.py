@@ -14,10 +14,11 @@ import shutil
 import stat
 import tempfile
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import Any, Generic, TypeVar
 
 from atomixos_provision import bundle
 from atomixos_provision.config import ProvisionError
@@ -29,6 +30,7 @@ DEFAULT_RUNTIME_ROOT = Path("/run/atomixos-provision")
 DEFAULT_MAX_STAGED_JOBS = 4
 MAX_CONTROL_JSON_BYTES = 1024 * 1024
 STAGED_RESERVATION_TTL_SECONDS = 300
+STAGED_RESULT_POLL_SECONDS = 0.2
 RUNTIME_ROOT_MODE = 0o755
 QUEUE_DIR_MODE = 0o2770
 RESULTS_DIR_MODE = 0o2750
@@ -802,6 +804,100 @@ def staged_timeout_state(paths: RuntimePaths, job_id: str) -> StagedTimeoutState
     if final_presence == "queued":
         return StagedTimeoutState.WAITING
     return StagedTimeoutState.MISSING
+
+
+_T = TypeVar("_T")
+_QUEUED_DETAIL = "waiting for privileged apply worker"
+_RUNNING_DETAIL = "privileged apply worker is running"
+
+
+class StagedResultWaiter(Generic[_T]):
+    """Shared polling policy for a staged job's worker result.
+
+    Callers own I/O and sleeping; each ``poll`` returns the published result,
+    ``None`` to keep waiting, or raises ``ProvisionError`` when the wait fails.
+    Worker liveness is reconciled every interval even while result reads fail,
+    and read errors fail the wait only after persisting for a full interval.
+    """
+
+    def __init__(
+        self,
+        *,
+        read: Callable[[], _T | None],
+        timeout_state: Callable[[], StagedTimeoutState],
+        is_claimed: Callable[[], bool],
+        interval_seconds: float,
+        on_stage: Callable[[str, str], None] | None = None,
+        stage: str = "queued",
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self._read = read
+        self._timeout_state = timeout_state
+        self._is_claimed = is_claimed
+        self._interval = interval_seconds
+        self._on_stage = on_stage
+        self._stage = stage
+        self._clock = clock
+        self._liveness_due = clock() + interval_seconds
+        self._read_error_since: float | None = None
+        self._last_read_error: str | None = None
+
+    def poll(self) -> _T | None:
+        """Poll once for the result, reconciling worker liveness when due."""
+        now = self._clock()
+        try:
+            value = self._read()
+            if value is not None:
+                return value
+            claimed = self._is_claimed()
+        except OSError as exc:
+            self._read_failed(now, exc)
+        else:
+            self._read_error_since = None
+            self._last_read_error = None
+            self._report("running" if claimed else "queued")
+        if now < self._liveness_due:
+            return None
+        state = self._check_timeout_state()
+        if state in {StagedTimeoutState.WAITING, StagedTimeoutState.CLAIMED}:
+            self._liveness_due = now + self._interval
+            self._report("running" if state is StagedTimeoutState.CLAIMED else "queued")
+            return None
+        try:
+            value = self._read()
+        except OSError as exc:
+            raise ProvisionError(f"cannot read privileged apply worker result: {exc}") from exc
+        if value is not None:
+            return value
+        if state is StagedTimeoutState.MISSING:
+            raise ProvisionError("privileged apply worker did not publish a result")
+        raise ProvisionError("timed out waiting for privileged apply worker")
+
+    def _check_timeout_state(self) -> StagedTimeoutState:
+        try:
+            return self._timeout_state()
+        except ProvisionError:
+            raise
+        except Exception as exc:
+            raise ProvisionError(f"cannot determine staged job timeout state: {exc}") from exc
+
+    def _read_failed(self, now: float, exc: OSError) -> None:
+        if self._read_error_since is None:
+            self._read_error_since = now
+        elif now - self._read_error_since >= self._interval:
+            raise ProvisionError(f"cannot read privileged apply worker result: {exc}") from exc
+        if str(exc) != self._last_read_error:
+            self._last_read_error = str(exc)
+            self._emit(self._stage, f"worker result I/O failed; retrying: {exc}")
+
+    def _report(self, stage: str) -> None:
+        if stage != self._stage:
+            self._stage = stage
+            self._emit(stage, _RUNNING_DETAIL if stage == "running" else _QUEUED_DETAIL)
+
+    def _emit(self, stage: str, detail: str) -> None:
+        if self._on_stage is not None:
+            self._on_stage(stage, detail)
 
 
 def abandon_queued_job(paths: RuntimePaths, job_id: str) -> None:

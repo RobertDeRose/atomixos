@@ -19,6 +19,7 @@ from atomixos_provision.provision import (
     write_imported_state,
 )
 from atomixos_provision.staging import (
+    ensure_runtime_layout,
     reserve_staged_job_slot,
     runtime_paths,
 )
@@ -320,12 +321,27 @@ async def test_apply_config_operation_direct_path_applies_candidate(monkeypatch,
     assert "9.9.9.9" in (config_root / "config.toml").read_text()
 
 
+class _RecordingProgress:
+    def __init__(self):
+        self.stages = []
+
+    def set_stage(self, name, detail=None, **_fields):
+        self.stages.append((name, detail))
+
+
+def _wait_without_sleeping(monkeypatch, provision):
+    """Reconcile liveness on every poll without real sleeps."""
+    monkeypatch.setattr(provision, "STAGED_RESULT_TIMEOUT_SECONDS", 0)
+    monkeypatch.setattr(provision.time, "sleep", lambda _seconds: None)
+
+
 def test_wait_for_staged_result_keeps_claimed_job_nonterminal(monkeypatch, tmp_path):
     """Verify that wait for staged result keeps claimed job nonterminal."""
     from atomixos_provision import provision
 
     paths = runtime_paths(tmp_path / "run")
-    (paths.active / "job-1").mkdir(parents=True)
+    ensure_runtime_layout(paths, for_worker=True)
+    (paths.active / "job-1").mkdir()
     reads = {"count": 0}
 
     def read_result_after_two_intervals(_paths, _job_id):
@@ -335,19 +351,20 @@ def test_wait_for_staged_result_keeps_claimed_job_nonterminal(monkeypatch, tmp_p
             return None
         return {"status": "succeeded", "result": {"warnings": []}}
 
-    times = iter([0, 2, 4, 6, 8, 10])
-    monkeypatch.setattr(provision, "STAGED_RESULT_TIMEOUT_SECONDS", 1)
-    monkeypatch.setattr(provision.time, "monotonic", lambda: next(times))
+    _wait_without_sleeping(monkeypatch, provision)
     monkeypatch.setattr(provision, "read_result", read_result_after_two_intervals)
+    progress = _RecordingProgress()
 
-    assert provision._wait_for_staged_result(paths, "job-1") == {"warnings": []}
+    assert provision._wait_for_staged_result(paths, "job-1", progress) == {"warnings": []}
     assert reads["count"] == 3
+    assert progress.stages == [("running", "privileged apply worker is running")]
 
 
 def test_wait_for_staged_result_rereads_before_timeout_failure(monkeypatch, tmp_path):
     from atomixos_provision import provision
 
     paths = runtime_paths(tmp_path / "run")
+    ensure_runtime_layout(paths, for_worker=True)
     calls = {"count": 0}
 
     def fake_read_result(_paths, _job_id):
@@ -356,9 +373,7 @@ def test_wait_for_staged_result_rereads_before_timeout_failure(monkeypatch, tmp_
             return None
         return {"status": "succeeded", "result": {"warnings": []}}
 
-    times = iter([0, 0, 2])
-    monkeypatch.setattr(provision, "STAGED_RESULT_TIMEOUT_SECONDS", 1)
-    monkeypatch.setattr(provision.time, "monotonic", lambda: next(times))
+    _wait_without_sleeping(monkeypatch, provision)
     monkeypatch.setattr(provision, "read_result", fake_read_result)
 
     assert provision._wait_for_staged_result(paths, "job-1") == {"warnings": []}
@@ -373,10 +388,7 @@ def test_wait_for_staged_result_abandons_queued_job_on_timeout(monkeypatch, tmp_
     (paths.queue / "job-1.ready").write_text(
         '{"job_id": "job-1", "sequence": 1}\n', encoding="utf-8"
     )
-
-    times = iter([0, 2, 2])
-    monkeypatch.setattr(provision, "STAGED_RESULT_TIMEOUT_SECONDS", 1)
-    monkeypatch.setattr(provision.time, "monotonic", lambda: next(times))
+    _wait_without_sleeping(monkeypatch, provision)
 
     with pytest.raises(ProvisionError, match="timed out waiting"):
         provision._wait_for_staged_result(paths, "job-1")
@@ -392,10 +404,7 @@ def test_wait_for_staged_result_fails_when_worker_removes_job_without_result(
 
     paths = runtime_paths(tmp_path / "run")
     paths.queue.mkdir(parents=True)
-
-    times = iter([0, 2, 2])
-    monkeypatch.setattr(provision, "STAGED_RESULT_TIMEOUT_SECONDS", 1)
-    monkeypatch.setattr(provision.time, "monotonic", lambda: next(times))
+    _wait_without_sleeping(monkeypatch, provision)
 
     with pytest.raises(ProvisionError, match="did not publish a result"):
         provision._wait_for_staged_result(paths, "job-1")

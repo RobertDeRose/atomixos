@@ -438,9 +438,7 @@ class TestStagedJobManager:
         await asyncio.wait_for(mgr._task, timeout=5)
 
         assert job.state == JobState.FAILED
-        assert job.error == (
-            "timed out waiting for privileged apply worker result: result unreadable"
-        )
+        assert job.error == "cannot read privileged apply worker result: result unreadable"
         assert job.completed_at is not None
         retry_events = [
             event

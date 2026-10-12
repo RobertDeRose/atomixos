@@ -324,9 +324,9 @@ existing work. When the queue is full, submission returns conflict/backpressure
 instead of evicting existing work. The root worker
 keeps only one staged job active at a time. Polling may abandon a job only if it
 is still queued under the shared queue lock; once the root worker claims a job,
-the API waits up to the configured result timeout for the worker or worker
-finalizer to write a terminal result, then reports a timeout instead of waiting
-indefinitely.
+the API keeps waiting for the worker or worker finalizer to write a terminal
+result, rechecking queue state each result-timeout interval. Result read errors
+fail the job only after persisting for a full interval.
 
 ### Existing Behavior Preservation
 

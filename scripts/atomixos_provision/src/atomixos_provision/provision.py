@@ -56,9 +56,10 @@ from atomixos_provision.staging import (
     DEFAULT_MAX_STAGED_JOBS,
     DEFAULT_RUNTIME_ROOT,
     MANIFEST_VERSION,
+    STAGED_RESULT_POLL_SECONDS,
     ClaimedJob,
     RuntimePaths,
-    StagedTimeoutState,
+    StagedResultWaiter,
     claim_next_job,
     cleanup_claimed_job,
     consume_authorization_nonce,
@@ -601,45 +602,21 @@ def _wait_for_staged_result(
 ) -> dict[str, Any]:
     """Wait for and return a successful worker result payload.
 
-    Renew the timeout while the job is claimed or waiting behind other work.
-    An eligible queued job may be abandoned on timeout. Worker failure, an
-    abandoned or missing job, or invalid result data raises ProvisionError;
-    I/O errors propagate.
+    Claimed or waiting jobs keep waiting; an eligible queued job may be
+    abandoned when an interval expires. Worker failure, an abandoned or missing
+    job, invalid result data, or result read errors that persist for a full
+    interval raise ProvisionError.
     """
-    deadline = time.monotonic() + STAGED_RESULT_TIMEOUT_SECONDS
-    last_stage = None
-    while True:
-        while time.monotonic() < deadline:
-            result = read_result(paths, job_id)
-            if result is not None:
-                return _staged_result_payload_or_raise(result)
-            marker_stage = "running" if (paths.active / job_id).exists() else "queued"
-            if progress and marker_stage != last_stage:
-                detail = (
-                    "privileged apply worker is running"
-                    if marker_stage == "running"
-                    else "waiting for privileged apply worker"
-                )
-                progress.set_stage(marker_stage, detail)
-                last_stage = marker_stage
-            time.sleep(0.2)
-        result = read_result(paths, job_id)
-        if result is not None:
-            return _staged_result_payload_or_raise(result)
-        timeout_state = staged_timeout_state(paths, job_id)
-        if timeout_state in {
-            StagedTimeoutState.WAITING,
-            StagedTimeoutState.CLAIMED,
-        }:
-            deadline = time.monotonic() + STAGED_RESULT_TIMEOUT_SECONDS
-            if progress and timeout_state is StagedTimeoutState.CLAIMED:
-                progress.set_stage("running", "privileged apply worker is running")
-            continue
-        if timeout_state is StagedTimeoutState.ABANDONED:
-            raise ProvisionError("timed out waiting for privileged apply worker")
-        if timeout_state is StagedTimeoutState.MISSING:
-            raise ProvisionError("privileged apply worker did not publish a result")
-        raise ProvisionError("timed out waiting for privileged apply worker")
+    waiter = StagedResultWaiter(
+        read=lambda: read_result(paths, job_id),
+        timeout_state=lambda: staged_timeout_state(paths, job_id),
+        is_claimed=lambda: (paths.active / job_id).exists(),
+        interval_seconds=STAGED_RESULT_TIMEOUT_SECONDS,
+        on_stage=progress.set_stage if progress else None,
+    )
+    while (result := waiter.poll()) is None:
+        time.sleep(STAGED_RESULT_POLL_SECONDS)
+    return _staged_result_payload_or_raise(result)
 
 
 def _staged_result_payload_or_raise(result: dict[str, Any]) -> dict[str, Any]:

@@ -17,6 +17,7 @@ from atomixos_provision.provision import (
 )
 from atomixos_provision.staging import (
     ClaimedJob,
+    StagedResultWaiter,
     StagedTimeoutState,
     abandon_queued_job,
     can_abandon_queued_job,
@@ -262,6 +263,133 @@ def test_staged_timeout_state_distinguishes_claimed_and_waiting_jobs(tmp_path):
 
     assert staged_timeout_state(paths, "job-1") is StagedTimeoutState.CLAIMED
     assert staged_timeout_state(paths, "job-2") is StagedTimeoutState.WAITING
+
+
+class _WaiterHarness:
+    """Script result reads and liveness for StagedResultWaiter on a fake clock."""
+
+    def __init__(self, reads, states=(), *, claimed=False, interval=10):
+        self.now = 0.0
+        self.reads = list(reads)
+        self.states = list(states)
+        self.claimed = claimed
+        self.stages = []
+        self.waiter = StagedResultWaiter(
+            read=self._read,
+            timeout_state=lambda: self._next(self.states),
+            is_claimed=lambda: self.claimed,
+            interval_seconds=interval,
+            on_stage=lambda stage, detail: self.stages.append((stage, detail)),
+            clock=lambda: self.now,
+        )
+
+    def _read(self):
+        return self._next(self.reads)
+
+    @staticmethod
+    def _next(script):
+        value = script.pop(0)
+        if isinstance(value, Exception):
+            raise value
+        return value
+
+    def poll_at(self, now):
+        self.now = now
+        return self.waiter.poll()
+
+
+def test_staged_result_waiter_returns_published_result():
+    harness = _WaiterHarness([None, {"status": "succeeded"}])
+
+    assert harness.poll_at(1) is None
+    assert harness.poll_at(2) == {"status": "succeeded"}
+    assert harness.stages == []
+
+
+def test_staged_result_waiter_reports_claim_once():
+    harness = _WaiterHarness([None, None], claimed=True)
+
+    assert harness.poll_at(1) is None
+    assert harness.poll_at(2) is None
+    assert harness.stages == [("running", "privileged apply worker is running")]
+
+
+@pytest.mark.parametrize(
+    ("state", "stage"),
+    [(StagedTimeoutState.CLAIMED, "running"), (StagedTimeoutState.WAITING, "queued")],
+)
+def test_staged_result_waiter_keeps_live_jobs_nonterminal(state, stage):
+    harness = _WaiterHarness(
+        [None, None, None, {"ok": True}],
+        [state, state],
+        claimed=state is StagedTimeoutState.CLAIMED,
+    )
+
+    assert harness.poll_at(10) is None
+    assert harness.poll_at(15) is None
+    assert harness.poll_at(20) is None
+    assert harness.poll_at(21) == {"ok": True}
+    assert harness.states == []
+    assert all(recorded == stage for recorded, _detail in harness.stages)
+
+
+@pytest.mark.parametrize(
+    ("state", "message"),
+    [
+        (StagedTimeoutState.ABANDONED, "timed out waiting for privileged apply worker"),
+        (StagedTimeoutState.MISSING, "did not publish a result"),
+    ],
+)
+def test_staged_result_waiter_fails_terminal_states(state, message):
+    harness = _WaiterHarness([None, None], [state])
+
+    with pytest.raises(ProvisionError, match=message):
+        harness.poll_at(10)
+
+
+def test_staged_result_waiter_rereads_before_terminal_failure():
+    harness = _WaiterHarness([None, {"ok": True}], [StagedTimeoutState.MISSING])
+
+    assert harness.poll_at(10) == {"ok": True}
+
+
+def test_staged_result_waiter_wraps_timeout_state_errors():
+    harness = _WaiterHarness([None], [RuntimeError("denied")])
+
+    with pytest.raises(ProvisionError, match="timeout state: denied"):
+        harness.poll_at(10)
+
+
+def test_staged_result_waiter_retries_transient_read_errors():
+    harness = _WaiterHarness([OSError("busy"), OSError("busy"), None, {"ok": True}])
+
+    assert harness.poll_at(1) is None
+    assert harness.poll_at(2) is None
+    assert harness.poll_at(3) is None
+    assert harness.poll_at(4) == {"ok": True}
+    assert harness.stages == [("queued", "worker result I/O failed; retrying: busy")]
+
+
+def test_staged_result_waiter_fails_persistent_read_errors_despite_live_worker():
+    harness = _WaiterHarness(
+        [OSError("busy")] * 3, [StagedTimeoutState.CLAIMED], claimed=True, interval=10
+    )
+
+    assert harness.poll_at(5) is None
+    assert harness.poll_at(10) is None
+    with pytest.raises(ProvisionError, match="cannot read privileged apply worker result: busy"):
+        harness.poll_at(15)
+
+
+def test_staged_result_waiter_resets_read_error_budget_after_success():
+    harness = _WaiterHarness(
+        [OSError("busy"), None, OSError("busy"), None], [StagedTimeoutState.WAITING]
+    )
+
+    assert harness.poll_at(1) is None
+    assert harness.poll_at(9) is None
+    assert harness.poll_at(12) is None
+    assert harness.poll_at(13) is None
 
 
 def test_claim_next_job_expires_stale_lower_sequence_reservation(tmp_path, monkeypatch):

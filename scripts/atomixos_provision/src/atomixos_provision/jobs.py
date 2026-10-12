@@ -12,6 +12,8 @@ from typing import Any
 from atomixos_provision.config import ProvisionError
 from atomixos_provision.staging import (
     DEFAULT_MAX_STAGED_JOBS,
+    STAGED_RESULT_POLL_SECONDS,
+    StagedResultWaiter,
     StagedTimeoutState,
     interpret_staged_result,
     staged_timeout_state,
@@ -480,51 +482,26 @@ class StagedJobManager(JobManager):
                 last_error = None
 
     async def _monitor_staged(self, job: Job) -> None:
-        """Monitor worker results, extending the deadline for waiting or claimed jobs.
+        """Monitor worker results under the shared StagedResultWaiter policy.
 
-        Retry OSError failures. Other errors mark the job failed; cancellation also
-        marks failure and is re-raised.
+        Waiting or claimed jobs keep waiting; result read errors are retried for
+        one interval. Other errors mark the job failed; cancellation also marks
+        failure and is re-raised.
         """
         try:
-            deadline = time.monotonic() + self._result_timeout_seconds
-            last_io_error = None
-            while job.state in (JobState.SUBMITTED, JobState.RUNNING):
-                try:
-                    if self._refresh_from_result(job):
-                        break
-                    if time.monotonic() >= deadline:
-                        timeout_state = self._handle_staged_timeout(job)
-                        if self._refresh_from_result(job):
-                            break
-                        if timeout_state in {
-                            StagedTimeoutState.WAITING,
-                            StagedTimeoutState.CLAIMED,
-                        }:
-                            deadline = time.monotonic() + self._result_timeout_seconds
-                            if timeout_state is StagedTimeoutState.CLAIMED:
-                                job.set_stage("running", "privileged apply worker is running")
-                            else:
-                                job.set_stage("queued", "waiting for privileged apply worker")
-                        elif timeout_state is StagedTimeoutState.MISSING:
-                            raise ProvisionError(
-                                "privileged apply worker did not publish a result"
-                            )
-                        else:
-                            raise ProvisionError("timed out waiting for privileged apply worker")
-                except OSError as exc:
-                    if time.monotonic() >= deadline:
-                        raise ProvisionError(
-                            f"timed out waiting for privileged apply worker result: {exc}"
-                        ) from exc
-                    if str(exc) != last_io_error:
-                        job.set_stage(
-                            "running" if job.state is JobState.RUNNING else "queued",
-                            f"worker result I/O failed; retrying: {exc}",
-                        )
-                    last_io_error = str(exc)
-                else:
-                    last_io_error = None
-                await asyncio.sleep(0.2)
+            from atomixos_provision.provision import _runtime_paths
+
+            active = _runtime_paths().active / job.id
+            waiter = StagedResultWaiter(
+                read=lambda: self._refresh_from_result(job) or None,
+                timeout_state=lambda: self._handle_staged_timeout(job),
+                is_claimed=active.exists,
+                interval_seconds=self._result_timeout_seconds,
+                on_stage=job.set_stage,
+                stage=job.stage,
+            )
+            while job.state in (JobState.SUBMITTED, JobState.RUNNING) and waiter.poll() is None:
+                await asyncio.sleep(STAGED_RESULT_POLL_SECONDS)
         except asyncio.CancelledError:
             with job._lock:
                 job.state = JobState.FAILED
@@ -639,11 +616,6 @@ class StagedJobManager(JobManager):
 
     def _handle_staged_timeout(self, job: Job) -> StagedTimeoutState:
         """Reconcile a staged job after result monitoring times out."""
-        try:
-            from atomixos_provision.provision import _runtime_paths
+        from atomixos_provision.provision import _runtime_paths
 
-            return staged_timeout_state(_runtime_paths(), job.id)
-        except ProvisionError:
-            raise
-        except Exception as exc:
-            raise ProvisionError("cannot determine staged job timeout state") from exc
+        return staged_timeout_state(_runtime_paths(), job.id)
