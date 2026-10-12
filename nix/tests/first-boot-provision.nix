@@ -429,10 +429,11 @@ nixos-lib.runTest {
         gateway.succeed("ssh-keygen -t ed25519 -N \"\" -f /tmp/auth-test-key -q")
         gateway.succeed("first-boot-provision import /tmp/config.tar.gz /tmp/auth-root")
 
-        # Managed bundle files are installed read-only by default. The application
-        # runtime owns them, while the unprivileged API can read them for export.
-        gateway.succeed("test \"$(stat -c '%U:%G:%a' /tmp/auth-root/files)\" = 'appsvc:atomixos-provision:550'")
-        gateway.succeed("test \"$(stat -c '%U:%G:%a' /tmp/auth-root/files/app/config.yaml)\" = 'appsvc:atomixos-provision:440'")
+        # Managed bundle files are installed read-only by default. Root owns them so the
+        # workload cannot change their mode; appsvc reads them through an ACL, and the
+        # unprivileged API reads them through its group for export.
+        gateway.succeed("test \"$(stat -c '%U:%G:%a' /tmp/auth-root/files)\" = 'root:atomixos-provision:550'")
+        gateway.succeed("test \"$(stat -c '%U:%G:%a' /tmp/auth-root/files/app/config.yaml)\" = 'root:atomixos-provision:440'")
         gateway.succeed("runuser -u appsvc -- test -r /tmp/auth-root/files/app/config.yaml")
         gateway.succeed("runuser -u appsvc -- test ! -w /tmp/auth-root/files/app/config.yaml")
         gateway.succeed("runuser -u atomixos-provision -- test -r /tmp/auth-root/files/app/config.yaml")
