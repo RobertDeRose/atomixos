@@ -26,7 +26,13 @@ jobs:
         uses: jdx/mise-action@4444d8fd7a1b92f1821c12f435db40f58b743d26 # v4.0.1
         with:
           install: false
+      - name: Install uv
+        env:
+          MISE_IGNORED_CONFIG_PATHS: /home/runner/.config/mise/config.toml
+        run: mise install uv
       - name: Run provisioning package tests
         env:
           MISE_IGNORED_CONFIG_PATHS: /home/runner/.config/mise/config.toml
-        run: mise x -- uv run --locked --extra dev pytest
+          # Only uv is needed; do not install the rest of the project toolchain.
+          MISE_EXEC_AUTO_INSTALL: "false"
+        run: mise x -- uv run --extra dev pytest
