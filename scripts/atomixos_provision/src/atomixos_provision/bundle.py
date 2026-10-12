@@ -406,11 +406,16 @@ def _build_export_tar(config_bytes: bytes, files_root: Path | None) -> bytes:
 
         add_file("config.toml", config_bytes, 0o600)
         if files_root is not None:
-            add_directory("files")
             paths = sorted(
                 files_root.rglob("*"),
                 key=lambda path: path.relative_to(files_root).as_posix(),
             )
+            # Extraction recreates parents of file members, so only empty
+            # directories need entries; this keeps exports within the members
+            # of any archive that could have produced the tree.
+            nonempty = {path.parent for path in paths}
+            if files_root not in nonempty:
+                add_directory("files")
             for path in paths:
                 relative = path.relative_to(files_root).as_posix()
                 name = f"files/{relative}"
@@ -418,7 +423,8 @@ def _build_export_tar(config_bytes: bytes, files_root: Path | None) -> bytes:
                 if stat.S_ISLNK(path_stat.st_mode):
                     raise provision_error(f"bundle files entry must not be a symlink: {path}")
                 if stat.S_ISDIR(path_stat.st_mode):
-                    add_directory(name)
+                    if path not in nonempty:
+                        add_directory(name)
                 elif stat.S_ISREG(path_stat.st_mode):
                     add_file(name, _read_export_file(path, name), 0o644)
                 else:
@@ -452,9 +458,6 @@ def export_bundle_bytes(config_root: Path) -> bytes:
         raise provision_error(f"cannot inspect managed bundle files: {files_path}") from exc
     if stat.S_ISLNK(files_stat.st_mode) or not stat.S_ISDIR(files_stat.st_mode):
         raise provision_error(f"bundle files entry must be a directory: {files_path}")
-    if MAX_BUNDLE_MEMBERS < 2:
-        raise provision_error(f"bundle exceeds {MAX_BUNDLE_MEMBERS} member limit")
-
     with tempfile.TemporaryDirectory(prefix=".atomixos-export-") as temporary:
         snapshot = Path(temporary) / "files"
         _snapshot_files_source(
@@ -462,7 +465,9 @@ def export_bundle_bytes(config_root: Path) -> bytes:
             snapshot,
             max_file_bytes=MAX_BUNDLE_MEMBER_BYTES,
             max_total_bytes=MAX_DECOMPRESSED_BYTES - len(config_bytes),
-            max_members=MAX_BUNDLE_MEMBERS - 2,
+            # Apply the import staging limit; the archive is then checked
+            # against the import archive limits as it is built.
+            max_members=MAX_BUNDLE_MEMBERS,
         )
         return _build_export_tar(config_bytes, snapshot)
 

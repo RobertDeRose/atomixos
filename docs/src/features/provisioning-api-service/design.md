@@ -45,8 +45,9 @@ uses the staged unprivileged API plus root-owned worker boundary.
   `root:atomixos-provision` with a POSIX ACL granting `appsvc` read access. A trusted integrator may deliberately
   grant a workload write access; the renderer warns but does not reject that Podman configuration, and later exports
   contain the resulting file bytes.
-  Archive members must be deterministic, relative, single-link regular files or directories, and bounded during
-  snapshotting by the existing upload/member/decompressed-size limits.
+  Archive members must be deterministic, relative, single-link regular files or empty directories; the importer
+  recreates other parent directories. Export applies the importer's upload/member/decompressed-size limits rather than
+  its own budget, so any tree the importer accepted can be exported. Config export is not a backup system.
 - Production export uses a dedicated root `systemd.path`/oneshot worker. The authenticated unprivileged API publishes
   an empty UUID request; only canonical `/data/config/config.toml` and managed `files/` may be read. No request-supplied
   source path, destination path, or command is accepted. File ownership and permissions are not changed.

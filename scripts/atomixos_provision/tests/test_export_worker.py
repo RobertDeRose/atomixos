@@ -53,7 +53,7 @@ async def test_complete_export_and_acknowledgement(export_root, config_root):
     await asyncio.to_thread(worker.drain_exports, root=export_root, config_root=config_root)
     payload = await task
     with tarfile.open(fileobj=io.BytesIO(payload), mode="r:gz") as archive:
-        assert archive.getnames() == ["config.toml", "files", "files/private.txt"]
+        assert archive.getnames() == ["config.toml", "files/private.txt"]
         assert archive.extractfile("files/private.txt").read() == b"changed payload\n"
     await asyncio.to_thread(worker.drain_exports, root=export_root, config_root=config_root)
     assert not list((export_root / "results").iterdir())

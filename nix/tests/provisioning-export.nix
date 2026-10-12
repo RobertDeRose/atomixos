@@ -49,7 +49,7 @@ let
             return
         assert sys.argv[1:] != ["failure"]
         with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as bundle:
-            assert bundle.getnames() == ["config.toml", "files", "files/private.txt"]
+            assert bundle.getnames() == ["config.toml", "files/private.txt"]
             assert bundle.extractfile("files/private.txt").read() == b"workload-owned private data\n"
             assert bundle.getmember("files/private.txt").mode == 0o644
             assert bundle.getmember("files/private.txt").uid == 0

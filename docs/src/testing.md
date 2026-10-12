@@ -109,7 +109,7 @@ Direct flake checks use committed policy. To test a local overlay, create `build
 `./scripts/nix-with-build-config.sh flake check`; the warning must appear before effective-policy evaluation.
 
 The `provisioning-export` VM check runs the production export path/service and unprivileged API. It verifies real
-UID-separated access, private-file backups without permission changes, concurrent authenticated downloads, root-owned
+UID-separated access, private-file exports without permission changes, concurrent authenticated downloads, root-owned
 results, acknowledgement cleanup, and rejection of symlinks and hard links. Package tests additionally cover UUID
 correlation, bounded admission, timeouts, cancellation, interrupted-worker finalization, expiry, atomic output,
 malformed requests, bounded snapshot reads, and JSON error responses.

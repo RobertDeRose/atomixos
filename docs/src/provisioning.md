@@ -138,8 +138,8 @@ candidate through the same asynchronous validate/render/promote/activate/rollbac
 `POST /api/config`. On staged production systems, partial endpoints require the staged queue to be
 otherwise empty and return `409 Conflict` when another staged job is queued or active. They do not
 mutate derived JSON, Quadlet, firewall, network, or user state
-directly. The generated `config.toml` is the canonical desired-state member of the exported backup artifact; comments and
-original TOML ordering are not preserved after a successful partial update. Bundle export also includes managed
+directly. The generated `config.toml` is the canonical desired-state member of the exported configuration bundle;
+comments and original TOML ordering are not preserved after a successful partial update. Bundle export also includes managed
 `/data/config/files/` payloads and excludes generated runtime state, markers, signer material, and unrelated config
 files. Managed payloads are installed read-only by default. Trusted integrators may deliberately mount `${FILES_DIR}`
 writable; AtomixOS accepts the Quadlet configuration and emits a warning because any resulting changes are included in
@@ -150,13 +150,18 @@ config export. Use Podman tooling when volume data must be backed up, restored, 
 does not own that runtime-data lifecycle. The archive can be imported through the same bundle importer into a clean
 config root.
 
+Config export captures portable desired state for another device or a distributable bundle; it is not a backup system.
+Export applies the importer's member, size, and decompressed-size limits, so every exported bundle imports. A tree that
+exceeds them fails with an error naming the limit. Archives list files and empty directories; the importer recreates
+other parent directories.
+
 ### Privileged bundle export
 
-Production export uses a dedicated root worker, so private files and workload-remapped ownership do not prevent backup.
+Production export uses a dedicated root worker, so private files and workload-remapped ownership do not prevent export.
 The API remains unprivileged and authenticates every export before publishing an empty UUID-named request under
 `/run/atomixos-provision/export/requests`. `atomixos-provision-export.path` starts the corresponding oneshot service,
 which reads only `config.toml` and `files/` under the provisioning lock. It does not change source ownership or modes.
-It rejects symbolic links, hard-linked files, and special files rather than following them or returning a partial backup.
+It rejects symbolic links, hard-linked files, and special files rather than following them or returning a partial archive.
 
 The worker atomically publishes `<uuid>.tar.gz` or `<uuid>.error` in the root-owned, API-group-readable `results`
 directory. The API serves only its matching completed archive, then publishes an acknowledgement for worker cleanup.
@@ -170,7 +175,7 @@ requests, acknowledgements, and results after five minutes. All export state is 
 For failures, inspect `journalctl -u atomixos-provision-export.service` and
 `systemctl status atomixos-provision-export.path atomixos-provision-export.timer`. Export waits for any active config
 apply to release the provisioning lock. This lock does not stop workload writes; quiesce workloads first when an
-application-consistent backup of writable managed files is required. Direct test/development config roots retain the
+application-consistent export of writable managed files is required. Direct test/development config roots retain the
 in-process exporter.
 
 ## USB Recovery Mode

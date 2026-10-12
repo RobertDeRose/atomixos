@@ -4,6 +4,7 @@ import gzip
 import io
 import os
 import tarfile
+from pathlib import Path
 
 import pytest
 
@@ -691,6 +692,7 @@ class TestExportBundle:
         (tmp_path / "config.toml").write_bytes(b"version = 1\n")
         files = tmp_path / "files"
         (files / "nested").mkdir(parents=True)
+        (files / "empty").mkdir()
         (files / "z.txt").write_text("z\n")
         (files / "nested" / "a.txt").write_text("a\n")
         for excluded in (
@@ -709,8 +711,7 @@ class TestExportBundle:
         assert first.startswith(b"\x1f\x8b")
         assert self._members(first) == {
             "config.toml": b"version = 1\n",
-            "files": None,
-            "files/nested": None,
+            "files/empty": None,
             "files/nested/a.txt": b"a\n",
             "files/z.txt": b"z\n",
         }
@@ -740,6 +741,44 @@ class TestExportBundle:
             assert (imported_files / "cert.pem").read_text() == "CERT\n"
         finally:
             tmpdir.cleanup()
+
+    def test_exports_imported_tree_with_implicit_parents_at_member_limit(
+        self, tmp_path, monkeypatch
+    ):
+        """Export any tree the importer accepted, even when parents were implicit."""
+        monkeypatch.setattr("atomixos_provision.bundle.MAX_BUNDLE_MEMBERS", 4)
+        output = io.BytesIO()
+        with tarfile.open(fileobj=output, mode="w:gz") as archive:
+            for name, content in (
+                ("config.toml", b"version = 1\n"),
+                ("files/d0/x.txt", b"0\n"),
+                ("files/d1/x.txt", b"1\n"),
+            ):
+                info = tarfile.TarInfo(name)
+                info.size = len(content)
+                archive.addfile(info, io.BytesIO(content))
+
+        def import_tree(source: bytes, config_root: Path) -> None:
+            """Import a bundle into a config root through the staging limits."""
+            tmpdir, config_path, files_path = prepare_source_bytes(source, "config.tar.gz")
+            try:
+                config_root.mkdir()
+                (config_root / "config.toml").write_bytes(config_path.read_bytes())
+                assert files_path is not None
+                stage_bundle_files(files_path, config_root / "files")
+            finally:
+                tmpdir.cleanup()
+
+        # Two implicit parents plus two files fill the four-entry tree budget.
+        import_tree(output.getvalue(), tmp_path / "first")
+        exported = export_bundle_bytes(tmp_path / "first")
+        assert set(self._members(exported)) == {
+            "config.toml",
+            "files/d0/x.txt",
+            "files/d1/x.txt",
+        }
+        import_tree(exported, tmp_path / "second")
+        assert (tmp_path / "second" / "files" / "d1" / "x.txt").read_bytes() == b"1\n"
 
     def test_rejects_symlinked_export_paths(self, tmp_path):
         """Verify that rejects symlinked export paths."""
@@ -803,7 +842,7 @@ class TestExportBundle:
                 copied_members += 1
             return fdopen(fd, *args, **kwargs)
 
-        monkeypatch.setattr(bundle_module, "MAX_BUNDLE_MEMBERS", 3)
+        monkeypatch.setattr(bundle_module, "MAX_BUNDLE_MEMBERS", 1)
         monkeypatch.setattr(bundle_module.os, "fdopen", counting_fdopen)
 
         with pytest.raises(ProvisionError, match="member limit"):
