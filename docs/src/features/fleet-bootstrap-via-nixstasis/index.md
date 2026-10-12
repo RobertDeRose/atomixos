@@ -1,11 +1,8 @@
 # Fleet Bootstrap via Nixstasis
 
-## Delivery Summary
+## References
 
 - Beads feature root: `atomixos-mol-efd`
-- Status: delivered
-- Pull request: not created
-- Merge commit: `9e16215fae12788df6a4f1a2816c77cdf58c337e` (fast-forward into `dev`)
 - Design record: [design.md](design.md)
 
 ## Delivered Capability
@@ -59,31 +56,13 @@ AtomixOS repository.
 - [Testing](../../testing.md)
 - [Nixstasis client design](../nixstasis-client/design.md)
 
-## Validation Evidence
+## Test Coverage
 
-- `nix build .#checks.aarch64-darwin.nixstasis-client --no-link`
-- `nix build .#checks.aarch64-darwin.fleet-bootstrap --no-link`
-- `nix build .#checks.aarch64-linux.nixstasis-client --no-link`
-- `nix build .#checks.aarch64-linux.fleet-bootstrap --no-link`
-- `uv run --no-project python scripts/check-docs.py`
-- `mdbook build docs`
-- Full `hk check -a` with the pinned formatter/tooling path
-- Focused Nix evaluation, `nixfmt`, Ruff, shellcheck, actionlint, rumdl, tombi, typos,
-  whitespace, and documentation checks
-
-The final validation boundary was the clean feature commit
-`ae0c7b23ca2e7887bca58d0f48484c382d04b338`. The audit-only interaction commit
-`b9fe98d` contains the selected Beads rows and no implementation paths. Exact logs are:
-
-- `/tmp/atomixos-fleet-close-build-config-darwin-final-v6.log`
-- `/tmp/atomixos-fleet-close-fleet-bootstrap-darwin-final-v8.log`
-- `/tmp/atomixos-fleet-close-nixstasis-client-darwin-final-v5.log`
-- `/tmp/atomixos-fleet-close-nixstasis-client-linux-final-v5.log`
-- `/tmp/atomixos-fleet-close-fleet-bootstrap-linux-final-v5.log`
-
-The build-configuration check passed with an explicit environment diagnostic: the nested
-`nix-instantiate` assertion is skipped only when the builder's nested Nix daemon resets its
-connection. The direct fleet-policy rejection evaluator and derivation evaluation passed.
+- `checks.<system>.nixstasis-client` covers Nixstasis registration, identity reuse, polling, the FRP launch boundary, and
+  the post-enrollment API outage path on `aarch64-darwin` and `aarch64-linux`.
+- `checks.<system>.fleet-bootstrap` covers the loopback fleet socket, the named AtomixOS route profile, Host rewriting,
+  withdrawal, and token secrecy.
+- `checks.<system>.build-configuration` covers rejection of invalid fleet transport policy.
 
 ## Design Reconciliation
 
@@ -102,17 +81,11 @@ connection. The direct fleet-policy rejection evaluator and derivation evaluatio
   than synchronous validation responses.
 - FRP cleanup assertions verify service/runtime cleanup rather than relying on a child
   process signal trap.
-- Documentation now records the delivered implementation and close-out evidence.
 
 ### Deferred Work
 
 - Public FRPS/Caddy deployment validation remains outside this AtomixOS feature and is
-  owned by the Nixstasis server-delivery task `nixstasis-4gg` (closed at
-  `6afcb7641b3cd4ed3db467df26b1b8ffc780f863`).
-- Nixstasis follow-up `nixstasis-04t` closed at
-  `361b1837cd60d9993681c6bd6c9643c3673cc971`; `nixstasis-5do` closed at
-  `1f0b0a0c7e85bd152852845c26b40ab6e6455976`.
-- Pull-request or merge delivery has not yet been selected.
+  owned by Nixstasis server delivery.
 
 ### Rejected or Removed Scope
 
@@ -132,32 +105,3 @@ connection. The direct fleet-policy rejection evaluator and derivation evaluatio
 - `docs/src/provisioning/fleet-bootstrap.md`
 - `docs/src/reference/build-configuration.md`
 - `docs/src/testing.md`
-
-## Audit Trail
-
-- Canonical Beads root: `atomixos-mol-efd` (Fleet Bootstrap via Nixstasis).
-- Lifecycle lineage: design `atomixos-mol-am3`; specification reconciliation
-  `atomixos-mol-pdn`; implementation coordinator `atomixos-mol-bzo`; documentation
-  reconciliation `atomixos-mol-ism`; validation `atomixos-mol-4fy`; delivery
-  `atomixos-mol-5ew`.
-- Close-review lineage: implementation integrity
-  `atomixos-mol-efd-implementation-integrity`; delivery integrity
-  `atomixos-mol-efd-delivery-integrity`.
-- Implementation boundary: `ae0c7b23ca2e7887bca58d0f48484c382d04b338`.
-- Documentation reconciliation: `e4a71ab`.
-- Interaction audit: `b9fe98d` (selected fleet-lineage rows only).
-- Historical implementation: `f9b26acb3641fb11d67620a0ef2fd1589231db48`.
-- Nixstasis revisions: `nixstasis-255` at
-  `a0f230ab107c38995d5cd074dc3277708ae2cfba`, `nixstasis-fss` at
-  `9e195c96e05cd42b420ee1331fd81a9d8f1cbc8e`, and `nixstasis-4gg` at
-  `6afcb7641b3cd4ed3db467df26b1b8ffc780f863`
-- Implementation review: approved after resolving F-001 and F-002.
-- Documentation review: approved with no findings.
-- Canonical Beads root `atomixos-mol-efd` owns the closed implementation coordinator
-  `atomixos-mol-bzo`, documentation gate `atomixos-mol-ism`, validation gate
-  `atomixos-mol-4fy`, and the close-out review gates.
-- Review-topology migration evidence: `a4049f5f5a043da363825ac5d6bd6d0e46a1f337`.
-- External Nixstasis lineage is explicit: `nixstasis-255` supplies the client pin,
-  `nixstasis-fss` owns Host rewriting, `nixstasis-4gg` owns server delivery, and the
-  follow-ups `nixstasis-04t` and `nixstasis-5do` are recorded as closed external work.
-- Delivery completed by fast-forward merge into `dev`; no pull request was created.

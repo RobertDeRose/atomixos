@@ -8,8 +8,6 @@
 - Feature slug: `network-config-extensions`
 - Design path: `docs/src/features/network-config-extensions/design.md`
 - Implemented record: `docs/src/features/network-config-extensions/index.md`
-- Base branch: `dev`
-- Status: delivered
 
 ## Feature Summary
 

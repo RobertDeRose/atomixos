@@ -1,11 +1,8 @@
 # Config Reapply Improvements
 
-## Delivery Summary
+## References
 
 - Beads feature root: `atomixos-iej`
-- Status: delivered
-- Pull request: not recorded in the legacy workflow
-- Primary delivery commit: `72f6209c49d8abc5f8ab7268e10bb76f01a32b5b`
 - Design record: [design.md](design.md)
 
 ## Delivered Capability
@@ -40,14 +37,12 @@ both desired files and runtime behavior.
 - [Authentication](../../architecture/authentication.md)
 - `schemas/config.schema.json`
 
-## Validation Evidence
+## Test Coverage
 
 - Provisioning package tests cover schema defaults and rejection, admin keys, authentication, candidate rendering,
   promotion, recovery, activation, and rollback.
 - `nix/tests/first-boot-provision.nix` covers successful authenticated re-apply, invalid candidate preservation, and
   activation rollback.
-- Commit `72f6209c49d8abc5f8ab7268e10bb76f01a32b5b` delivered the canonical schema/parser, VM coverage, examples, and docs;
-  later hardening and package-refactor commits preserved the contract.
 
 ## Design Reconciliation
 
@@ -78,9 +73,3 @@ shapes, and divergent partial state remain rejected.
 - `docs/src/data-flow.md`
 - `docs/src/architecture/authentication.md`
 - examples and affected reference pages
-
-## Audit Trail
-
-Legacy tasks T000-T999 were imported and closed under `atomixos-iej`; explicitly deferred validation remains recorded in
-the source task evidence. Commit `72f6209c49d8abc5f8ab7268e10bb76f01a32b5b` is the initial integrated delivery, with
-network and activation extensions reconciled by their own delivered features.

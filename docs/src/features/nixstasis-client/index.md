@@ -1,12 +1,8 @@
 # Nixstasis Client
 
-## Delivery Summary
+## References
 
 - Beads feature root: `atomixos-4hw`
-- Status: delivered
-- Pull request: not recorded in the legacy workflow
-- Primary delivery commits: `f3cf5a5bb9fdd2812a1c875063f16ac8ac5802b6`,
-  `80a1c84c272e7432c6e17aaf0b6b4e7be3562809`
 - Design record: [design.md](design.md)
 
 ## Delivered Capability
@@ -40,13 +36,11 @@ AtomixOS owns the bounded client execution and local recovery boundary.
 - [Testing](../../testing.md)
 - `modules/nixstasis.nix`
 
-## Validation Evidence
+## Test Coverage
 
 - `nix/tests/nixstasis-module.nix` validates options and rendered configuration.
 - `nix/tests/nixstasis-client.nix` uses a mock API to validate registration, identity reuse, polling, outage behavior,
   and a successful transient FRP unit with a mock `frpc`.
-- Commit `f3cf5a5bb9fdd2812a1c875063f16ac8ac5802b6` delivered the module integration.
-- Commit `80a1c84c272e7432c6e17aaf0b6b4e7be3562809` delivered the focused VM test.
 
 ## Design Reconciliation
 
@@ -75,9 +69,3 @@ remote availability remain out of scope.
 - `docs/src/runtime-boundaries.md`
 - `docs/src/testing.md`
 - `docs/src/planned-features.md`
-
-## Audit Trail
-
-All 39 legacy tasks including T999 were imported and closed under `atomixos-4hw`. Module, VM, and close-out evidence is
-preserved by commits `f3cf5a5bb9fdd2812a1c875063f16ac8ac5802b6`,
-`80a1c84c272e7432c6e17aaf0b6b4e7be3562809`, and `3ca38d6227c51be14a31462fa57506e524dd69a4`.

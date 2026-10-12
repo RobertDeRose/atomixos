@@ -8,8 +8,6 @@
 - Feature slug: `durable-journald-logs`
 - Design path: `docs/src/features/durable-journald-logs/design.md`
 - Implemented record: `docs/src/features/durable-journald-logs/index.md`
-- Base branch: `dev`
-- Status: in progress
 
 ## Feature Summary
 
@@ -688,14 +686,3 @@ rather than for general-purpose log persistence.
 - **THEN** that traffic is handled through the general volatile-journald plus
   RAM-queued batch logging path rather than being mirrored wholesale into the
   slot-local forensic store
-
-## Source Metadata
-
-```yaml
-schema: spec-driven
-created: 2026-04-25
-```
-
-## Source
-
-Converted from `openspec/changes/durable-journald-logs/` during the OpenSpec-to-feature-spec migration.

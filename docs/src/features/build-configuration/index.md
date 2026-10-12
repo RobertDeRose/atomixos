@@ -1,14 +1,9 @@
 # Build Configuration
 
-## Delivery Summary
+## References
 
 - Beads feature root: `atomixos-mol-0ws`
-- Status: delivered locally
-- Pull request: not created
-- Delivery: fast-forwarded into local `dev` at `fee921ffb5e48003a97285e2bf3774def5deb8f6`
 - Design record: [design.md](design.md)
-- Implementation commits: `bbb042eef81786bc78b63b22a89c8e0f3ecf1f25`,
-  `f2c7741eef137873f109b7ad394dc10af30a6684`, and `2e46fd1b5022f96b1c94fabfec78e67f10efe726`
 
 ## Delivered Capability
 
@@ -60,18 +55,13 @@ preserve the prior retained outputs; removing a malformed local overlay restores
 - [Flake Outputs](../../reference/flake-outputs.md)
 - [Project Structure](../../reference/project-structure.md)
 
-## Validation Evidence
+## Test Coverage
 
 - `checks.aarch64-darwin.build-configuration` and `checks.aarch64-linux.build-configuration` cover strict schema,
   normalization, provenance, module mapping, and artifact inputs.
 - `checks.aarch64-darwin.build-config-workflow` and `checks.aarch64-linux.build-config-workflow` cover fixed-path
   override handling, warning and purity behavior, the task matrix, Lima execution, validation ordering, and retained-link
   replacement.
-- Real wrapper evaluation demonstrated `localOverride = true`; the same direct Git-backed Nix evaluation remained
-  `false`.
-- `uv run scripts/check-docs.py` and `mise exec -- hk check -a` passed for the implementation worktree.
-- The repository-wide `mise run check` reached the pre-existing `first-boot-provision` rollback-fixture failure tracked
-  as `atomixos-1az`; the build-configuration checks passed independently.
 
 ## Design Reconciliation
 
@@ -110,12 +100,3 @@ layers, unmarked local artifacts, and automatic local overrides for direct Nix c
 - `docs/src/features/watchdog-enforcement/design.md`
 - `docs/src/SUMMARY.md`
 - `docs/src/features/index.md`
-
-## Audit Trail
-
-Specification reconciliation completed in `c7133740fbd696f1e552a34da5061f748348ade0`. Implementation tasks
-`atomixos-mol-off.1`, `atomixos-mol-off.2`, and `atomixos-mol-off.3` delivered the schema, immutable policy integration,
-and supported workflow in the three implementation commits listed above. Each task used test-first evidence, focused
-validation, aligned reader documentation, and an independent implementation review. The feature was fast-forwarded
-into local `dev` at `fee921ffb5e48003a97285e2bf3774def5deb8f6`; no pull request or remote branch push occurred. Beads
-preserves detailed findings, resolutions, validation limitations, and commit evidence under the feature root.

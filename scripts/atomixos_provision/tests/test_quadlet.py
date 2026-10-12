@@ -523,7 +523,7 @@ class TestRenderContainers:
 
     @pytest.mark.parametrize("mutating_option", ["rw", "U"])
     def test_managed_file_mount_warns_about_mutating_options(self, mutating_option):
-        """Verify that managed file mount warns about mutating options."""
+        """A ``rw`` or ``U`` option on a managed-file volume warns even alongside ``ro``."""
         table = {
             "app": {
                 "privileged": False,

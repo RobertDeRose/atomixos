@@ -6,8 +6,6 @@
 - Feature slug: `fleet-bootstrap-via-nixstasis`
 - Design path: `docs/src/features/fleet-bootstrap-via-nixstasis/design.md`
 - Implemented record: `docs/src/features/fleet-bootstrap-via-nixstasis/index.md`
-- Base branch: `dev`
-- Status: draft
 
 ## Feature Summary
 
@@ -322,7 +320,7 @@ image/operator uses an explicit supported seed path; it does not silently widen 
 | Development                | `docs/src/testing.md`                                                             | Update                  | Add focused fleet policy, socket, firewall, and mock enrollment validation                            | `atomixos-mol-bzo.3` |
 | Navigation                 | `docs/src/SUMMARY.md`                                                             | Update                  | Register the new fleet-bootstrap operations page and feature design                                   | `atomixos-mol-bzo.4` |
 | Roadmap                    | `docs/src/planned-features.md`                                                    | Update                  | Add the planned fleet bootstrap feature and Nixstasis dependency                                      | `atomixos-mol-bzo.4` |
-| Implemented Feature Record | `docs/src/features/fleet-bootstrap-via-nixstasis/index.md`                        | Create during close-out | Record delivery, validation, and external Nixstasis dependency evidence                               | lifecycle close-out  |
+| Implemented Feature Record | `docs/src/features/fleet-bootstrap-via-nixstasis/index.md`                        | Create during close-out | Record delivered capability, test coverage, and external Nixstasis dependencies                       | lifecycle close-out  |
 | Implemented Feature Index  | `docs/src/features/index.md` and the implemented section in `docs/src/SUMMARY.md` | Update during close-out | Index the delivered feature record with the repository's implemented-feature navigation               | lifecycle close-out  |
 
 ## Validation Strategy
@@ -342,7 +340,7 @@ image/operator uses an explicit supported seed path; it does not silently widen 
 - Run `nix build .#checks.aarch64-darwin.build-configuration --no-link`,
   `nix build .#checks.aarch64-darwin.firewall --no-link`,
   `nix build .#checks.aarch64-darwin.fleet-bootstrap --no-link`, and the matching `aarch64-linux` checks when the
-  builder is available. Run `uv run scripts/check-docs.py` and `mdbook build docs` for documentation changes.
+  builder is available. Run `mdbook build docs` for documentation changes.
 - Run the existing provisioning Python suite and repository-standard validation after review fixes stabilize.
 - Record the external Nixstasis revisions/tasks `nixstasis-255`, `nixstasis-fss`, and `nixstasis-4gg` used by the
   integration test and release build.
@@ -469,13 +467,8 @@ rather than choosing a duplicate representation.
 - `scripts/atomixos_provision/src/atomixos_provision/bootstrap_security.py`
 - `docs/src/features/build-configuration/design.md`
 - `docs/src/features/nixstasis-client/design.md`
-- `/Users/DeRoseR/workspace/personal/nixstasis/packages/client/build/root-dir/usr/share/nixstasis/frpc.toml`
-- `/Users/DeRoseR/workspace/personal/nixstasis/packages/client/internal/frp/manager.go`
-- `/Users/DeRoseR/workspace/personal/nixstasis/packages/client/internal/transport/client.go`
-- `/Users/DeRoseR/workspace/personal/nixstasis/deploy/compose/caddy/Caddyfile`
+- Nixstasis repository: `packages/client/build/root-dir/usr/share/nixstasis/frpc.toml`
+- Nixstasis repository: `packages/client/internal/frp/manager.go`
+- Nixstasis repository: `packages/client/internal/transport/client.go`
+- Nixstasis repository: `deploy/compose/caddy/Caddyfile`
 - External tasks `nixstasis-255`, `nixstasis-fss`, and `nixstasis-4gg`
-- Skill version evidence:
-
-<!--
-schema=dstack.skill-version.v1 skill=plan-features installed=0.8.4 canonical=unavailable status=unavailable installed_source=/Users/DeRoseR/.agents/skills/plan-features/SKILL.md checked_at=2026-08-06T21:30:23.043246Z
--->

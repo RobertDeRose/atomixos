@@ -6,8 +6,6 @@
 - Feature slug: `build-configuration`
 - Design path: `docs/src/features/build-configuration/design.md`
 - Implemented record: `docs/src/features/build-configuration/index.md`
-- Base branch: `dev`
-- Status: delivered
 
 ## Feature Summary
 
@@ -306,7 +304,7 @@ release signing and verification trust require their separately owned evidence.
 | Reference                  | `docs/src/reference/project-structure.md`                                         | Update                 | Register build policy, evaluator, wrapper, and tests                                                                                   | `atomixos-mol-off.3`                 |
 | Navigation                 | `docs/src/SUMMARY.md`                                                             | Update                 | Planning registers design; `.1` registers reference; close-out registers record                                                        | planning / `.1` / `atomixos-mol-bf2` |
 | Roadmap                    | `docs/src/planned-features.md`                                                    | Update                 | Record dependency, scope, and active design                                                                                            | planning / close-out                 |
-| Implemented Feature Record | `docs/src/features/build-configuration/index.md` and `docs/src/features/index.md` | Create/update at close | Preserve delivery/audit history and index it in both implemented-feature navigation pages                                              | `atomixos-mol-bf2`                   |
+| Implemented Feature Record | `docs/src/features/build-configuration/index.md` and `docs/src/features/index.md` | Create/update at close | Record delivered capability and index it in both implemented-feature navigation pages                                                  | `atomixos-mol-bf2`                   |
 
 ## Validation Strategy
 
@@ -323,7 +321,7 @@ release signing and verification trust require their separately owned evidence.
 - Verify syntax diagnostics include filename and native location context; schema diagnostics include filename and field.
 - Verify Linux and Darwin `build-configuration` checks, exact canonical bytes, lowercase hexadecimal hash, byte-identical
   closure/image/bundle copies, development names, preflight-before-mutation ordering, and atomic GC-root replacement.
-- Run `uv run scripts/check-docs.py`, mdBook, repository hooks, focused Nix checks, and the repository-standard suite.
+- Run mdBook, repository hooks, focused Nix checks, and the repository-standard suite.
 - Preserve any environment limitation or unrelated baseline failure as explicit Beads evidence rather than weakening
   feature checks.
 

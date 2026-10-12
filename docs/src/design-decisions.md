@@ -70,10 +70,10 @@ applied via the kernel config (not U-Boot patches), keeping the build simple.
 build-time selection of the onboard RK3328 DesignWare watchdog or the external TI UCC2946 path. The target settings are
 30s runtime and 10min reboot.
 
-**Rationale**: Both watchdog paths have passed physical Rock64 device and ownership validation; the internal path has also
-passed induced-reboot validation. Rollback and 72-hour soak evidence remain part of the RAUC OTA campaign. The
-default-disabled policy avoids enabling enforcement in
-unvalidated release profiles.
+**Rationale**: A hardware watchdog that resets a device before its reset timing, RAUC rollback interaction, and
+long-running stability are proven can cause reboot loops in the field. The default-disabled policy avoids enabling
+enforcement in release profiles that have not completed physical reset-timing, RAUC rollback, and 72-hour soak
+validation.
 
 **Integration**: When enabled, systemd is the sole watchdog owner and watchdog reboots feed into the U-Boot boot-count
 rollback path.

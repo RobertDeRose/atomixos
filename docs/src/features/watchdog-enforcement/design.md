@@ -8,16 +8,12 @@
 - Feature slug: `watchdog-enforcement`
 - Design path: `docs/src/features/watchdog-enforcement/design.md`
 - Implemented record: `docs/src/features/watchdog-enforcement/index.md`
-- Base branch: `dev`
-- Status: delivered
 
 ## Feature Summary
 
-Finish opt-in systemd hardware watchdog enforcement without enabling it in release profiles by default. The onboard
-RK3328 and external UCC2946 paths have passed physical Rock64 device, ownership, and timeout validation; the onboard
-RK3328 path has also passed induced-reboot validation. External reset timing, rollback, and soak evidence are deferred
-to the RAUC OTA validation campaign. Build-time configuration is owned by the separate Build
-Configuration feature; runtime `config.toml` does not control watchdog policy.
+Finish opt-in systemd hardware watchdog enforcement without enabling it in release profiles by default. External
+reset timing, rollback, and soak validation belong to the RAUC OTA validation campaign. Build-time configuration is
+owned by the separate Build Configuration feature; runtime `config.toml` does not control watchdog policy.
 
 ## User Intent
 
@@ -220,7 +216,7 @@ board-specific rather than a general production command.
 | Operational unknowns       | `docs/src/unknowns.md`                                 | Update                           | Separate compiled driver support from runtime hardware proof                             | `atomixos-aua.8`                                    |
 | Roadmap                    | `docs/src/planned-features.md`                         | Update                           | Record Build Configuration dependency and current physical gates                         | `atomixos-aua.8`                                    |
 | Feature navigation         | `docs/src/features/index.md` and `docs/src/SUMMARY.md` | Update at delivery               | Add the implemented record only after delivery                                           | `atomixos-aua.8`                                    |
-| Implemented feature record | `docs/src/features/watchdog-enforcement/index.md`      | Create during close-out          | Preserve delivery, evidence, limitations, and audit history                              | `atomixos-aua.8`                                    |
+| Implemented feature record | `docs/src/features/watchdog-enforcement/index.md`      | Create during close-out          | Record delivered capability, test coverage, and limitations                              | `atomixos-aua.8`                                    |
 
 No introduction page is needed; this feature changes build reference, architecture, testing, and operator procedures.
 
@@ -234,7 +230,7 @@ No introduction page is needed; this feature changes build reference, architectu
 - Coverage that disabled non-RAUC profiles do not install or start `watchdog-boot-count`.
 - Coverage that enabled missing-device behavior continues booting and emits a warning.
 - Build Configuration's watchdog schema/default/integration checks.
-- `uv run scripts/check-docs.py`
+- `mdbook build docs`
 - Repository-wide `mise run check` before delivery.
 
 Use the host-appropriate Nix output. Record remote-builder or hardware limitations rather than treating an unexecuted

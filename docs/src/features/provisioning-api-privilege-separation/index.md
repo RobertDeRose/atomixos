@@ -1,12 +1,8 @@
 # Provisioning API Privilege Separation
 
-## Delivery Summary
+## References
 
 - Beads feature root: `atomixos-vfi`
-- Status: delivered
-- Pull request: not recorded in the legacy workflow
-- Primary delivery commits: `6b8e3e846cc249f2a9f01452a93d99d18adf1319`,
-  `a1dff1b4c52ff03cdf9bc45aad03d17a4a575076`
 - Design record: [design.md](design.md)
 
 ## Delivered Capability
@@ -41,14 +37,11 @@ interrupted active jobs before accepting new work.
 - [Firmware Data Flow](../../data-flow.md)
 - `modules/first-boot.nix`
 
-## Validation Evidence
+## Test Coverage
 
 - Provisioning Python tests cover staging manifests, hashes, path normalization, unsafe entries, queueing, state recovery,
   tampering, rollback, and result reporting.
 - `nix/tests/first-boot-provision.nix` exercises the unprivileged service and root worker boundary.
-- Commit `6b8e3e846cc249f2a9f01452a93d99d18adf1319` delivered the primary split.
-- Commit `a1dff1b4c52ff03cdf9bc45aad03d17a4a575076` delivered focused boundary tests; later hardening commits closed review
-  findings without changing the ownership model.
 
 ## Design Reconciliation
 
@@ -79,9 +72,3 @@ execution remain rejected.
 - `docs/src/provisioning.md`
 - `docs/src/data-flow.md`
 - affected architecture and specification pages
-
-## Audit Trail
-
-All 71 legacy tasks including security review and T999 were imported and closed under `atomixos-vfi`. Primary delivery
-and focused test commits are listed above; subsequent hardening culminated in `c7565f3` and `88808a4` on the migration
-base.

@@ -45,8 +45,8 @@ durable receipt phases, interrupted-promotion recovery, and abandoned-job result
 Desired state and managed payloads remain under `/data/config`; transient queue, active-job, and result state lives
 under `/run/atomixos-provision`. Operators can validate, import, and reapply bundles with the
 `first-boot-provision` command; authenticated export is provided by `GET /api/config/export`. Podman volume backup,
-restore, and transfer remain operator-managed through Podman tooling. The squashfs result is 418.5 MB, below the 1 GiB
-closure budget.
+restore, and transfer remain operator-managed through Podman tooling. The service closure keeps the squashfs rootfs
+within the 1 GiB slot budget.
 
 ## Reference and Contracts
 

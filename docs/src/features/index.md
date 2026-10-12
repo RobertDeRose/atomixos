@@ -1,8 +1,8 @@
 # Implemented features
 
 This index contains features that have completed implementation, documentation reconciliation, validation, and
-close-out. Each feature record states its current pull-request or merge status. Planned or partially implemented work
-remains in [Planned features](../planned-features.md) and Beads.
+close-out. Each record describes the delivered capability and how it differs from its design; delivery history lives in
+Beads. Planned or partially implemented work remains in [Planned features](../planned-features.md) and Beads.
 
 ## Feature index
 

@@ -8,8 +8,6 @@
 - Feature slug: `nixstasis-client`
 - Design path: `docs/src/features/nixstasis-client/design.md`
 - Implemented record: `docs/src/features/nixstasis-client/index.md`
-- Base branch: `dev`
-- Status: delivered
 
 ## Feature Summary
 
@@ -73,7 +71,7 @@ packaged binary/config contract; end-to-end tunnel transport remained outside th
 
 Seeded from `docs/src/planned-features.md` entry `nixstasis-client`, refined by
 review against the existing client implementation at
-`/Users/DeRoseR/workspace/personal/nixstasis/packages/client`, and aligned with
+the `packages/client` directory of the Nixstasis repository, and aligned with
 `docs/src/architecture/overwatch-enrollment.md`.
 
 ## Overview

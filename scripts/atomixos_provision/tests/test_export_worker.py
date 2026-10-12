@@ -19,7 +19,7 @@ from atomixos_provision.exceptions import ApiError, ConflictError
 
 @pytest.fixture
 def export_root(tmp_path):
-    """Provide the layout normally installed by systemd-tmpfiles."""
+    """Create the request, claim, and result directories and lock files that tmpfiles installs."""
     root = tmp_path / "export"
     root.mkdir()
     for directory in ("requests", "active", "results"):
@@ -40,7 +40,7 @@ def config_root(tmp_path):
 
 
 async def wait_for_request(root, count=1):
-    """Wait until API tasks have published requests before running the worker."""
+    """Wait up to three seconds for at least ``count`` published ``.request`` markers."""
     async with asyncio.timeout(3):
         while len(list((root / "requests").glob("*.request"))) < count:
             await asyncio.sleep(0.01)
@@ -78,6 +78,7 @@ async def test_worker_failure_is_explicit(export_root, config_root, monkeypatch)
     """A failed export produces an error, not an archive or an endless wait."""
 
     def fail(_root):
+        """Simulate an unreadable managed file during export."""
         raise PermissionError("unreadable managed file")
 
     monkeypatch.setattr("atomixos_provision.provision.locked_export_config_bytes", fail)
@@ -90,7 +91,7 @@ async def test_worker_failure_is_explicit(export_root, config_root, monkeypatch)
 
 
 async def test_timeout_cancels_unclaimed_request(export_root, monkeypatch):
-    """A missing worker cannot hold an HTTP request indefinitely."""
+    """An unanswered request times out, withdraws its marker, and leaves an acknowledgement."""
     monkeypatch.setattr(worker, "WAIT_SECONDS", 0.02)
     with pytest.raises(worker.ExportTimeout):
         await worker.request_export(export_root)
@@ -110,7 +111,7 @@ async def test_cancelled_request_is_acknowledged(export_root):
 
 
 async def test_busy_queue_does_not_publish_extra_markers(export_root):
-    """Admission accounts for both pending work and retained results."""
+    """Pending requests and retained results fill the queue; rejection adds no markers."""
     for _ in range(worker.MAX_EXPORTS - 1):
         worker._submit(export_root, str(uuid4()))
     (export_root / "results" / f"{uuid4()}.tar.gz").write_bytes(b"retained")
@@ -188,6 +189,7 @@ def test_failed_result_publication_retains_claim(export_root, config_root, monke
     publish = worker._publish
 
     def full_run(_path, _content):
+        """Simulate a full filesystem when publishing any result."""
         raise OSError(28, "No space left on device")
 
     monkeypatch.setattr(worker, "_publish", full_run)
@@ -202,7 +204,7 @@ def test_failed_result_publication_retains_claim(export_root, config_root, monke
 
 
 def test_expire_abandoned_requests_and_results(export_root):
-    """Periodic cleanup frees expired slots, including abandoned error results."""
+    """Cleanup expires stale requests, archives, and errors but keeps fresh results."""
     old = time.time() - worker.RETENTION_SECONDS - 1
     stale = [
         export_root / "requests" / f"{uuid4()}.request",
@@ -241,6 +243,7 @@ def test_reject_untrusted_request_entries(export_root, config_root, monkeypatch,
         path.touch()
 
     def unexpected(_root):
+        """Fail the test if an invalid marker reaches the export."""
         pytest.fail("invalid marker must not trigger an export")
 
     monkeypatch.setattr("atomixos_provision.provision.locked_export_config_bytes", unexpected)
@@ -267,6 +270,7 @@ def test_worker_drains_requests_arriving_during_export(export_root, config_root,
     exports = 0
 
     def export(_root):
+        """Queue a second request during the first export and return an archive."""
         nonlocal exports
         exports += 1
         if exports == 1:
@@ -281,11 +285,12 @@ def test_worker_drains_requests_arriving_during_export(export_root, config_root,
 
 
 def test_atomic_output_is_group_readable(export_root, monkeypatch):
-    """No final result exists until the entire restrictive output is published."""
+    """Publication writes a complete ``0640`` temporary file before renaming it into place."""
     result = export_root / "results" / f"{uuid4()}.tar.gz"
     replace = os.replace
 
     def inspect(source, destination):
+        """Check the temporary result before completing the rename."""
         assert not result.exists()
         assert os.stat(source).st_mode & 0o777 == 0o640
         assert Path(source).read_bytes() == b"complete"
@@ -300,6 +305,7 @@ async def test_production_service_delegates_to_worker(monkeypatch):
     """Production never tries to read private managed files as the API user."""
 
     async def export():
+        """Stand in for the privileged worker's archive."""
         return b"privileged archive"
 
     monkeypatch.setattr(worker, "request_export", export)
@@ -318,10 +324,14 @@ async def test_export_http_errors_are_json(config_root, monkeypatch, error, stat
     """Authenticated export failures return explicit JSON, never gzip headers."""
 
     class NonceStore:
+        """Accept every nonce."""
+
         async def consume(self, _nonce):
+            """Accept the nonce."""
             return True
 
     async def fail(_self):
+        """Raise the parametrized export error."""
         raise error
 
     (config_root / "admin-signers").write_text("ssh-ed25519 AAAA test\n")

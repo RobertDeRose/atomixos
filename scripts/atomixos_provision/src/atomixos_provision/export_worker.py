@@ -27,14 +27,20 @@ logger = logging.getLogger(__name__)
 
 
 class ExportTimeout(ApiError):
-    """The privileged export worker did not finish within the request deadline."""
+    """The privileged export worker published no result within ``WAIT_SECONDS`` (HTTP 504)."""
 
     status_code = 504
 
 
 @contextlib.contextmanager
 def _lock(path: Path):
-    """Lock a pre-created control file, never following links or creating paths."""
+    """Hold an exclusive ``flock`` on a pre-created control file for the block.
+
+    The file is opened without following a final symlink, without creating it, and
+    without blocking on a FIFO; only acquiring the lock itself waits. Raise
+    ``ApiError`` if the path is not a regular file and ``OSError`` if it is missing
+    or a symlink.
+    """
     fd = os.open(path, os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK)
     try:
         if not stat.S_ISREG(os.fstat(fd).st_mode):
@@ -46,7 +52,13 @@ def _lock(path: Path):
 
 
 def _publish(path: Path, content: bytes) -> None:
-    """Publish a complete group-readable result in the root-controlled directory."""
+    """Atomically replace ``path`` with ``content`` as a mode ``0640`` file.
+
+    Write a ``.export-*`` temporary file beside ``path`` and rename it into place,
+    so readers see either no result or the complete one. The setgid results
+    directory supplies the API group. The temporary file is removed on failure,
+    and the finalizer removes any left by a killed worker.
+    """
     fd, temporary = tempfile.mkstemp(prefix=".export-", dir=path.parent)
     try:
         with os.fdopen(fd, "wb") as output:
@@ -59,13 +71,20 @@ def _publish(path: Path, content: bytes) -> None:
 
 
 def _marker(path: Path) -> None:
-    """Atomically publish an empty marker without replacing an existing entry."""
+    """Create an empty marker file, raising ``FileExistsError`` if the path exists.
+
+    Exclusive creation never replaces or follows an existing entry.
+    """
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o640)
     os.close(fd)
 
 
 def _read_result(path: Path, limit: int) -> bytes | None:
-    """Read only a bounded regular result; absence means the worker is not done."""
+    """Return a published result's bytes, or ``None`` if it does not exist yet.
+
+    Open without following symlinks or blocking on a FIFO. Raise ``ApiError`` if
+    the entry is not a single-link regular file or holds more than ``limit`` bytes.
+    """
     try:
         fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     except FileNotFoundError:
@@ -81,7 +100,13 @@ def _read_result(path: Path, limit: int) -> bytes | None:
 
 
 def _submit(root: Path, request_id: str) -> None:
-    """Reserve one bounded export slot and publish its UUID request."""
+    """Admit ``request_id`` by publishing ``requests/<uuid>.request`` under the queue lock.
+
+    Every UUID with a pending request or acknowledgement, an active claim, or a
+    retained result holds one slot, counted once however many of those entries it
+    has. Raise ``ConflictError`` when ``MAX_EXPORTS`` slots are taken or the UUID
+    is already present.
+    """
     with _lock(root / "queue.lock"):
         occupied = {
             path.name.split(".", 1)[0]
@@ -97,14 +122,30 @@ def _submit(root: Path, request_id: str) -> None:
 
 
 def _acknowledge(root: Path, request_id: str) -> None:
-    """Cancel an unclaimed request and ask root to remove any completed result."""
+    """Release ``request_id`` by withdrawing its request and publishing an acknowledgement.
+
+    Under the queue lock, remove the request if the worker has not claimed it yet,
+    then publish ``requests/<uuid>.ack``. The acknowledgement keeps the UUID's slot
+    until the worker deletes its result, or until cleanup expires it.
+    """
     with _lock(root / "queue.lock"):
         (root / "requests" / f"{request_id}.request").unlink(missing_ok=True)
         _marker(root / "requests" / f"{request_id}.ack")
 
 
 async def request_export(root: Path = RUNTIME_ROOT) -> bytes:
-    """Wait for precisely this request's archive, never a previous export's output."""
+    """Submit an export to the root worker and return this request's archive bytes.
+
+    Admit a fresh UUID, then poll every 100 ms for up to ``WAIT_SECONDS`` for that
+    UUID's error or archive, so another export's output is never returned. Once
+    the request is admitted, try to acknowledge it on every exit, including on
+    cancellation, so the worker withdraws it or deletes its result. A failed
+    acknowledgement is logged, not raised.
+
+    Raise ``ConflictError`` when admission fails, ``ApiError`` with the worker's
+    message when it publishes an error, ``ExportTimeout`` when no result appears
+    in time, and ``ApiError`` when the runtime directory cannot be used.
+    """
     request_id = str(uuid4())
     submission = asyncio.create_task(asyncio.to_thread(_submit, root, request_id))
     try:
@@ -140,7 +181,7 @@ async def request_export(root: Path = RUNTIME_ROOT) -> bytes:
 
 
 def _discard(path: Path) -> None:
-    """Remove a claimed entry without following a request's symlink target."""
+    """Delete a claimed file, symlink, or directory tree without following symlinks."""
     if stat.S_ISDIR(path.lstat().st_mode):
         shutil.rmtree(path)
     else:
@@ -148,7 +189,12 @@ def _discard(path: Path) -> None:
 
 
 def _finish_interrupted(root: Path) -> None:
-    """Publish failures for claims left by a killed worker and remove partial output."""
+    """Resolve claims and partial output left by a previous worker run.
+
+    For each claimed ``<uuid>.request`` without a published archive, publish a
+    failure ``<uuid>.error``. Then delete every entry in ``active/`` and every
+    ``.export-*`` temporary file in ``results/``. The caller holds the queue lock.
+    """
     for path in (root / "active").iterdir():
         match = REQUEST_NAME.fullmatch(path.name)
         if match and match[2] == "request":
@@ -164,7 +210,11 @@ def _finish_interrupted(root: Path) -> None:
 
 
 def _cleanup(root: Path) -> None:
-    """Expire abandoned output and requests; called under the queue lock."""
+    """Delete results, requests, and acknowledgements older than ``RETENTION_SECONDS``.
+
+    Each expired entry is first renamed into ``active/`` under a random name, so an
+    API-writable entry is never inspected in place. The caller holds the queue lock.
+    """
     cutoff = time.time() - RETENTION_SECONDS
     for directory in ("results", "requests"):
         for path in (root / directory).iterdir():
@@ -185,10 +235,26 @@ def drain_exports(
     root: Path = RUNTIME_ROOT,
     config_root: Path = CONFIG_ROOT,
 ) -> None:
-    """Consume UUID markers; callers cannot choose paths through request contents.
+    """Process queued export markers until ``requests/`` is empty.
 
-    Only the fixed-path root CLI invokes this in production. Alternate roots are
-    dependency injection for tests, not part of the request or CLI protocol.
+    Hold the worker lock throughout. Under the queue lock, first resolve claims
+    left by an interrupted run and expire abandoned entries. With ``finalize``
+    set, as the systemd stop-post finalizer does, stop there.
+
+    Otherwise claim markers in name order by renaming them into ``active/``.
+    Discard any marker that is not an empty, single-link regular file named
+    ``<uuid>.request`` or ``<uuid>.ack``. An acknowledgement deletes that UUID's
+    result. A request whose result already exists is dropped, so a replayed UUID
+    never overwrites output. Any other request exports ``config_root`` outside the
+    queue lock and publishes ``<uuid>.tar.gz``, or a generic ``<uuid>.error`` if
+    exporting or publishing the archive raises. The claim is removed only after a
+    result is published. If the error cannot be published either, the exception
+    propagates and the claim stays for the finalizer.
+
+    Markers carry no content, and their names are the only input. Only the root CLI
+    calls this in production, with the default paths. ``root`` and ``config_root``
+    exist only so tests can inject paths; they are not part of the request or CLI
+    protocol.
     """
     with _lock(root / "worker.lock"):
         with _lock(root / "queue.lock"):

@@ -8,8 +8,6 @@
 - Feature slug: `activation-options`
 - Design path: `docs/src/features/activation-options/design.md`
 - Implemented record: `docs/src/features/activation-options/index.md`
-- Base branch: `dev`
-- Status: delivered
 
 ## Feature Summary
 

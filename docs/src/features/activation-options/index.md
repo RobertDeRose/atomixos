@@ -1,11 +1,8 @@
 # Activation Options
 
-## Delivery Summary
+## References
 
 - Beads feature root: `atomixos-ivy`
-- Status: delivered
-- Pull request: not recorded in the legacy workflow
-- Primary delivery commit: `7c4bb43471e26e4a424da4d93bf88ee5dc98bf40`
 - Design record: [design.md](design.md)
 
 ## Delivered Capability
@@ -38,12 +35,11 @@ and policy.
 - [Runtime Boundaries](../../runtime-boundaries.md)
 - [Firmware Data Flow](../../data-flow.md)
 
-## Validation Evidence
+## Test Coverage
 
 - `scripts/atomixos_provision/tests/test_config.py` covers schema and policy validation.
 - `scripts/atomixos_provision/tests/test_activation.py` covers timing, restart, degraded, and rollback behavior.
 - `scripts/atomixos_provision/tests/test_provision.py` covers integration with the shared apply pipeline.
-- Commit `7c4bb43471e26e4a424da4d93bf88ee5dc98bf40` changed the runtime and focused tests together.
 
 ## Design Reconciliation
 
@@ -72,9 +68,3 @@ compatibility behavior have focused automated coverage.
 - `docs/src/runtime-boundaries.md`
 - `docs/src/data-flow.md`
 - `docs/src/planned-features.md`
-
-## Audit Trail
-
-Legacy tasks T000-T999 were imported under `atomixos-ivy` and closed from delivery evidence. Runtime implementation is
-corroborated by commit `7c4bb43471e26e4a424da4d93bf88ee5dc98bf40`; close-out reconciliation is recorded in
-`315ed5fc5dda05f4a039b318b2a355e4c1a00f44`.

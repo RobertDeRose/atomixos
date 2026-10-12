@@ -314,7 +314,14 @@ def _snapshot_dir(
 
 
 def _read_export_file(path: Path, member_name: str) -> bytes:
-    """Read a bounded export file without following symlinks."""
+    """Return the bytes of one export member, refusing anything but a stable regular file.
+
+    ``lstat`` the path, then open it without following symlinks or blocking on a
+    FIFO. Require the open file to be the same single-link regular inode that was
+    inspected, and no larger than ``MAX_BUNDLE_MEMBER_BYTES``. ``member_name``
+    appears in error messages. A missing ``config.toml`` is reported as
+    "current config.toml not found". Every failure raises ``ProvisionError``.
+    """
     try:
         path_stat = path.lstat()
     except FileNotFoundError as exc:
@@ -361,7 +368,11 @@ def _read_export_file(path: Path, member_name: str) -> bytes:
 
 
 def _tar_info(name: str, *, mode: int, size: int = 0, directory: bool = False) -> tarfile.TarInfo:
-    """Create normalized metadata for an exported tar member."""
+    """Create tar metadata with ``mode``, zero mtime/uid/gid, and empty owner names.
+
+    Set ``directory`` for a directory entry; otherwise the entry is a regular file of
+    ``size`` bytes.
+    """
     info = tarfile.TarInfo(name)
     info.mode = mode
     info.size = size
@@ -376,14 +387,25 @@ def _tar_info(name: str, *, mode: int, size: int = 0, directory: bool = False) -
 
 
 def _build_export_tar(config_bytes: bytes, files_root: Path | None) -> bytes:
-    """Build a deterministic tar archive from the export snapshot."""
+    """Return a deterministic gzip-compressed tar bundle of the config and files snapshot.
+
+    Write ``config.toml`` (mode ``0600``) first. Then write each ``files/`` entry
+    under ``files_root`` in relative-path order: regular files with mode ``0644``,
+    and directories only when they are empty. Extraction recreates other parents,
+    and ``files`` itself is listed only when it is empty. When ``files_root`` is
+    ``None``, the bundle holds only ``config.toml``.
+
+    Raise ``ProvisionError`` for a symlink or special file. Also raise it when the
+    bundle exceeds the importer's member-count, per-member, decompressed-size, or
+    compressed-size limits.
+    """
     output = io.BytesIO()
     member_count = 0
 
     with tarfile.open(fileobj=output, mode="w:", format=tarfile.PAX_FORMAT) as archive:
 
         def add_file(name: str, content: bytes, mode: int) -> None:
-            """Add a file to the deterministic export archive."""
+            """Add a validated regular-file member within the member-count and size limits."""
             nonlocal member_count
             validate_bundle_member(name)
             member_count += 1
@@ -396,7 +418,7 @@ def _build_export_tar(config_bytes: bytes, files_root: Path | None) -> bytes:
             archive.addfile(_tar_info(name, mode=mode, size=len(content)), io.BytesIO(content))
 
         def add_directory(name: str) -> None:
-            """Add a directory to the deterministic export archive."""
+            """Add a validated ``0755`` directory member within the member-count limit."""
             nonlocal member_count
             validate_bundle_member(name)
             member_count += 1
@@ -443,7 +465,16 @@ def _build_export_tar(config_bytes: bytes, files_root: Path | None) -> bytes:
 
 
 def export_bundle_bytes(config_root: Path) -> bytes:
-    """Export canonical config and managed files as a deterministic gzip tar bundle."""
+    """Export ``config.toml`` and managed ``files/`` as a deterministic gzip tar bundle.
+
+    Copy ``files/`` into a private temporary snapshot within the importer's member,
+    per-file, and total-size limits, then build the archive from that snapshot.
+    A missing ``files/`` produces a config-only bundle. Generated state, markers,
+    and signer material elsewhere in ``config_root`` are never read. This function
+    takes no lock; ``locked_export_config_bytes`` serializes it against applies.
+    Raise ``ProvisionError`` if ``config.toml`` is missing, or if a source is
+    unsafe, changes during the snapshot, or exceeds a limit.
+    """
     config_path = config_root / "config.toml"
     config_bytes = _read_export_file(config_path, "config.toml")
     if len(config_bytes) > MAX_DECOMPRESSED_BYTES:

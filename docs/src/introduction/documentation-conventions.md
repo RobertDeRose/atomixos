@@ -5,7 +5,8 @@
 - Beads stores workflow state, dependencies, priorities, claims, findings, and execution evidence.
 - Feature `design.md` files store intended feature behavior and design decisions.
 - Reader-facing pages under `docs/src/` describe current supported behavior.
-- Implemented-feature `index.md` files preserve feature-specific delivery and audit history.
+- Implemented-feature `index.md` files record what a delivered feature provides and how it differs from its design;
+  Beads owns delivery history.
 - `planned-features.md` provides a human roadmap; Beads is authoritative for live execution state.
 - Code and tests provide implementation evidence.
 

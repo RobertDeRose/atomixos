@@ -1,11 +1,8 @@
 # Network Config Extensions
 
-## Delivery Summary
+## References
 
 - Beads feature root: `atomixos-ky9`
-- Status: delivered
-- Pull request: not recorded in the legacy workflow
-- Primary delivery commit: `77a151669d6aa7d342bb70f12db6d15d14628fae`
 - Design record: [design.md](design.md)
 
 ## Delivered Capability
@@ -41,13 +38,11 @@ re-apply, so activation failures restore the prior desired state.
 - [LAN Gateway Specification](../../specs/lan-gateway.md)
 - [NTP Settings](../../operations/ntp-settings.md)
 
-## Validation Evidence
+## Test Coverage
 
 - `tests/test_lan_gateway_apply.py` covers derived state application and failure handling.
 - Provisioning package tests cover accepted and rejected network schema values and rendered state.
 - Existing re-apply tests cover candidate promotion and rollback integration.
-- Commit `77a151669d6aa7d342bb70f12db6d15d14628fae` changed the runtime apply script, focused tests, modules,
-  and reader docs together.
 
 ## Design Reconciliation
 
@@ -78,8 +73,3 @@ Empty gateway sentinels, unbounded interface names, and config paths that enable
 - `docs/src/data-flow.md`
 - `docs/src/specs/lan-gateway.md`
 - `docs/src/operations/ntp-settings.md`
-
-## Audit Trail
-
-Legacy tasks T000-T999 were imported under `atomixos-ky9` and closed from delivery evidence. Commit
-`77a151669d6aa7d342bb70f12db6d15d14628fae` corroborates the runtime, test, module, and documentation integration.

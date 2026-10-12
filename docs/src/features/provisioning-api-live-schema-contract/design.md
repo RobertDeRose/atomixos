@@ -8,8 +8,6 @@
 - Feature slug: `provisioning-api-live-schema-contract`
 - Design path: `docs/src/features/provisioning-api-live-schema-contract/design.md`
 - Implemented record: `docs/src/features/provisioning-api-live-schema-contract/index.md`
-- Base branch: `dev`
-- Status: delivered
 
 ## Feature Summary
 

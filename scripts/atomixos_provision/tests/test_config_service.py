@@ -52,7 +52,7 @@ async def test_put_user_applies_config_operation(tmp_path, monkeypatch):
 
 
 async def test_export_config_reads_current_bundle_bytes(tmp_path):
-    """Verify that export config reads current bundle bytes."""
+    """A non-production root exports the current config and files as a gzip bundle."""
     _write_current_config(tmp_path)
     (tmp_path / "files").mkdir()
     (tmp_path / "files" / "cert.pem").write_text("CERT\n")
@@ -63,11 +63,11 @@ async def test_export_config_reads_current_bundle_bytes(tmp_path):
 
 
 async def test_export_config_uses_locked_export(tmp_path, monkeypatch):
-    """Verify that export config uses locked export."""
+    """A non-production root exports in process through ``locked_export_config_bytes``."""
     captured = {}
 
     def fake_locked_export_config_bytes(config_root):
-        """Simulate locked export config bytes for the test."""
+        """Record the config root and return a stand-in bundle."""
         captured["config_root"] = config_root
         return b"\x1f\x8bexported-bundle"
 

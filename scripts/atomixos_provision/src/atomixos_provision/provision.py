@@ -2085,7 +2085,13 @@ async def apply_config_transform(
 
 
 def locked_export_config_bytes(config_root: Path) -> bytes:
-    """Export active config and managed files under the provisioning lock."""
+    """Return the config bundle export for ``config_root``, serialized against applies.
+
+    Validate the root, then hold the provisioning lock while exporting so a
+    concurrent apply cannot change config or managed files mid-snapshot. Workload
+    writes are not blocked. Raise ``ProvisionError`` for an invalid root or a
+    failed export.
+    """
     config_root = validate_config_root(config_root)
     with provisioning_lock(config_root):
         return export_bundle_bytes(config_root)

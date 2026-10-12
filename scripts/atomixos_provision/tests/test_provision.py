@@ -158,7 +158,7 @@ def test_provisioning_lock_rejects_non_root_runtime_lock_directory(monkeypatch, 
 
 
 def test_locked_export_uses_runtime_lock_for_data_config(monkeypatch, tmp_path):
-    """Verify that locked export uses runtime lock for data config."""
+    """Exporting /data/config takes the runtime config lock and never runs recovery."""
     from atomixos_provision import provision
 
     data_root = tmp_path / "data"

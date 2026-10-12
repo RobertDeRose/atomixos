@@ -11,14 +11,10 @@ Use the same commands locally and in automation:
 ```bash
 mise run check
 mise run fix
-mise run docs:check
 mise run docs:build
 mise run docs:deployment:enable
 mise run docs:serve
 ```
-
-Use `/update-project` for the recorded template channel, or `/update-project --stable` / `--unstable` to change it. The
-update always records the exact resolved template commit.
 
 `check` is read-only and delegates to the hk quality gate. `fix` changes the working tree. Contextlint checks links,
 anchors, and image targets across README and `docs/**/*.md`. The pre-commit hook may fix files while safely stashing
