@@ -11,6 +11,7 @@ from typing import Any
 
 from atomixos_provision.activation import (
     begin_rollback_activation,
+    candidate_root_path,
     cleanup_rollback,
     discard_initial_config,
     promotion_marker_path,
@@ -178,7 +179,7 @@ def recover_interrupted_apply(config_root: Path) -> ApplyRecovery:
     A pending rollback activation or an uncommitted reapply restores the
     rollback root and reports restored_rollback, so the caller reactivates it.
     An uncommitted initial promotion is discarded. A committed promotion keeps
-    its config and drops rollback state.
+    its config and drops rollback state and any later apply's leftover candidate.
     """
     if rollback_activation_marker_path(config_root).exists():
         # A restore or its reactivation was interrupted; finish the restore and
@@ -187,6 +188,10 @@ def recover_interrupted_apply(config_root: Path) -> ApplyRecovery:
         return ApplyRecovery(read_apply_receipt(config_root), restored_rollback=True)
     receipt = read_apply_receipt(config_root)
     if receipt is not None and receipt.phase is ApplyReceiptPhase.COMMITTED:
+        # A candidate beside a committed root belongs to a later, unfinished apply.
+        candidate_root = candidate_root_path(config_root)
+        if candidate_root.exists():
+            shutil.rmtree(candidate_root)
         cleanup_rollback(config_root)
         return ApplyRecovery(receipt)
     if (

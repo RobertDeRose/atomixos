@@ -64,6 +64,30 @@ def test_receipt_aware_recovery_keeps_committed_promotion(tmp_path):
     assert not rollback.exists()
 
 
+def test_committed_recovery_removes_leftover_candidate(tmp_path):
+    """A later apply's leftover candidate is removed without touching the committed root."""
+    config_root = tmp_path / "config"
+    config_root.mkdir()
+    (config_root / "config.toml").write_text("committed")
+    transaction = StagedApplyTransaction.from_manifest(
+        {"job_id": "job-1", "source_sha256": "a" * 64}, {"reapply": False}
+    )
+    transaction.mark_promoted(config_root)
+    transaction.mark_committed(config_root)
+    candidate = tmp_path / "config-candidate"
+    (candidate / "files").mkdir(parents=True)
+    (candidate / "config.toml").write_text("interrupted")
+    marker = tmp_path / "config.atomixos-promotion-pending"
+    marker.write_text("pending\n")
+
+    recovery = recover_interrupted_apply(config_root)
+
+    assert recovery.receipt is not None and recovery.receipt.job_id == "job-1"
+    assert (config_root / "config.toml").read_text() == "committed"
+    assert not candidate.exists()
+    assert not marker.exists()
+
+
 def _interrupted_reapply_roots(tmp_path):
     """Create a failed promoted config whose rollback holds an older committed config."""
     config_root = tmp_path / "config"
