@@ -114,6 +114,23 @@ async def test_validate_invalid_server_schema_uses_framework_500(tmp_path, monke
     assert response.status_code == 500
 
 
+async def test_validate_invalid_utf8_returns_bad_request(tmp_path):
+    """Verify that a malformed UTF-8 upload is a client validation error."""
+    body = b"version = 1\n\xff\n"
+
+    @post("/api/validate")
+    async def endpoint() -> Response:
+        """Handle the test validation endpoint."""
+        return await validate_config.fn(_ValidationRequest(body), ConfigService(tmp_path))
+
+    async with AsyncTestClient(app=Litestar(route_handlers=[endpoint])) as client:
+        response = await client.post("/api/validate", content=body)
+
+    assert response.status_code == 400
+    assert response.json()["ok"] is False
+    assert "not valid UTF-8" in response.json()["error"]
+
+
 async def test_nonce_response_returns_nonce(tmp_path):
     async with AsyncTestClient(app=create_app(config_root=tmp_path)) as client:
         response = await client.get("/api/nonce")
@@ -1396,9 +1413,8 @@ async def test_openapi_documents_public_api_contract(tmp_path):
     assert submit["responses"]["202"]["content"]["application/json"]["schema"]["$ref"].endswith(
         "/SubmitConfigResponseBody"
     )
-    assert export["responses"]["200"]["content"]["application/gzip"]["schema"] == {
-        "type": "string",
-        "format": "binary",
+    assert export["responses"]["200"]["content"] == {
+        "application/toml": {"schema": {"type": "string"}}
     }
     assert validate["responses"]["200"]["content"]["application/json"]["schema"]["$ref"].endswith(
         "/ValidationResponseBody"

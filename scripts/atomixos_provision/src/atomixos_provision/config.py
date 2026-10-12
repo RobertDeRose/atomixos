@@ -822,7 +822,9 @@ def load_config(
         Parsed and validated config dict with all sections normalized.
     """
     try:
-        data = tomllib.loads(config_path.read_text())
+        data = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    except UnicodeDecodeError as exc:
+        raise provision_error(f"config is not valid UTF-8 in {config_path}: {exc}") from exc
     except tomllib.TOMLDecodeError as exc:
         message = f"invalid TOML in {config_path}: {exc}"
         raise provision_error(message) from exc

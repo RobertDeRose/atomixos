@@ -7,6 +7,7 @@ import pytest
 
 from atomixos_provision.config import (
     ProvisionError,
+    ProvisionSystemError,
     load_config,
     load_firewall_inbound,
     load_host_network_settings,
@@ -725,6 +726,14 @@ Image = "docker.io/library/alpine:latest"
         bad.write_text("not valid [[[toml")
         with pytest.raises(ProvisionError, match="invalid TOML"):
             load_config(bad)
+
+    def test_invalid_utf8_is_config_error(self, tmp_path: Path, schema_path: Path, monkeypatch):
+        monkeypatch.setenv("ATOMIXOS_CONFIG_SCHEMA", str(schema_path))
+        bad = tmp_path / "bad.toml"
+        bad.write_bytes(b"version = 1\n\xff\n")
+        with pytest.raises(ProvisionError, match="not valid UTF-8") as exc_info:
+            load_config(bad)
+        assert not isinstance(exc_info.value, ProvisionSystemError)
 
     def test_rejects_non_current_version(self, tmp_path: Path, schema_path: Path, monkeypatch):
         monkeypatch.setenv("ATOMIXOS_CONFIG_SCHEMA", str(schema_path))
