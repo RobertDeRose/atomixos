@@ -8,8 +8,6 @@
 - Feature slug: `caddy-authcrunch-cockpit-tutorial`
 - Design path: `docs/src/features/caddy-authcrunch-cockpit-tutorial/design.md`
 - Implemented record: `docs/src/features/caddy-authcrunch-cockpit-tutorial/index.md`
-- Base branch: `dev`
-- Status: delivered
 
 ## Feature Summary
 
@@ -63,7 +61,7 @@ are high privilege and must stay limited to the admin container. AuthCrunch synt
 ## Documentation Impact
 
 Update `docs/src/tutorials/oidc-device-management.md`, `docs/src/SUMMARY.md`, and the example bundle. Create
-`docs/src/features/caddy-authcrunch-cockpit-tutorial/index.md` during migration close-out.
+`docs/src/features/caddy-authcrunch-cockpit-tutorial/index.md` during close-out.
 
 ## Validation Strategy
 
@@ -429,11 +427,11 @@ values that change for Google and other OIDC providers:
 
 ## Dependencies
 
-Existing dependencies are satisfied. One new capability is required:
+Existing capabilities used by the tutorial:
 
-- Network and volume Quadlet support (completed: `85ec53c`)
-- Bundle file support with `${FILES_DIR}` token substitution (completed)
-- Container, network, volume rendering and sync (completed)
+- Network and volume Quadlet support
+- Bundle file support with `${FILES_DIR}` token substitution
+- Container, network, volume rendering and sync
 - **Quadlet `.build` support (new)**: schema, rendering, sync, and test updates needed
   to support `[containers.build.*]` sections in config.toml that produce `.build` Quadlet units.
   This is implemented as a prerequisite task within this feature.

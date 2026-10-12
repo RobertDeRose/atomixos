@@ -1,11 +1,8 @@
 # {{ feature_name }}
 
-## Delivery Summary
+## References
 
 - Beads feature root: `{{ beads_root_id }}`
-- Status: delivered
-- Pull request: `{{ pull_request }}`
-- Merge commit: `{{ merge_commit }}`
 - Design record: [design.md](design.md)
 
 ## Delivered Capability
@@ -27,9 +24,10 @@ Describe usage, deployment, configuration, observability, maintenance, recovery,
 Link the exact reader-facing pages that define commands, configuration, interfaces, data, events, states, defaults,
 limits, or other durable contracts.
 
-## Validation Evidence
+## Test Coverage
 
-List validation commands and outcomes. Link tests or CI evidence where useful.
+List the tests and checks that cover this feature's behavior. Do not record run results, commits, or pull requests;
+Beads owns delivery history.
 
 ## Design Reconciliation
 
@@ -44,7 +42,3 @@ List validation commands and outcomes. Link tests or CI evidence where useful.
 ## Documentation Updated
 
 List every reader-facing page updated or created for this feature.
-
-## Audit Trail
-
-Summarize key Beads tasks, review findings, commits, pull requests, and decisions needed to reconstruct delivery.

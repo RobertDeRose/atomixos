@@ -8,8 +8,6 @@
 - Feature slug: `provisioning-api-privilege-separation`
 - Design path: `docs/src/features/provisioning-api-privilege-separation/design.md`
 - Implemented record: `docs/src/features/provisioning-api-privilege-separation/index.md`
-- Base branch: `dev`
-- Status: delivered
 
 ## Feature Summary
 

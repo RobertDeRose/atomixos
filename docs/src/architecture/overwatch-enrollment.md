@@ -41,7 +41,7 @@ The fleet socket remains loopback-only after provisioning. Later re-apply reques
 boundary, not the first-boot exception. Fleet mode does not install the pending WAN bootstrap rule or rebind the socket
 to the provisioned LAN gateway.
 
-The AtomixOS image consumes the published Nixstasis capability pinned at `6afcb7641b3cd4ed3db467df26b1b8ffc780f863`.
+The AtomixOS image consumes the published Nixstasis capability through the pinned `nixstasis` flake input.
 The named route profile, fixed Host rewrite, and server delivery action are owned by upstream tasks `nixstasis-255`,
 `nixstasis-fss`, and `nixstasis-4gg`.
 

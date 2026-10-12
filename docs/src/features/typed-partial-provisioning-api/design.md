@@ -8,8 +8,6 @@
 - Feature slug: `typed-partial-provisioning-api`
 - Design path: `docs/src/features/typed-partial-provisioning-api/design.md`
 - Implemented record: `docs/src/features/typed-partial-provisioning-api/index.md`
-- Base branch: `dev`
-- Status: delivered
 
 ## Feature Summary
 

@@ -1,11 +1,8 @@
 # Provisioning API Live Schema Contract
 
-## Delivery Summary
+## References
 
 - Beads feature root: `atomixos-doh`
-- Status: delivered
-- Pull request: not recorded in the legacy workflow
-- Primary delivery commit: `ddae537052abae39ec106c8c9df00a3988093ac0`
 - Design record: [design.md](design.md)
 
 ## Delivered Capability
@@ -37,12 +34,11 @@ artifacts. Schema compatibility must be reviewed whenever public routes, payload
 - [Firmware Data Flow](../../data-flow.md)
 - Live route: `/schema/openapi.json`
 
-## Validation Evidence
+## Test Coverage
 
 - `scripts/atomixos_provision/tests/test_app.py` asserts public route coverage, operation IDs, tags, request bodies,
   headers, responses, error schemas, and UI/static exclusion.
 - Controller tests preserve API behavior behind the documented schema.
-- Commit `ddae537052abae39ec106c8c9df00a3988093ac0` changed route metadata and live-schema tests together.
 
 ## Design Reconciliation
 
@@ -72,9 +68,3 @@ remain out of scope.
 - `docs/src/runtime-boundaries.md`
 - `docs/src/data-flow.md`
 - `docs/src/planned-features.md`
-
-## Audit Trail
-
-Legacy tasks T000-T999 were imported and closed under `atomixos-doh`. Commit
-`ddae537052abae39ec106c8c9df00a3988093ac0` delivered the executable schema assertions, and
-`395808b1a8419a6a8d726dee5ef20455b9eb131f` reconciled close-out documentation.

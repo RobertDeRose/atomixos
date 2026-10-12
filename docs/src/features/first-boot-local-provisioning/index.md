@@ -1,11 +1,8 @@
 # First-Boot Local Provisioning
 
-## Delivery Summary
+## References
 
 - Beads feature root: `atomixos-ehv`
-- Status: delivered
-- Pull request: not recorded in the legacy workflow
-- Primary delivery commit: `ff96939469c76dc62d7f681fab7de0cca8dbd7f6`
 - Design record: [design.md](design.md)
 
 ## Delivered Capability
@@ -44,17 +41,12 @@ provisioning surface, not a general device-management UI.
 - [Partition Layout](../../architecture/partition-layout.md)
 - [Authentication](../../architecture/authentication.md)
 
-## Validation Evidence
+## Test Coverage
 
-The legacy close-out records successful coverage in:
-
-- `nix/tests/initrd-fresh-flash-marker.nix` for initrd fresh-flash detection;
-- `nix/tests/first-boot-source-discovery.nix` for source order and reprovisioning;
-- `nix/tests/first-boot-provision.nix` for schema validation, import, rendering, bootstrap UI, and runtime application;
-- documentation validation and the mdBook build.
-
-Commit `ff96939469c76dc62d7f681fab7de0cca8dbd7f6` updated the implementation, all three focused Nix tests, and the
-reader-facing provisioning documentation together.
+- `nix/tests/initrd-fresh-flash-marker.nix` covers initrd fresh-flash detection.
+- `nix/tests/first-boot-source-discovery.nix` covers source order and reprovisioning.
+- `nix/tests/first-boot-provision.nix` covers schema validation, import, rendering, the bootstrap UI, and runtime
+  application.
 
 ## Design Reconciliation
 
@@ -86,9 +78,3 @@ remain rejected.
 - `docs/src/architecture/partition-layout.md`
 - `docs/src/architecture/authentication.md`
 - `docs/src/hardware-testing.md`
-
-## Audit Trail
-
-Legacy tasks T001-T021 were mapped into Beads and closed from implementation evidence. The feature root is
-`atomixos-ehv`; its imported lifecycle and implementation records preserve the original task text. Primary delivery is
-corroborated by commit `ff96939469c76dc62d7f681fab7de0cca8dbd7f6` and the paths listed above.

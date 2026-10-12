@@ -8,8 +8,6 @@
 - Feature slug: `rock64-ab-image`
 - Design path: `docs/src/features/rock64-ab-image/design.md`
 - Implemented record: `docs/src/features/rock64-ab-image/index.md`
-- Base branch: `dev`
-- Status: in progress
 
 ## Feature Summary
 
@@ -1051,14 +1049,3 @@ rollback.
 
 - **WHEN** a new image causes the system to hang on every boot attempt, triggering the watchdog each time
 - **THEN** U-Boot's boot counter decrements to zero and the device rolls back to the previous working slot
-
-## Source Metadata
-
-```yaml
-schema: spec-driven
-created: 2026-04-09
-```
-
-## Source
-
-Converted from `openspec/changes/rock64-ab-image/` during the OpenSpec-to-feature-spec migration.

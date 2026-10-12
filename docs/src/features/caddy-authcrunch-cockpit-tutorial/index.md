@@ -1,11 +1,8 @@
 # Caddy AuthCrunch Cockpit Tutorial
 
-## Delivery Summary
+## References
 
 - Beads feature root: `atomixos-b45`
-- Status: delivered
-- Pull request: not recorded in the legacy workflow
-- Primary delivery commit: `52ca7b6fc97004769554d495c227693b6bf74dc6`
 - Design record: [design.md](design.md)
 
 ## Delivered Capability
@@ -38,12 +35,9 @@ uses local TLS for the documented local deployment and requires production harde
 - `example/caddy-oidc/files/Caddyfile`
 - `example/caddy-oidc/files/cockpit/Containerfile`
 
-## Validation Evidence
+## Test Coverage
 
-- The tutorial's config passes the provisioning validator according to legacy close-out evidence.
 - Existing provisioning tests cover container, network, volume, build, bundle-file, and Quadlet synchronization paths.
-- Commit `52ca7b6fc97004769554d495c227693b6bf74dc6` introduced the tutorial, design, roadmap entry, and navigation.
-- Later commits moved the example into `example/caddy-oidc` and reconciled local-device behavior and config evolution.
 
 ## Design Reconciliation
 
@@ -72,9 +66,3 @@ Cockpit in the base image, double authentication, SAML guidance, and a dedicated
 - `docs/src/SUMMARY.md`
 - `docs/src/planned-features.md`
 - `example/caddy-oidc/`
-
-## Audit Trail
-
-Legacy tasks T000-T999, including numeric mappings for the former T00A/T00B prerequisites, were imported under
-`atomixos-b45`. T006 is preserved as intentionally skipped because existing provisioning tests cover the same paths.
-The primary tutorial delivery is commit `52ca7b6fc97004769554d495c227693b6bf74dc6`.

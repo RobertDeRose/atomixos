@@ -8,8 +8,6 @@
 - Feature slug: `config-reapply-improvements`
 - Design path: `docs/src/features/config-reapply-improvements/design.md`
 - Implemented record: `docs/src/features/config-reapply-improvements/index.md`
-- Base branch: `dev`
-- Status: delivered
 
 ## Feature Summary
 

@@ -1,11 +1,8 @@
 # Boot UI HTMX
 
-## Delivery Summary
+## References
 
 - Beads feature root: `atomixos-hns`
-- Status: delivered
-- Pull request: not recorded in the legacy workflow
-- Primary delivery commit: `2c9c2df28f5d1e02640c3c3496ebf24e07c7584c`
 - Design record: [design.md](design.md)
 
 ## Delivered Capability
@@ -38,12 +35,11 @@ SPA state. Job progress follows the existing in-process and staged-worker lifecy
 - [Runtime Boundaries](../../runtime-boundaries.md)
 - [Firmware Data Flow](../../data-flow.md)
 
-## Validation Evidence
+## Test Coverage
 
 - Provisioning route tests cover page controls, asynchronous submission, progress and terminal fragments, conflicts,
   escaping, CSRF/origin failures, and post-provision unavailability.
 - Live-schema tests prove UI, static, and fragment routes remain excluded.
-- Commit `2c9c2df28f5d1e02640c3c3496ebf24e07c7584c` changed UI implementation, tests, docs, and roadmap together.
 
 ## Design Reconciliation
 
@@ -72,9 +68,3 @@ remain rejected.
 - `docs/src/runtime-boundaries.md`
 - `docs/src/data-flow.md`
 - `docs/src/planned-features.md`
-
-## Audit Trail
-
-Legacy tasks T000-T999 were imported and closed under `atomixos-hns`. Commit
-`2c9c2df28f5d1e02640c3c3496ebf24e07c7584c` provides integrated implementation, test, and documentation evidence;
-`434d372d90bbd56b1960ec4ec5c1c603ce445683` records terminal polling clarification.

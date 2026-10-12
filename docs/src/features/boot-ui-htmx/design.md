@@ -8,8 +8,6 @@
 - Feature slug: `boot-ui-htmx`
 - Design path: `docs/src/features/boot-ui-htmx/design.md`
 - Implemented record: `docs/src/features/boot-ui-htmx/index.md`
-- Base branch: `dev`
-- Status: delivered
 
 ## Feature Summary
 

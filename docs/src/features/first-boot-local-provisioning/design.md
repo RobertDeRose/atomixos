@@ -8,8 +8,6 @@
 - Feature slug: `first-boot-local-provisioning`
 - Design path: `docs/src/features/first-boot-local-provisioning/design.md`
 - Implemented record: `docs/src/features/first-boot-local-provisioning/index.md`
-- Base branch: `dev`
-- Status: delivered
 
 ## Feature Summary
 
@@ -71,7 +69,7 @@ slot unconfirmed.
 - Update `docs/src/data-flow.md` and `docs/src/runtime-boundaries.md` for persisted and active state ownership.
 - Update `docs/src/architecture/partition-layout.md` and `docs/src/architecture/authentication.md` for lifecycle and
   credential boundaries.
-- Create `docs/src/features/first-boot-local-provisioning/index.md` during migration close-out.
+- Create `docs/src/features/first-boot-local-provisioning/index.md` during close-out.
 
 ## Validation Strategy
 
@@ -651,14 +649,3 @@ committed. If no valid provisioning state exists on a production first boot, the
 
 - **WHEN** the device is in the production first-boot path and no valid local provisioning state has been imported
 - **THEN** the slot remains uncommitted rather than being marked good unconditionally
-
-## Source Metadata
-
-```yaml
-schema: spec-driven
-created: 2026-04-27
-```
-
-## Source
-
-Converted from `openspec/changes/first-boot-local-provisioning/` during the OpenSpec-to-feature-spec migration.

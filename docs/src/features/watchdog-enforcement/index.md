@@ -1,11 +1,8 @@
 # Watchdog Enforcement
 
-## Delivery Summary
+## References
 
 - Beads feature root: `atomixos-aua`
-- Status: delivered
-- Merge commit: `f9367607ce49f10cb48c98b68f82d4d8bb2346f8` (fast-forward into `dev`)
-- Pull request: not created
 - Design record: [design.md](design.md)
 
 ## Delivered Capability
@@ -59,23 +56,16 @@ reset timing, rollback, and 72-hour soak validation remain part of the RAUC OTA 
 - [Update and rollback architecture](../../architecture/update-rollback.md#watchdog-integration)
 - [Feature design](design.md)
 
-## Validation Evidence
+## Test Coverage
 
-- Rock64 internal path: `/dev/watchdog-internal` resolved to `watchdog0`; sysfs bound to `dw_wdt`; the loaded TOP table
-  contained 16 cells; PID 1 held `/dev/watchdog0`.
-- Rock64 external path: the UCC2946/PCA9536-compatible path was previously physically validated through I2C bus 1 and
-  `/dev/watchdog-external`.
-- Internal induced-reboot test: `run0 kill -STOP 1` caused a second U-Boot TPL/SPL/U-Boot sequence in the serial capture,
-  followed by SSH recovery and a clean system state.
-- Serial evidence: `/tmp/rock64-internal-watchdog-reset.log`.
-- Post-reset systemd evidence: selected device, 30-second runtime timeout, 10-minute reboot timeout, running system,
-  and no failed units.
-- Feature-specific validation passed: `uv run scripts/check-docs.py`, `mise exec -- hk check -a`, the Linux/Darwin
-  watchdog and build-configuration checks, Linux device-tree and boot-script checks, Linux/Darwin build-config-workflow
-  and missing-device checks, and `mise run e2e:rauc-watchdog`.
-- Repository-wide `mise check` was attempted and explicitly waived by the user for this delivery. It failed in the
-  unrelated `nixstasis-client` Go-module sandbox setup (`sandbox network setup timed out`; `pasta exited with code 1`).
-  Repository-wide validation remains residual risk for a follow-up change; feature-specific validation is current.
+- `checks.<system>.watchdog-module` covers option defaults and the opt-in systemd manager watchdog settings.
+- `checks.<system>.watchdog-missing-device` covers booting with enforcement enabled but no watchdog device.
+- `checks.<system>.build-configuration` and `checks.<system>.build-config-workflow` cover watchdog build policy.
+- Linux device-tree and boot-script checks cover the Rock64 watchdog wiring.
+- `mise run e2e:rauc-watchdog` simulates watchdog-triggered resets and verifies boot-count rollback.
+- On Rock64 hardware, follow [Hardware Testing](../../hardware-testing.md#phase-8-watchdog). An induced internal reset
+  (`run0 kill -STOP 1`) must produce a second U-Boot TPL/SPL sequence on the serial console, then recover over SSH with
+  no failed units.
 
 ## Design Reconciliation
 
@@ -120,12 +110,3 @@ reset timing, rollback, and 72-hour soak validation remain part of the RAUC OTA 
 - `docs/src/features/watchdog-enforcement/design.md`
 - `docs/src/features/index.md`
 - `docs/src/SUMMARY.md`
-
-## Audit Trail
-
-Implementation and physical evidence were recorded on Beads task `atomixos-aua.7.32`; implementation coordinator
-`atomixos-aua.7`, documentation reconciliation `atomixos-aua.8`, validation `atomixos-aua.9`, and the delivery/drift
-reviews `atomixos-aua.10` and `atomixos-aua.11` are complete. The repository-wide check waiver and its residual risk are
-recorded on `atomixos-aua.9`. Delivery `atomixos-aua.12` and feature root `atomixos-aua` are complete after the
-fast-forward delivery to `dev`; merge commit `f9367607ce49f10cb48c98b68f82d4d8bb2346f8` was used and no pull request was
-created. External reset timing, RAUC rollback, and soak work remain explicitly deferred to the OTA campaign.

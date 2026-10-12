@@ -1,11 +1,8 @@
 # Typed Partial Provisioning API
 
-## Delivery Summary
+## References
 
 - Beads feature root: `atomixos-c08`
-- Status: delivered
-- Pull request: not recorded in the legacy workflow
-- Primary delivery commit: `47fa62ae442f0c6972938f8be45bcfbed9be5413`
 - Design record: [design.md](design.md)
 
 ## Delivered Capability
@@ -39,12 +36,11 @@ backup and clone bookend.
 - [Firmware Data Flow](../../data-flow.md)
 - Live route: `/schema/openapi.json`
 
-## Validation Evidence
+## Test Coverage
 
 - `scripts/atomixos_provision/tests/test_partial_config.py` covers typed validation and patch-to-full-state conversion.
 - Service, route, provisioning, and live-schema tests cover auth, conflicts, jobs, errors, and shared apply behavior.
 - `nix/tests/first-boot-provision.nix` covers selected partial updates through the device integration path.
-- Commit `47fa62ae442f0c6972938f8be45bcfbed9be5413` changed implementation, tests, VM coverage, and docs together.
 
 ## Design Reconciliation
 
@@ -73,8 +69,3 @@ post-provision partial mutation remain rejected.
 - `docs/src/runtime-boundaries.md`
 - `docs/src/data-flow.md`
 - `docs/src/planned-features.md`
-
-## Audit Trail
-
-Legacy tasks T000-T999 were imported and closed under `atomixos-c08`. Commit
-`47fa62ae442f0c6972938f8be45bcfbed9be5413` is the integrated delivery evidence for code, tests, VM behavior, and docs.
