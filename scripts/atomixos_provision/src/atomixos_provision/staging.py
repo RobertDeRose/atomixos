@@ -1137,6 +1137,7 @@ def _entry_key(entry: Any) -> tuple[str, str]:
 
 
 def _require_int(payload: dict[str, Any], key: str) -> int:
+    """Return a manifest field that must be a non-negative integer (not a bool)."""
     value = payload.get(key)
     if not isinstance(value, int) or isinstance(value, bool) or value < 0:
         raise ProvisionError(f"staged manifest {key} must be a non-negative integer")

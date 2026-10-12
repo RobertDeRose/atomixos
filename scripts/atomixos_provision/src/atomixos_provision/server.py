@@ -162,7 +162,10 @@ def apply_staged(config_root: Path, runtime_root: Path | None, drain: bool) -> N
     help="Failure reason to record for abandoned active jobs.",
 )
 def finalize_staged(config_root: Path, runtime_root: Path | None, reason: str) -> None:
-    """Finalize claimed staged jobs left behind by an interrupted worker."""
+    """Recover config state and finalize staged jobs left by an interrupted worker.
+
+    Print a JSON status with the number of finalized jobs; exit 1 on error.
+    """
     from atomixos_provision.provision import finalize_staged_jobs
 
     try:
@@ -176,7 +179,7 @@ def finalize_staged(config_root: Path, runtime_root: Path | None, reason: str) -
 @cli.command()
 @click.argument("config_root", type=click.Path(path_type=Path))
 def recover(config_root: Path) -> None:
-    """Recover an interrupted config promotion."""
+    """Recover an interrupted config promotion at boot using its apply receipt."""
     from atomixos_provision.provision import (
         _recover_staged_apply,
         grant_service_read_access,

@@ -208,11 +208,11 @@ def test_apply_staged_command_returns_json_error(monkeypatch, tmp_path):
 
 
 def test_finalize_staged_command_returns_json(monkeypatch, tmp_path):
-    """Verify that finalize staged command returns json."""
+    """finalize-staged forwards its arguments and prints the finalized count as JSON."""
     captured = {}
 
     def fake_finalize(config_root, runtime_root, reason):
-        """Simulate finalize for the test."""
+        """Capture the forwarded arguments and report two finalized jobs."""
         captured["config_root"] = config_root
         captured["runtime_root"] = runtime_root
         captured["reason"] = reason

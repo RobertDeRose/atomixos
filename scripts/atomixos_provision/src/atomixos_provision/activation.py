@@ -139,7 +139,12 @@ def write_managed_state(config_root: Path, names: set[str]) -> None:
 
 
 def recover_config_root(config_root: Path) -> None:
-    """Recover from interrupted promotion or activation."""
+    """Leave one complete config root after an interrupted promotion.
+
+    Restore the rollback root while a promotion marker remains, discard an
+    incomplete initial root, and remove leftover candidates. Services are not
+    reactivated here; the apply receipt flow decides when to reactivate.
+    """
     rollback_root = rollback_root_path(config_root)
     candidate_root = candidate_root_path(config_root)
     marker_path = promotion_marker_path(config_root)
@@ -663,7 +668,11 @@ def _restart_rootless_service(
 def run_activation_sequence(
     config_root: Path, progress: ProgressReporter | None = None
 ) -> list[str]:
-    """Run activation commands and restart affected services."""
+    """Activate a config root, restart affected services, and run health checks.
+
+    Return failure messages; an empty list means activation succeeded. Raise
+    ActivationPolicyError when the root's activation policy is invalid.
+    """
     policy = load_activation_policy(config_root)
     timeout_seconds = int(policy.get("timeout_seconds", BOOTSTRAP_ACTIVATION_TIMEOUT_SECONDS))
     settle_seconds = int(policy.get("settle_seconds", 0))
@@ -701,10 +710,15 @@ def complete_reapply(
     *,
     before_commit: Callable[[], None] | None = None,
 ) -> tuple[bool, list[str], str]:
-    """Run activation + health checks, rolling back on failure.
+    """Activate a promoted config root, restoring the rollback root on failure.
+
+    On success, call ``before_commit`` before removing rollback state, so a
+    durable commit precedes cleanup. On failure, hold the rollback-activation
+    marker from restore until rollback activation finishes.
 
     Returns:
-        (success, failures_list, rollback_status)
+        (success, failures_list, rollback_status), where rollback_status is
+        "skipped", "completed", or "failed".
     """
     try:
         failures = run_activation_sequence(config_root, progress)

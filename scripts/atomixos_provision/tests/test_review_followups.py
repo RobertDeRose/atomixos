@@ -86,7 +86,7 @@ def test_fifo_ready_marker_does_not_block_next_job(tmp_path, monkeypatch):
 
 
 def test_stop_timeout_covers_supported_rollback_activation():
-    """ExecStopPost receives the maximum activation budget plus recovery overhead."""
+    """The apply unit's stop timeout gives ExecStopPost the activation budget plus overhead."""
     root = Path(__file__).resolve().parents[3]
     module = (root / "modules/first-boot.nix").read_text()
     worker = module.split("systemd.services.atomixos-provision-apply = {")[1]
@@ -139,6 +139,7 @@ def test_committed_finalizer_retries_transport_followup_before_result(
     calls = []
 
     def schedule(command, **_kwargs):
+        """Record each follow-up command; the first must run before the result exists."""
         if not calls:
             assert staging.read_result(paths, "job-1") is None
         calls.append(command)
@@ -238,6 +239,7 @@ def test_unrelated_worker_failure_does_not_replay_completed_followups(
     monkeypatch.setattr(provision, "validate_config_root", lambda value, **_: value)
 
     def reject_job(*_args, **_kwargs):
+        """Reject verification of the later job."""
         raise ProvisionError("invalid staged job")
 
     monkeypatch.setattr(provision, "verify_staged_job", reject_job)

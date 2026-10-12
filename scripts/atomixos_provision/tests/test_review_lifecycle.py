@@ -25,7 +25,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 def test_boot_recovery_does_not_wait_for_ordered_wan_unit(tmp_path, monkeypatch):
-    """Boot recovery leaves WAN reconciliation to the service ordered after it."""
+    """Boot recovery discards an uncommitted initial config without reconciling WAN."""
     root = tmp_path / "config"
     root.mkdir()
     (root / "config.toml").write_text("version = 1\n")
@@ -71,6 +71,7 @@ def test_finalizer_merges_users_and_activates_before_result(
     calls = []
 
     def activate(restored_root, progress=None):
+        """Check the restored config and merged users before any result is published."""
         assert (restored_root / "config.toml").read_text() == "old"
         assert set(json.loads((restored_root / "managed-users.json").read_text())) == {
             "new-user",
@@ -98,6 +99,7 @@ async def test_monitor_retries_result_io_errors_without_terminal_failure(monkeyp
     calls = 0
 
     def refresh(current):
+        """Fail result reads until released, then publish success."""
         nonlocal calls
         calls += 1
         if not release.is_set():

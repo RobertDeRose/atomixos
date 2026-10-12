@@ -1220,14 +1220,14 @@ def test_finalize_staged_jobs_keeps_initial_config_committed_before_cleanup(tmp_
     wan_calls = []
 
     def reconcile_wan():
-        """Recovery reconciles WAN before publishing the committed result."""
+        """Record WAN reconciliation; it must run before the result is published."""
         assert read_result(runtime_paths(runtime_root), "job-1") is None
         wan_calls.append("WAN")
 
     monkeypatch.setattr("atomixos_provision.provision.reconcile_bootstrap_wan", reconcile_wan)
 
     def interrupt_cleanup(_root, _progress=None, *, before_commit=None):
-        """Interrupt cleanup to exercise recovery."""
+        """Commit the apply, then interrupt before rollback cleanup."""
         assert before_commit is not None
         before_commit()
         raise KeyboardInterrupt
@@ -1271,7 +1271,7 @@ def test_failed_result_write_keeps_claim_for_finalizer(tmp_path, monkeypatch):
     stage_config_bytes("job-1", _valid_config(), "config.toml", config_root)
 
     def reject_staged_job(*_args, **_kwargs):
-        """Handle reject staged job."""
+        """Reject verification to force the failure path."""
         raise ProvisionError("verification failed")
 
     def fail_write_result(*_args, **_kwargs):

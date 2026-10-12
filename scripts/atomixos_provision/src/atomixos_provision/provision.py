@@ -211,7 +211,12 @@ def _write_first_config_marker(candidate_root: Path) -> None:
 
 
 def _grant_service_read_access(config_root: Path, runtime_config_root: Path | None = None) -> None:
-    """Grant service access to a config root using the active root for mount paths."""
+    """Grant the service group read access to a config root's control state.
+
+    Managed files follow the access policy of the mounts in
+    ``runtime_config_root`` (default: ``config_root``). The apply receipt stays
+    owner-only. Raise ProvisionError when the config state contains a symlink.
+    """
     identity = _service_identity()
     if identity is None:
         return
@@ -1007,13 +1012,17 @@ def _uses_network_bootstrap() -> bool:
 
 
 def schedule_bootstrap_rebind(parsed: dict[str, Any]) -> None:
-    """Restart bootstrap socket after apply has completed."""
+    """Queue the delayed bootstrap rebind when the config sets a forwarding URL."""
     if provisioning_forwarding_url(parsed) is not None:
         _schedule_bootstrap_rebind()
 
 
 def _schedule_bootstrap_rebind() -> None:
-    """Queue the transport follow-up, sharing one pending transient rebind unit."""
+    """Queue the transport follow-up, sharing one pending transient rebind unit.
+
+    Skip non-network bootstrap transports. Best-effort: command failures are
+    ignored.
+    """
     if not _uses_network_bootstrap():
         return
     try:
@@ -1042,7 +1051,10 @@ def _schedule_bootstrap_rebind() -> None:
 
 
 def reconcile_bootstrap_wan() -> None:
-    """Best-effort reconciliation of first-boot WAN bootstrap firewall state."""
+    """Best-effort reconciliation of first-boot WAN bootstrap firewall state.
+
+    Skip non-network bootstrap transports; command failures are ignored.
+    """
     if not _uses_network_bootstrap():
         return
     try:
@@ -1603,7 +1615,13 @@ def _promote_pre_rendered_candidate_sync(
     manifest: dict[str, Any],
     progress: ProgressReporter | None = None,
 ) -> dict[str, Any]:
-    """Promote and activate a verified candidate, preserving runtime-root access."""
+    """Promote and activate a verified candidate under a durable apply receipt.
+
+    Write the promoted receipt before the swap and commit it only after
+    activation succeeds. Grant access using the active root's mount policy.
+    Raise ProvisionError when reapply is not allowed, or with rollback_status
+    when activation fails.
+    """
     config_root = validate_config_root(config_root, allow_unsafe_env=False)
     recover_config_root(config_root)
     is_reapply = _is_provisioned_config_root(config_root)
@@ -1705,7 +1723,14 @@ def _recover_staged_apply(
     boot_recovery: bool = False,
     paths: RuntimePaths | None = None,
 ) -> ApplyRecovery:
-    """Recover an interrupted staged apply from its transaction receipt."""
+    """Recover an interrupted staged apply from its transaction receipt.
+
+    Boot recovery only restores config state and clears a pending rollback
+    activation, leaving activation to ordered boot units. Same-boot recovery
+    also replays a matching unfinished claim's transport follow-up,
+    reactivates a restored rollback, and reconciles WAN state before results
+    are published.
+    """
     recovery = recover_interrupted_apply(config_root)
     # Ordered boot services reconcile WAN, users, networking, and Quadlet units.
     # Waiting for those units from their prerequisite recovery unit would deadlock.
@@ -1822,7 +1847,12 @@ def finalize_staged_jobs(
     runtime_root: Path | None = None,
     reason: str | None = None,
 ) -> int:
-    """Recover config state and finalize jobs left by an interrupted worker."""
+    """Recover config state and finalize jobs left by an interrupted worker.
+
+    Publish a committed result for the matching claim and fail the others with
+    ``reason``, extended with any rollback activation failures. Return the
+    number of claims finalized.
+    """
     config_root = validate_config_root(config_root, allow_unsafe_env=False)
     require_worker_for_data_config(config_root, "finalize staged jobs")
     paths = runtime_paths(runtime_root or _runtime_paths().root)

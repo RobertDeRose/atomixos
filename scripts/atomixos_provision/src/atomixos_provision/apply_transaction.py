@@ -77,7 +77,10 @@ class StagedApplyTransaction:
         manifest: dict[str, Any],
         result: dict[str, Any],
     ) -> StagedApplyTransaction:
-        """Create a staged apply transaction from a staged manifest."""
+        """Create a staged apply transaction from a staged manifest.
+
+        Raise ProvisionError when the job ID or source digest is invalid.
+        """
         job_id = validate_job_id(manifest.get("job_id", ""))
         source_sha256 = manifest.get("source_sha256")
         if not _is_sha256(source_sha256):
@@ -85,11 +88,15 @@ class StagedApplyTransaction:
         return cls(job_id, source_sha256, result)
 
     def mark_promoted(self, candidate_root: Path) -> None:
-        """Record that the candidate configuration has been promoted."""
+        """Write the promoted receipt into the candidate root before it is swapped in."""
         self._write_receipt(candidate_root, ApplyReceiptPhase.PROMOTED)
 
     def mark_committed(self, config_root: Path) -> None:
-        """Record that activation of the promoted configuration committed."""
+        """Record that activation of the promoted configuration committed.
+
+        Raise ProvisionError unless the active root holds this transaction's
+        promoted receipt.
+        """
         receipt = read_apply_receipt(config_root)
         if (
             receipt is None
@@ -102,7 +109,7 @@ class StagedApplyTransaction:
         self._write_receipt(config_root, ApplyReceiptPhase.COMMITTED)
 
     def _write_receipt(self, config_root: Path, phase: ApplyReceiptPhase) -> None:
-        """Persist the apply receipt at the configuration root."""
+        """Atomically write an owner-only apply receipt at the configuration root."""
         write_json_atomic(
             config_root / APPLY_RECEIPT_FILENAME,
             {
@@ -117,7 +124,11 @@ class StagedApplyTransaction:
 
 
 def read_apply_receipt(config_root: Path) -> StagedApplyReceipt | None:
-    """Read and validate an apply transaction receipt."""
+    """Read and validate a config root's apply receipt.
+
+    Return None when no receipt exists. Raise ProvisionError when the receipt
+    is not an owner-only regular file or has an invalid version or field.
+    """
     receipt_path = config_root / APPLY_RECEIPT_FILENAME
     try:
         receipt_stat = receipt_path.lstat()
@@ -149,7 +160,11 @@ def committed_result_for_manifest(
     job_id: str,
     manifest: dict[str, Any] | None,
 ) -> dict[str, Any] | None:
-    """Return success when the manifest matches a committed receipt."""
+    """Return the committed result when the receipt matches the job and manifest.
+
+    Return None unless the receipt is committed and its job ID and source digest
+    match the claimed job.
+    """
     if receipt is None or receipt.phase is not ApplyReceiptPhase.COMMITTED or manifest is None:
         return None
     if receipt.job_id != job_id or receipt.source_sha256 != manifest.get("source_sha256"):
@@ -158,7 +173,13 @@ def committed_result_for_manifest(
 
 
 def recover_interrupted_apply(config_root: Path) -> ApplyRecovery:
-    """Resolve durable promotion state before publishing an interrupted result."""
+    """Resolve durable promotion state before publishing an interrupted result.
+
+    A pending rollback activation or an uncommitted reapply restores the
+    rollback root and reports restored_rollback, so the caller reactivates it.
+    An uncommitted initial promotion is discarded. A committed promotion keeps
+    its config and drops rollback state.
+    """
     if rollback_activation_marker_path(config_root).exists():
         # A restore or its reactivation was interrupted; finish the restore and
         # report it so the caller reactivates the rollback config.
@@ -188,7 +209,11 @@ def unfinished_committed_receipt(
     paths: RuntimePaths,
     receipt: StagedApplyReceipt | None,
 ) -> StagedApplyReceipt | None:
-    """Return a committed receipt only for a matching claim awaiting its result."""
+    """Return a committed receipt only for a matching claim awaiting its result.
+
+    The claim must be an active job directory without a published result whose
+    manifest matches the receipt's job ID and source digest.
+    """
     if receipt is None or receipt.phase is not ApplyReceiptPhase.COMMITTED:
         return None
     active_path = paths.active / receipt.job_id
@@ -206,7 +231,12 @@ def finalize_abandoned_active_jobs(
     reason: str,
     receipt: StagedApplyReceipt | None = None,
 ) -> int:
-    """Write terminal results for jobs left by an interrupted worker."""
+    """Write terminal results for jobs left by an interrupted worker.
+
+    A claim matching the committed receipt is published as success; any other
+    claim without a result fails with ``reason``. Remove each claim, including
+    non-directory entries, and return the number of job claims finalized.
+    """
     ensure_runtime_layout(paths, for_worker=True)
     finalized = 0
     with queue_operation_lock(paths):
@@ -237,7 +267,10 @@ def _committed_receipt_for_active_job(
     job_id: str,
     receipt: StagedApplyReceipt | None,
 ) -> StagedApplyReceipt | None:
-    """Return the committed receipt when it belongs to the active job."""
+    """Return the committed receipt when the active job's manifest matches it.
+
+    Return None when the manifest is unreadable or names another job or digest.
+    """
     if (
         receipt is None
         or receipt.phase is not ApplyReceiptPhase.COMMITTED

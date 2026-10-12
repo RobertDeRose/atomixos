@@ -46,7 +46,7 @@ def test_transaction_rejects_commit_without_matching_promotion(tmp_path):
 
 
 def test_receipt_aware_recovery_keeps_committed_promotion(tmp_path):
-    """Verify that boot recovery does not roll back a committed promotion."""
+    """Recovery keeps a committed promotion and removes its rollback root."""
     result = {"warnings": [], "reapply": True}
     transaction = StagedApplyTransaction.from_manifest(
         {"job_id": "job-1", "source_sha256": "a" * 64},
