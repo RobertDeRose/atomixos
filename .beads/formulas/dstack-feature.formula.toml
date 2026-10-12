@@ -119,7 +119,7 @@ labels = ["workflow:feature-lifecycle", "phase:closeout", "closeout:documentatio
 needs = ["implementation"]
 metadata = { workflow_phase = "closeout", closeout_kind = "documentation" }
 description = """
-Compare delivered behavior with {{design_path}}, every page named in its Documentation Impact section, and every reader-facing page changed by implementation. Update current docs, docs/src/planned-features.md, docs/src/features/index.md, {{implemented_path}}, and docs/src/SUMMARY.md as applicable. The implemented-feature page preserves audit history without replacing product documentation.
+Compare delivered behavior with {{design_path}}, every page named in its Documentation Impact section, and every reader-facing page changed by implementation. Update current docs, docs/src/planned-features.md, docs/src/features/index.md, {{implemented_path}}, and docs/src/SUMMARY.md as applicable. The implemented-feature page records the delivered capability and how it differs from the design without replacing product documentation; it does not record pull requests, commits, validation runs, or delivery status, which stay in Beads.
 """
 
 [[steps]]
