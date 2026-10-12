@@ -287,8 +287,9 @@ RAUC tests lives in `nix/tests/rauc-qemu-config.nix`.
 
 ## Native ARM CI validation
 
-The independent `hk.yml` workflow runs quality checks on `ubuntu-latest` with `mise x -- hk check -a`.
-The `nix.yml` workflow evaluates Nix on `ubuntu-26.04-arm` (`aarch64-linux`) and
+CI runs only on pull requests (opened, synchronized, or reopened) and manual `workflow_dispatch` runs; pushes do not
+trigger validation. The independent `hk.yml` workflow runs quality checks on `ubuntu-latest` with
+`mise x -- hk check -a`. The `nix.yml` workflow evaluates Nix on `ubuntu-26.04-arm` (`aarch64-linux`) and
 `macos-latest` (`aarch64-darwin`). Each runner evaluates its own Nix platform with
 `flake check --no-build --system <system>`. PR validation does not build packages
 or execute VM tests. Run full build and VM checks locally with `./scripts/nix-with-build-config.sh flake check`
