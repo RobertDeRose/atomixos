@@ -1481,7 +1481,7 @@ async def test_openapi_documents_public_api_contract(tmp_path):
         "/SubmitConfigResponseBody"
     )
     assert export["responses"]["200"]["content"] == {
-        "application/toml": {"schema": {"type": "string"}}
+        "application/gzip": {"schema": {"type": "string", "format": "binary"}}
     }
     assert validate["responses"]["200"]["content"]["application/json"]["schema"]["$ref"].endswith(
         "/ValidationResponseBody"

@@ -234,7 +234,9 @@ class ConfigOperation(Operation):
                 self.request_body = _PARTIAL_REQUEST_BODIES[self.operation_id]
             if self.operation_id == "configExport" and self.responses:
                 self.responses["200"].content = {
-                    "application/toml": OpenAPIMediaType(schema=Schema(type=OpenAPIType.STRING))
+                    "application/gzip": OpenAPIMediaType(
+                        schema=Schema(type=OpenAPIType.STRING, format=OpenAPIFormat.BINARY)
+                    )
                 }
             if self.operation_id == "configValidate":
                 self.request_body = _BINARY_CONFIG_BODY
