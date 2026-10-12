@@ -454,13 +454,13 @@ async def test_config_export_requires_auth(tmp_path):
 
 
 async def test_authenticated_config_export_returns_complete_bundle(tmp_path, monkeypatch):
-    """Verify that authenticated config export returns complete bundle."""
+    """A signed export request downloads the bundle as a gzip ``config-bundle.tar.gz``."""
 
     class AcceptingNonceStore:
-        """Provide the AcceptingNonceStore test helper."""
+        """Accept only the ``test`` nonce."""
 
         async def consume(self, nonce):
-            """Accept the nonce for this test."""
+            """Return whether ``nonce`` is the ``test`` nonce."""
             return nonce == "test"
 
     (tmp_path / "config.toml").write_text("version = 1\n")
@@ -489,12 +489,12 @@ async def test_authenticated_config_export_returns_complete_bundle(tmp_path, mon
 
 
 async def test_config_export_does_not_block_health_request(tmp_path, monkeypatch):
-    """Verify that config export does not block health request."""
+    """A blocked in-process export runs off the event loop, so health still responds."""
     export_started = threading.Event()
     release_export = threading.Event()
 
     def blocked_export(config_root):
-        """Handle blocked export."""
+        """Block the export thread until the test releases it."""
         assert config_root == tmp_path
         export_started.set()
         assert release_export.wait(timeout=2)
@@ -1337,7 +1337,11 @@ async def test_boot_ui_rejects_malformed_terminal_job_after_provisioning(tmp_pat
 
 
 async def test_openapi_documents_public_api_contract(tmp_path):
-    """Verify that openapi documents public api contract."""
+    """The OpenAPI schema lists exactly the public routes with their contracts.
+
+    Check operation IDs, tags, request bodies, auth and filename headers, typed
+    partial schemas, and response media types, including the gzip export.
+    """
     async with AsyncTestClient(app=create_app(config_root=tmp_path)) as client:
         response = await client.get("/schema/openapi.json")
 

@@ -55,7 +55,14 @@ class ConfigService:
         return await validate_config_bytes(body, filename, self.config_root)
 
     async def export_config(self) -> bytes:
-        """Delegate production exports to the fixed-purpose privileged worker."""
+        """Return the complete config bundle as gzip tar bytes.
+
+        For the production ``/data/config`` root, delegate to the root export worker,
+        because the API user cannot read workload-owned private files. Worker
+        admission, failure, and timeout raise ``ApiError`` subclasses. Other roots,
+        used in development and tests, export in a worker thread under the
+        provisioning lock and raise ``ProvisionError`` on failure.
+        """
         from atomixos_provision.export_worker import CONFIG_ROOT, request_export
         from atomixos_provision.provision import locked_export_config_bytes
 

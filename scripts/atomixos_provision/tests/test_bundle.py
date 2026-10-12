@@ -674,11 +674,11 @@ class TestCopyBundleFiles:
 
 
 class TestExportBundle:
-    """Group tests for ExportBundle."""
+    """Tests for ``export_bundle_bytes``."""
 
     @staticmethod
     def _members(bundle: bytes) -> dict[str, bytes | None]:
-        """Handle members."""
+        """Map each member of a gzip tar bundle to its bytes, or ``None`` for a directory."""
         tar_bytes = gzip.decompress(bundle)
         with tarfile.open(fileobj=io.BytesIO(tar_bytes), mode="r:") as archive:
             members = {}
@@ -688,7 +688,7 @@ class TestExportBundle:
             return members
 
     def test_is_deterministic_and_allowlisted(self, tmp_path):
-        """Verify that is deterministic and allowlisted."""
+        """Repeated exports are byte-identical and contain only config.toml and files/."""
         (tmp_path / "config.toml").write_bytes(b"version = 1\n")
         files = tmp_path / "files"
         (files / "nested").mkdir(parents=True)
@@ -717,7 +717,7 @@ class TestExportBundle:
         }
 
     def test_omits_missing_files_and_preserves_empty_files_directory(self, tmp_path):
-        """Verify that omits missing files and preserves empty files directory."""
+        """A missing files/ is omitted, and an empty files/ is exported as a directory."""
         (tmp_path / "config.toml").write_bytes(b"version = 1\n")
 
         assert set(self._members(export_bundle_bytes(tmp_path))) == {"config.toml"}
@@ -726,7 +726,7 @@ class TestExportBundle:
         assert set(self._members(export_bundle_bytes(tmp_path))) == {"config.toml", "files"}
 
     def test_round_trips_through_bundle_importer(self, tmp_path):
-        """Verify that round trips through bundle importer."""
+        """An exported bundle imports back to the same config and managed files."""
         (tmp_path / "config.toml").write_bytes(b"version = 1\n")
         (tmp_path / "files").mkdir()
         (tmp_path / "files" / "cert.pem").write_text("CERT\n")
@@ -781,7 +781,7 @@ class TestExportBundle:
         assert (tmp_path / "second" / "files" / "d1" / "x.txt").read_bytes() == b"1\n"
 
     def test_rejects_symlinked_export_paths(self, tmp_path):
-        """Verify that rejects symlinked export paths."""
+        """A symlinked config.toml or files/ entry is rejected."""
         target = tmp_path / "target"
         target.write_text("version = 1\n")
         (tmp_path / "config.toml").symlink_to(target)
@@ -796,7 +796,7 @@ class TestExportBundle:
             export_bundle_bytes(tmp_path)
 
     def test_rejects_export_member_over_size_limit(self, tmp_path, monkeypatch):
-        """Verify that rejects export member over size limit."""
+        """A managed file over the per-member byte limit is rejected."""
         (tmp_path / "config.toml").write_bytes(b"version = 1\n")
         (tmp_path / "files").mkdir()
         (tmp_path / "files" / "large.txt").write_text("large\n")
@@ -806,7 +806,7 @@ class TestExportBundle:
             export_bundle_bytes(tmp_path)
 
     def test_rejects_export_archive_limits(self, tmp_path, monkeypatch):
-        """Verify that rejects export archive limits."""
+        """Exports over the member-count, decompressed, or compressed limit are rejected."""
         (tmp_path / "config.toml").write_bytes(b"version = 1\n")
 
         monkeypatch.setattr("atomixos_provision.bundle.MAX_BUNDLE_MEMBERS", 0)
@@ -824,7 +824,7 @@ class TestExportBundle:
             export_bundle_bytes(tmp_path)
 
     def test_rejects_member_limit_while_snapshotting(self, tmp_path, monkeypatch):
-        """Verify that rejects member limit while snapshotting."""
+        """Snapshotting rejects too many members before copying any file."""
         import atomixos_provision.bundle as bundle_module
 
         (tmp_path / "config.toml").write_bytes(b"version = 1\n")
@@ -888,6 +888,7 @@ def test_export_rejects_inode_substitution(tmp_path, monkeypatch, member, replac
     swapped = False
 
     def swap_before_open(path, flags, *args, **kwargs):
+        """Replace the target with the substitute just before its first open."""
         nonlocal swapped
         if not swapped and (path == target or (path == target.name and "dir_fd" in kwargs)):
             swapped = True

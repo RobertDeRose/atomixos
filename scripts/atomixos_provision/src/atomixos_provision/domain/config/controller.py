@@ -215,7 +215,16 @@ class ConfigOperation(Operation):
     """Patch generated config operations for binary uploads and auth docs."""
 
     def __post_init__(self) -> None:
-        """Customize OpenAPI bodies, auth parameters, and responses by operation."""
+        """Patch the generated OpenAPI operation for its ``operation_id``.
+
+        ``configSubmit`` gets a binary request body, the filename header, optional
+        SSH-auth headers, and a ``Location`` header on ``202``. Required-auth
+        operations get required SSH-auth headers and a ``Location`` header on
+        ``202``. Typed partial operations among them also get their typed request
+        body. ``configValidate`` also gets the binary body and filename header.
+        ``configExport`` documents its ``200`` response as an ``application/gzip``
+        binary.
+        """
         if self.operation_id == "configSubmit":
             self.request_body = _BINARY_CONFIG_BODY
             self.parameters = [
@@ -336,7 +345,12 @@ async def submit_config(
     tags=["config"],
 )
 async def export_config(config_service: ConfigService) -> Response[bytes]:
-    """Return the current configuration as a gzip bundle."""
+    """Download the complete config bundle as ``config-bundle.tar.gz``.
+
+    The route requires SSH-signature authentication. Export ``ApiError`` failures
+    (busy queue ``409``, worker failure ``500``, timeout ``504``) are returned as
+    JSON error bodies rather than gzip responses.
+    """
     try:
         archive = await config_service.export_config()
     except ApiError as exc:

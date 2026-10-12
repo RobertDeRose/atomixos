@@ -277,7 +277,14 @@ def _managed_file_source(source: str, config_root: Path | None) -> bool:
 def managed_file_mount_warning(
     directive: str, value: str, path: str, config_root: Path | None = None
 ) -> str | None:
-    """Warn when managed bundle files may be changed by a container."""
+    """Return an advisory warning for a writable mount of managed bundle files.
+
+    ``directive`` and ``value`` describe one Quadlet mount, and ``path`` names it in
+    the message. Warn when the mount's host source is ``files/``, a path inside it,
+    or a parent of it, unless the mount is explicitly read-only. Named and
+    anonymous volumes never warn. The warning is advisory and notes that config
+    export includes those files.
+    """
     source = _mount_source(directive, value)
     if source is None or not _managed_file_source(source, config_root):
         return None

@@ -153,7 +153,12 @@ def apply_staged(config_root: Path, runtime_root: Path | None, drain: bool) -> N
     "--finalize", is_flag=True, help="Fail interrupted exports without accepting new work."
 )
 def export_worker(finalize: bool) -> None:
-    """Drain fixed-path UUID export requests as the root systemd worker."""
+    """Run the root export worker over the fixed runtime directory.
+
+    Fail interrupted exports, expire abandoned ones, then drain queued requests.
+    With --finalize (the systemd stop-post hook), stop before draining. Must run as
+    root; accepts no path arguments.
+    """
     import os
 
     from atomixos_provision.export_worker import drain_exports
