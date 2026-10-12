@@ -512,6 +512,10 @@ class StagedJobManager(JobManager):
                         else:
                             raise ProvisionError("timed out waiting for privileged apply worker")
                 except OSError as exc:
+                    if time.monotonic() >= deadline:
+                        raise ProvisionError(
+                            f"timed out waiting for privileged apply worker result: {exc}"
+                        ) from exc
                     if str(exc) != last_io_error:
                         job.set_stage(
                             "running" if job.state is JobState.RUNNING else "queued",

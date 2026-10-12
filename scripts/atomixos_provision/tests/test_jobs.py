@@ -417,6 +417,39 @@ class TestStagedJobManager:
         assert job.completed_at is not None
 
     @pytest.mark.asyncio
+    async def test_staged_monitor_fails_when_result_io_errors_outlast_deadline(
+        self, monkeypatch, tmp_path
+    ):
+        """Verify that persistent result I/O errors cannot keep a job pending forever."""
+        monkeypatch.setenv("ATOMIXOS_PROVISION_RUNTIME_DIR", str(tmp_path / "run"))
+        mgr = StagedJobManager(result_timeout_seconds=0.3)
+
+        def failing_refresh(_job):
+            raise OSError("result unreadable")
+
+        monkeypatch.setattr(mgr, "_refresh_from_result", failing_refresh)
+
+        async def work(job):
+            return None
+
+        job = await mgr.submit_staged(work)
+        assert job is not None
+        assert mgr._task is not None
+        await asyncio.wait_for(mgr._task, timeout=5)
+
+        assert job.state == JobState.FAILED
+        assert job.error == (
+            "timed out waiting for privileged apply worker result: result unreadable"
+        )
+        assert job.completed_at is not None
+        retry_events = [
+            event
+            for event in job.events
+            if event.get("message") == "worker result I/O failed; retrying: result unreadable"
+        ]
+        assert len(retry_events) == 1
+
+    @pytest.mark.asyncio
     async def test_staged_submit_returns_failed_job_when_staging_fails(
         self, monkeypatch, tmp_path
     ):
