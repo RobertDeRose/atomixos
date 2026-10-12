@@ -50,6 +50,7 @@ class ProgressReporter(Protocol):
 CANDIDATE_SUFFIX = "-candidate"
 ROLLBACK_SUFFIX = "-rollback"
 PROMOTION_MARKER = ".atomixos-promotion-pending"
+ROLLBACK_ACTIVATION_MARKER = ".atomixos-rollback-activation-pending"
 
 
 # --- Path Helpers ---
@@ -85,6 +86,11 @@ def _fsync_tree(path: Path) -> None:
 def promotion_marker_path(config_root: Path) -> Path:
     """Get the path to the promotion marker file."""
     return config_root.parent / f"{config_root.name}{PROMOTION_MARKER}"
+
+
+def rollback_activation_marker_path(config_root: Path) -> Path:
+    """Get the path to the marker held from rollback restore through reactivation."""
+    return config_root.parent / f"{config_root.name}{ROLLBACK_ACTIVATION_MARKER}"
 
 
 def candidate_root_path(config_root: Path) -> Path:
@@ -269,6 +275,28 @@ def restore_rollback(config_root: Path) -> bool:
     marker_path.unlink(missing_ok=True)
     _fsync_directory(config_root.parent)
     return True
+
+
+def begin_rollback_activation(config_root: Path) -> None:
+    """Durably mark that the restored rollback config still needs activation."""
+    rollback_activation_marker_path(config_root).write_text("pending\n")
+    _fsync_directory(config_root.parent)
+
+
+def run_rollback_activation(
+    config_root: Path, progress: ProgressReporter | None = None
+) -> list[str]:
+    """Activate a restored rollback config, then clear its pending marker.
+
+    An interruption leaves the marker so recovery reruns the activation.
+    """
+    try:
+        failures = run_activation_sequence(config_root, progress)
+    except ActivationPolicyError as exc:
+        failures = [str(exc)]
+    rollback_activation_marker_path(config_root).unlink(missing_ok=True)
+    _fsync_directory(config_root.parent)
+    return failures
 
 
 # --- Activation ---
@@ -685,12 +713,11 @@ def complete_reapply(
     if failures:
         if progress:
             progress.set_stage("rollback", "restoring previous config")
+        if rollback_root_path(config_root).exists():
+            begin_rollback_activation(config_root)
         restored = restore_rollback(config_root)
         if restored:
-            try:
-                rollback_failures = run_activation_sequence(config_root, progress)
-            except ActivationPolicyError as exc:
-                rollback_failures = [str(exc)]
+            rollback_failures = run_rollback_activation(config_root, progress)
             if rollback_failures:
                 return (
                     False,

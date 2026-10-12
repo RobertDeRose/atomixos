@@ -80,7 +80,7 @@ def test_finalizer_merges_users_and_activates_before_result(
         calls.append("activate")
         return activation_errors
 
-    monkeypatch.setattr(provision, "run_activation_sequence", activate, raising=False)
+    monkeypatch.setattr("atomixos_provision.activation.run_activation_sequence", activate)
     assert provision.finalize_staged_jobs(root, paths.root, "worker stopped") == 1
     assert calls == ["activate"]
     result = read_result(paths, "job-1")

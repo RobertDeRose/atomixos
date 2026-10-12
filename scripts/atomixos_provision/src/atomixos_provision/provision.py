@@ -32,7 +32,8 @@ from atomixos_provision.activation import (
     discard_initial_config,
     promotion_marker_path,
     recover_config_root,
-    run_activation_sequence,
+    rollback_activation_marker_path,
+    run_rollback_activation,
 )
 from atomixos_provision.apply_transaction import (
     APPLY_RECEIPT_FILENAME,
@@ -1709,6 +1710,7 @@ def _recover_staged_apply(
     # Ordered boot services reconcile WAN, users, networking, and Quadlet units.
     # Waiting for those units from their prerequisite recovery unit would deadlock.
     if boot_recovery:
+        rollback_activation_marker_path(config_root).unlink(missing_ok=True)
         return recovery
     receipt = unfinished_committed_receipt(paths or _runtime_paths(), recovery.receipt)
     if (
@@ -1720,7 +1722,7 @@ def _recover_staged_apply(
         # Replay that follow-up before publishing a recovered success.
         _schedule_bootstrap_rebind()
     if recovery.restored_rollback:
-        recovery = replace(recovery, rollback_failures=tuple(run_activation_sequence(config_root)))
+        recovery = replace(recovery, rollback_failures=tuple(run_rollback_activation(config_root)))
     if (
         recovery.discarded_initial
         or recovery.restored_rollback

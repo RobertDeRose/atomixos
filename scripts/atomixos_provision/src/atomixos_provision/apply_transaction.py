@@ -10,10 +10,12 @@ from pathlib import Path
 from typing import Any
 
 from atomixos_provision.activation import (
+    begin_rollback_activation,
     cleanup_rollback,
     discard_initial_config,
     promotion_marker_path,
     recover_config_root,
+    rollback_activation_marker_path,
     rollback_root_path,
 )
 from atomixos_provision.config import ProvisionError
@@ -157,6 +159,11 @@ def committed_result_for_manifest(
 
 def recover_interrupted_apply(config_root: Path) -> ApplyRecovery:
     """Resolve durable promotion state before publishing an interrupted result."""
+    if rollback_activation_marker_path(config_root).exists():
+        # A restore or its reactivation was interrupted; finish the restore and
+        # report it so the caller reactivates the rollback config.
+        recover_config_root(config_root)
+        return ApplyRecovery(read_apply_receipt(config_root), restored_rollback=True)
     receipt = read_apply_receipt(config_root)
     if receipt is not None and receipt.phase is ApplyReceiptPhase.COMMITTED:
         cleanup_rollback(config_root)
@@ -171,6 +178,8 @@ def recover_interrupted_apply(config_root: Path) -> ApplyRecovery:
     restored_rollback = (
         promotion_marker_path(config_root).exists() and rollback_root_path(config_root).exists()
     )
+    if restored_rollback:
+        begin_rollback_activation(config_root)
     recover_config_root(config_root)
     return ApplyRecovery(read_apply_receipt(config_root), restored_rollback=restored_rollback)
 

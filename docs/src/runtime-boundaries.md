@@ -304,5 +304,8 @@ The receipt binds the staged job ID and source digest to its durable phase and
 result. Activation precedes commit; finalization preserves published results
 and retries unfinished work. Boot recovery leaves WAN and runtime activation
 to ordered successor services. Same-boot recovery completes transport and
-rollback activation before publishing results. The apply service stop timeout
+rollback activation before publishing results. A durable rollback-activation
+marker spans rollback restore through reactivation, so recovery reruns an
+interrupted rollback activation; boot recovery clears it because ordered boot
+units activate the restored config. The apply service stop timeout
 covers the supported activation budget plus recovery overhead.
