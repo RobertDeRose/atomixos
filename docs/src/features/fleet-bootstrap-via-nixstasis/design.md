@@ -342,7 +342,7 @@ image/operator uses an explicit supported seed path; it does not silently widen 
 - Run `nix build .#checks.aarch64-darwin.build-configuration --no-link`,
   `nix build .#checks.aarch64-darwin.firewall --no-link`,
   `nix build .#checks.aarch64-darwin.fleet-bootstrap --no-link`, and the matching `aarch64-linux` checks when the
-  builder is available. Run `uv run scripts/check-docs.py` and `mdbook build docs` for documentation changes.
+  builder is available. Run `mdbook build docs` for documentation changes.
 - Run the existing provisioning Python suite and repository-standard validation after review fixes stabilize.
 - Record the external Nixstasis revisions/tasks `nixstasis-255`, `nixstasis-fss`, and `nixstasis-4gg` used by the
   integration test and release build.

@@ -57,7 +57,6 @@ No recognized language profile is active; only the universal tooling baseline is
 |--------------------------|-----------------------------------------------------------------------|
 | `check`                  | Run all hk checks without requesting fixes.                           |
 | `fix`                    | Apply deterministic hk fixes to the working tree.                     |
-| `docs:check`             | Build the book.                                                       |
 | `docs:build`             | Build the mdBook site.                                                |
 | `docs:deployment:enable` | Configure Pages and enable its repository gate through external `gh`. |
 | `docs:serve`             | Serve mdBook on port 3000 by default or a supplied port.              |

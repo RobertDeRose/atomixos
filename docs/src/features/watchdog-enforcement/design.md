@@ -234,7 +234,7 @@ No introduction page is needed; this feature changes build reference, architectu
 - Coverage that disabled non-RAUC profiles do not install or start `watchdog-boot-count`.
 - Coverage that enabled missing-device behavior continues booting and emits a warning.
 - Build Configuration's watchdog schema/default/integration checks.
-- `uv run scripts/check-docs.py`
+- `mdbook build docs`
 - Repository-wide `mise run check` before delivery.
 
 Use the host-appropriate Nix output. Record remote-builder or hardware limitations rather than treating an unexecuted

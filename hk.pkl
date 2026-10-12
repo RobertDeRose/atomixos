@@ -107,8 +107,6 @@ local linters = new Mapping<String, Step> {
   }
   ["docs"] = new Step {
     glob = List("docs/src/**/*.md", "docs/book.toml")
-    // scripts/check-docs.py is disabled: it enforces the retired dstack template's feature-record sections and
-    // will be removed in a future change.
     check = "mdbook build docs"
   }
   ["mise"] = Builtins.mise

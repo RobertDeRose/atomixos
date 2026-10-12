@@ -131,7 +131,7 @@ labels = ["workflow:feature-lifecycle", "phase:closeout", "closeout:validation"]
 needs = ["implementation"]
 metadata = { workflow_phase = "closeout", closeout_kind = "validation" }
 description = """
-Run repository-wide validation, `uv run scripts/check-docs.py`, and all feature-specific commands named by {{design_path}} or implementation beads. Record commands, results, limitations, and skipped checks in this bead.
+Run repository-wide validation and all feature-specific commands named by {{design_path}} or implementation beads. Record commands, results, limitations, and skipped checks in this bead.
 """
 
 [[steps]]

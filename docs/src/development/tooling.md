@@ -11,7 +11,6 @@ Use the same commands locally and in automation:
 ```bash
 mise run check
 mise run fix
-mise run docs:check
 mise run docs:build
 mise run docs:deployment:enable
 mise run docs:serve

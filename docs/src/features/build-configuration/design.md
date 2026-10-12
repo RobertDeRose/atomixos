@@ -323,7 +323,7 @@ release signing and verification trust require their separately owned evidence.
 - Verify syntax diagnostics include filename and native location context; schema diagnostics include filename and field.
 - Verify Linux and Darwin `build-configuration` checks, exact canonical bytes, lowercase hexadecimal hash, byte-identical
   closure/image/bundle copies, development names, preflight-before-mutation ordering, and atomic GC-root replacement.
-- Run `uv run scripts/check-docs.py`, mdBook, repository hooks, focused Nix checks, and the repository-standard suite.
+- Run mdBook, repository hooks, focused Nix checks, and the repository-standard suite.
 - Preserve any environment limitation or unrelated baseline failure as explicit Beads evidence rather than weakening
   feature checks.
 
