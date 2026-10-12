@@ -68,7 +68,12 @@ class ProvisionCoordinator:
         request_payload: bytes | None = None,
         authorization: dict[str, str] | None = None,
     ) -> SubmissionResult:
-        """Submit a typed partial operation through the staged job adapter."""
+        """Submit a partial operation through the staged or direct job adapter.
+
+        Staged submission uses exclusive admission and forwards the exact signed
+        request_payload and authorization metadata for worker verification.
+        Return a result with no job when admission is refused.
+        """
         if isinstance(self._job_manager, StagedJobManager):
 
             async def stage_work(job: Job) -> None:

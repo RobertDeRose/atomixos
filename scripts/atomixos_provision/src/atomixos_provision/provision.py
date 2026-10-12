@@ -539,7 +539,14 @@ def stage_reserved_config_bytes(
     progress: ProgressReporter | None = None,
     authorization: dict[str, str] | None = None,
 ) -> None:
-    """Stage configuration bytes using an existing capacity reservation."""
+    """Stage configuration bytes using an existing capacity reservation.
+
+    Return once published without waiting for worker application. Preserve
+    payload as the exact request body, with nonce, signature, method, and path
+    in authorization for the worker to verify. allow_reapply=False rejects an
+    already provisioned root with ProvisionError. Source validation, reservation,
+    and I/O errors propagate.
+    """
     if progress:
         progress.set_stage("prepare", f"unpacking {filename}")
     tmpdir, config_path, files_path = prepare_source_bytes(payload, filename)
@@ -592,7 +599,13 @@ def stage_config_bytes(
 def _wait_for_staged_result(
     paths: RuntimePaths, job_id: str, progress: ProgressReporter | None = None
 ) -> dict[str, Any]:
-    """Wait for a staged worker result while tracking active claims."""
+    """Wait for and return a successful worker result payload.
+
+    Renew the timeout while the job is claimed or waiting behind other work.
+    An eligible queued job may be abandoned on timeout. Worker failure, an
+    abandoned or missing job, or invalid result data raises ProvisionError;
+    I/O errors propagate.
+    """
     deadline = time.monotonic() + STAGED_RESULT_TIMEOUT_SECONDS
     last_stage = None
     while True:
@@ -1214,7 +1227,15 @@ def _verify_staged_authorization(
     *,
     locally_trusted: bool,
 ) -> tuple[bytes | None, dict[str, str] | None]:
-    """Verify and consume authorization for a staged request."""
+    """Return request bytes and verified authorization, consuming its nonce.
+
+    Request bytes are None when no request evidence was staged. Initial
+    provisioning rejects supplied authorization and returns None for authorization. On a provisioned root, locally_trusted bypasses signature
+    and nonce checks and also returns None for authorization. Other re-applies
+    require a signature from active admin signers and an unused current-boot
+    nonce. Rejected evidence raises ProvisionError; I/O errors propagate.
+    A consumed nonce remains spent if subsequent rendering or application fails.
+    """
     request_payload = _read_staged_request(snapshot, manifest)
     request = manifest.get("request")
     authorization = request.get("authorization") if isinstance(request, dict) else None
@@ -1256,7 +1277,13 @@ def _verify_staged_authorization(
 
 
 def _request_operation(authorization: dict[str, str], payload: bytes) -> dict[str, Any] | None:
-    """Derive the typed operation from verified request bytes."""
+    """Map a verified request to a partial operation, or None for POST /api/config.
+
+    Partial bodies must be JSON objects; empty bytes mean an empty object.
+    DELETE requires an empty object. Resource names are URL-decoded and must
+    be nonempty without slashes. Invalid bodies and unsupported method/path
+    combinations raise ProvisionError.
+    """
     method = authorization["method"]
     path = authorization["path"]
     if method == "POST" and path == "/api/config":
@@ -1310,7 +1337,13 @@ def _render_verified_staged_candidate_sync(
     locally_trusted: bool,
     progress: ProgressReporter | None = None,
 ) -> dict[str, Any]:
-    """Render a configuration candidate from verified staged inputs."""
+    """Authorize, render, and apply a staged candidate, returning the apply result.
+
+    Recover pending promotion first. Signed re-applies use the verified request;
+    partial operations are applied to the current config. Initial and locally
+    trusted jobs use the staged source config after checking its hash.
+    Authorization, validation, activation, and I/O errors propagate.
+    """
     recover_config_root(config_root)
     request_payload, authorization = _verify_staged_authorization(
         snapshot,
@@ -1469,6 +1502,13 @@ def _copy_staged_dir_metadata(source: Path, destination: Path) -> None:
 def _copy_staged_file_from_path(
     source: Path, destination: Path, expected_size: int | None = None
 ) -> None:
+    """Copy a regular staged file and preserve its permission bits.
+
+    When supplied, expected_size is the exact byte count required before and
+    during copying. Nonregular files and size changes raise ProvisionError;
+    open, read, and write errors propagate. A failed copy can leave a partial
+    destination file.
+    """
     source_fd = os.open(
         source,
         os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0),
@@ -1589,7 +1629,12 @@ def _promote_pre_rendered_candidate_sync(
 
 
 def _claimed_job_is_locally_trusted(job: ClaimedJob, paths: RuntimePaths) -> bool:
-    """Recognize root-created maintenance jobs without trusting manifest data."""
+    """Check claimed-directory ownership to identify local maintenance jobs.
+
+    Require root ownership at the default runtime root, or the current effective
+    UID at a custom runtime root. Raise ProvisionError if ownership cannot be
+    inspected.
+    """
     try:
         owner_uid = job.path.lstat().st_uid
     except OSError as exc:
@@ -1600,7 +1645,13 @@ def _claimed_job_is_locally_trusted(job: ClaimedJob, paths: RuntimePaths) -> boo
 
 
 def apply_staged_job(config_root: Path, runtime_root: Path | None = None) -> dict[str, Any] | None:
-    """Claim and apply one staged provisioning job as the root worker."""
+    """Claim, authorize, and apply one staged provisioning job as the root worker.
+
+    Return the apply result, or None when no job can currently be claimed.
+    Publish a result and remove the claimed directory after success or failure.
+    Application errors are recorded and re-raised with staged_job_claimed=True;
+    a failure to publish that result propagates instead.
+    """
     config_root = validate_config_root(config_root, allow_unsafe_env=False)
     require_worker_for_data_config(config_root, "apply staged job")
     previous_worker_active = os.environ.get(PROVISION_WORKER_ACTIVE_ENV)

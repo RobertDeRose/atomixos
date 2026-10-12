@@ -130,7 +130,11 @@ class SignerState:
 
 
 def current_boot_id() -> str:
-    """Return the kernel boot identifier used to scope replay protection."""
+    """Return the kernel boot identifier used to scope replay protection.
+
+    Use a process-local random fallback if the kernel file is empty or cannot
+    be read.
+    """
     try:
         value = Path("/proc/sys/kernel/random/boot_id").read_text().strip()
     except OSError:
@@ -139,13 +143,20 @@ def current_boot_id() -> str:
 
 
 def nonce_matches_current_boot(nonce: str) -> bool:
-    """Return whether a nonce was issued for the current boot."""
+    """Return whether the nonce has the current boot prefix and a nonempty token.
+
+    This checks the prefix only; it does not establish issuance or freshness.
+    """
     boot_id, separator, token = nonce.partition(":")
     return bool(separator and token and secrets.compare_digest(boot_id, current_boot_id()))
 
 
 def reapply_signature_message(nonce: str, method: str, path: str, payload: bytes) -> str:
-    """Build the message string that the client must sign."""
+    """Build the v2 message to sign for the exact request body.
+
+    Bind the nonce, uppercased HTTP method, unchanged URL path, and SHA-256
+    hex digest of payload. The returned message ends with a newline.
+    """
     digest = hashlib.sha256(payload).hexdigest()
     return (
         "atomixos-reapply-v2\n"
@@ -216,7 +227,14 @@ def build_allowed_signers(config_root: Path) -> Path | None:
 
 
 async def _verify_ssh_auth(connection: ASGIConnection, allowed_path: Path) -> None:
-    """Verify SSH authentication and preserve evidence for the worker."""
+    """Verify SSH authentication and preserve evidence in the request scope.
+
+    Consume the in-memory nonce before checking the signature, so a failed
+    signature attempt also spends it. Delete the temporary allowed_path even
+    on failure. Missing credentials, invalid nonces, and rejected signatures
+    raise NotAuthorizedException; a missing or timed-out verifier also rejects
+    the signature. Other I/O errors propagate.
+    """
     try:
         nonce = connection.headers.get("x-atomixos-nonce", "")
         signature_b64 = connection.headers.get("x-atomixos-signature", "")
@@ -253,7 +271,12 @@ async def _verify_ssh_auth(connection: ASGIConnection, allowed_path: Path) -> No
 
 
 async def ssh_auth_guard(connection: ASGIConnection, _: BaseRouteHandler) -> None:
-    """Guard that enforces SSH signature authentication."""
+    """Enforce SSH signature authentication once the config root is provisioned.
+
+    Unprovisioned roots bypass this guard even if admin signers exist.
+    Unavailable signers or invalid credentials raise NotAuthorizedException
+    for a provisioned root; filesystem errors propagate.
+    """
     config_root: Path = connection.app.state.config_root
     signer_state: SignerState = connection.app.state.signer_state
 

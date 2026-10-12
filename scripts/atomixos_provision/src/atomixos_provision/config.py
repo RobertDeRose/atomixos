@@ -131,7 +131,12 @@ DEFAULT_NTP_SERVERS = list(_LAN_DEFAULTS["ntp_servers"])
 
 
 def load_config_schema() -> dict[str, Any]:
-    """Locate and load the JSON schema for config.toml validation."""
+    """Locate and load the JSON schema for config.toml validation.
+
+    Try ATOMIXOS_CONFIG_SCHEMA before the bundled schema locations. Raise
+    ProvisionSystemError if no file is found or the first existing file has
+    invalid JSON. File read errors propagate.
+    """
     candidates: list[Path] = []
     env_path = os.environ.get(SCHEMA_ENV)
     if env_path:
@@ -203,7 +208,12 @@ def _schema_error_message(error, path: str) -> str:
 
 
 def validate_against_schema(value: Any, schema: dict, path: str, root_schema: dict) -> None:
-    """Validate a value with the committed Draft 2020-12 JSON Schema."""
+    """Validate a value with Draft 2020-12, resolving references via root_schema.
+
+    Use path as the prefix for validation error locations. Raise ProvisionError
+    for a rejected value and ProvisionSystemError for an invalid root schema.
+    Reference-resolution errors propagate.
+    """
     try:
         Draft202012Validator.check_schema(root_schema)
         validator = Draft202012Validator(root_schema).evolve(schema=schema)

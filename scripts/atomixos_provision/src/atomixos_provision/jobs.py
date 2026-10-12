@@ -233,7 +233,12 @@ class StagedJobManager(JobManager):
         result_timeout_seconds: float | None = None,
         max_pending: int = DEFAULT_MAX_STAGED_JOBS,
     ) -> None:
-        """Initialize staged job tracking and timeout state."""
+        """Initialize staged job tracking with a bounded queue.
+
+        result_timeout_seconds is a reconciliation interval, not a total execution
+        limit: waiting or claimed jobs renew it. None uses the configured staged
+        result timeout. max_pending bounds active, queued, and reserved jobs.
+        """
         super().__init__()
         if result_timeout_seconds is None:
             from atomixos_provision.provision import STAGED_RESULT_TIMEOUT_SECONDS
@@ -314,7 +319,12 @@ class StagedJobManager(JobManager):
             return job
 
     def get(self, job_id: str) -> Job | None:
-        """Return the staged job for the requested identifier."""
+        """Return a cached job or recover it from worker results or queue state.
+
+        Return None for an invalid identifier or an unknown job. Recovered pending
+        jobs start monitoring when an event loop is available. Result validation
+        and I/O errors other than missing files propagate.
+        """
         from atomixos_provision.staging import validate_job_id
 
         try:
@@ -336,7 +346,13 @@ class StagedJobManager(JobManager):
         job: Job,
         work: Callable[[Job], Coroutine[Any, Any, None]],
     ) -> Job:
-        """Stage a reserved job and monitor it through terminal state."""
+        """Stage a reserved job, start background monitoring, and return the job.
+
+        Return after staging without waiting for the worker result. Staging errors
+        usually become failed jobs; queue-busy errors are re-raised for admission
+        handling. Post-publication maintenance errors keep the job queued for
+        monitoring.
+        """
         with job._lock:
             job.state = JobState.RUNNING
             job.started_at = time.monotonic()
@@ -442,7 +458,10 @@ class StagedJobManager(JobManager):
             job.completed_at = time.monotonic()
 
     async def _heartbeat_reservation(self, job: Job) -> None:
-        """Refresh a reservation until staging finishes."""
+        """Refresh a reservation until canceled, retrying OSError failures.
+
+        Other refresh errors and cancellation propagate to the staging task.
+        """
         last_error: OSError | None = None
         while True:
             await asyncio.sleep(_STAGED_RESERVATION_HEARTBEAT_SECONDS)
@@ -461,7 +480,11 @@ class StagedJobManager(JobManager):
                 last_error = None
 
     async def _monitor_staged(self, job: Job) -> None:
-        """Monitor a published staged job for worker results."""
+        """Monitor worker results, extending the deadline for waiting or claimed jobs.
+
+        Retry OSError failures. Other errors mark the job failed; cancellation also
+        marks failure and is re-raised.
+        """
         try:
             deadline = time.monotonic() + self._result_timeout_seconds
             last_io_error = None
@@ -515,7 +538,11 @@ class StagedJobManager(JobManager):
             self._monitored_job_ids.discard(job.id)
 
     def _refresh_from_result(self, job: Job) -> bool:
-        """Refresh job state from a published worker result."""
+        """Apply a published worker result to the job and return whether one was found.
+
+        Return False for absent results or FileNotFoundError. Malformed results
+        raise ProvisionError; other I/O errors propagate.
+        """
         try:
             from atomixos_provision.provision import _runtime_paths
             from atomixos_provision.staging import read_result
@@ -541,7 +568,10 @@ class StagedJobManager(JobManager):
         return True
 
     def _release_reservation(self, job: Job) -> None:
-        """Release a job's staging capacity reservation."""
+        """Release a job's staging capacity reservation.
+
+        Ignore FileNotFoundError; other reservation errors propagate.
+        """
         try:
             from atomixos_provision.provision import _runtime_paths
             from atomixos_provision.staging import release_staged_job_slot
@@ -551,7 +581,10 @@ class StagedJobManager(JobManager):
             return
 
     def _refresh_reservation(self, job: Job) -> None:
-        """Refresh a job's staging capacity reservation."""
+        """Refresh a job's staging capacity reservation.
+
+        Ignore FileNotFoundError; other reservation errors propagate.
+        """
         try:
             from atomixos_provision.provision import _runtime_paths
             from atomixos_provision.staging import refresh_staged_job_slot
@@ -561,7 +594,12 @@ class StagedJobManager(JobManager):
             return
 
     def _job_from_result(self, job_id: str) -> Job | None:
-        """Translate a worker result into public job state."""
+        """Recover a job from its worker result or queued/active directory state.
+
+        Return None if neither is found. Start monitoring recovered pending jobs
+        when an event loop is available; validation and non-missing I/O errors
+        propagate.
+        """
         job = Job(id=job_id)
         if self._refresh_from_result(job):
             return job

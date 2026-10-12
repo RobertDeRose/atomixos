@@ -214,7 +214,7 @@ class ConfigOperation(Operation):
     """Patch generated config operations for binary uploads and auth docs."""
 
     def __post_init__(self) -> None:
-        """Validate the initialized configuration operation."""
+        """Customize OpenAPI bodies, auth parameters, and response headers by operation."""
         if self.operation_id == "configSubmit":
             self.request_body = _BINARY_CONFIG_BODY
             self.parameters = [
@@ -563,7 +563,11 @@ async def _submit_partial_operation(
 
 
 def _request_authorization(request: Request) -> dict[str, str] | None:
-    """Return verified worker authorization metadata from request scope."""
+    """Copy authorization metadata placed in request scope by the auth guard.
+
+    Return None if the mapping or any required string field is missing or
+    malformed. Signature verification remains the guard's and worker's job.
+    """
     value = request.scope.get("atomixos_authorization")
     if not isinstance(value, dict):
         return None
@@ -590,7 +594,12 @@ async def validate_config(
     request: Request,
     config_service: ConfigService,
 ) -> Response[ValidationResponseBody]:
-    """POST /api/validate — validate config without applying."""
+    """POST /api/validate — validate config without applying.
+
+    Return HTTP 400 for submitted-config ProvisionError failures.
+    ProvisionSystemError and unexpected errors propagate to framework error
+    handling instead of being reported as client validation failures.
+    """
     body = await request.body()
     filename = _sanitize_filename(request.headers.get("x-config-filename", "config.toml"))
 

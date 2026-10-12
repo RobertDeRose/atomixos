@@ -150,7 +150,11 @@ def validate_relative_path(raw_path: str) -> str:
 
 
 def sha256_file(path: Path, *, max_bytes: int | None = None) -> str:
-    """Hash a no-follow regular file, optionally bounding reads of mutable evidence."""
+    """Return the SHA-256 hex digest without following the final path symlink.
+
+    Reject nonregular files and reads exceeding max_bytes with ProvisionError;
+    None leaves the byte count unbounded. Open and read errors propagate.
+    """
     fd = os.open(
         path,
         os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0),
@@ -186,7 +190,12 @@ def sha256_bytes(payload: bytes) -> str:
 
 
 def consume_authorization_nonce(paths: RuntimePaths, nonce: str) -> None:
-    """Consume a boot-scoped authorization nonce in root-owned runtime state."""
+    """Record a current-boot nonce as consumed in the worker's runtime state.
+
+    Raise ProvisionError for a mismatched boot prefix or an existing consumption
+    marker. Other filesystem errors propagate. Once created, the marker remains
+    even if a later write or synchronization fails.
+    """
     from atomixos_provision.auth import nonce_matches_current_boot
 
     if not nonce_matches_current_boot(nonce):
@@ -276,7 +285,12 @@ def read_json(path: Path) -> dict[str, Any]:
 
 
 def read_control_file(path: Path, *, max_bytes: int = MAX_CONTROL_JSON_BYTES) -> bytes:
-    """Read a small staged control file without following symlinks."""
+    """Read a regular staged control file without following its final symlink.
+
+    Raise ProvisionError for a symlink, a nonregular file, or an initial size
+    greater than max_bytes. Return up to max_bytes + 1 bytes so a file that grows
+    after the size check can yield an extra byte. Other I/O errors propagate.
+    """
     flags = (
         os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
     )
@@ -298,7 +312,11 @@ def read_control_file(path: Path, *, max_bytes: int = MAX_CONTROL_JSON_BYTES) ->
 
 
 def publish_ready_marker(paths: RuntimePaths, job_id: str) -> Path:
-    """Publish a staged job after validating its live reservation."""
+    """Replace a live reservation with a ready marker and return its path.
+
+    Preserve the reservation's FIFO sequence. Missing, expired, or malformed
+    reservations raise ProvisionError; filesystem errors propagate.
+    """
     validate_job_id(job_id)
     ready_path = paths.queue / f"{job_id}.ready"
     with queue_operation_lock(paths):
@@ -765,7 +783,12 @@ def staged_job_presence(paths: RuntimePaths, job_id: str) -> str:
 
 
 def staged_timeout_state(paths: RuntimePaths, job_id: str) -> StagedTimeoutState:
-    """Resolve timeout handling without racing a queued job's worker claim."""
+    """Reconcile a timeout, abandoning eligible queued work under the queue lock.
+
+    Return CLAIMED for an active job, WAITING while other work blocks it or it
+    remains queued after reconciliation, ABANDONED after queue removal, or
+    MISSING when no job remains. Queue validation and I/O errors propagate.
+    """
     presence = staged_job_presence(paths, job_id)
     if presence == "active":
         return StagedTimeoutState.CLAIMED
