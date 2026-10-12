@@ -1,6 +1,7 @@
 """First-boot and re-apply provision orchestration."""
 
 import asyncio
+import base64
 import contextlib
 import errno
 import fcntl
@@ -12,10 +13,12 @@ import shutil
 import stat
 import subprocess
 import tempfile
+import threading
 import time
 import uuid
 from pathlib import Path
 from typing import Any, Protocol
+from urllib.parse import unquote
 
 from atomixos_provision.activation import (
     BOOTSTRAP_ACTIVATION_ENV,
@@ -28,6 +31,11 @@ from atomixos_provision.activation import (
     discard_initial_config,
     promotion_marker_path,
     recover_config_root,
+)
+from atomixos_provision.auth import (
+    build_allowed_signers,
+    reapply_signature_message,
+    verify_ssh_signature,
 )
 from atomixos_provision.bundle import (
     copy_bundle_files,
@@ -46,18 +54,28 @@ from atomixos_provision.quadlet import (
     render_volumes,
 )
 from atomixos_provision.staging import (
+    DEFAULT_MAX_STAGED_JOBS,
+    DEFAULT_RUNTIME_ROOT,
     MANIFEST_VERSION,
+    STAGED_RESERVATION_HEARTBEAT_SECONDS,
+    STAGED_RESULT_POLL_SECONDS,
     ClaimedJob,
     RuntimePaths,
+    StagedResultWaiter,
     claim_next_job,
     cleanup_claimed_job,
+    consume_authorization_nonce,
     ensure_runtime_layout,
     finalize_abandoned_active_jobs,
     has_staged_jobs,
     interpret_staged_result,
     publish_ready_marker,
     read_result,
+    refresh_staged_job_slot,
+    release_staged_job_slot,
+    reserve_staged_job_slot,
     runtime_paths,
+    sha256_bytes,
     sha256_file,
     staged_timeout_state,
     tree_manifest,
@@ -67,6 +85,7 @@ from atomixos_provision.staging import (
     write_json_atomic,
     write_result,
 )
+from atomixos_provision.state import FIRST_CONFIG_MARKER, is_provisioned_config_root
 
 __all__ = [
     "apply_config_bytes",
@@ -110,7 +129,6 @@ PROVISION_SERVICE_GROUP = "atomixos-provision"
 PROVISION_LOCK_DIR = Path("/run/atomixos-provision")
 PROVISION_RUNTIME_DIR_ENV = "ATOMIXOS_PROVISION_RUNTIME_DIR"
 PROVISION_WORKER_ACTIVE_ENV = "ATOMIXOS_PROVISION_WORKER_ACTIVE"
-FIRST_CONFIG_MARKER = ".first-config"
 STAGED_RESULT_TIMEOUT_SECONDS = int(
     os.environ.get("ATOMIXOS_PROVISION_RESULT_TIMEOUT_SECONDS", "1200")
 )
@@ -165,22 +183,23 @@ def _first_config_marker_path(config_root: Path) -> Path:
 
 
 def _has_first_config_marker(config_root: Path) -> bool:
+    """Return whether the first-configuration marker exists."""
     return _first_config_marker_path(config_root).is_file()
 
 
 def _is_provisioned_config_root(config_root: Path) -> bool:
-    return _has_first_config_marker(config_root) or (config_root / "config.toml").is_file()
+    """Return whether the configuration root represents a provisioned device."""
+    return is_provisioned_config_root(config_root)
 
 
 def _write_first_config_marker(candidate_root: Path) -> None:
+    """Write the first-configuration marker into a candidate root."""
     marker = _first_config_marker_path(candidate_root)
     marker.write_text("ok\n", encoding="utf-8")
     marker.chmod(0o600)
 
 
-def _grant_service_read_access(
-    config_root: Path, runtime_config_root: Path | None = None
-) -> None:
+def _grant_service_read_access(config_root: Path, runtime_config_root: Path | None = None) -> None:
     """Grant service access to a config root using the active root for mount paths."""
     identity = _service_identity()
     if identity is None:
@@ -211,6 +230,26 @@ def _grant_service_read_access(
 def grant_service_read_access(config_root: Path) -> None:
     """Reconcile a config root so the unprivileged API can read control state."""
     _grant_service_read_access(config_root)
+
+
+def _managed_files_are_writable(
+    config_root: Path, runtime_config_root: Path | None = None
+) -> bool:
+    """Return whether config requests writable mounts resolved against the runtime root."""
+    config_path = config_root / "config.toml"
+    if not config_path.is_file():
+        return False
+    try:
+        parsed = load_config(config_path)
+    except (OSError, ProvisionError):
+        return False
+    containers = parsed.get("containers", {})
+    if not isinstance(containers, dict):
+        return False
+    container_table = containers.get("container", {})
+    return isinstance(container_table, dict) and managed_files_are_writable(
+        container_table, runtime_config_root or config_root
+    )
 
 
 @contextlib.contextmanager
@@ -339,7 +378,32 @@ def _manifest_for_staged_candidate(
     }
 
 
+def _stage_request_evidence(
+    staging_path: Path,
+    manifest: dict[str, Any],
+    payload: bytes,
+    filename: str,
+    authorization: dict[str, str] | None,
+) -> None:
+    """Write request.bin and record its metadata in manifest for worker verification.
+
+    Authorization is recorded only when supplied; the caller persists manifest.
+    """
+    request_path = staging_path / "request.bin"
+    request_path.write_bytes(payload)
+    request_path.chmod(0o600)
+    request: dict[str, Any] = {
+        "filename": filename,
+        "size": len(payload),
+        "sha256": sha256_bytes(payload),
+    }
+    if authorization is not None:
+        request["authorization"] = dict(authorization)
+    manifest["request"] = request
+
+
 def _progress_job_id(progress: ProgressReporter | None) -> str:
+    """Return the progress reporter's job ID or generate one."""
     job_id = getattr(progress, "id", None)
     return str(job_id) if isinstance(job_id, str) and job_id else str(uuid.uuid4())
 
@@ -364,7 +428,10 @@ def _stage_prepared_sync(
     operation: str = "full-apply",
     progress: ProgressReporter | None = None,
     wait_for_result: bool = True,
+    request_payload: bytes | None = None,
+    authorization: dict[str, str] | None = None,
 ) -> dict[str, Any]:
+    """Synchronously publish a prepared configuration candidate."""
     job_id = validate_job_id(job_id)
     config_root = validate_config_root(config_root)
     paths = _runtime_paths()
@@ -415,6 +482,14 @@ def _stage_prepared_sync(
             is_reapply=is_reapply,
             preserve_bundle_files=preserve_bundle_files,
         )
+        if request_payload is not None:
+            _stage_request_evidence(
+                staging_path,
+                manifest,
+                request_payload,
+                filename,
+                authorization,
+            )
         write_json_atomic(staging_path / "manifest.json", manifest)
         os.replace(staging_path, job_path)
         publish_ready_marker(paths, job_id)
@@ -432,7 +507,72 @@ def _stage_prepared_sync(
         raise
 
 
-def stage_config_bytes(
+def _reserve_staged_job_or_raise(paths: RuntimePaths, job_id: str) -> None:
+    """Reserve staging capacity or raise a queue-full error."""
+    if not reserve_staged_job_slot(paths, job_id, DEFAULT_MAX_STAGED_JOBS):
+        raise StagedQueueBusyError("the provision queue is full")
+
+
+def _refresh_reservation_until(paths: RuntimePaths, job_id: str, stop: threading.Event) -> None:
+    """Refresh a reservation every heartbeat interval until stop is set.
+
+    Refresh errors are retried on the next interval; a reservation that has
+    already been published or released makes each refresh a no-op.
+    """
+    while not stop.wait(STAGED_RESERVATION_HEARTBEAT_SECONDS):
+        with contextlib.suppress(Exception):
+            refresh_staged_job_slot(paths, job_id)
+
+
+@contextlib.contextmanager
+def _local_staged_reservation(paths: RuntimePaths, job_id: str):
+    """Reserve staging capacity and keep it alive until the block exits.
+
+    Raise StagedQueueBusyError when the queue is full. A background heartbeat
+    refreshes the reservation so slow local staging cannot outlive its TTL, as
+    StagedJobManager does for API jobs. Release the reservation if the block
+    raises.
+    """
+    _reserve_staged_job_or_raise(paths, job_id)
+    stop = threading.Event()
+    heartbeat = threading.Thread(
+        target=_refresh_reservation_until,
+        args=(paths, job_id, stop),
+        name=f"staged-reservation-{job_id}",
+        daemon=True,
+    )
+    heartbeat.start()
+    try:
+        try:
+            yield
+        finally:
+            stop.set()
+            heartbeat.join()
+    except Exception:
+        release_staged_job_slot(paths, job_id)
+        raise
+
+
+def _stage_and_wait_prepared_sync(
+    job_id: str,
+    config_path: Path,
+    files_path: Path | None,
+    config_root: Path,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Stage a prepared candidate and wait for its worker result."""
+    paths = _runtime_paths()
+    with _local_staged_reservation(paths, job_id):
+        return _stage_prepared_sync(
+            job_id,
+            config_path,
+            files_path,
+            config_root,
+            **kwargs,
+        )
+
+
+def stage_reserved_config_bytes(
     job_id: str,
     payload: bytes,
     filename: str,
@@ -440,7 +580,16 @@ def stage_config_bytes(
     *,
     allow_reapply: bool = True,
     progress: ProgressReporter | None = None,
+    authorization: dict[str, str] | None = None,
 ) -> None:
+    """Stage configuration bytes using an existing capacity reservation.
+
+    Return once published without waiting for worker application. Preserve
+    payload as the exact request body, with nonce, signature, method, and path
+    in authorization for the worker to verify. allow_reapply=False rejects an
+    already provisioned root with ProvisionError. Source validation, reservation,
+    and I/O errors propagate.
+    """
     if progress:
         progress.set_stage("prepare", f"unpacking {filename}")
     tmpdir, config_path, files_path = prepare_source_bytes(payload, filename)
@@ -455,46 +604,61 @@ def stage_config_bytes(
             allow_reapply=allow_reapply,
             progress=progress,
             wait_for_result=False,
+            request_payload=payload,
+            authorization=authorization,
         )
     finally:
         tmpdir.cleanup()
 
 
+def stage_config_bytes(
+    job_id: str,
+    payload: bytes,
+    filename: str,
+    config_root: Path,
+    *,
+    allow_reapply: bool = True,
+    progress: ProgressReporter | None = None,
+    authorization: dict[str, str] | None = None,
+) -> None:
+    """Reserve capacity and stage bytes outside the API job manager."""
+    paths = _runtime_paths()
+    with _local_staged_reservation(paths, job_id):
+        stage_reserved_config_bytes(
+            job_id,
+            payload,
+            filename,
+            config_root,
+            allow_reapply=allow_reapply,
+            progress=progress,
+            authorization=authorization,
+        )
+
+
 def _wait_for_staged_result(
     paths: RuntimePaths, job_id: str, progress: ProgressReporter | None = None
 ) -> dict[str, Any]:
-    deadline = time.monotonic() + STAGED_RESULT_TIMEOUT_SECONDS
-    last_stage = None
-    while True:
-        while time.monotonic() < deadline:
-            result = read_result(paths, job_id)
-            if result is not None:
-                return _staged_result_payload_or_raise(result)
-            marker_stage = "running" if (paths.active / job_id).exists() else "queued"
-            if progress and marker_stage != last_stage:
-                detail = (
-                    "privileged apply worker is running"
-                    if marker_stage == "running"
-                    else "waiting for privileged apply worker"
-                )
-                progress.set_stage(marker_stage, detail)
-                last_stage = marker_stage
-            time.sleep(0.2)
-        result = read_result(paths, job_id)
-        if result is not None:
-            return _staged_result_payload_or_raise(result)
-        timeout_state = staged_timeout_state(paths, job_id)
-        if timeout_state == "active":
-            deadline = time.monotonic() + STAGED_RESULT_TIMEOUT_SECONDS
-            continue
-        if timeout_state == "abandoned":
-            raise ProvisionError("timed out waiting for privileged apply worker")
-        if timeout_state == "missing":
-            raise ProvisionError("privileged apply worker did not publish a result")
-        raise ProvisionError("timed out waiting for privileged apply worker")
+    """Wait for and return a successful worker result payload.
+
+    Claimed or waiting jobs keep waiting; an eligible queued job may be
+    abandoned when an interval expires. Worker failure, an abandoned or missing
+    job, invalid result data, or result read errors that persist for a full
+    interval raise ProvisionError.
+    """
+    waiter = StagedResultWaiter(
+        read=lambda: read_result(paths, job_id),
+        timeout_state=lambda: staged_timeout_state(paths, job_id),
+        is_claimed=lambda: (paths.active / job_id).exists(),
+        interval_seconds=STAGED_RESULT_TIMEOUT_SECONDS,
+        on_stage=progress.set_stage if progress else None,
+    )
+    while (result := waiter.poll()) is None:
+        time.sleep(STAGED_RESULT_POLL_SECONDS)
+    return _staged_result_payload_or_raise(result)
 
 
 def _staged_result_payload_or_raise(result: dict[str, Any]) -> dict[str, Any]:
+    """Return a successful staged payload or raise its reported error."""
     outcome = interpret_staged_result(result)
     if outcome.succeeded:
         return outcome.payload
@@ -509,7 +673,10 @@ def _stage_config_operation_sync(
     operation: dict[str, Any],
     config_root: Path,
     progress: ProgressReporter | None = None,
+    request_payload: bytes | None = None,
+    authorization: dict[str, str] | None = None,
 ) -> None:
+    """Synchronously stage a typed configuration operation."""
     config_root = validate_config_root(config_root)
     paths = _runtime_paths()
     if promotion_marker_path(config_root).exists():
@@ -537,9 +704,24 @@ def _stage_config_operation_sync(
             operation="partial-apply",
             progress=progress,
             wait_for_result=False,
+            request_payload=request_payload,
+            authorization=authorization,
         )
     finally:
         tmpdir.cleanup()
+
+
+def _stage_and_wait_operation_sync(
+    job_id: str,
+    operation: dict[str, Any],
+    config_root: Path,
+    progress: ProgressReporter | None = None,
+) -> dict[str, Any]:
+    """Stage a typed operation and wait for its worker result."""
+    paths = _runtime_paths()
+    with _local_staged_reservation(paths, job_id):
+        _stage_config_operation_sync(job_id, operation, config_root, progress)
+        return _wait_for_staged_result(paths, job_id, progress)
 
 
 def write_imported_state(
@@ -984,6 +1166,7 @@ def _copy_candidate_to_durable(candidate_root: Path, durable_candidate: Path) ->
 def _copy_staged_job_snapshot(
     source: Path, destination: Path, job_id: str, manifest: dict[str, Any]
 ) -> None:
+    """Copy a verified staged job into a private worker snapshot."""
     if destination.exists():
         shutil.rmtree(destination)
     _validate_staged_snapshot_manifest(source, job_id, manifest)
@@ -994,11 +1177,22 @@ def _copy_staged_job_snapshot(
     bundle_entries = manifest.get("bundle_files", [])
     if bundle_entries or manifest.get("bundle_files_present") is True:
         _copy_staged_manifest_tree(source, destination, "bundle-files", bundle_entries)
+    request = manifest.get("request")
+    if isinstance(request, dict):
+        expected_size = request.get("size")
+        if not isinstance(expected_size, int) or isinstance(expected_size, bool):
+            raise ProvisionError("staged request size must be an integer")
+        _copy_staged_file_from_path(
+            source / "request.bin",
+            destination / "request.bin",
+            expected_size,
+        )
 
 
 def _validate_staged_snapshot_manifest(
     source: Path, job_id: str, manifest: dict[str, Any]
 ) -> None:
+    """Validate snapshot contents against the staged manifest."""
     if manifest.get("version") != MANIFEST_VERSION:
         raise ProvisionError("unsupported staged manifest version")
     if manifest.get("job_id") != job_id:
@@ -1006,6 +1200,8 @@ def _validate_staged_snapshot_manifest(
     allowed = {"manifest.json", "candidate"}
     if manifest.get("bundle_files") or manifest.get("bundle_files_present") is True:
         allowed.add("bundle-files")
+    if manifest.get("request") is not None:
+        allowed.add("request.bin")
     actual = {child.name for child in source.iterdir()}
     unexpected = actual - allowed
     if unexpected:
@@ -1017,59 +1213,235 @@ def _validate_staged_snapshot_manifest(
 
 
 def _manifest_nonnegative_int(manifest: dict[str, Any], key: str) -> int:
+    """Read a required non-negative integer from a staged manifest."""
     value = manifest.get(key)
     if not isinstance(value, int) or isinstance(value, bool) or value < 0:
         raise ProvisionError(f"staged manifest {key} must be a non-negative integer")
     return value
 
 
+def _read_staged_request(snapshot: Path, manifest: dict[str, Any]) -> bytes | None:
+    """Read exact request bytes from a staged worker snapshot."""
+    request = manifest.get("request")
+    if request is None:
+        return None
+    if not isinstance(request, dict):
+        raise ProvisionError("staged request metadata must be an object")
+    return (snapshot / "request.bin").read_bytes()
+
+
+def _verify_staged_authorization(
+    snapshot: Path,
+    config_root: Path,
+    manifest: dict[str, Any],
+    paths: RuntimePaths,
+    *,
+    locally_trusted: bool,
+) -> tuple[bytes | None, dict[str, str] | None]:
+    """Return request bytes and verified authorization, consuming its nonce.
+
+    Request bytes are None when no request evidence was staged. Initial
+    provisioning rejects supplied authorization and returns None for
+    authorization. On a provisioned root, locally_trusted bypasses signature
+    and nonce checks and also returns None for authorization. Other re-applies
+    require a signature from active admin signers and an unused current-boot
+    nonce. Rejected evidence raises ProvisionError; I/O errors propagate.
+    A consumed nonce remains spent if subsequent rendering or application fails.
+    """
+    request_payload = _read_staged_request(snapshot, manifest)
+    request = manifest.get("request")
+    authorization = request.get("authorization") if isinstance(request, dict) else None
+    is_reapply = _is_provisioned_config_root(config_root)
+
+    if not is_reapply:
+        if authorization is not None:
+            raise ProvisionError("initial provisioning must not carry re-apply authorization")
+        return request_payload, None
+    if locally_trusted:
+        return request_payload, None
+    if request_payload is None or not isinstance(authorization, dict):
+        raise ProvisionError("re-apply requires worker-verifiable authorization")
+
+    fields = ("nonce", "signature", "method", "path")
+    if not all(isinstance(authorization.get(field), str) for field in fields):
+        raise ProvisionError("staged authorization metadata is invalid")
+    normalized = {field: str(authorization[field]) for field in fields}
+    allowed_path = build_allowed_signers(config_root)
+    if allowed_path is None:
+        raise ProvisionError("re-apply authorization has no active admin signers")
+    try:
+        try:
+            signature = base64.b64decode(normalized["signature"], validate=True)
+        except ValueError as exc:
+            raise ProvisionError("staged authorization signature encoding is invalid") from exc
+        message = reapply_signature_message(
+            normalized["nonce"],
+            normalized["method"],
+            normalized["path"],
+            request_payload,
+        )
+        if not verify_ssh_signature(message, signature, allowed_path):
+            raise ProvisionError("staged request signature verification failed")
+    finally:
+        allowed_path.unlink(missing_ok=True)
+    consume_authorization_nonce(paths, normalized["nonce"])
+    return request_payload, normalized
+
+
+def _request_operation(authorization: dict[str, str], payload: bytes) -> dict[str, Any] | None:
+    """Map a verified request to a partial operation, or None for POST /api/config.
+
+    Partial bodies must be JSON objects; empty bytes mean an empty object.
+    DELETE requires an empty object. Resource names are URL-decoded and must
+    be nonempty without slashes. Invalid bodies and unsupported method/path
+    combinations raise ProvisionError.
+    """
+    method = authorization["method"]
+    path = authorization["path"]
+    if method == "POST" and path == "/api/config":
+        return None
+
+    try:
+        body = json.loads(payload.decode("utf-8")) if payload.strip() else {}
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ProvisionError("signed partial request body must be a JSON object") from exc
+    if not isinstance(body, dict):
+        raise ProvisionError("signed partial request body must be a JSON object")
+    if method == "PATCH" and path == "/api/config/network":
+        return {"op": "patch_network", "payload": body}
+
+    prefixes = {
+        "/api/config/users/": ("user", None),
+        "/api/config/containers/": ("resource", "container"),
+        "/api/config/container-networks/": ("resource", "network"),
+        "/api/config/container-volumes/": ("resource", "volume"),
+    }
+    for prefix, (kind, table) in prefixes.items():
+        if not path.startswith(prefix):
+            continue
+        name = unquote(path.removeprefix(prefix))
+        if not name or "/" in name:
+            break
+        if kind == "user":
+            if method == "PUT":
+                return {"op": "put_user", "name": name, "payload": body}
+            if method == "DELETE" and not body:
+                return {"op": "delete_user", "name": name}
+        else:
+            if method == "PUT":
+                return {
+                    "op": "put_resource",
+                    "table": table,
+                    "name": name,
+                    "payload": body,
+                }
+            if method == "DELETE" and not body:
+                return {"op": "delete_resource", "table": table, "name": name}
+        break
+    raise ProvisionError("signed request does not map to a supported provisioning operation")
+
+
 def _render_verified_staged_candidate_sync(
     snapshot: Path,
     config_root: Path,
     manifest: dict[str, Any],
+    paths: RuntimePaths,
+    locally_trusted: bool,
     progress: ProgressReporter | None = None,
 ) -> dict[str, Any]:
-    source_config = snapshot / "candidate" / "config.toml"
-    expected_digest = manifest.get("source_sha256")
-    if not isinstance(expected_digest, str) or expected_digest != sha256_file(source_config):
-        raise ProvisionError("staged source config hash changed")
-    parsed = load_config(source_config)
-    allow_reapply = _manifest_bool(manifest, "allow_reapply", default=True)
-    preserve_bundle_files = _manifest_bool(manifest, "preserve_bundle_files", default=False)
-    candidate_root = snapshot / "candidate-rendered"
-    bundle_root = snapshot / "bundle-files"
-    warnings = write_imported_state(
-        parsed, source_config, None, candidate_root, config_root, progress
-    )
-    if _is_provisioned_config_root(config_root):
-        carry_forward_managed_state(config_root, candidate_root)
-    rendered_manifest = {
-        **manifest,
-        **_manifest_for_staged_candidate(
-            job_id=str(manifest["job_id"]),
-            config_path=source_config,
-            candidate_root=candidate_root,
-            bundle_root=bundle_root,
-            parsed=parsed,
-            warnings=warnings,
-            filename="config.toml",
-            source_digest=sha256_file(source_config),
-            allow_reapply=allow_reapply,
-            operation=str(manifest.get("operation", "full-apply")),
-            is_reapply=_is_provisioned_config_root(config_root),
-            preserve_bundle_files=preserve_bundle_files,
-        ),
-    }
-    return _promote_pre_rendered_candidate_sync(
-        candidate_root,
-        bundle_root,
+    """Authorize, render, and apply a staged candidate, returning the apply result.
+
+    Recover pending promotion first. Signed re-applies use the verified request;
+    partial operations are applied to the current config. Initial and locally
+    trusted jobs use the staged source config after checking its hash.
+    Authorization, validation, activation, and I/O errors propagate.
+    """
+    recover_config_root(config_root)
+    request_payload, authorization = _verify_staged_authorization(
+        snapshot,
         config_root,
-        rendered_manifest,
-        progress,
+        manifest,
+        paths,
+        locally_trusted=locally_trusted,
     )
+    if request_payload is None or authorization is None:
+        source_config = snapshot / "candidate" / "config.toml"
+        bundle_root: Path | None = snapshot / "bundle-files"
+        preserve_bundle_files = _manifest_bool(manifest, "preserve_bundle_files", default=False)
+        operation = str(manifest.get("operation", "full-apply"))
+        source_tmpdir = None
+    else:
+        operation_payload = _request_operation(authorization, request_payload)
+        if operation_payload is None:
+            request = manifest["request"]
+            filename = request.get("filename")
+            if not isinstance(filename, str) or not filename:
+                raise ProvisionError("staged request filename is invalid")
+            source_tmpdir, source_config, bundle_root = prepare_source_bytes(
+                request_payload, filename
+            )
+            preserve_bundle_files = False
+            operation = "full-apply"
+        else:
+            from atomixos_provision.partial_config import (
+                apply_operation,
+                canonical_config_bytes,
+                load_current_config,
+            )
+
+            candidate = canonical_config_bytes(
+                apply_operation(load_current_config(config_root), operation_payload)
+            )
+            source_tmpdir, source_config, _ = prepare_source_bytes(candidate, "config.toml")
+            bundle_root = None
+            preserve_bundle_files = (config_root / "files").exists()
+            operation = "partial-apply"
+
+    try:
+        expected_digest = manifest.get("source_sha256")
+        if authorization is None and (
+            not isinstance(expected_digest, str) or expected_digest != sha256_file(source_config)
+        ):
+            raise ProvisionError("staged source config hash changed")
+        parsed = load_config(source_config)
+        candidate_root = snapshot / "candidate-rendered"
+        warnings = write_imported_state(
+            parsed, source_config, None, candidate_root, config_root, progress
+        )
+        if _is_provisioned_config_root(config_root):
+            carry_forward_managed_state(config_root, candidate_root)
+        bundle_manifest_root = bundle_root or (snapshot / "missing-bundle-files")
+        rendered_manifest = {
+            **manifest,
+            **_manifest_for_staged_candidate(
+                job_id=str(manifest["job_id"]),
+                config_path=source_config,
+                candidate_root=candidate_root,
+                bundle_root=bundle_manifest_root,
+                parsed=parsed,
+                warnings=warnings,
+                filename="config.toml",
+                source_digest=sha256_file(source_config),
+                allow_reapply=locally_trusted or authorization is not None,
+                operation=operation,
+                is_reapply=_is_provisioned_config_root(config_root),
+                preserve_bundle_files=preserve_bundle_files,
+            ),
+        }
+        return _promote_pre_rendered_candidate_sync(
+            candidate_root,
+            bundle_root,
+            config_root,
+            rendered_manifest,
+            progress,
+        )
+    finally:
+        if source_tmpdir is not None:
+            source_tmpdir.cleanup()
 
 
 def _manifest_bool(manifest: dict[str, Any], key: str, *, default: bool) -> bool:
+    """Read a boolean value from a staged manifest."""
     value = manifest.get(key, default)
     if not isinstance(value, bool):
         raise ProvisionError(f"staged manifest {key} must be a boolean")
@@ -1142,9 +1514,16 @@ def _copy_staged_dir_metadata(source: Path, destination: Path) -> None:
 def _copy_staged_file_from_path(
     source: Path, destination: Path, expected_size: int | None = None
 ) -> None:
+    """Copy a regular staged file and preserve its permission bits.
+
+    When supplied, expected_size is the exact byte count required before and
+    during copying. Nonregular files and size changes raise ProvisionError;
+    open, read, and write errors propagate. A failed copy can leave a partial
+    destination file.
+    """
     source_fd = os.open(
         source,
-        os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0),
+        os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0),
     )
     try:
         with os.fdopen(source_fd, "rb") as source_file:
@@ -1261,8 +1640,30 @@ def _promote_pre_rendered_candidate_sync(
     }
 
 
+def _claimed_job_is_locally_trusted(job: ClaimedJob, paths: RuntimePaths) -> bool:
+    """Check claimed-directory ownership to identify local maintenance jobs.
+
+    Require root ownership at the default runtime root, or the current effective
+    UID at a custom runtime root. Raise ProvisionError if ownership cannot be
+    inspected.
+    """
+    try:
+        owner_uid = job.path.lstat().st_uid
+    except OSError as exc:
+        raise ProvisionError(f"cannot inspect claimed staged job: {job.path}") from exc
+    if paths.root == DEFAULT_RUNTIME_ROOT:
+        return owner_uid == 0
+    return owner_uid == os.geteuid()
+
+
 def apply_staged_job(config_root: Path, runtime_root: Path | None = None) -> dict[str, Any] | None:
-    """Claim and apply one staged provisioning job as the root worker."""
+    """Claim, authorize, and apply one staged provisioning job as the root worker.
+
+    Return the apply result, or None when no job can currently be claimed.
+    Publish a result and remove the claimed directory after success or failure.
+    Application errors are recorded and re-raised with staged_job_claimed=True;
+    a failure to publish that result propagates instead.
+    """
     config_root = validate_config_root(config_root, allow_unsafe_env=False)
     require_worker_for_data_config(config_root, "apply staged job")
     previous_worker_active = os.environ.get(PROVISION_WORKER_ACTIVE_ENV)
@@ -1282,7 +1683,11 @@ def apply_staged_job(config_root: Path, runtime_root: Path | None = None) -> dic
                 manifest = verify_staged_job(snapshot_job, paths, require_active=False)
                 with provisioning_lock(config_root):
                     result = _render_verified_staged_candidate_sync(
-                        snapshot, config_root, manifest
+                        snapshot,
+                        config_root,
+                        manifest,
+                        paths,
+                        _claimed_job_is_locally_trusted(claimed, paths),
                     )
             write_result(paths, claimed.job_id, {"status": "succeeded", "result": result})
             return result
@@ -1324,7 +1729,7 @@ def _provision_sync(
     tmpdir, config_path, files_path = prepare_source_bytes(payload, filename)
     try:
         if staging_enabled() and config_root.resolve(strict=False) == Path("/data/config"):
-            return _stage_prepared_sync(
+            return _stage_and_wait_prepared_sync(
                 _progress_job_id(progress),
                 config_path,
                 files_path,
@@ -1347,10 +1752,10 @@ def _apply_config_operation_sync(
     config_root: Path,
     progress: ProgressReporter | None = None,
 ) -> dict[str, Any]:
+    """Synchronously apply a typed operation to the current configuration."""
     if staging_enabled() and config_root.resolve(strict=False) == Path("/data/config"):
         job_id = _progress_job_id(progress)
-        _stage_config_operation_sync(job_id, operation, config_root, progress)
-        return _wait_for_staged_result(_runtime_paths(), job_id, progress)
+        return _stage_and_wait_operation_sync(job_id, operation, config_root, progress)
 
     with provisioning_lock(config_root):
         recover_config_root(config_root)
@@ -1395,7 +1800,7 @@ def import_config_from_path(source_path: Path, config_root: Path) -> dict[str, A
     tmpdir, config_path, files_path = prepare_source_path(source_path)
     try:
         if staging_enabled() and config_root.resolve(strict=False) == Path("/data/config"):
-            return _stage_prepared_sync(
+            return _stage_and_wait_prepared_sync(
                 str(uuid.uuid4()),
                 config_path,
                 files_path,
@@ -1454,9 +1859,41 @@ async def stage_config_operation(
     operation: dict[str, Any],
     config_root: Path,
     progress: ProgressReporter | None = None,
+    request_payload: bytes | None = None,
+    authorization: dict[str, str] | None = None,
 ) -> None:
-    """Stage a typed partial operation for the privileged worker."""
-    await asyncio.to_thread(_stage_config_operation_sync, job_id, operation, config_root, progress)
+    """Reserve capacity and stage a typed operation outside the API job manager."""
+    paths = _runtime_paths()
+    with _local_staged_reservation(paths, job_id):
+        await asyncio.to_thread(
+            _stage_config_operation_sync,
+            job_id,
+            operation,
+            config_root,
+            progress,
+            request_payload,
+            authorization,
+        )
+
+
+async def stage_reserved_config_operation(
+    job_id: str,
+    operation: dict[str, Any],
+    config_root: Path,
+    progress: ProgressReporter | None = None,
+    request_payload: bytes | None = None,
+    authorization: dict[str, str] | None = None,
+) -> None:
+    """Stage a typed operation using capacity reserved by the API job manager."""
+    await asyncio.to_thread(
+        _stage_config_operation_sync,
+        job_id,
+        operation,
+        config_root,
+        progress,
+        request_payload,
+        authorization,
+    )
 
 
 async def apply_config_transform(
@@ -1464,9 +1901,14 @@ async def apply_config_transform(
     config_root: Path,
     progress: ProgressReporter | None = None,
 ) -> dict[str, Any]:
-    """Apply a config transform under the same lock and pipeline as full imports."""
+    """Apply a config transform under the same lock and pipeline as full imports.
+
+    Staged /data/config roots are rejected with ProvisionError; use staged
+    operations there instead.
+    """
 
     def _apply_transform_sync() -> dict[str, Any]:
+        """Apply the transformation synchronously under the provision lock."""
         if staging_enabled() and config_root.resolve(strict=False) == Path("/data/config"):
             raise ProvisionError("config transforms for /data/config must use staged operations")
         with provisioning_lock(config_root):
@@ -1503,23 +1945,3 @@ async def validate_config_bytes(
 ) -> dict[str, Any]:
     """Validate config bytes without applying."""
     return await asyncio.to_thread(_validate_sync, payload, filename, config_root)
-
-
-def _managed_files_are_writable(
-    config_root: Path, runtime_config_root: Path | None = None
-) -> bool:
-    """Return whether config requests writable mounts resolved against the runtime root."""
-    config_path = config_root / "config.toml"
-    if not config_path.is_file():
-        return False
-    try:
-        parsed = load_config(config_path)
-    except (OSError, ProvisionError):
-        return False
-    containers = parsed.get("containers", {})
-    if not isinstance(containers, dict):
-        return False
-    container_table = containers.get("container", {})
-    return isinstance(container_table, dict) and managed_files_are_writable(
-        container_table, runtime_config_root or config_root
-    )

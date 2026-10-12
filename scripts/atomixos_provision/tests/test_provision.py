@@ -2,6 +2,8 @@
 
 import json
 import tarfile
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -19,6 +21,8 @@ from atomixos_provision.provision import (
     write_imported_state,
 )
 from atomixos_provision.staging import (
+    ensure_runtime_layout,
+    publish_ready_marker,
     reserve_staged_job_slot,
     runtime_paths,
 )
@@ -94,6 +98,7 @@ def test_provisioning_lock_uses_runtime_lock_for_data_config(monkeypatch, tmp_pa
 
 
 def test_provisioning_lock_rejects_writable_runtime_lock_directory(monkeypatch, tmp_path):
+    """Verify that provisioning lock rejects writable runtime lock directory."""
     from atomixos_provision import provision
 
     lock_dir = tmp_path / "run-locks"
@@ -109,6 +114,7 @@ def test_provisioning_lock_rejects_writable_runtime_lock_directory(monkeypatch, 
 
 
 def test_provisioning_lock_rejects_non_root_runtime_lock_directory(monkeypatch, tmp_path):
+    """Verify that provisioning lock rejects non root runtime lock directory."""
     from atomixos_provision import provision
 
     lock_dir = tmp_path / "run-locks"
@@ -177,6 +183,7 @@ async def test_stage_config_operation_queues_rendered_candidate(monkeypatch, tmp
 
 
 async def test_stage_config_operation_does_not_recover_config_root(monkeypatch, tmp_path):
+    """Verify that stage config operation does not recover config root."""
     from atomixos_provision import provision
 
     runtime_root = tmp_path / "run"
@@ -258,6 +265,7 @@ async def test_stage_config_operation_rejects_when_queue_not_empty(monkeypatch, 
 
 
 async def test_apply_config_operation_staged_path_waits_after_queueing(monkeypatch, tmp_path):
+    """Verify that apply config operation staged path waits after queueing."""
     from atomixos_provision import provision
 
     calls = []
@@ -274,6 +282,11 @@ async def test_apply_config_operation_staged_path_waits_after_queueing(monkeypat
     )
     monkeypatch.setattr(provision, "_wait_for_staged_result", fake_wait)
     monkeypatch.setattr(provision, "staging_enabled", lambda: True)
+    monkeypatch.setattr(
+        provision,
+        "_reserve_staged_job_or_raise",
+        lambda _paths, _job_id: calls.append("reserve"),
+    )
 
     result = await apply_config_operation(
         {"op": "put_user", "name": "alice", "payload": {"isAdmin": False, "ssh_key": "k"}},
@@ -281,7 +294,7 @@ async def test_apply_config_operation_staged_path_waits_after_queueing(monkeypat
     )
 
     assert result == {"warnings": []}
-    assert calls == ["stage", "wait"]
+    assert calls == ["reserve", "stage", "wait"]
 
 
 async def test_apply_config_operation_direct_path_applies_candidate(monkeypatch, tmp_path):
@@ -311,10 +324,102 @@ async def test_apply_config_operation_direct_path_applies_candidate(monkeypatch,
     assert "9.9.9.9" in (config_root / "config.toml").read_text()
 
 
-def test_wait_for_staged_result_rereads_before_timeout_failure(monkeypatch, tmp_path):
+class _RecordingProgress:
+    """Record progress stages reported by the staged-result wait."""
+
+    def __init__(self):
+        """Start with no recorded stages."""
+        self.stages = []
+
+    def set_stage(self, name, detail=None, **_fields):
+        """Record a stage name and detail."""
+        self.stages.append((name, detail))
+
+
+def _wait_without_sleeping(monkeypatch, provision):
+    """Reconcile liveness on every poll without real sleeps."""
+    monkeypatch.setattr(provision, "STAGED_RESULT_TIMEOUT_SECONDS", 0)
+    monkeypatch.setattr(provision.time, "sleep", lambda _seconds: None)
+
+
+def _short_reservation_ttl(monkeypatch, *, heartbeat_seconds):
+    """Expire reservations after 0.2s and set the local staging heartbeat."""
+    from atomixos_provision import provision
+
+    monkeypatch.setattr("atomixos_provision.staging.STAGED_RESERVATION_TTL_SECONDS", 0.2)
+    monkeypatch.setattr(provision, "STAGED_RESERVATION_HEARTBEAT_SECONDS", heartbeat_seconds)
+
+
+@pytest.mark.parametrize(("heartbeat_seconds", "survives"), [(0.05, True), (60, False)])
+def test_local_staged_reservation_heartbeat_outlives_ttl(
+    monkeypatch, tmp_path, heartbeat_seconds, survives
+):
+    """Verify that slow local staging keeps its reservation only via the heartbeat."""
     from atomixos_provision import provision
 
     paths = runtime_paths(tmp_path / "run")
+    ensure_runtime_layout(paths, for_worker=True)
+    _short_reservation_ttl(monkeypatch, heartbeat_seconds=heartbeat_seconds)
+
+    with provision._local_staged_reservation(paths, "job-1"):
+        time.sleep(0.5)
+        if survives:
+            assert publish_ready_marker(paths, "job-1").exists()
+        else:
+            with pytest.raises(ProvisionError, match="reservation is missing"):
+                publish_ready_marker(paths, "job-1")
+
+
+def test_local_staged_reservation_releases_and_stops_heartbeat_on_failure(monkeypatch, tmp_path):
+    """Verify that a staging failure releases the slot and stops the heartbeat."""
+    from atomixos_provision import provision
+
+    paths = runtime_paths(tmp_path / "run")
+    ensure_runtime_layout(paths, for_worker=True)
+    _short_reservation_ttl(monkeypatch, heartbeat_seconds=0.05)
+
+    with (
+        pytest.raises(RuntimeError, match="render failed"),
+        provision._local_staged_reservation(paths, "job-1"),
+    ):
+        assert (paths.queue / "job-1.reserve").exists()
+        raise RuntimeError("render failed")
+
+    assert not (paths.queue / "job-1.reserve").exists()
+    assert not any(thread.name == "staged-reservation-job-1" for thread in threading.enumerate())
+
+
+def test_wait_for_staged_result_keeps_claimed_job_nonterminal(monkeypatch, tmp_path):
+    """Verify that wait for staged result keeps claimed job nonterminal."""
+    from atomixos_provision import provision
+
+    paths = runtime_paths(tmp_path / "run")
+    ensure_runtime_layout(paths, for_worker=True)
+    (paths.active / "job-1").mkdir()
+    reads = {"count": 0}
+
+    def read_result_after_two_intervals(_paths, _job_id):
+        """Read result after two intervals."""
+        reads["count"] += 1
+        if reads["count"] < 3:
+            return None
+        return {"status": "succeeded", "result": {"warnings": []}}
+
+    _wait_without_sleeping(monkeypatch, provision)
+    monkeypatch.setattr(provision, "read_result", read_result_after_two_intervals)
+    progress = _RecordingProgress()
+
+    assert provision._wait_for_staged_result(paths, "job-1", progress) == {"warnings": []}
+    assert reads["count"] == 3
+    assert progress.stages == [("running", "privileged apply worker is running")]
+
+
+def test_wait_for_staged_result_rereads_before_timeout_failure(monkeypatch, tmp_path):
+    """Verify that a result published during timeout handling is returned."""
+    from atomixos_provision import provision
+
+    paths = runtime_paths(tmp_path / "run")
+    ensure_runtime_layout(paths, for_worker=True)
     calls = {"count": 0}
 
     def fake_read_result(_paths, _job_id):
@@ -323,15 +428,14 @@ def test_wait_for_staged_result_rereads_before_timeout_failure(monkeypatch, tmp_
             return None
         return {"status": "succeeded", "result": {"warnings": []}}
 
-    times = iter([0, 0, 2])
-    monkeypatch.setattr(provision, "STAGED_RESULT_TIMEOUT_SECONDS", 1)
-    monkeypatch.setattr(provision.time, "monotonic", lambda: next(times))
+    _wait_without_sleeping(monkeypatch, provision)
     monkeypatch.setattr(provision, "read_result", fake_read_result)
 
     assert provision._wait_for_staged_result(paths, "job-1") == {"warnings": []}
 
 
 def test_wait_for_staged_result_abandons_queued_job_on_timeout(monkeypatch, tmp_path):
+    """Verify that an unblocked queued job is abandoned and fails as timed out."""
     from atomixos_provision import provision
 
     paths = runtime_paths(tmp_path / "run")
@@ -340,10 +444,7 @@ def test_wait_for_staged_result_abandons_queued_job_on_timeout(monkeypatch, tmp_
     (paths.queue / "job-1.ready").write_text(
         '{"job_id": "job-1", "sequence": 1}\n', encoding="utf-8"
     )
-
-    times = iter([0, 2, 2])
-    monkeypatch.setattr(provision, "STAGED_RESULT_TIMEOUT_SECONDS", 1)
-    monkeypatch.setattr(provision.time, "monotonic", lambda: next(times))
+    _wait_without_sleeping(monkeypatch, provision)
 
     with pytest.raises(ProvisionError, match="timed out waiting"):
         provision._wait_for_staged_result(paths, "job-1")
@@ -352,33 +453,15 @@ def test_wait_for_staged_result_abandons_queued_job_on_timeout(monkeypatch, tmp_
     assert not (paths.queue / "job-1.ready").exists()
 
 
-def test_wait_for_staged_result_times_out_claimed_job_without_result(monkeypatch, tmp_path):
-    from atomixos_provision import provision
-
-    paths = runtime_paths(tmp_path / "run")
-    (paths.active / "job-1").mkdir(parents=True)
-
-    times = iter([0, 2, 2])
-    monkeypatch.setattr(provision, "STAGED_RESULT_TIMEOUT_SECONDS", 1)
-    monkeypatch.setattr(provision.time, "monotonic", lambda: next(times))
-
-    with pytest.raises(ProvisionError, match="timed out waiting"):
-        provision._wait_for_staged_result(paths, "job-1")
-
-    assert (paths.active / "job-1").is_dir()
-
-
 def test_wait_for_staged_result_fails_when_worker_removes_job_without_result(
     monkeypatch, tmp_path
 ):
+    """Verify that a job removed without a result fails as unpublished."""
     from atomixos_provision import provision
 
     paths = runtime_paths(tmp_path / "run")
     paths.queue.mkdir(parents=True)
-
-    times = iter([0, 2, 2])
-    monkeypatch.setattr(provision, "STAGED_RESULT_TIMEOUT_SECONDS", 1)
-    monkeypatch.setattr(provision.time, "monotonic", lambda: next(times))
+    _wait_without_sleeping(monkeypatch, provision)
 
     with pytest.raises(ProvisionError, match="did not publish a result"):
         provision._wait_for_staged_result(paths, "job-1")
@@ -414,6 +497,7 @@ def test_write_imported_state_writes_apply_users_inputs(tmp_path):
 
 
 def test_write_imported_state_uses_private_permissions_and_cleans_quadlet(tmp_path):
+    """Verify that write imported state uses private permissions and cleans quadlet."""
     config_path = tmp_path / "config.toml"
     config_path.write_text("version = 1\n")
     config_root = tmp_path / "config"
@@ -777,10 +861,34 @@ def test_durable_reapply_grants_writable_access_using_runtime_root(monkeypatch, 
     assert grants == [(config_root.parent / "config-candidate" / "files", True)]
 
 
+def test_import_config_reconciles_existing_config_without_first_marker(tmp_path, monkeypatch):
+    """Verify that import reapplies an existing config and writes the first-config marker."""
+    monkeypatch.setattr(
+        "atomixos_provision.config.load_config_schema",
+        lambda: {"type": "object", "additionalProperties": True},
+    )
+    monkeypatch.setattr(
+        "atomixos_provision.provision.complete_reapply",
+        lambda _root, _progress=None: (True, [], False),
+    )
+    source = tmp_path / "config.toml"
+    source.write_text(BASE_PARTIAL_CONFIG)
+    config_root = tmp_path / "config"
+    config_root.mkdir()
+    (config_root / "config.toml").write_text("version = 1\n")
+
+    result = import_config_from_path(source, config_root)
+
+    assert result["reapply"] is True
+    assert (config_root / ".first-config").is_file()
+
+
 def test_import_config_from_path_stages_data_config_outside_worker(monkeypatch, tmp_path):
+    """Verify that import config from path stages data config outside worker."""
     from atomixos_provision import provision
 
     calls = []
+    reservations = []
     config_path = tmp_path / "config.toml"
     config_path.write_text("version = 1\n")
     monkeypatch.setattr(provision, "validate_config_root", lambda _root: Path("/data/config"))
@@ -789,11 +897,17 @@ def test_import_config_from_path_stages_data_config_outside_worker(monkeypatch, 
         "_stage_prepared_sync",
         lambda *args, **kwargs: calls.append((args, kwargs)) or {"queued": True},
     )
+    monkeypatch.setattr(
+        provision,
+        "_reserve_staged_job_or_raise",
+        lambda _paths, job_id: reservations.append(job_id),
+    )
 
     result = import_config_from_path(config_path, Path("/data/config"))
 
     assert result == {"queued": True}
     assert calls
+    assert reservations == [calls[0][0][0]]
 
 
 def test_import_config_from_path_applies_data_config_in_worker(monkeypatch, tmp_path):

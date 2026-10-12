@@ -15,6 +15,7 @@ from jsonschema.exceptions import SchemaError, best_match
 __all__ = [
     "DEFAULT_LAN_GATEWAY_IP",
     "ProvisionError",
+    "ProvisionSystemError",
     "load_config",
     "load_config_schema",
     "load_lan_defaults",
@@ -103,10 +104,15 @@ SSH_KEY_TYPES = frozenset(
 
 
 class ProvisionError(RuntimeError):
-    """Raised when config parsing or validation fails."""
+    """Raised when submitted config parsing or validation fails."""
+
+
+class ProvisionSystemError(ProvisionError):
+    """Raised when the appliance's server-side validation setup is invalid."""
 
 
 def provision_error(message: str) -> ProvisionError:
+    """Build a validation error for submitted provisioning data."""
     return ProvisionError(message)
 
 
@@ -125,7 +131,12 @@ DEFAULT_NTP_SERVERS = list(_LAN_DEFAULTS["ntp_servers"])
 
 
 def load_config_schema() -> dict[str, Any]:
-    """Locate and load the JSON schema for config.toml validation."""
+    """Locate and load the JSON schema for config.toml validation.
+
+    Try ATOMIXOS_CONFIG_SCHEMA before the bundled schema locations. Raise
+    ProvisionSystemError if no file is found or the first existing file has
+    invalid JSON. File read errors propagate.
+    """
     candidates: list[Path] = []
     env_path = os.environ.get(SCHEMA_ENV)
     if env_path:
@@ -148,17 +159,18 @@ def load_config_schema() -> dict[str, Any]:
                 return json.loads(candidate.read_text())
             except json.JSONDecodeError as exc:
                 message = f"invalid config schema in {candidate}: {exc}"
-                raise provision_error(message) from exc
+                raise ProvisionSystemError(message) from exc
 
     searched = ", ".join(str(c) for c in candidates)
     message = f"unable to find config schema (checked: {searched})"
-    raise provision_error(message)
+    raise ProvisionSystemError(message)
 
 
 # --- Schema Validation Engine ---
 
 
 def _schema_error_path(path: str, segments: list[Any]) -> str:
+    """Render a JSON-schema error path from its path segments."""
     rendered = path
     for segment in segments:
         rendered += f"[{segment}]" if isinstance(segment, int) else f".{segment}"
@@ -196,12 +208,17 @@ def _schema_error_message(error, path: str) -> str:
 
 
 def validate_against_schema(value: Any, schema: dict, path: str, root_schema: dict) -> None:
-    """Validate a value with the committed Draft 2020-12 JSON Schema."""
+    """Validate a value with Draft 2020-12, resolving references via root_schema.
+
+    Use path as the prefix for validation error locations. Raise ProvisionError
+    for a rejected value and ProvisionSystemError for an invalid root schema.
+    Reference-resolution errors propagate.
+    """
     try:
         Draft202012Validator.check_schema(root_schema)
         validator = Draft202012Validator(root_schema).evolve(schema=schema)
     except SchemaError as exc:
-        raise provision_error(f"invalid config schema: {exc.message}") from exc
+        raise ProvisionSystemError(f"invalid config schema: {exc.message}") from exc
     error = best_match(validator.iter_errors(value))
     if error is not None:
         raise provision_error(_schema_error_message(error, path))
@@ -803,9 +820,16 @@ def load_config(
 
     Returns:
         Parsed and validated config dict with all sections normalized.
+
+    Raises:
+        ProvisionError: The file is not valid UTF-8 or TOML, or a value is rejected.
+        ProvisionSystemError: The config schema cannot be loaded or is invalid.
+        OSError: The config file cannot be read.
     """
     try:
-        data = tomllib.loads(config_path.read_text())
+        data = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    except UnicodeDecodeError as exc:
+        raise provision_error(f"config is not valid UTF-8 in {config_path}: {exc}") from exc
     except tomllib.TOMLDecodeError as exc:
         message = f"invalid TOML in {config_path}: {exc}"
         raise provision_error(message) from exc

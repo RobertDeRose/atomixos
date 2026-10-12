@@ -66,6 +66,31 @@ still wired explicitly by the app factory:
 | `DELETE /api/config/container-volumes/{name}`  | Removes a declared Quadlet volume.                                              |
 | `GET /api/jobs/{job_id}`                       | Returns current provisioning job status, events, result, and rollback state.    |
 
+### API authentication and transport
+
+On a provisioned device, `/api/validate`, `/api/config`, all typed partial routes,
+and `/api/config/export` require SSH-signature authentication. Clients request a
+single-use nonce from `GET /api/nonce`, then sign:
+
+```text
+atomixos-reapply-v2
+nonce:{nonce}
+method:{request_method}
+path:{request_path}
+sha256:{payload_sha256_hex}
+```
+
+The request carries the base64 SSH signature in `X-AtomixOS-Signature` and the
+nonce in `X-AtomixOS-Nonce`; nonces expire after five minutes and are single-use.
+The method is uppercase. Nonces are scoped to the current boot so queued work
+cannot carry authorization across a reboot.
+Binary config submissions use `application/octet-stream` and identify the source
+with `x-config-filename` (for example `config.toml` or `config.tar.zst`); the
+server also detects supported archive magic bytes. Signatures cover the exact raw
+request body. JSON partial requests sign their exact JSON body. A `GET` export has
+an empty body, so its signed digest is SHA-256 of zero bytes. The export response remains canonical `config.toml` bytes.
+The live transport contract is available at `/schema/openapi.json`.
+
 On production staged systems, mutating apply jobs are accepted into a bounded
 FIFO queue and applied one at a time. Clients receive `409 Conflict` when the
 queue is full, and otherwise poll the returned job URL for progress and final
@@ -85,6 +110,12 @@ parsing and upload handling unprivileged while preserving the same
 operator-visible API responses and rollback behavior. Result handoff files are
 root-writable/group-readable, and queue claim/abandon operations share a runtime
 lock so timed-out queued jobs cannot race with the root worker claiming them.
+Each result-timeout interval (`ATOMIXOS_PROVISION_RESULT_TIMEOUT_SECONDS`, 1200 by
+default) the API rechecks the queue. Jobs the worker has claimed, and queued jobs
+blocked behind an active or earlier job, keep waiting. An unblocked queued job is
+abandoned and fails as timed out, and a job that vanishes without a result fails.
+Errors reading a result are retried and fail the job only after persisting for a
+full interval without a successful read.
 
 Before initial provisioning, browser operators can use the Boot UI at `/` to
 upload or drop a config bundle or `config.toml`. Browser submissions post to
@@ -109,3 +140,14 @@ ordering are not preserved after a successful partial update.
 If the reset button is held from power-on for 5 seconds, U-Boot enters USB
 mass storage mode instead of booting Linux. The
 Rock64 OTG USB port then exposes the full eMMC as a removable disk, allowing the host to write a fresh image directly.
+
+## Privileged request verification
+
+Re-apply signatures bind the HTTP method, path, nonce, and exact request bytes.
+The HTTP service stages that evidence, and the root worker independently
+verifies it against active administrator signers before rendering configuration.
+Boot-scoped nonces are consumed once by the worker. Initial provisioning accepts
+unsigned input only while the device is unprovisioned. A regular, non-symlink
+`.first-config` marker or `config.toml` identifies provisioned state; missing
+signer state fails closed. Invalid submitted configuration returns a client
+error; invalid server-side validation setup remains a server error.

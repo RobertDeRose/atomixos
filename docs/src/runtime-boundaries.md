@@ -288,3 +288,12 @@ and `PodmanArgs` mounts: Quadlet resolves them from the installed unit directory
 and Podman from the service working directory, so provisioning cannot classify them.
 A `Volume=` source containing `/` is path-like rather than a named volume (volume
 names cannot contain `/`), so `data/state:/state` is rejected under the same rule.
+
+## Worker request trust
+
+The root worker verifies signed request evidence and re-renders from those
+verified bytes rather than trusting the API-rendered candidate. Staged reads
+are bounded, nonblocking, and reject symlinks and non-regular descriptors.
+Ready publication requires a live capacity reservation and preserves FIFO order.
+API jobs and local CLI staging both refresh their reservation while staging, so slow
+imports keep their slot past the reservation TTL.
