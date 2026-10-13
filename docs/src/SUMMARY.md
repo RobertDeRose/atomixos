@@ -95,7 +95,6 @@
 - [Build Configuration](./reference/build-configuration.md)
 - [Flake Outputs](./reference/flake-outputs.md)
 - [Project Structure](./reference/project-structure.md)
-- [Tooling](./reference/tooling.md)
 - [Code Reference](./code-reference.md)
   - [NixOS Modules](./code-reference/modules.md)
   - [Nix Derivations](./code-reference/derivations.md)

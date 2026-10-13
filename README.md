@@ -349,7 +349,6 @@ All tasks are run with `mise run <task>`. Run `mise tasks` to list them.
 | `apps.aarch64-linux.rock64-qemu-vm`   | QEMU VM runner                                           |
 | `checks.aarch64-linux.*`              | Full VM test suite from `nix/tests/`                     |
 | `checks.aarch64-darwin.*`             | Same VM test suite, run natively on macOS via apple-virt |
-| `devShells.*.default`                 | Development shell with mdBook                            |
 
 ## Versioned Image Naming
 
