@@ -84,81 +84,6 @@
 
       developmentMode = builtins.getEnv "DEVELOPMENT" == "1";
 
-      mkDocsToolchain =
-        pkgsFor:
-        let
-          mkReleaseTool =
-            {
-              pname,
-              version,
-              repo,
-              binaries,
-              platforms,
-            }:
-            pkgsFor.stdenvNoCC.mkDerivation {
-              inherit pname version;
-              src = pkgsFor.fetchurl {
-                url = "https://github.com/${repo}/releases/download/v${version}/${
-                  platforms.${pkgsFor.stdenv.hostPlatform.system}.asset
-                }";
-                hash = platforms.${pkgsFor.stdenv.hostPlatform.system}.hash;
-              };
-              dontUnpack = true;
-              dontConfigure = true;
-              dontBuild = true;
-              installPhase = ''
-                runHook preInstall
-                mkdir -p "$out/bin"
-                tmpdir=$(mktemp -d)
-                tar -xzf "$src" -C "$tmpdir"
-                ${builtins.concatStringsSep "\n                " (
-                  map (bin: ''install -m755 "$tmpdir/${bin}" "$out/bin/${bin}"'') binaries
-                )}
-                runHook postInstall
-              '';
-              meta.platforms = builtins.attrNames platforms;
-            };
-
-          mdbook = mkReleaseTool {
-            pname = "mdbook";
-            version = "0.5.2";
-            repo = "rust-lang/mdBook";
-            binaries = [ "mdbook" ];
-            platforms = {
-              aarch64-darwin = {
-                asset = "mdbook-v0.5.2-aarch64-apple-darwin.tar.gz";
-                hash = "sha256-2i9VZT6W4/bhxT4uE+kcwM+86KuXHC4N55LA8fjSQiI=";
-              };
-              aarch64-linux = {
-                asset = "mdbook-v0.5.2-aarch64-unknown-linux-musl.tar.gz";
-                hash = "sha256-+yKb/caN1sk2kuZMUCpnqNPS/DXDfGH8cnaIQ+ZHat0=";
-              };
-            };
-          };
-
-          mdbook-mermaid = mkReleaseTool {
-            pname = "mdbook-mermaid";
-            version = "0.17.0";
-            repo = "badboy/mdbook-mermaid";
-            binaries = [ "mdbook-mermaid" ];
-            platforms = {
-              aarch64-darwin = {
-                asset = "mdbook-mermaid-v0.17.0-aarch64-apple-darwin.tar.gz";
-                hash = "sha256-bkprt0I6A9aML1hpv+fT6rM5MERSEpd5qdmr5MUQA08=";
-              };
-              aarch64-linux = {
-                asset = "mdbook-mermaid-v0.17.0-aarch64-unknown-linux-musl.tar.gz";
-                hash = "sha256-NywujvH1n2XkCIdRfs81NYfDww+39JEeLsJQ4Mph2AY=";
-              };
-            };
-          };
-        in
-        [
-          mdbook
-          mdbook-mermaid
-          pkgsFor.nixfmt
-        ];
-
       # Shared module that applies the overlay to NixOS configurations
       overlayModule =
         { ... }:
@@ -565,39 +490,5 @@
           program = "${self.nixosConfigurations.bundle-test-vm.config.system.build.vm}/bin/run-gateway-vm";
         };
       };
-
-      # ── Development shell ────────────────────────────────────────────────
-
-      devShells.${system}.default = pkgs.mkShell {
-        packages = (mkDocsToolchain pkgs) ++ [ pkgs.zsh ];
-        shellHook = ''
-          case $- in
-            *i*)
-              if [ -z "''${IN_NIX_ZSH:-}" ] && [ -z "''${ZSH_VERSION:-}" ]; then
-                export IN_NIX_ZSH=1
-                exec ${pkgs.zsh}/bin/zsh -i
-              fi
-              ;;
-          esac
-        '';
-      };
-
-      devShells."aarch64-darwin".default =
-        let
-          darwinPkgs = import nixpkgs { system = "aarch64-darwin"; };
-        in
-        darwinPkgs.mkShell {
-          packages = (mkDocsToolchain darwinPkgs) ++ [ darwinPkgs.zsh ];
-          shellHook = ''
-            case $- in
-              *i*)
-                if [ -z "''${IN_NIX_ZSH:-}" ] && [ -z "''${ZSH_VERSION:-}" ]; then
-                  export IN_NIX_ZSH=1
-                  exec ${darwinPkgs.zsh}/bin/zsh -i
-                fi
-                ;;
-            esac
-          '';
-        };
     };
 }
