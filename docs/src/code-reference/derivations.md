@@ -133,7 +133,7 @@ type=raw
 
 ```nix
 { stdenv, ubootTools, nixosConfig, buildId, board, systemClosure, dtbPath,
-  rootfsPathA, rootfsPathB, bootargsBase, recoveryButtonPin, ramdiskAddr }:
+  rootfsPathA, rootfsPathB, kernelParams, bootargsBase, recoveryButtonPin, ramdiskAddr }:
 ```
 
 | Parameter                   | Source                                  | Description                                     |
@@ -143,6 +143,7 @@ type=raw
 | `systemClosure`             | `system.build.toplevel`                 | Kernel `init=` target                           |
 | `rootfsPathA`/`rootfsPathB` | `atomixos.rauc.slots.rootfs0`/`rootfs1` | Kernel `atomixos.lowerdev` per slot             |
 | `dtbPath`                   | `hardware.deviceTree.name`              | DTB loaded from the boot slot                   |
+| `kernelParams`              | `boot.kernelParams` minus `root=fstab`  | NixOS parameters, placed before `bootargsBase`  |
 | `bootargsBase`              | `boards.<board>` in `flake.nix`         | Console, earlycon, and log level                |
 | `recoveryButtonPin`         | `boards.<board>` in `flake.nix`         | UMS hold-button GPIO; empty disables it         |
 | `ramdiskAddr`               | `boards.<board>` in `flake.nix`         | `ramdisk_addr_r` override; empty keeps U-Boot's |

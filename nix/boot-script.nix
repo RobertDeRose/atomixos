@@ -12,6 +12,8 @@
   # Derived from the board's RAUC rootfs slots so boot.scr cannot drift from them.
   rootfsPathA ? nixosConfig.atomixos.rauc.slots.rootfs0,
   rootfsPathB ? nixosConfig.atomixos.rauc.slots.rootfs1,
+  # NixOS kernel parameters (lsm=bpf, net.ifnames=0, ...); boot.cmd adds root=.
+  kernelParams ? builtins.filter (p: p != "root=fstab") nixosConfig.boot.kernelParams,
   bootargsBase,
   # Empty disables the hold-button UMS trigger.
   recoveryButtonPin,
@@ -39,7 +41,8 @@ stdenv.mkDerivation {
       --replace-fail "@rootfsPathA@" "${rootfsPathA}" \
       --replace-fail "@rootfsPathB@" "${rootfsPathB}" \
       --replace-fail "@recoveryButtonPin@" "${recoveryButtonPin}" \
-      --replace-fail "@ramdiskAddr@" "${ramdiskAddr}"
+      --replace-fail "@ramdiskAddr@" "${ramdiskAddr}" \
+      --replace-fail "@kernelParams@" "${builtins.concatStringsSep " " kernelParams}"
     mkimage -C none -A arm64 -T script -d boot.cmd boot.scr
   '';
 

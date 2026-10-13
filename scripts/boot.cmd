@@ -126,7 +126,8 @@ fatload mmc ${devnum}:${distro_bootpart} ${fdt_addr_r} dtbs/@dtbPath@
 fatload mmc ${devnum}:${distro_bootpart} ${ramdisk_addr_r} initrd
 setenv initrd_size ${filesize}
 
-setenv bootargs "${bootargs_base} root=fstab rw atomixos.lowerdev=${atomixos_lowerdev} atomixos.lowerfstype=squashfs init=@systemClosure@/init rauc.slot=${rauc_slot}"
+# NixOS boot.kernelParams first, so the board's console and loglevel win.
+setenv bootargs "@kernelParams@ ${bootargs_base} root=fstab rw atomixos.lowerdev=${atomixos_lowerdev} atomixos.lowerfstype=squashfs init=@systemClosure@/init rauc.slot=${rauc_slot}"
 booti ${kernel_addr_r} ${ramdisk_addr_r}:${initrd_size} ${fdt_addr_r}
 
 echo "ERROR: booti failed!"
