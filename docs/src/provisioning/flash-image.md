@@ -5,10 +5,10 @@ Build a complete `.img` file that can be written to eMMC (or SD card) using `dd`
 ## Build the Image
 
 ```sh
-# Build ROCK64 (default: .gcroots/images/image-rock64.1/)
+# Build ROCK64 (default: .gcroots/rock64/current/image/)
 mise run build
 
-# Build the Radxa CM3 IO Board (.gcroots/images/image-cm3.1/)
+# Build the Radxa CM3 IO Board (.gcroots/cm3/current/image/)
 mise run build --board cm3
 
 # Copy a specific board image to a path
@@ -18,8 +18,8 @@ mise run build --board rock64 -o atomixos-rock64-26.05.img
 mise run build -- --board cm3 --lima
 
 # Or with Nix directly (result stays in Nix store)
-nix build .#image-rock64 -o result-image-rock64
-nix build .#image-cm3 -o result-image-cm3
+nix build .#rock64.image -o result-rock64-image
+nix build .#cm3.image -o result-cm3-image
 ```
 
 ## Flash to eMMC
@@ -50,6 +50,7 @@ mise run flash -y /dev/disk4
 
 The flash task automatically:
 
+- Uses `.gcroots/<board>/current/image/` unless `-i` names an image
 - Converts `/dev/diskN` to `/dev/rdiskN` (raw device for faster writes)
 - Unmounts all partitions on the target disk
 - Refuses to write to the macOS boot disk

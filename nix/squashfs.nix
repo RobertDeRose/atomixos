@@ -6,7 +6,7 @@
   closureInfo,
   nixosConfig,
   maxSquashfsSize,
-  board ? "rock64",
+  board ? nixosConfig.atomixos.board,
 }:
 
 let

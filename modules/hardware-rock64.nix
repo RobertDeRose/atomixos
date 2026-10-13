@@ -10,7 +10,6 @@
 let
   kernelConfig = import ./kernel-config.nix { inherit lib; };
   ubootEnvTools = config.atomixos.ubootEnvTools;
-  rtl815xFirmware = pkgs.callPackage ../nix/rtl815x-firmware.nix { };
   watchdogDevice =
     {
       internal = "/dev/watchdog-internal";
@@ -405,6 +404,8 @@ let
   '';
 in
 {
+  imports = [ ./hardware-rockchip.nix ];
+
   atomixos.serialRootDebug.enable = true;
 
   # ── Boot partition ────────────────────────────────────────────────────────────
@@ -417,10 +418,6 @@ in
   # Initrd repart cannot infer the backing disk from our overlay root, so point
   # it at the Rock64 eMMC device explicitly when creating the data partition.
   boot.initrd.systemd.repart.device = "/dev/mmcblk1";
-  # The Rock64 stores U-Boot in the raw gap before the first GPT partition.
-  # systemd-repart's default discard pass trims that gap, which destroys the
-  # bootloader payload and breaks subsequent soft reboots.
-  boot.initrd.systemd.repart.discard = false;
 
   # ── U-Boot environment tools (fw_setenv / fw_printenv) ─────────────────────
   # Environment is stored on SPI flash (not eMMC) to avoid the eMMC raw write
@@ -435,12 +432,6 @@ in
     # Device         Offset    Size      Erase-size
     /dev/mtd0        0x140000  0x2000    0x1000
   '';
-
-  # ── Boot configuration ───────────────────────────────────────────────────────
-
-  # U-Boot handles booting — no bootloader managed by NixOS
-  boot.loader.grub.enable = false;
-  boot.loader.generic-extlinux-compatible.enable = false;
 
   # ── Kernel ───────────────────────────────────────────────────────────────────
 
@@ -492,14 +483,10 @@ in
 
   # ── Hardware-specific settings ───────────────────────────────────────────────
 
-  # Only include firmware for hardware we actually use.
-  # enableRedistributableFirmware = true would pull in ALL linux-firmware (~700 MB).
-  # The RK3328 SoC doesn't need runtime firmware for its built-in peripherals,
-  # but Realtek RTL8153 USB NIC revisions can request rtl_nic patch blobs.
-  # Keep the image small by including only the specific r8152 firmware files we
-  # need instead of all of linux-firmware.
+  # Only include firmware for hardware we actually use (the RK3328 SoC needs
+  # none for its built-in peripherals); hardware-rockchip.nix adds the USB NIC
+  # blobs.
   hardware.enableRedistributableFirmware = lib.mkForce false;
-  hardware.firmware = [ rtl815xFirmware ];
 
   # The root filesystem is a squashfs partition selected by U-Boot
   # The actual root device is passed via kernel command line by U-Boot boot script
@@ -510,18 +497,6 @@ in
     "f2fs"
     "overlay"
     "dm_mod"
-  ];
-
-  # Keep both stage-1 and stage-2 aware of the filesystems we provision in the
-  # initrd so the required mkfs/fsck helpers are available to systemd-repart.
-  boot.supportedFilesystems = [
-    "vfat"
-    "f2fs"
-  ];
-
-  boot.initrd.supportedFilesystems = [
-    "vfat"
-    "f2fs"
   ];
 
   # ── RAUC slot device paths (eMMC) ──────────────────────────────────────────
@@ -538,13 +513,7 @@ in
   };
 
   # ── Serial console (UART2) ─────────────────────────────────────────────────
-  # Enable login prompt on the debug serial console (ttyS2 @ 1.5Mbaud).
-  # This is the 3-pin header on the Rock64 board.
-  systemd.services."serial-getty@ttyS2" = {
-    enable = true;
-    wantedBy = [ "getty.target" ];
-    serviceConfig.Restart = "always";
-  };
+  # hardware-rockchip.nix enables the ttyS2 getty on the Rock64's 3-pin header.
 
   systemd.services."serial-root-debug@" = lib.mkIf config.atomixos.serialRootDebug.enable {
     description = "Serial root debug autologin on %I";
@@ -582,7 +551,4 @@ in
       ExecStart = serialRootDebugScript;
     };
   };
-
-  # Disable the storage debug capture by default on normal images.
-  systemd.services.boot-storage-debug.wantedBy = lib.mkForce [ ];
 }

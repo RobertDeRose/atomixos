@@ -13,8 +13,8 @@ assert repart."30-boot-b".SizeMinBytes == bootSize;
 assert repart."20-rootfs-a".Label == layout.rootfs.labels.a;
 assert repart."20-rootfs-a".SizeMinBytes == rootfsSize;
 assert repart."40-rootfs-b".SizeMinBytes == rootfsSize;
-assert self.packages.aarch64-linux.squashfs.drvPath != "";
-assert self.packages.aarch64-linux.boot-partition.drvPath != "";
+assert self.packages.aarch64-linux.rock64.squashfs.drvPath != "";
+assert self.packages.aarch64-linux.rock64.boot-partition.drvPath != "";
 pkgs.runCommandNoCC "partition-layout-contract" { } ''
   test "$(grep -c 'mkfs.vfat' ${../../nix/boot-partition.nix})" -eq 1
   ! grep -q 'mkfs.vfat\|mcopy\|mmd' ${../../scripts/build-image.sh}

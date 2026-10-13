@@ -50,37 +50,31 @@
       partitionLayout = import ./nix/partition-layout.nix;
 
       # Userspace fw_printenv/fw_setenv built from the same U-Boot source,
-      # version, and environment config as the board bootloader.
+      # version, and environment config as the board bootloader. Only the
+      # cross_tools/envtools targets are built, so no BL31/TPL firmware is needed.
       mkUbootEnvTools =
-        {
-          uboot,
-          defconfig,
-          firmware,
-        }:
-        pkgs.buildUBoot (
-          {
-            inherit defconfig;
-            src = uboot.src;
-            version = uboot.version;
-            extraConfig = uboot.extraConfig;
-            extraPatches = uboot.patches or [ ];
-            installDir = "$out/bin";
-            hardeningDisable = [ ];
-            dontStrip = false;
-            crossTools = true;
-            extraMakeFlags = [
-              "HOST_TOOLS_ALL=y"
-              "NO_SDL=1"
-              "cross_tools"
-              "envtools"
-            ];
-            filesToInstall = [ "tools/env/fw_printenv" ];
-            postInstall = ''
-              ln -s "$out/bin/fw_printenv" "$out/bin/fw_setenv"
-            '';
-          }
-          // firmware
-        );
+        uboot:
+        pkgs.buildUBoot {
+          inherit (uboot) defconfig;
+          src = uboot.src;
+          version = uboot.version;
+          extraConfig = uboot.extraConfig;
+          extraPatches = uboot.patches or [ ];
+          installDir = "$out/bin";
+          hardeningDisable = [ ];
+          dontStrip = false;
+          crossTools = true;
+          extraMakeFlags = [
+            "HOST_TOOLS_ALL=y"
+            "NO_SDL=1"
+            "cross_tools"
+            "envtools"
+          ];
+          filesToInstall = [ "tools/env/fw_printenv" ];
+          postInstall = ''
+            ln -s "$out/bin/fw_printenv" "$out/bin/fw_setenv"
+          '';
+        };
 
       developmentMode = builtins.getEnv "DEVELOPMENT" == "1";
 
@@ -91,10 +85,97 @@
           nixpkgs.overlays = [ embeddedOverlay ];
         };
 
-      # Build the NixOS system for the Rock64
-      rock64System = self.nixosConfigurations.rock64;
-      rock64Config = rock64System.config;
-      cm3Config = self.nixosConfigurations.cm3.config;
+      # Per-board inputs to the artifact chain. Everything else (DTB path, RAUC
+      # slots and compatible, system closure) comes from the board's NixOS config.
+      boards = {
+        rock64 = {
+          nixosConfig = self.nixosConfigurations.rock64.config;
+          uboot = pkgs.callPackage ./nix/uboot.nix { };
+          bootScript = {
+            bootargsBase = "console=ttyS2,1500000 earlycon=uart8250,mmio32,0xff130000 loglevel=7 rootwait";
+            recoveryButtonPin = "100";
+            # Move initrd clear of the relocated kernel (default 0x06000000 overlaps it).
+            ramdiskAddr = "0x08000000";
+          };
+        };
+        # Radxa CM3 on its IO board (RK3566; different U-Boot/firmware/DTB).
+        cm3 = {
+          nixosConfig = self.nixosConfigurations.cm3.config;
+          uboot = pkgs.callPackage ./nix/uboot-cm3.nix { };
+          bootScript = {
+            bootargsBase = "console=ttyS2,1500000 earlycon=uart8250,mmio32,0xfe660000 loglevel=7 rootwait";
+            recoveryButtonPin = ""; # no ROCK64 reset-button GPIO on CM3
+            ramdiskAddr = ""; # keep RK3568 U-Boot defaults (kernel 0x02000000, initrd 0x12180000)
+          };
+        };
+      };
+
+      # One board's artifact chain as a single derivation: building it links the
+      # shipped artifacts into subdirectories ($out/image, $out/rauc-bundle, ...),
+      # and every artifact stays buildable on its own as an attribute (.#cm3.image).
+      mkBoardPackages =
+        board:
+        {
+          nixosConfig,
+          uboot,
+          bootScript,
+        }:
+        let
+          # U-Boot env tools from the same source/version as the bootloader, to
+          # avoid env format mismatches.
+          ubootEnvTools = mkUbootEnvTools uboot;
+          squashfs = pkgs.callPackage ./nix/squashfs.nix {
+            inherit nixosConfig maxSquashfsSize;
+          };
+          bootScriptPackage = pkgs.callPackage ./nix/boot-script.nix (
+            {
+              inherit nixosConfig;
+              # Embed the squashfs store hash so U-Boot prints a build ID on serial.
+              buildId = builtins.substring 0 32 (baseNameOf (toString squashfs));
+            }
+            // bootScript
+          );
+          # Shared boot-slot filesystem consumed by factory and update artifacts.
+          bootPartition = pkgs.callPackage ./nix/boot-partition.nix {
+            inherit nixosConfig partitionLayout;
+            bootScript = bootScriptPackage;
+          };
+          artifacts = {
+            # U-Boot with persistent env + RAUC A/B bootmeth, and its env tools.
+            inherit uboot squashfs;
+            uboot-env-tools = ubootEnvTools;
+            boot-script = bootScriptPackage;
+            boot-partition = bootPartition;
+            # Signed RAUC bundle (boot + rootfs). Uses the committed development
+            # signing keys; override signingCert/signingKeyPath for production.
+            rauc-bundle = pkgs.callPackage ./nix/rauc-bundle.nix {
+              inherit nixosConfig bootPartition;
+              buildConfiguration = effectiveBuildConfig;
+              squashfsImage = squashfs;
+              signingCert = ./certs/dev.signing.cert.pem;
+              signingKeyPath = ./certs/dev.signing.key.pem;
+            };
+            # Flashable eMMC disk image.
+            image = pkgs.callPackage ./nix/image.nix {
+              inherit
+                nixosConfig
+                bootPartition
+                uboot
+                partitionLayout
+                ;
+              buildConfiguration = effectiveBuildConfig;
+              squashfsImage = squashfs;
+            };
+          };
+          # The board package links what is flashed, shipped, or needed on the host;
+          # squashfs and boot-partition are already inside the image and bundle, so
+          # they stay attributes only and retained roots do not pin them twice.
+          shipped = removeAttrs artifacts [
+            "squashfs"
+            "boot-partition"
+          ];
+        in
+        pkgs.linkFarm "atomixos-${board}" shipped // artifacts;
 
       # Maximum squashfs image size (1 GB)
       # NixOS + Podman + systemd baseline is ~450-500 MB compressed.
@@ -226,124 +307,13 @@
 
       # ── Package outputs ────────────────────────────────────────────────────
 
-      packages.${system} = {
-        # Custom U-Boot with SPI flash env + RAUC A/B bootmeth
-        uboot = pkgs.callPackage ./nix/uboot.nix { };
+      # One package per board (rock64, cm3); see mkBoardPackages.
+      packages.${system} = builtins.mapAttrs mkBoardPackages boards;
 
-        # Userspace U-Boot env tools built from the same U-Boot source/version
-        # as the Rock64 bootloader, to avoid env format mismatches.
-        uboot-env-tools = mkUbootEnvTools {
-          uboot = self.packages.${system}.uboot;
-          defconfig = "rock64-rk3328_defconfig";
-          firmware.BL31 = "${pkgs.armTrustedFirmwareRK3328}/bl31.elf";
-        };
-
-        # Radxa CM3 on its IO board (RK3566; different U-Boot/firmware/DTB).
-        uboot-cm3 = pkgs.callPackage ./nix/uboot-cm3.nix { };
-        uboot-env-tools-cm3 = mkUbootEnvTools {
-          uboot = self.packages.${system}.uboot-cm3;
-          defconfig = "radxa-cm3-io-rk3566_defconfig";
-          firmware.env = {
-            BL31 = "${pkgs.armTrustedFirmwareRK3568}/bl31.elf";
-            ROCKCHIP_TPL = pkgs.rkbin.TPL_RK3566;
-          };
-        };
-
-        squashfs-cm3 = pkgs.callPackage ./nix/squashfs.nix {
-          board = "cm3";
-          nixosConfig = cm3Config;
-          inherit maxSquashfsSize;
-        };
-        boot-script-cm3 = pkgs.callPackage ./nix/boot-script.nix {
-          board = "cm3";
-          buildId = builtins.substring 0 32 (baseNameOf (toString self.packages.${system}.squashfs-cm3));
-          systemClosure = cm3Config.system.build.toplevel;
-          # Keep boot.scr on the same DTB path boot-partition.nix installs.
-          dtbPath = cm3Config.hardware.deviceTree.name;
-          bootargsBase = "console=ttyS2,1500000 earlycon=uart8250,mmio32,0xfe660000 loglevel=7 rootwait";
-          rootfsPathA = cm3Config.atomixos.rauc.slots.rootfs0;
-          rootfsPathB = cm3Config.atomixos.rauc.slots.rootfs1;
-          recoveryButtonPin = ""; # no ROCK64 reset-button GPIO on CM3
-          ramdiskAddr = ""; # keep RK3568 U-Boot defaults (kernel 0x02000000, initrd 0x12180000)
-        };
-        boot-partition-cm3 = pkgs.callPackage ./nix/boot-partition.nix {
-          board = "cm3";
-          nixosConfig = cm3Config;
-          bootScript = self.packages.${system}.boot-script-cm3;
-          inherit partitionLayout;
-        };
-        rauc-bundle-cm3 = pkgs.callPackage ./nix/rauc-bundle.nix {
-          board = "cm3";
-          buildConfiguration = effectiveBuildConfig;
-          nixosConfig = cm3Config;
-          squashfsImage = self.packages.${system}.squashfs-cm3;
-          bootPartition = self.packages.${system}.boot-partition-cm3;
-          signingCert = ./certs/dev.signing.cert.pem;
-          signingKeyPath = ./certs/dev.signing.key.pem;
-        };
-        image-cm3 = pkgs.callPackage ./nix/image.nix {
-          board = "cm3";
-          buildConfiguration = effectiveBuildConfig;
-          nixosConfig = cm3Config;
-          squashfsImage = self.packages.${system}.squashfs-cm3;
-          bootPartition = self.packages.${system}.boot-partition-cm3;
-          uboot = self.packages.${system}.uboot-cm3;
-          inherit partitionLayout;
-        };
-
-        # Squashfs root filesystem image
-        squashfs = pkgs.callPackage ./nix/squashfs.nix {
-          nixosConfig = rock64Config;
-          inherit maxSquashfsSize;
-        };
-
-        # Shared boot-slot filesystem consumed by factory and update artifacts.
-        boot-partition = pkgs.callPackage ./nix/boot-partition.nix {
-          nixosConfig = rock64Config;
-          bootScript = self.packages.${system}.boot-script;
-          inherit partitionLayout;
-        };
-
-        # Signed RAUC bundle (multi-slot: boot + rootfs)
-        # Uses development signing keys by default (committed to repo).
-        # For production: override signingCert/signingKeyPath with production keys.
-        rauc-bundle = pkgs.callPackage ./nix/rauc-bundle.nix {
-          buildConfiguration = effectiveBuildConfig;
-          nixosConfig = rock64Config;
-          squashfsImage = self.packages.${system}.squashfs;
-          bootPartition = self.packages.${system}.boot-partition;
-          signingCert = ./certs/dev.signing.cert.pem;
-          signingKeyPath = ./certs/dev.signing.key.pem;
-        };
-
-        # U-Boot boot script compiled for Rock64
-        boot-script = pkgs.callPackage ./nix/boot-script.nix {
-          # Embed squashfs store hash so U-Boot prints a build ID on serial
-          buildId = builtins.substring 0 32 (baseNameOf (toString self.packages.${system}.squashfs));
-          systemClosure = rock64Config.system.build.toplevel;
-          dtbPath = rock64Config.hardware.deviceTree.name;
-          rootfsPathA = rock64Config.atomixos.rauc.slots.rootfs0;
-          rootfsPathB = rock64Config.atomixos.rauc.slots.rootfs1;
-        };
-
-        # Flashable disk image for eMMC provisioning (board-specific name).
-        image-rock64 = pkgs.callPackage ./nix/image.nix {
-          buildConfiguration = effectiveBuildConfig;
-          nixosConfig = rock64Config;
-          squashfsImage = self.packages.${system}.squashfs;
-          bootPartition = self.packages.${system}.boot-partition;
-          uboot = self.packages.${system}.uboot;
-          inherit partitionLayout;
-        };
-        # Preserve the original Rock64 output for existing callers.
-        image = self.packages.${system}.image-rock64;
-        rauc-bundle-rock64 = self.packages.${system}.rauc-bundle;
-      };
-
-      # Expose aarch64-linux packages on aarch64-darwin so `nix build .#image`
+      # Expose aarch64-linux packages on aarch64-darwin so `nix build .#cm3`
       # works from macOS. Nix delegates the actual build to the linux-builder
-      # (configured in nix-darwin). Without this, `nix build .#image` on macOS
-      # looks for packages.aarch64-darwin.image which doesn't exist.
+      # (configured in nix-darwin). Without this, `nix build .#cm3` on macOS
+      # looks for packages.aarch64-darwin.cm3 which doesn't exist.
       packages."aarch64-darwin" = self.packages.${system};
 
       # ── Tests ────────────────────────────────────────────────────────────

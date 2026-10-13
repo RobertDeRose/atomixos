@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #MISE description="Flash image to disk device (eMMC/SD) using dd with progress"
 #USAGE flag "-y --yes" help="Skip confirmation prompt"
-#USAGE flag "-i --image <path>" help="Path to image file (default: latest image for --board)"
+#USAGE flag "-i --image <path>" help="Path to image file (default: .gcroots/<board>/current/image)"
 #USAGE flag "--board <board>" help="Target board when --image is omitted" default="rock64" {
 #USAGE   choices "rock64" "cm3"
 #USAGE }
@@ -21,17 +21,7 @@ esac
 
 IMAGE_PATH="${usage_image:-}"
 if [ -z "$IMAGE_PATH" ]; then
-	for candidate in ".gcroots/images/image-${BOARD}.1"/*.img; do
-		if [ -f "$candidate" ]; then
-			IMAGE_PATH="$candidate"
-			break
-		fi
-	done
-fi
-
-# Allow flashing an existing ROCK64 build before the first board-aware rebuild.
-if [ -z "$IMAGE_PATH" ] && [ "$BOARD" = rock64 ]; then
-	for candidate in .gcroots/images/image.1/*.img; do
+	for candidate in ".gcroots/$BOARD/current/image"/*.img; do
 		if [ -f "$candidate" ]; then
 			IMAGE_PATH="$candidate"
 			break

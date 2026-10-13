@@ -59,7 +59,7 @@ atomically to the target slot pair.
 
 #### Scenario: Bundle structure
 
-- Given a bundle is built with `nix build .#rauc-bundle`
+- Given a bundle is built with `nix build .#rock64.rauc-bundle`
 - When `rauc info` is run on the bundle
 - Then it shows an image for `boot` (type: raw) and an image for `rootfs` (type: raw)
 - And the `compatible` field is `rock64`

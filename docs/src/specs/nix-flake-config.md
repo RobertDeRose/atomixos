@@ -17,12 +17,12 @@ service modules: systemd, openssh, chrony, dnsmasq, RAUC, nftables, watchdog, an
 
 ### ADDED: Produces squashfs rootfs image
 
-The flake builds a compressed squashfs root filesystem via `packages.aarch64-linux.squashfs`. The image must not exceed
-the partition slot size (1 GB).
+The flake builds a compressed squashfs root filesystem via `packages.aarch64-linux.<board>.squashfs`. The image must
+not exceed the partition slot size (1 GB).
 
 #### Scenario: Squashfs image fits within slot
 
-- Given the squashfs is built with `nix build .#squashfs`
+- Given the squashfs is built with `nix build .#rock64.squashfs`
 - Then the resulting image is less than or equal to 1 GB
 - And it uses zstd compression with 1 MB block size
 
@@ -34,7 +34,7 @@ signed with the project's CA key.
 
 #### Scenario: RAUC bundle is valid
 
-- Given the bundle is built with `nix build .#rauc-bundle`
+- Given the bundle is built with `nix build .#rock64.rauc-bundle`
 - Then the `.raucb` file passes `rauc info --no-verify`
 - And it contains entries for both `boot` and `rootfs` slots
 - And it is signed with the development CA certificate
