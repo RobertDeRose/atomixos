@@ -1,9 +1,9 @@
 # Radxa CM3 on the Radxa CM3 IO Board
 
-This target is for the ROCK 3 Compute Module (RK3566) attached to the **Radxa CM3 IO Board** (tested hardware still
-required for v1.36). It is **not** the ROCK64/RK3328 or the Raspberry Pi CM4 IO carrier board. The CM3 target is
-separately selectable and keeps ROCK64 as the default build with its `rock64` RAUC compatibility string; ROCK64 image
-files are now named `atomixos-rock64-<release>.img`.
+This target is for the ROCK 3 Compute Module (RK3566) attached to the **Radxa CM3 IO Board**. It is **not** the
+ROCK64/RK3328 or the Raspberry Pi CM4 IO carrier board. The CM3 target is separately selectable and keeps ROCK64 as the
+default build with its `rock64` RAUC compatibility string; ROCK64 image files are named
+`atomixos-rock64-<release>.img`.
 
 ## Build
 
@@ -20,8 +20,12 @@ nix build .#cm3 -o result-cm3
 the RAUC bundle is `result-cm3/rauc-bundle/cm3.raucb`, and U-Boot is in `result-cm3/uboot/`. Build a single artifact
 with, for example, `nix build .#cm3.image`. U-Boot uses `radxa-cm3-io-rk3566_defconfig` and the kernel boots with the
 `rockchip/rk3566-radxa-cm3-io.dtb` device tree. The image layout matches ROCK64 (SPL @ sector 64, U-Boot FIT @ sector
-16384, slot A starts at 16 MiB). The kernel is initially **unstripped** to keep RK3566 MMC, power management, Ethernet,
-and USB support available until hardware validation.
+16384, slot A starts at 16 MiB). The kernel is **unstripped**, keeping RK3566 MMC, power management, Ethernet, and USB
+support available.
+
+`mise run build` defaults to ROCK64; use `mise run build --board cm3` for this board. Builds are retained independently
+under `.gcroots/rock64/` and `.gcroots/cm3/`; the CM3 image is `.gcroots/cm3/current/image/`. The corresponding flake
+outputs are `.#rock64.image` and `.#cm3.image`.
 
 ## First boot / storage warning
 
@@ -60,18 +64,15 @@ the hold-button trigger is disabled, because the ROCK64 recovery GPIO is not val
 remains available as a fallback. A stale SPL or bootloader in SPI NOR (when fitted) may override the image on eMMC, so
 verify U-Boot's version via serial output.
 
-## Current validation status
+## Bring-up checks
 
-This addition is a **bring-up target**, not a claim of a successfully booted image on CM3 hardware. In addition to
-eMMC and serial boot, verify GMAC, both USB host/OTG controllers, the RK817 PMIC, and watchdog operation. The CM3
-always uses the internal RK3566 watchdog (`fe600000`); if `build.toml` selects `backend = "external"`, evaluation warns
-and still uses the internal one. Do not enable hardware watchdog or deploy production RAUC updates until boot,
-power-loss recovery, and rollback tests succeed.
+On new CM3 hardware, verify GMAC, both USB host/OTG controllers, the RK817 PMIC, and watchdog operation in addition to
+eMMC and serial boot. The CM3 always uses the internal RK3566 watchdog (`fe600000`); if `build.toml` selects
+`backend = "external"`, evaluation warns and still uses the internal one. Do not enable hardware watchdog or deploy
+production RAUC updates until boot, power-loss recovery, and rollback tests succeed.
 
-For OTA updates, a CM3 sends `X-Compatible: radxa-cm3-io` when polling, and the update server must answer with a CM3
-bundle. A response naming another board's `compatible` is skipped without downloading; see
+## OTA updates
+
+A CM3 sends `X-Compatible: radxa-cm3-io` when polling, and the update server must answer with a CM3 bundle. A response
+naming another board's `compatible` is skipped without downloading; see
 [Update Polling](architecture/update-rollback.md#update-polling).
-
-`mise run build` defaults to ROCK64; use `mise run build --board cm3` for this board. Builds are retained independently
-under `.gcroots/rock64/` and `.gcroots/cm3/`; the CM3 image is `.gcroots/cm3/current/image/`. The corresponding flake
-outputs are `.#rock64.image` and `.#cm3.image`.
