@@ -57,7 +57,8 @@ The flash task automatically:
 - On Linux, writes only a whole removable or USB disk that nothing uses, as `lsblk` reports it; the same disks are
   offered when no disk is given. A disk is in use when any partition or volume on it (including through LVM, LUKS, or
   RAID) is mounted or is swap, or when it carries a `zfs_member`, `LVM2_member`, `linux_raid_member`, `crypto_LUKS`,
-  or `swap` signature. Unmount the disk first; clear an old signature with `wipefs -a`. Flash never unmounts on Linux
+  or `swap` signature. Unmount the disk first; clear an old signature with `wipefs -a`. Flash never unmounts on Linux,
+  and checks the disk again after confirmation, in case it was mounted while the prompt waited
 - Runs `dd` with `bs=4M` and progress reporting
 - Syncs and ejects when done
 
