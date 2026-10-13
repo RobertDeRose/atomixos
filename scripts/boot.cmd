@@ -131,4 +131,4 @@ setenv bootargs "@kernelParams@ ${bootargs_base} root=fstab rw atomixos.lowerdev
 booti ${kernel_addr_r} ${ramdisk_addr_r}:${initrd_size} ${fdt_addr_r}
 
 echo "ERROR: booti failed!"
-echo "Dropping to U-Boot shell for debugging..."
+echo "Returning to U-Boot, which resets so the RAUC try counter can fall back to the other slot"
