@@ -35,11 +35,13 @@ for argument in "$@"; do
 done
 
 if [[ "$output" ]]; then
-  target="$TEST_REPO/fake-output-$(basename "$output" .new)"
+  target="$TEST_REPO/fake-output-$(basename "$output" .new)${FAKE_GENERATION:+-$FAKE_GENERATION}"
   mkdir -p "$target"
+  board=rock64
+  [[ "$output" == *-cm3* ]] && board=cm3
   case "$output" in
-    *image*) touch "$target/atomixos-26.05.img" ;;
-    *rauc-bundle*) touch "$target/rock64.raucb" ;;
+    *image*) touch "$target/atomixos-$board-26.05.img" ;;
+    *rauc-bundle*) touch "$target/$board.raucb" ;;
   esac
   rm -f "$output"
   ln -s "$target" "$output"
@@ -82,6 +84,7 @@ grep -Fx "dev=$TEST_REPO/build.dev.toml args=flake check --impure" "$log"
 rm "$TEST_REPO/build.dev.toml"
 
 # Full-build validation happens before retained links change; a later failure preserves every prior root.
+# Start with pre-board ROCK64 roots to verify successful one-time migration.
 mkdir -p "$TEST_REPO/.gcroots/images" "$TEST_REPO/.gcroots/bundles" "$TEST_REPO/old"
 for root in kernel toplevel uboot uboot-env-tools; do
 	mkdir -p "$TEST_REPO/old/$root"
@@ -100,21 +103,74 @@ fi
 head -n 1 "$log" | grep -F 'args=eval .#lib.effectiveBuildConfiguration.policySHA256 --raw'
 for root in kernel toplevel uboot uboot-env-tools; do
 	test "$(readlink "$TEST_REPO/.gcroots/$root")" = "$TEST_REPO/old/$root"
+	test ! -L "$TEST_REPO/.gcroots/$root-rock64"
 done
 test "$(readlink "$TEST_REPO/.gcroots/images/image.1")" = "$TEST_REPO/old/image"
 test "$(readlink "$TEST_REPO/.gcroots/bundles/rauc-bundle.1")" = "$TEST_REPO/old/bundle"
 
-# A successful full build atomically replaces retained roots and leaves no temporary links.
+# A successful default ROCK64 build migrates old links and rotates the old image to .2.
 : >"$log"
 (cd "$TEST_REPO" && ./scripts/build.sh)
 for root in kernel toplevel uboot uboot-env-tools; do
-	test "$(readlink "$TEST_REPO/.gcroots/$root")" != "$TEST_REPO/old/$root"
-	test ! -e "$TEST_REPO/.gcroots/$root.new"
+	test "$(readlink "$TEST_REPO/.gcroots/$root-rock64")" != "$TEST_REPO/old/$root"
+	test ! -L "$TEST_REPO/.gcroots/$root"
+	test ! -e "$TEST_REPO/.gcroots/$root-rock64.new"
 done
-test "$(readlink "$TEST_REPO/.gcroots/images/image.1")" != "$TEST_REPO/old/image"
-test "$(readlink "$TEST_REPO/.gcroots/bundles/rauc-bundle.1")" != "$TEST_REPO/old/bundle"
-test ! -e "$TEST_REPO/.gcroots/images/image.1.new"
-test ! -e "$TEST_REPO/.gcroots/bundles/rauc-bundle.1.new"
+test -f "$TEST_REPO/.gcroots/images/image-rock64.1/atomixos-rock64-26.05.img"
+test "$(readlink "$TEST_REPO/.gcroots/images/image-rock64.2")" = "$TEST_REPO/old/image"
+test "$(readlink "$TEST_REPO/.gcroots/bundles/rauc-bundle-rock64.2")" = "$TEST_REPO/old/bundle"
+test ! -L "$TEST_REPO/.gcroots/images/image.1"
+test ! -L "$TEST_REPO/.gcroots/bundles/rauc-bundle.1"
+test ! -e "$TEST_REPO/.gcroots/images/image-rock64.1.new"
+test ! -e "$TEST_REPO/.gcroots/bundles/rauc-bundle-rock64.1.new"
+grep -F 'args=build .#image-rock64 -o .gcroots/images/image-rock64.1.new' "$log"
+grep -F 'args=build .#rauc-bundle-rock64 -o .gcroots/bundles/rauc-bundle-rock64.1.new' "$log"
+
+# Invalid boards are rejected before any evaluation or retained-root mutation.
+rock64_image_target=$(readlink "$TEST_REPO/.gcroots/images/image-rock64.1")
+rock64_bundle_target=$(readlink "$TEST_REPO/.gcroots/bundles/rauc-bundle-rock64.1")
+: >"$log"
+if (cd "$TEST_REPO" && usage_board=unknown ./scripts/build.sh) \
+	>"$TEST_REPO/invalid-board.out" 2>"$TEST_REPO/invalid-board.err"; then
+	echo "unknown board unexpectedly succeeded" >&2
+	exit 1
+fi
+grep -F "ERROR: unsupported board 'unknown'" "$TEST_REPO/invalid-board.err"
+test ! -s "$log"
+
+# A failed CM3 build leaves ROCK64 roots intact and does not install CM3 roots.
+: >"$log"
+if (cd "$TEST_REPO" && usage_board=cm3 NIX_FAIL_MATCH='.#rauc-bundle-cm3' ./scripts/build.sh); then
+	echo "failed CM3 build unexpectedly succeeded" >&2
+	exit 1
+fi
+test "$(readlink "$TEST_REPO/.gcroots/images/image-rock64.1")" = "$rock64_image_target"
+test "$(readlink "$TEST_REPO/.gcroots/bundles/rauc-bundle-rock64.1")" = "$rock64_bundle_target"
+test ! -L "$TEST_REPO/.gcroots/images/image-cm3.1"
+test ! -e "$TEST_REPO/.gcroots/images/image-cm3.1.new"
+test ! -e "$TEST_REPO/.gcroots/bundles/rauc-bundle-cm3.1.new"
+
+# CM3 builds all hardware-specific outputs without replacing the ROCK64 artifacts.
+: >"$log"
+(cd "$TEST_REPO" && usage_board=cm3 ./scripts/build.sh)
+grep -F 'args=build .#nixosConfigurations.cm3.config.system.build.kernel' "$log"
+grep -F 'args=build .#uboot-cm3 ' "$log"
+grep -F 'args=build .#uboot-env-tools-cm3 ' "$log"
+grep -F 'args=build .#image-cm3 -o .gcroots/images/image-cm3.1.new' "$log"
+grep -F 'args=build .#rauc-bundle-cm3 -o .gcroots/bundles/rauc-bundle-cm3.1.new' "$log"
+test -f "$TEST_REPO/.gcroots/images/image-cm3.1/atomixos-cm3-26.05.img"
+test -f "$TEST_REPO/.gcroots/bundles/rauc-bundle-cm3.1/cm3.raucb"
+test "$(readlink "$TEST_REPO/.gcroots/images/image-rock64.1")" = "$rock64_image_target"
+test "$(readlink "$TEST_REPO/.gcroots/bundles/rauc-bundle-rock64.1")" = "$rock64_bundle_target"
+
+# A later CM3 revision rotates only its own two image and bundle generations.
+cm3_image_target=$(readlink "$TEST_REPO/.gcroots/images/image-cm3.1")
+cm3_bundle_target=$(readlink "$TEST_REPO/.gcroots/bundles/rauc-bundle-cm3.1")
+(cd "$TEST_REPO" && usage_board=cm3 FAKE_GENERATION=next ./scripts/build.sh)
+test "$(readlink "$TEST_REPO/.gcroots/images/image-cm3.2")" = "$cm3_image_target"
+test "$(readlink "$TEST_REPO/.gcroots/bundles/rauc-bundle-cm3.2")" = "$cm3_bundle_target"
+test "$(readlink "$TEST_REPO/.gcroots/images/image-cm3.1")" != "$cm3_image_target"
+test "$(readlink "$TEST_REPO/.gcroots/images/image-rock64.1")" = "$rock64_image_target"
 
 # Local-override exports cannot discard durable -dev filename identity.
 printf '%s\n' '[watchdog]' 'enable_hardware = true' >"$TEST_REPO/build.dev.toml"
@@ -134,12 +190,13 @@ test -f "$TEST_REPO/atomixos-dev.img"
 
 # Lima executes the same fixed-path wrapper inside the mounted repository.
 : >"$log"
-(cd "$TEST_REPO" && usage_lima=true usage_vm=test-vm ./scripts/build.sh) \
+(cd "$TEST_REPO" && usage_board=cm3 usage_lima=true usage_vm=test-vm ./scripts/build.sh) \
 	>"$TEST_REPO/lima.out" 2>"$TEST_REPO/lima.err"
 grep -F 'WARNING: applying local build.dev.toml overrides; outputs will be marked -dev.' \
 	"$TEST_REPO/lima.err"
 grep -F "dev=$TEST_REPO/build.dev.toml args=eval .#lib.effectiveBuildConfiguration.policySHA256 --raw --impure" \
 	"$log"
+grep -F 'args=build .#image-cm3 -o .gcroots/images/image-cm3.1.new --impure' "$log"
 rm "$TEST_REPO/build.dev.toml"
 
 # The supported task matrix routes only configuration-bearing project commands.
@@ -155,6 +212,8 @@ grep -F './scripts/nix-with-build-config.sh build .#boot-script' "$TEST_REPO/mis
 grep -F './scripts/nix-with-build-config.sh build .#nixosConfigurations.bundle-test-vm' \
 	"$TEST_REPO/mise.toml"
 grep -F 'run = "./scripts/build.sh"' "$TEST_REPO/mise.toml"
+grep -F 'flag "--board <board>" help="Target board" default="rock64"' "$TEST_REPO/mise.toml"
+grep -F 'choices "rock64" "cm3"' "$TEST_REPO/mise.toml"
 if grep -R -F 'nix-with-build-config.sh' "$TEST_REPO/.mise/tasks/e2e" "$TEST_REPO/.mise/tasks/serial"; then
 	echo "excluded e2e or serial task unexpectedly uses local build policy" >&2
 	exit 1

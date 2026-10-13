@@ -5,17 +5,21 @@ Build a complete `.img` file that can be written to eMMC (or SD card) using `dd`
 ## Build the Image
 
 ```sh
-# Build with mise (stores the latest image under .gcroots/images/image.1)
+# Build ROCK64 (default: .gcroots/images/image-rock64.1/)
 mise run build
 
-# Copy the latest image to a specific output path
-mise run build -- -o atomixos-26.05.img
+# Build the Radxa CM3 IO Board (.gcroots/images/image-cm3.1/)
+mise run build --board cm3
+
+# Copy a specific board image to a path
+mise run build --board rock64 -o atomixos-rock64-26.05.img
 
 # Build via Lima VM
-mise run build -- --lima
+mise run build -- --board cm3 --lima
 
-# Or with Nix directly (result stays in Nix store, symlinked to result-image/)
-nix build .#image -o result-image
+# Or with Nix directly (result stays in Nix store)
+nix build .#image-rock64 -o result-image-rock64
+nix build .#image-cm3 -o result-image-cm3
 ```
 
 ## Flash to eMMC
@@ -32,10 +36,13 @@ Flash using the mise task:
 
 ```sh
 # Auto-detect image, specify target disk
-mise run flash /dev/disk4
+mise run flash /dev/disk4  # ROCK64 default
+
+# Select the CM3 image explicitly
+mise run flash --board cm3 /dev/disk4
 
 # Specify image explicitly
-mise run flash -i atomixos-26.05.img /dev/disk4
+mise run flash -i atomixos-rock64-26.05.img /dev/disk4
 
 # Skip confirmation prompt
 mise run flash -y /dev/disk4
@@ -52,11 +59,11 @@ The flash task automatically:
 ### Linux
 
 ```sh
-# With mise
+# With mise (ROCK64 default; use --board cm3 to select the CM3 image)
 mise run flash -y /dev/mmcblk0
 
-# With dd directly
-sudo dd if=atomixos-26.05.img of=/dev/mmcblk0 bs=4M status=progress
+# With dd directly (select the correct image and target disk)
+sudo dd if=atomixos-rock64-26.05.img of=/dev/mmcblk0 bs=4M status=progress
 sudo sync
 ```
 

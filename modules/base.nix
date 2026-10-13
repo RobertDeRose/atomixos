@@ -17,6 +17,15 @@ let
   partitionLayout = import ../nix/partition-layout.nix;
 in
 {
+  options.atomixos.board = lib.mkOption {
+    type = lib.types.enum [
+      "rock64"
+      "cm3"
+    ];
+    default = "rock64";
+    description = "Board-specific U-Boot environment tools and hardware integration.";
+  };
+
   options.atomixos.serialRootDebug.enable = lib.mkOption {
     type = lib.types.bool;
     default = false;

@@ -54,7 +54,7 @@ ensure_rauc_env() {
 		return 0
 	fi
 
-	log "Seeding missing SPI boot environment for RAUC"
+	log "Seeding missing persistent U-Boot environment for RAUC"
 	fw_setenv BOOT_ORDER "A B"
 	fw_setenv BOOT_A_LEFT 3
 	fw_setenv BOOT_B_LEFT 3

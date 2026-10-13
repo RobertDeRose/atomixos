@@ -1,9 +1,9 @@
-# U-Boot boot script for Rock64 with RAUC A/B bootmeth.
+# U-Boot boot script for Rock64 and CM3 with RAUC A/B bootmeth.
 #
 # RAUC bootmeth (CONFIG_BOOTMETH_RAUC) handles slot selection, boot counter
 # decrement, and saveenv BEFORE loading this script. By the time this runs:
 #
-#   devnum           - MMC device number (1 for eMMC)
+#   devnum           - MMC device selected by the RAUC bootmeth
 #   distro_bootpart  - Boot partition of selected slot (1=A, 3=B)
 #   distro_rootpart  - Root partition of selected slot (2=A, 4=B)
 #
@@ -12,15 +12,15 @@
 # Confirmation flow:
 #   After successful boot, Linux calls `rauc status mark-good` which
 #   internally uses fw_setenv to restore BOOT_x_LEFT=3.
-#   Environment is stored on SPI flash (not eMMC), so fw_setenv is safe.
+#   Environment location depends on the board: SPI flash on Rock64,
+#   redundant reserved eMMC sectors on CM3.
 #   See modules/first-boot.nix and scripts/first-boot.sh.
 
 echo "AtomixOS build: @buildId@"
 echo ""
 
-# Self-heal blank or stale SPI environments in memory only. Persisting SPI from
-# early boot is riskier than fixing it from Linux on first boot with matching
-# fw_setenv tooling.
+# Self-heal blank or stale boot environments in memory only. Persistent
+# initialization is done from Linux with matching fw_setenv tooling.
 if test -z "${BOOT_ORDER}"; then
   echo "Seeding BOOT_ORDER default (in-memory)"
   setenv BOOT_ORDER "A B"
@@ -43,10 +43,9 @@ if test -z "${distro_bootpart}"; then
   setenv distro_bootpart 1
 fi
 
-# Hold the reset button at power-on to expose eMMC over the Rock64 OTG port.
-# Linux sees this as gpiochip3 line 4; in U-Boot that is global GPIO 100.
+# GPIO recovery is supported on Rock64; the CM3 does not use that pin.
 if test -z "${recovery_button_pin}"; then
-  setenv recovery_button_pin 100
+  setenv recovery_button_pin "@recoveryButtonPin@"
 fi
 if test -z "${recovery_hold_secs}"; then
   setenv recovery_hold_secs 5
@@ -68,16 +67,18 @@ if test "${START_UMS}" = "1"; then
   reset
 fi
 
-if gpio input ${recovery_button_pin}; then
-  echo "Recovery button detected on GPIO ${recovery_button_pin}"
-  echo "Hold for ${recovery_hold_secs} seconds to enter USB mass storage mode"
-  sleep ${recovery_hold_secs}
+if test -n "${recovery_button_pin}"; then
   if gpio input ${recovery_button_pin}; then
-    echo "Entering USB mass storage mode for mmc ${recovery_mmc_dev}"
-    echo "Write a new image over the OTG USB cable, then unplug to reboot"
-    ums ${recovery_usb_controller} mmc ${recovery_mmc_dev}
-    echo "USB mass storage exited, resetting..."
-    reset
+    echo "Recovery button detected on GPIO ${recovery_button_pin}"
+    echo "Hold for ${recovery_hold_secs} seconds to enter USB mass storage mode"
+    sleep ${recovery_hold_secs}
+    if gpio input ${recovery_button_pin}; then
+      echo "Entering USB mass storage mode for mmc ${recovery_mmc_dev}"
+      echo "Write a new image over the OTG USB cable, then unplug to reboot"
+      ums ${recovery_usb_controller} mmc ${recovery_mmc_dev}
+      echo "USB mass storage exited, resetting..."
+      reset
+    fi
   fi
 fi
 
@@ -87,10 +88,13 @@ fi
 # Boot partition 1 → rootfs partition 2, boot partition 3 → rootfs partition 4.
 if test "${distro_bootpart}" = "1"; then
   setenv distro_rootpart 2
+  setenv atomixos_lowerdev "@rootfsPathA@"
 elif test "${distro_bootpart}" = "3"; then
   setenv distro_rootpart 4
+  setenv atomixos_lowerdev "@rootfsPathB@"
 else
   setenv distro_rootpart 2
+  setenv atomixos_lowerdev "@rootfsPathA@"
   echo "WARNING: unknown distro_bootpart, defaulted rootfs to ${distro_rootpart}"
 fi
 
@@ -106,20 +110,23 @@ fi
 
 echo "Recovery boot selection: dev=${devnum} boot=${distro_bootpart} root=${distro_rootpart}"
 
-setenv bootargs_base "console=ttyS2,1500000 earlycon=uart8250,mmio32,0xff130000 loglevel=7 rootwait"
+setenv bootargs_base "@bootargsBase@"
 
-# Override ramdisk address to avoid overlap with relocated kernel.
+# Rock64: override ramdisk address to avoid overlap with relocated kernel.
 # Default ramdisk_addr_r=0x06000000 but kernel relocates to end=0x06130000+.
 # Place initrd at 128 MiB (0x08000000) — well clear of kernel.
-setenv ramdisk_addr_r 0x08000000
+# CM3 leaves this empty and keeps the RK3568 defaults.
+if test -n "@ramdiskAddr@"; then
+  setenv ramdisk_addr_r @ramdiskAddr@
+fi
 
 # Load kernel, DTB, and initrd from the selected boot partition
 fatload mmc ${devnum}:${distro_bootpart} ${kernel_addr_r} Image
-fatload mmc ${devnum}:${distro_bootpart} ${fdt_addr_r} dtbs/rockchip/rk3328-rock64.dtb
+fatload mmc ${devnum}:${distro_bootpart} ${fdt_addr_r} dtbs/@dtbPath@
 fatload mmc ${devnum}:${distro_bootpart} ${ramdisk_addr_r} initrd
 setenv initrd_size ${filesize}
 
-setenv bootargs "${bootargs_base} root=fstab rw atomixos.lowerdev=/dev/mmcblk1p${distro_rootpart} atomixos.lowerfstype=squashfs init=@systemClosure@/init rauc.slot=${rauc_slot}"
+setenv bootargs "${bootargs_base} root=fstab rw atomixos.lowerdev=${atomixos_lowerdev} atomixos.lowerfstype=squashfs init=@systemClosure@/init rauc.slot=${rauc_slot}"
 booti ${kernel_addr_r} ${ramdisk_addr_r}:${initrd_size} ${fdt_addr_r}
 
 echo "ERROR: booti failed!"

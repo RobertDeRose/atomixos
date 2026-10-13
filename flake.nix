@@ -49,6 +49,39 @@
       };
       partitionLayout = import ./nix/partition-layout.nix;
 
+      # Userspace fw_printenv/fw_setenv built from the same U-Boot source,
+      # version, and environment config as the board bootloader.
+      mkUbootEnvTools =
+        {
+          uboot,
+          defconfig,
+          firmware,
+        }:
+        pkgs.buildUBoot (
+          {
+            inherit defconfig;
+            src = uboot.src;
+            version = uboot.version;
+            extraConfig = uboot.extraConfig;
+            extraPatches = uboot.patches or [ ];
+            installDir = "$out/bin";
+            hardeningDisable = [ ];
+            dontStrip = false;
+            crossTools = true;
+            extraMakeFlags = [
+              "HOST_TOOLS_ALL=y"
+              "NO_SDL=1"
+              "cross_tools"
+              "envtools"
+            ];
+            filesToInstall = [ "tools/env/fw_printenv" ];
+            postInstall = ''
+              ln -s "$out/bin/fw_printenv" "$out/bin/fw_setenv"
+            '';
+          }
+          // firmware
+        );
+
       developmentMode = builtins.getEnv "DEVELOPMENT" == "1";
 
       mkDocsToolchain =
@@ -136,6 +169,7 @@
       # Build the NixOS system for the Rock64
       rock64System = self.nixosConfigurations.rock64;
       rock64Config = rock64System.config;
+      cm3Config = self.nixosConfigurations.cm3.config;
 
       # Maximum squashfs image size (1 GB)
       # NixOS + Podman + systemd baseline is ~450-500 MB compressed.
@@ -209,6 +243,24 @@
         };
       };
 
+      nixosConfigurations.cm3 = nixpkgs.lib.nixosSystem {
+        inherit system;
+        modules = [
+          overlayModule
+          ./modules/base.nix
+          ./modules/build-configuration.nix
+          ./modules/hardware-cm3.nix
+        ];
+        specialArgs = {
+          inherit
+            self
+            developmentMode
+            effectiveBuildConfig
+            nixstasis
+            ;
+        };
+      };
+
       nixosConfigurations.rock64-qemu = nixpkgs.lib.nixosSystem {
         inherit system;
         modules = [
@@ -255,29 +307,63 @@
 
         # Userspace U-Boot env tools built from the same U-Boot source/version
         # as the Rock64 bootloader, to avoid env format mismatches.
-        uboot-env-tools = pkgs.buildUBoot {
+        uboot-env-tools = mkUbootEnvTools {
+          uboot = self.packages.${system}.uboot;
           defconfig = "rock64-rk3328_defconfig";
-          src = self.packages.${system}.uboot.src;
-          version = self.packages.${system}.uboot.version;
-          extraConfig = self.packages.${system}.uboot.extraConfig;
-          extraPatches = self.packages.${system}.uboot.patches or [ ];
-          installDir = "$out/bin";
-          hardeningDisable = [ ];
-          dontStrip = false;
-          crossTools = true;
-          BL31 = "${pkgs.armTrustedFirmwareRK3328}/bl31.elf";
-          extraMakeFlags = [
-            "HOST_TOOLS_ALL=y"
-            "NO_SDL=1"
-            "cross_tools"
-            "envtools"
-          ];
-          filesToInstall = [
-            "tools/env/fw_printenv"
-          ];
-          postInstall = ''
-            ln -s "$out/bin/fw_printenv" "$out/bin/fw_setenv"
-          '';
+          firmware.BL31 = "${pkgs.armTrustedFirmwareRK3328}/bl31.elf";
+        };
+
+        # Radxa CM3 on its IO board (RK3566; different U-Boot/firmware/DTB).
+        uboot-cm3 = pkgs.callPackage ./nix/uboot-cm3.nix { };
+        uboot-env-tools-cm3 = mkUbootEnvTools {
+          uboot = self.packages.${system}.uboot-cm3;
+          defconfig = "radxa-cm3-io-rk3566_defconfig";
+          firmware.env = {
+            BL31 = "${pkgs.armTrustedFirmwareRK3568}/bl31.elf";
+            ROCKCHIP_TPL = pkgs.rkbin.TPL_RK3566;
+          };
+        };
+
+        squashfs-cm3 = pkgs.callPackage ./nix/squashfs.nix {
+          board = "cm3";
+          nixosConfig = cm3Config;
+          inherit maxSquashfsSize;
+        };
+        boot-script-cm3 = pkgs.callPackage ./nix/boot-script.nix {
+          board = "cm3";
+          buildId = builtins.substring 0 32 (baseNameOf (toString self.packages.${system}.squashfs-cm3));
+          systemClosure = cm3Config.system.build.toplevel;
+          # Keep boot.scr on the same DTB path boot-partition.nix installs.
+          dtbPath = cm3Config.hardware.deviceTree.name;
+          bootargsBase = "console=ttyS2,1500000 earlycon=uart8250,mmio32,0xfe660000 loglevel=7 rootwait";
+          rootfsPathA = cm3Config.atomixos.rauc.slots.rootfs0;
+          rootfsPathB = cm3Config.atomixos.rauc.slots.rootfs1;
+          recoveryButtonPin = ""; # no ROCK64 reset-button GPIO on CM3
+          ramdiskAddr = ""; # keep RK3568 U-Boot defaults (kernel 0x02000000, initrd 0x12180000)
+        };
+        boot-partition-cm3 = pkgs.callPackage ./nix/boot-partition.nix {
+          board = "cm3";
+          nixosConfig = cm3Config;
+          bootScript = self.packages.${system}.boot-script-cm3;
+          inherit partitionLayout;
+        };
+        rauc-bundle-cm3 = pkgs.callPackage ./nix/rauc-bundle.nix {
+          board = "cm3";
+          buildConfiguration = effectiveBuildConfig;
+          nixosConfig = cm3Config;
+          squashfsImage = self.packages.${system}.squashfs-cm3;
+          bootPartition = self.packages.${system}.boot-partition-cm3;
+          signingCert = ./certs/dev.signing.cert.pem;
+          signingKeyPath = ./certs/dev.signing.key.pem;
+        };
+        image-cm3 = pkgs.callPackage ./nix/image.nix {
+          board = "cm3";
+          buildConfiguration = effectiveBuildConfig;
+          nixosConfig = cm3Config;
+          squashfsImage = self.packages.${system}.squashfs-cm3;
+          bootPartition = self.packages.${system}.boot-partition-cm3;
+          uboot = self.packages.${system}.uboot-cm3;
+          inherit partitionLayout;
         };
 
         # Squashfs root filesystem image
@@ -310,19 +396,23 @@
           # Embed squashfs store hash so U-Boot prints a build ID on serial
           buildId = builtins.substring 0 32 (baseNameOf (toString self.packages.${system}.squashfs));
           systemClosure = rock64Config.system.build.toplevel;
+          dtbPath = rock64Config.hardware.deviceTree.name;
+          rootfsPathA = rock64Config.atomixos.rauc.slots.rootfs0;
+          rootfsPathB = rock64Config.atomixos.rauc.slots.rootfs1;
         };
 
-        # Flashable disk image for eMMC provisioning
-        # Flash with: dd if=result-image/atomixos-<nixos-series>.img of=/dev/mmcblkN bs=4M
-        # Or use a tool like Etcher.
-        image = pkgs.callPackage ./nix/image.nix {
+        # Flashable disk image for eMMC provisioning (board-specific name).
+        image-rock64 = pkgs.callPackage ./nix/image.nix {
           buildConfiguration = effectiveBuildConfig;
           nixosConfig = rock64Config;
           squashfsImage = self.packages.${system}.squashfs;
           bootPartition = self.packages.${system}.boot-partition;
-          ubootRock64 = self.packages.${system}.uboot;
+          uboot = self.packages.${system}.uboot;
           inherit partitionLayout;
         };
+        # Preserve the original Rock64 output for existing callers.
+        image = self.packages.${system}.image-rock64;
+        rauc-bundle-rock64 = self.packages.${system}.rauc-bundle;
       };
 
       # Expose aarch64-linux packages on aarch64-darwin so `nix build .#image`
@@ -391,6 +481,7 @@
 
           allTests = raucTests // netTests;
           evalChecks = {
+            cm3-board = import ./nix/tests/cm3-board.nix netTestArgs;
             boot-script = import ./nix/tests/boot-script.nix netTestArgs;
             device-tree-overlay = import ./nix/tests/device-tree-overlay.nix netTestArgs;
             build-config-workflow = import ./nix/tests/build-config-workflow.nix netTestArgs;
@@ -418,6 +509,7 @@
             hostPkgs = darwinPkgs;
           };
           darwinTests = {
+            cm3-board = import ./nix/tests/cm3-board.nix darwinNetTestArgs;
             build-config-workflow = import ./nix/tests/build-config-workflow.nix darwinNetTestArgs;
             build-configuration = import ./nix/tests/build-configuration.nix darwinNetTestArgs;
             e2e-launcher = import ./nix/tests/e2e-launcher.nix darwinNetTestArgs;

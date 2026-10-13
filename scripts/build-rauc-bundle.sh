@@ -19,7 +19,7 @@ cp "@squashfs@/rootfs.squashfs" bundle/rootfs.squashfs
 # ── Create RAUC manifest ──
 cat >bundle/manifest.raucm <<EOF
 [update]
-compatible=rock64
+compatible=@compatible@
 version=@version@
 
 [bundle]
@@ -39,4 +39,4 @@ rauc bundle \
 	--cert="@signingCert@" \
 	--key="@signingKey@" \
 	bundle/ \
-	rock64.raucb
+	@board@.raucb

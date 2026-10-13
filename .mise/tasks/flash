@@ -1,14 +1,36 @@
 #!/usr/bin/env bash
 #MISE description="Flash image to disk device (eMMC/SD) using dd with progress"
 #USAGE flag "-y --yes" help="Skip confirmation prompt"
-#USAGE flag "-i --image <path>" help="Path to image file (default: .gcroots/images/image.1)"
+#USAGE flag "-i --image <path>" help="Path to image file (default: latest image for --board)"
+#USAGE flag "--board <board>" help="Target board when --image is omitted" default="rock64" {
+#USAGE   choices "rock64" "cm3"
+#USAGE }
 #USAGE arg "[disk]" help="Target disk device (e.g. /dev/disk4 on macOS, /dev/mmcblk0 on Linux)"
 set -euo pipefail
+
+BOARD=${usage_board:-rock64}
+case "$BOARD" in
+rock64 | cm3) ;;
+*)
+	echo "ERROR: unsupported board '$BOARD' (expected rock64 or cm3)" >&2
+	exit 1
+	;;
+esac
 
 # ── Resolve image path ─────────────────────────────────────────────────────────
 
 IMAGE_PATH="${usage_image:-}"
 if [ -z "$IMAGE_PATH" ]; then
+	for candidate in ".gcroots/images/image-${BOARD}.1"/*.img; do
+		if [ -f "$candidate" ]; then
+			IMAGE_PATH="$candidate"
+			break
+		fi
+	done
+fi
+
+# Allow flashing an existing ROCK64 build before the first board-aware rebuild.
+if [ -z "$IMAGE_PATH" ] && [ "$BOARD" = rock64 ]; then
 	for candidate in .gcroots/images/image.1/*.img; do
 		if [ -f "$candidate" ]; then
 			IMAGE_PATH="$candidate"
@@ -21,7 +43,7 @@ if [ -z "$IMAGE_PATH" ] || [ ! -f "$IMAGE_PATH" ]; then
 	echo "ERROR: No image file found."
 	echo ""
 	echo "Either:"
-	echo "  1. Run 'mise run build' to build the image into .gcroots/images/image.1"
+	echo "  1. Run 'mise run build --board $BOARD' to build the selected board image"
 	echo "  2. Specify the image path: mise run flash --image /path/to/image.img /dev/diskN"
 	exit 1
 fi
