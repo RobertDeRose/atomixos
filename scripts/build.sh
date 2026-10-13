@@ -6,14 +6,7 @@ set -euo pipefail
 REPO_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 BOARD=${usage_board:-rock64}
 case "$BOARD" in
-rock64)
-	UBOOT_OUTPUT=uboot
-	UBOOT_ENV_TOOLS_OUTPUT=uboot-env-tools
-	;;
-cm3)
-	UBOOT_OUTPUT=uboot-cm3
-	UBOOT_ENV_TOOLS_OUTPUT=uboot-env-tools-cm3
-	;;
+rock64 | cm3) ;;
 *)
 	echo "ERROR: unsupported board '$BOARD' (expected rock64 or cm3)" >&2
 	exit 1
@@ -41,97 +34,78 @@ if [[ "${usage_lima:-false}" == true ]]; then
 fi
 
 GCROOTS=.gcroots
-IMGROOT="$GCROOTS/images"
-BUNDLEROOT="$GCROOTS/bundles"
-IMAGE_ROOT="$IMGROOT/image-$BOARD"
-BUNDLE_ROOT="$BUNDLEROOT/rauc-bundle-$BOARD"
+# Each board keeps its retained roots in its own folder:
+#   current   the board package (image/, rauc-bundle/, uboot/, ...) of the last build
+#   previous  the last distinct earlier build
+#   toplevel  the system closure, so rebuilds reuse the kernel and packages
+BOARD_DIR="$GCROOTS/$BOARD"
+CURRENT="$BOARD_DIR/current"
+PREVIOUS="$BOARD_DIR/previous"
+TOPLEVEL="$BOARD_DIR/toplevel"
 NIX=./scripts/nix-with-build-config.sh
 
 # Validate the effective configuration before creating or replacing any output link.
 "${cmd[@]}" "$NIX" eval .#lib.effectiveBuildConfiguration.policySHA256 --raw >/dev/null
 
-"${cmd[@]}" mkdir -p "$IMGROOT" "$BUNDLEROOT"
+"${cmd[@]}" mkdir -p "$BOARD_DIR"
 
-temporary_links=(
-	"$GCROOTS/kernel-$BOARD.new"
-	"$GCROOTS/toplevel-$BOARD.new"
-	"$GCROOTS/uboot-$BOARD.new"
-	"$GCROOTS/uboot-env-tools-$BOARD.new"
-	"$IMAGE_ROOT.1.new"
-	"$BUNDLE_ROOT.1.new"
-)
+publishing=false
 cleanup() {
-	"${cmd[@]}" rm -f "${temporary_links[@]}" || true
+	if [[ "$publishing" == true ]]; then
+		# Every .new link is a GC root, so keeping them preserves both builds.
+		echo "ERROR: publishing $BOARD_DIR was interrupted; its .new links still hold every build. Rerun the build." >&2
+		return
+	fi
+	"${cmd[@]}" rm -f "$CURRENT.new" "$TOPLEVEL.new" "$PREVIOUS.new" || true
 }
-atomic_replace() {
-	"${cmd[@]}" sh -c '
-    if mv --help 2>&1 | grep -q -- "--no-target-directory"; then
-      exec mv -Tf -- "$1" "$2"
-    fi
-    exec mv -fh "$1" "$2"
-  ' _ "$1" "$2"
+# Point a retained link at a store path through nix build, which replaces the
+# link atomically and registers it as a GC root. A link renamed with mv would
+# leave Nix tracking the old path, so the store path could be collected.
+retain() {
+	"${cmd[@]}" "$NIX" build "$2" -o "$1"
 }
+# Finish an interrupted publish first: previous.new holds the build that was
+# current when it stopped.
+if [[ -L "$PREVIOUS.new" ]] && "${cmd[@]}" test -e "$PREVIOUS.new"; then
+	retain "$PREVIOUS" "$(readlink "$PREVIOUS.new")"
+fi
 trap cleanup EXIT
 cleanup
 
 # Build every replacement first. Existing retained links remain untouched on failure.
-"${cmd[@]}" "$NIX" build ".#nixosConfigurations.$BOARD.config.system.build.kernel" \
-	-o "$GCROOTS/kernel-$BOARD.new"
-"${cmd[@]}" "$NIX" build ".#nixosConfigurations.$BOARD.config.system.build.toplevel" \
-	-o "$GCROOTS/toplevel-$BOARD.new"
-"${cmd[@]}" "$NIX" build ".#$UBOOT_OUTPUT" -o "$GCROOTS/uboot-$BOARD.new"
-"${cmd[@]}" "$NIX" build ".#$UBOOT_ENV_TOOLS_OUTPUT" -o "$GCROOTS/uboot-env-tools-$BOARD.new"
-"${cmd[@]}" "$NIX" build ".#image-$BOARD" -o "$IMAGE_ROOT.1.new"
-"${cmd[@]}" "$NIX" build ".#rauc-bundle-$BOARD" -o "$BUNDLE_ROOT.1.new"
+"${cmd[@]}" "$NIX" build ".#nixosConfigurations.$BOARD.config.system.build.toplevel" -o "$TOPLEVEL.new"
+"${cmd[@]}" "$NIX" build ".#$BOARD" -o "$CURRENT.new"
 
-# One-time migration of pre-board ROCK64 roots, only after every build succeeds.
-# This also preserves the previous .1/.2 images across the naming transition.
-if [[ "$BOARD" == rock64 ]]; then
-	for root in kernel toplevel uboot uboot-env-tools; do
-		if [[ -L "$GCROOTS/$root" && ! -e "$GCROOTS/$root-rock64" && ! -L "$GCROOTS/$root-rock64" ]]; then
-			atomic_replace "$GCROOTS/$root" "$GCROOTS/$root-rock64"
-		fi
-	done
-	for generation in 1 2; do
-		if [[ -L "$IMGROOT/image.$generation" && ! -e "$IMAGE_ROOT.$generation" && ! -L "$IMAGE_ROOT.$generation" ]]; then
-			atomic_replace "$IMGROOT/image.$generation" "$IMAGE_ROOT.$generation"
-		fi
-		if [[ -L "$BUNDLEROOT/rauc-bundle.$generation" && ! -e "$BUNDLE_ROOT.$generation" && ! -L "$BUNDLE_ROOT.$generation" ]]; then
-			atomic_replace "$BUNDLEROOT/rauc-bundle.$generation" "$BUNDLE_ROOT.$generation"
-		fi
-	done
+# A current link whose store path is gone (for example after the checkout moved
+# and its GC root went stale) has nothing left to keep as previous.
+prev_target=
+if [[ -L "$CURRENT" ]] && "${cmd[@]}" test -e "$CURRENT"; then
+	prev_target=$(readlink "$CURRENT")
+fi
+new_target=$(readlink "$CURRENT.new")
+toplevel_target=$(readlink "$TOPLEVEL.new")
+
+# Root the outgoing build under previous.new before current changes, so an
+# interrupted publish cannot leave it unrooted.
+rotate=false
+if [[ -n "$prev_target" && "$prev_target" != "$new_target" ]]; then
+	retain "$PREVIOUS.new" "$prev_target"
+	rotate=true
 fi
 
-prev_image_target=
-if [[ -L "$IMAGE_ROOT.1" ]]; then
-	prev_image_target=$(readlink "$IMAGE_ROOT.1")
+# All builds succeeded. Publish the retained links as the commit point.
+publishing=true
+retain "$CURRENT" "$new_target"
+retain "$TOPLEVEL" "$toplevel_target"
+if [[ "$rotate" == true ]]; then
+	retain "$PREVIOUS" "$prev_target"
 fi
-new_image_target=$(readlink "$IMAGE_ROOT.1.new")
+publishing=false
 
-prev_bundle_target=
-if [[ -L "$BUNDLE_ROOT.1" ]]; then
-	prev_bundle_target=$(readlink "$BUNDLE_ROOT.1")
-fi
-new_bundle_target=$(readlink "$BUNDLE_ROOT.1.new")
-
-# All builds succeeded. Rename prepared links over retained links as the commit point.
-for root in kernel toplevel uboot uboot-env-tools; do
-	atomic_replace "$GCROOTS/$root-$BOARD.new" "$GCROOTS/$root-$BOARD"
-done
-
-if [[ -n "$prev_image_target" && "$prev_image_target" != "$new_image_target" ]]; then
-	atomic_replace "$IMAGE_ROOT.1" "$IMAGE_ROOT.2"
-fi
-atomic_replace "$IMAGE_ROOT.1.new" "$IMAGE_ROOT.1"
-
-if [[ -n "$prev_bundle_target" && "$prev_bundle_target" != "$new_bundle_target" ]]; then
-	atomic_replace "$BUNDLE_ROOT.1" "$BUNDLE_ROOT.2"
-fi
-atomic_replace "$BUNDLE_ROOT.1.new" "$BUNDLE_ROOT.1"
-
+cleanup
 trap - EXIT
 
-IMG=$("${cmd[@]}" sh -c 'set -- "$1"/*.img; [ -e "$1" ] && printf "%s\n" "$1"' _ "$IMAGE_ROOT.1")
+IMG=$("${cmd[@]}" sh -c 'set -- "$1"/*.img; [ -e "$1" ] && printf "%s\n" "$1"' _ "$CURRENT/image")
 
 if [[ -n "${usage_output:-}" ]]; then
 	DEST=$usage_output

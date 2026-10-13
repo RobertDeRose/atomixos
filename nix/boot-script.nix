@@ -3,17 +3,20 @@
 {
   stdenv,
   ubootTools,
+  nixosConfig,
   buildId ? "unknown",
-  systemClosure,
-  board ? "rock64",
-  dtbPath ? "rockchip/rk3328-rock64.dtb",
-  bootargsBase ? "console=ttyS2,1500000 earlycon=uart8250,mmio32,0xff130000 loglevel=7 rootwait",
-  # Pass the board's RAUC rootfs slot devices so boot.scr cannot drift from them.
-  rootfsPathA,
-  rootfsPathB,
-  recoveryButtonPin ? "100",
+  board ? nixosConfig.atomixos.board,
+  systemClosure ? nixosConfig.system.build.toplevel,
+  # Keep boot.scr on the same DTB path boot-partition.nix installs.
+  dtbPath ? nixosConfig.hardware.deviceTree.name,
+  # Derived from the board's RAUC rootfs slots so boot.scr cannot drift from them.
+  rootfsPathA ? nixosConfig.atomixos.rauc.slots.rootfs0,
+  rootfsPathB ? nixosConfig.atomixos.rauc.slots.rootfs1,
+  bootargsBase,
+  # Empty disables the hold-button UMS trigger.
+  recoveryButtonPin,
   # Empty keeps the U-Boot default ramdisk_addr_r.
-  ramdiskAddr ? "0x08000000",
+  ramdiskAddr,
 }:
 
 stdenv.mkDerivation {

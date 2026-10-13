@@ -1,7 +1,8 @@
 # Nix Derivations
 
-The `nix/` directory contains five derivations that produce the build artifacts. Each is called from `flake.nix` via
-`pkgs.callPackage`.
+The `nix/` directory contains five derivations that produce the build artifacts. `mkBoardPackages` in `flake.nix` calls
+each with `pkgs.callPackage` once per entry in its `boards` table and exposes the results as attributes of the board
+package (`.#rock64.image`, `.#cm3.rauc-bundle`, ...).
 
 ## Build Pipeline
 
@@ -30,13 +31,14 @@ flowchart LR
 **Function signature:**
 
 ```nix
-{ stdenv, squashfsTools, closureInfo, nixosConfig, maxSquashfsSize }:
+{ stdenv, squashfsTools, closureInfo, nixosConfig, maxSquashfsSize, board }:
 ```
 
-| Parameter         | Source                | Description                   |
-|-------------------|-----------------------|-------------------------------|
-| `nixosConfig`     | `rock64System.config` | Evaluated NixOS configuration |
-| `maxSquashfsSize` | `flake.nix` (1 GB)    | Maximum allowed image size    |
+| Parameter         | Source                               | Description                        |
+|-------------------|--------------------------------------|------------------------------------|
+| `nixosConfig`     | `boards.<board>.nixosConfig`         | The board's evaluated NixOS config |
+| `maxSquashfsSize` | `flake.nix` (rootfs slot size, 1 GB) | Maximum allowed image size         |
+| `board`           | `atomixos.board` (default)           | Derivation name prefix             |
 
 **Delegates to:** `scripts/build-squashfs.sh`
 
@@ -64,8 +66,9 @@ flowchart LR
 
 **Purpose**: Builds the vfat boot-slot filesystem once for both factory images and RAUC bundles.
 
-It copies the kernel `Image`, initrd, overlaid Rock64 DTB, and compiled `boot.scr` into a filesystem sized by
-`nix/partition-layout.nix`.
+It copies the kernel `Image`, initrd, the board's device tree (`hardware.deviceTree.name`, with its overlays applied), and
+compiled `boot.scr` into a filesystem sized by `nix/partition-layout.nix`. Its inputs are `nixosConfig`, `bootScript`,
+`partitionLayout`, and `board` (default `atomixos.board`).
 
 **Output:** `$out/boot.vfat`
 
@@ -78,18 +81,19 @@ It copies the kernel `Image`, initrd, overlaid Rock64 DTB, and compiled `boot.sc
 **Function signature:**
 
 ```nix
-{ stdenv, rauc, squashfsTools, nixosConfig, squashfsImage,
-  bootPartition, signingCert, signingKeyPath }:
+{ stdenv, rauc, squashfsTools, buildConfiguration, nixosConfig, squashfsImage,
+  bootPartition, signingCert, signingKeyPath, board }:
 ```
 
-| Parameter        | Source                         | Description                      |
-|------------------|--------------------------------|----------------------------------|
-| `nixosConfig`    | `rock64System.config`          | Provides kernel/initrd/DTB paths |
-| `squashfsImage`  | `packages.squashfs`            | The squashfs derivation output   |
-| `bootPartition`  | `packages.boot-partition`      | Shared boot-slot filesystem      |
-| `signingCert`    | `./certs/dev.signing.cert.pem` | RAUC signing certificate         |
-| `signingKeyPath` | `./certs/dev.signing.key.pem`  | RAUC signing private key         |
-| `caCert`         | `./certs/dev.ca.cert.pem`      | CA certificate for verification  |
+| Parameter            | Source                            | Description                        |
+|----------------------|-----------------------------------|------------------------------------|
+| `buildConfiguration` | `lib.effectiveBuildConfiguration` | Policy sidecars and `-dev` naming  |
+| `nixosConfig`        | `boards.<board>.nixosConfig`      | RAUC compatible and bundle version |
+| `squashfsImage`      | `.#<board>.squashfs`              | The squashfs derivation output     |
+| `bootPartition`      | `.#<board>.boot-partition`        | Shared boot-slot filesystem        |
+| `signingCert`        | `./certs/dev.signing.cert.pem`    | RAUC signing certificate           |
+| `signingKeyPath`     | `./certs/dev.signing.key.pem`     | RAUC signing private key           |
+| `board`              | `atomixos.board` (default)        | Bundle filename (`<board>.raucb`)  |
 
 **Delegates to:** `scripts/build-rauc-bundle.sh`
 
@@ -128,15 +132,23 @@ type=raw
 **Function signature:**
 
 ```nix
-{ stdenv, ubootTools, buildId, systemClosure, board, dtbPath, bootargsBase,
-  rootfsPathA, rootfsPathB, recoveryButtonPin, ramdiskAddr }:
+{ stdenv, ubootTools, nixosConfig, buildId, board, systemClosure, dtbPath,
+  rootfsPathA, rootfsPathB, bootargsBase, recoveryButtonPin, ramdiskAddr }:
 ```
 
-| Parameter                   | Source                                  | Description                                |
-|-----------------------------|-----------------------------------------|--------------------------------------------|
-| `buildId`                   | `flake.nix`                             | Build identifier echoed during U-Boot boot |
-| `rootfsPathA`/`rootfsPathB` | `atomixos.rauc.slots.rootfs0`/`rootfs1` | Kernel `atomixos.lowerdev` per slot        |
-| `dtbPath`                   | `hardware.deviceTree.name`              | DTB loaded from the boot slot              |
+| Parameter                   | Source                                  | Description                                     |
+|-----------------------------|-----------------------------------------|-------------------------------------------------|
+| `buildId`                   | `flake.nix`                             | Build identifier echoed during U-Boot boot      |
+| `board`                     | `atomixos.board`                        | Derivation name prefix                          |
+| `systemClosure`             | `system.build.toplevel`                 | Kernel `init=` target                           |
+| `rootfsPathA`/`rootfsPathB` | `atomixos.rauc.slots.rootfs0`/`rootfs1` | Kernel `atomixos.lowerdev` per slot             |
+| `dtbPath`                   | `hardware.deviceTree.name`              | DTB loaded from the boot slot                   |
+| `bootargsBase`              | `boards.<board>` in `flake.nix`         | Console, earlycon, and log level                |
+| `recoveryButtonPin`         | `boards.<board>` in `flake.nix`         | UMS hold-button GPIO; empty disables it         |
+| `ramdiskAddr`               | `boards.<board>` in `flake.nix`         | `ramdisk_addr_r` override; empty keeps U-Boot's |
+
+The values derived from `nixosConfig` are defaults; `flake.nix` passes only `nixosConfig`, `buildId`, and the board table
+values.
 
 **Build step:**
 
@@ -159,13 +171,13 @@ mkimage -C none -A arm64 -T script -d boot.cmd boot.scr
   squashfsImage, bootPartition, partitionLayout }:
 ```
 
-| Parameter         | Source                     | Description                              |
-|-------------------|----------------------------|------------------------------------------|
-| `uboot`           | `packages.uboot[-cm3]`     | Board U-Boot (idbloader + u-boot.itb)    |
-| `nixosConfig`     | `rock64System.config`      | Provides kernel, initrd, DTB             |
-| `squashfsImage`   | `packages.squashfs`        | Squashfs derivation                      |
-| `bootPartition`   | `packages.boot-partition`  | Shared boot-slot filesystem              |
-| `partitionLayout` | `nix/partition-layout.nix` | Shared labels, GUIDs, offsets, and sizes |
+| Parameter         | Source                       | Description                              |
+|-------------------|------------------------------|------------------------------------------|
+| `uboot`           | `.#<board>.uboot`            | Board U-Boot (idbloader + u-boot.itb)    |
+| `nixosConfig`     | `boards.<board>.nixosConfig` | Release name for the image filename      |
+| `squashfsImage`   | `.#<board>.squashfs`         | Squashfs derivation                      |
+| `bootPartition`   | `.#<board>.boot-partition`   | Shared boot-slot filesystem              |
+| `partitionLayout` | `nix/partition-layout.nix`   | Shared labels, GUIDs, offsets, and sizes |
 
 **Delegates to:** `scripts/build-image.sh`
 

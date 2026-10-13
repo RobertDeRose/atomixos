@@ -62,13 +62,22 @@ The failed slot's data is preserved for diagnostics but is not booted.
 - And U-Boot boots slot A (the previous working image)
 - And slot A still has its original content
 
-### ADDED: SPI flash U-Boot environment
+### ADDED: Board-specific U-Boot environment
 
-The U-Boot environment is stored in SPI flash exposed to Linux as `/dev/mtd0` at offset `0x140000` with size `0x2000`.
-AtomixOS does not store redundant U-Boot environment copies on eMMC.
+On ROCK64, the U-Boot environment is stored in SPI flash exposed to Linux as `/dev/mtd0` at offset `0x140000` with size
+`0x2000`, with no redundant copy on eMMC. On the Radxa CM3, which may have no SPI NOR, it is stored as two redundant
+32 KiB copies in the reserved eMMC gap before the first partition, at `0x3F8000` (primary) and `0x3F0000` (redundant).
 
-#### Scenario: Userspace tools address SPI env
+#### Scenario: Userspace tools address the ROCK64 SPI env
 
-- Given the device has booted
+- Given a ROCK64 device has booted
 - When `/etc/fw_env.config` is inspected
 - Then it points to `/dev/mtd0 0x140000 0x2000 0x1000`
+
+#### Scenario: Userspace tools address the CM3 redundant eMMC env
+
+- Given a CM3 device has booted
+- When `/etc/fw_env.config` is inspected
+- Then its first line is `/dev/mmcblk0 0x3F8000 0x8000`
+- And its second line is `/dev/mmcblk0 0x3F0000 0x8000`
+- And U-Boot is built with `CONFIG_ENV_REDUNDANT` and the same offsets

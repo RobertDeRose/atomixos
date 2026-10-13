@@ -70,52 +70,64 @@ limactl start "${usage_vm}" 2>/dev/null || true
 [tasks."build:squashfs"]
 description = "Build squashfs rootfs"
 usage = """
+flag "--board <board>" help="Target board" default="rock64" {
+  choices "rock64" "cm3"
+}
 flag "--lima" help="Build inside a Lima VM"
 flag "--vm <name>" help="Lima VM instance name" default="default"
 """
 run = """
 #!/usr/bin/env bash
 set -euo pipefail
+board="${usage_board:-rock64}"
 cmd=()
 if [ "${usage_lima:-false}" = "true" ]; then
   mise run _lima "${usage_vm}"
   cmd+=(limactl shell "${usage_vm}" --)
 fi
-"${cmd[@]}" ./scripts/nix-with-build-config.sh build .#squashfs -o result-squashfs
+"${cmd[@]}" ./scripts/nix-with-build-config.sh build ".#$board.squashfs" -o "result-$board-squashfs"
 """
 
 [tasks."build:rauc-bundle"]
 description = "Build signed RAUC bundle"
 usage = """
+flag "--board <board>" help="Target board" default="rock64" {
+  choices "rock64" "cm3"
+}
 flag "--lima" help="Build inside a Lima VM"
 flag "--vm <name>" help="Lima VM instance name" default="default"
 """
 run = """
 #!/usr/bin/env bash
 set -euo pipefail
+board="${usage_board:-rock64}"
 cmd=()
 if [ "${usage_lima:-false}" = "true" ]; then
   mise run _lima "${usage_vm}"
   cmd+=(limactl shell "${usage_vm}" --)
 fi
-"${cmd[@]}" ./scripts/nix-with-build-config.sh build .#rauc-bundle -o result-rauc-bundle
+"${cmd[@]}" ./scripts/nix-with-build-config.sh build ".#$board.rauc-bundle" -o "result-$board-rauc-bundle"
 """
 
 [tasks."build:boot-script"]
 description = "Build U-Boot boot script"
 usage = """
+flag "--board <board>" help="Target board" default="rock64" {
+  choices "rock64" "cm3"
+}
 flag "--lima" help="Build inside a Lima VM"
 flag "--vm <name>" help="Lima VM instance name" default="default"
 """
 run = """
 #!/usr/bin/env bash
 set -euo pipefail
+board="${usage_board:-rock64}"
 cmd=()
 if [ "${usage_lima:-false}" = "true" ]; then
   mise run _lima "${usage_vm}"
   cmd+=(limactl shell "${usage_vm}" --)
 fi
-"${cmd[@]}" ./scripts/nix-with-build-config.sh build .#boot-script -o result-boot-script
+"${cmd[@]}" ./scripts/nix-with-build-config.sh build ".#$board.boot-script" -o "result-$board-boot-script"
 """
 
 [tasks."vm:bundle-test"]
@@ -203,7 +215,7 @@ exec "$host_runner"
 """
 
 [tasks.build]
-description = "Build board-specific artifacts and retain the last 2 distinct images per board"
+description = "Build every artifact for a board into .gcroots/<board>/current, keeping the previous build"
 usage = """
 flag "--board <board>" help="Target board" default="rock64" {
   choices "rock64" "cm3"
@@ -215,7 +227,7 @@ flag "-o --output <path>" help="Copy .img to this path (default: retain under .g
 run = "./scripts/build.sh"
 
 [tasks.gc]
-description = "Garbage collect unrooted Nix store paths"
+description = "Garbage collect Nix store paths not kept by .gcroots/<board>/ or other roots"
 usage = """
 flag "--lima" help="Run inside a Lima VM"
 flag "--vm <name>" help="Lima VM instance name" default="default"

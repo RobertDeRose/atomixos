@@ -13,13 +13,13 @@ Run on an `aarch64-linux` builder (or macOS using the existing Linux builder):
 mise run build --board cm3
 nix eval --raw .#nixosConfigurations.cm3.config.hardware.deviceTree.name
 nix build .#checks.aarch64-linux.cm3-board
-nix build .#uboot-cm3 -o result-uboot-cm3
-nix build .#image-cm3 -o result-image-cm3
-nix build .#rauc-bundle-cm3 -o result-rauc-cm3
+nix build .#cm3 -o result-cm3
 ```
 
-The image is `result-image-cm3/atomixos-cm3-<release>.img`, and the RAUC bundle is `cm3.raucb`. The CM3 U-Boot defconfig
-and kernel DTB both use `radxa-cm3-io-rk3566`; the image layout matches ROCK64 (SPL @ sector 64, U-Boot FIT @ sector
+`result-cm3/` holds one subdirectory per shipped artifact: the image is `result-cm3/image/atomixos-cm3-<release>.img`,
+the RAUC bundle is `result-cm3/rauc-bundle/cm3.raucb`, and U-Boot is in `result-cm3/uboot/`. Build a single artifact
+with, for example, `nix build .#cm3.image`. U-Boot uses `radxa-cm3-io-rk3566_defconfig` and the kernel boots with the
+`rockchip/rk3566-radxa-cm3-io.dtb` device tree. The image layout matches ROCK64 (SPL @ sector 64, U-Boot FIT @ sector
 16384, slot A starts at 16 MiB). The kernel is initially **unstripped** to keep RK3566 MMC, power management, Ethernet,
 and USB support available until hardware validation.
 
@@ -70,6 +70,6 @@ For OTA updates, a CM3 sends `X-Compatible: radxa-cm3-io` when polling, and the 
 bundle. A response naming another board's `compatible` is skipped without downloading; see
 [Update Polling](architecture/update-rollback.md#update-polling).
 
-`mise run build` defaults to ROCK64; use `mise run build --board cm3` for this board. Images are retained independently
-at `.gcroots/images/image-rock64.1/` and `.gcroots/images/image-cm3.1/`. The corresponding flake outputs are
-`image-rock64` and `image-cm3`; the legacy `image` output remains an alias for `image-rock64`.
+`mise run build` defaults to ROCK64; use `mise run build --board cm3` for this board. Builds are retained independently
+under `.gcroots/rock64/` and `.gcroots/cm3/`; the CM3 image is `.gcroots/cm3/current/image/`. The corresponding flake
+outputs are `.#rock64.image` and `.#cm3.image`.

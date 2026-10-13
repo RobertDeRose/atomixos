@@ -7,7 +7,7 @@
   nixosConfig,
   bootScript,
   partitionLayout,
-  board ? "rock64",
+  board ? nixosConfig.atomixos.board,
 }:
 
 let
@@ -34,7 +34,7 @@ stdenvNoCC.mkDerivation {
     dd if=/dev/zero of="$out/boot.vfat" bs=1M count=${toString partitionLayout.boot.sizeMiB} status=none
     mkfs.vfat -n BOOT "$out/boot.vfat"
     mmd -i "$out/boot.vfat" ::dtbs
-    mmd -i "$out/boot.vfat" ::dtbs/rockchip
+    mmd -i "$out/boot.vfat" ::dtbs/${dirOf dtbPath}
     mcopy -i "$out/boot.vfat" ${kernel}/Image ::Image
     mcopy -i "$out/boot.vfat" ${initrd}/initrd ::initrd
     mcopy -i "$out/boot.vfat" ${deviceTree}/${dtbPath} ::dtbs/${dtbPath}

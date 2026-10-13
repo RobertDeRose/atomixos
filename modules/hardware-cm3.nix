@@ -14,6 +14,8 @@ let
   emmc = "/dev/mmcblk0";
 in
 {
+  imports = [ ./hardware-rockchip.nix ];
+
   atomixos.board = "cm3";
   atomixos.watchdog.device = "/dev/watchdog-internal";
 
@@ -22,9 +24,6 @@ in
   warnings = lib.optional (
     config.atomixos.watchdog.enableHardware && config.atomixos.watchdog.backend == "external"
   ) "CM3 IO has no external watchdog; using the internal RK3566 watchdog (fe600000).";
-
-  boot.loader.grub.enable = false;
-  boot.loader.generic-extlinux-compatible.enable = false;
 
   # Start with the stock upstream kernel: the Rock64's aggressively stripped
   # RK3328 config excludes critical RK3566 eMMC/SDHCI and PMIC drivers.
@@ -38,25 +37,15 @@ in
     "sdhci"
     "sdhci_pltfm"
     "sdhci_of_dwcmshc"
-    # initrd-prepare-overlay-lower mounts the squashfs slot; the stock kernel
-    # builds squashfs as a module.
+    # initrd-prepare-overlay-lower mounts the squashfs slot. The stock kernel
+    # builds squashfs (and the eMMC host drivers) in, so these entries only
+    # matter if the kernel config changes.
     "squashfs"
   ];
-  boot.supportedFilesystems = [
-    "vfat"
-    "f2fs"
-  ];
-  boot.initrd.supportedFilesystems = [
-    "vfat"
-    "f2fs"
-  ];
 
-  # The first 16 MiB contains Rockchip SPL, U-Boot, and redundant environments.
-  # Never trim that gap during systemd-repart.
-  boot.initrd.systemd.repart = {
-    device = emmc;
-    discard = false;
-  };
+  # The first 16 MiB contains Rockchip SPL, U-Boot, and redundant environments;
+  # hardware-rockchip.nix keeps systemd-repart from trimming it.
+  boot.initrd.systemd.repart.device = emmc;
   fileSystems."/boot" = {
     device = "${emmc}p1";
     fsType = "vfat";
@@ -73,10 +62,6 @@ in
     config.atomixos.ubootEnvTools
     pkgs.i2c-tools
   ];
-
-  # The stock kernel builds r8152, but its RTL8153 patch blobs are not in the
-  # image unless installed explicitly, as on ROCK64.
-  hardware.firmware = [ (pkgs.callPackage ../nix/rtl815x-firmware.nix { }) ];
 
   atomixos.rauc = {
     enable = lib.mkDefault true;
@@ -96,12 +81,4 @@ in
   services.udev.extraRules = ''
     SUBSYSTEM=="watchdog", KERNEL=="watchdog*", KERNELS=="fe600000.watchdog", SYMLINK+="watchdog-internal"
   '';
-  systemd.services."serial-getty@ttyS2" = {
-    enable = true;
-    wantedBy = [ "getty.target" ];
-    serviceConfig.Restart = "always";
-  };
-
-  # Rock64-specific boot-storage probes assume both SPI NOR and mmcblk1.
-  systemd.services.boot-storage-debug.wantedBy = lib.mkForce [ ];
 }

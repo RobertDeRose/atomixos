@@ -10,7 +10,7 @@
   bootPartition,
   signingCert,
   signingKeyPath,
-  board ? "rock64",
+  board ? nixosConfig.atomixos.board,
 }:
 
 let

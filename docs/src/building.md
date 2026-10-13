@@ -21,10 +21,10 @@ mise run check
 # Evaluate the flake without building checks
 ./scripts/nix-with-build-config.sh flake check --no-build
 
-# Build individual ROCK64 artifacts (the build:* helpers still target ROCK64)
-mise run build:squashfs        # result-squashfs/
-mise run build:rauc-bundle     # result-rauc-bundle/
-mise run build:boot-script     # result-boot-script/
+# Build individual artifacts (--board rock64|cm3, default rock64)
+mise run build:squashfs        # result-rock64-squashfs/
+mise run build:rauc-bundle     # result-rock64-rauc-bundle/
+mise run build:boot-script     # result-rock64-boot-script/
 
 # Build for the default board (ROCK64)
 mise run build
@@ -35,9 +35,16 @@ mise run build --board cm3
 
 `mise run build` accepts `--board rock64|cm3` (default: `rock64`). It validates effective build policy before touching
 retained links, prepares replacements under `.new` links, and publishes them only after all builds succeed. Each board
-keeps its own latest two distinct images, RAUC bundles, kernel, system closure, and U-Boot tools. Retained images are
-found under `.gcroots/images/image-<board>.1/` (and `.2/` for the previous build). Existing ROCK64 roots from before
-the multi-board change are migrated on the next successful ROCK64 build. Use `-o <path>` to copy the selected image.
+keeps its retained links in its own folder:
+
+| Link                        | Contents                                                                                               |
+|-----------------------------|--------------------------------------------------------------------------------------------------------|
+| `.gcroots/<board>/current`  | The latest `.#<board>` package: `image/`, `rauc-bundle/`, `uboot/`, `uboot-env-tools/`, `boot-script/` |
+| `.gcroots/<board>/previous` | The last distinct earlier build, in the same layout                                                    |
+| `.gcroots/<board>/toplevel` | The system closure, so rebuilds reuse the kernel and packages                                          |
+
+The image is `.gcroots/<board>/current/image/atomixos-<board>-<release>.img`. Every link is a registered Nix GC root, so
+`mise run gc` keeps it. Use `-o <path>` to copy the selected image.
 When a local override is active, the destination filename must include `-dev`; an unmarked destination is rejected
 before evaluation or retained-link mutation. A validation or later build failure leaves prior retained roots unchanged.
 
@@ -66,7 +73,7 @@ Image and RAUC bundle output directories contain `build.toml` and `build-metadat
 metadata against the exact policy bytes:
 
 ```sh
-artifact_dir=result-image
+artifact_dir=.gcroots/rock64/current/image   # or rauc-bundle, or a result-<board>-image link
 nix shell nixpkgs#coreutils nixpkgs#jq -c sh -c '
   expected=$(jq -r .policy_sha256 "$1/build-metadata.json")
   printf "%s  %s\n" "$expected" "$1/build.toml" | sha256sum -c -
@@ -106,13 +113,16 @@ Lima, so the flake path works unchanged.
 
 ## Build Artifacts
 
-| Artifact        | mise Task              | Nix Output                            | Description                          |
-|-----------------|------------------------|---------------------------------------|--------------------------------------|
-| Squashfs rootfs | `build:squashfs`       | `packages.aarch64-linux.squashfs`     | Compressed root filesystem (~300 MB) |
-| RAUC bundle     | `build:rauc-bundle`    | `packages.aarch64-linux.rauc-bundle`  | Signed `.raucb` for OTA updates      |
-| Boot script     | `build:boot-script`    | `packages.aarch64-linux.boot-script`  | Compiled U-Boot `boot.scr`           |
-| Disk image      | `build --board rock64` | `packages.aarch64-linux.image-rock64` | `.gcroots/images/image-rock64.1/`    |
-| Disk image      | `build --board cm3`    | `packages.aarch64-linux.image-cm3`    | `.gcroots/images/image-cm3.1/`       |
+Every Nix output below is an attribute of the board package `.#<board>` (`rock64` or `cm3`); every mise task takes
+`--board` (default `rock64`).
+
+| Artifact        | mise Task           | Nix Output              | Description                          |
+|-----------------|---------------------|-------------------------|--------------------------------------|
+| Shipped set     |                     | `.#<board>`             | One `result/` subdirectory each      |
+| Squashfs rootfs | `build:squashfs`    | `.#<board>.squashfs`    | Compressed root filesystem (~300 MB) |
+| RAUC bundle     | `build:rauc-bundle` | `.#<board>.rauc-bundle` | Signed `.raucb` for OTA updates      |
+| Boot script     | `build:boot-script` | `.#<board>.boot-script` | Compiled U-Boot `boot.scr`           |
+| Disk image      | `build`             | `.#<board>.image`       | `.gcroots/<board>/current/image/`    |
 
 ## Building with Nix Directly
 
@@ -120,14 +130,14 @@ Direct Git-backed Nix commands use committed `build.toml` only. They intentional
 `build.dev.toml`; use the supported `mise` tasks when testing a local overlay.
 
 ```sh
-# Build the flashable ROCK64 image
-nix build .#image-rock64 -o result-image-rock64
+# Build every CM3 artifact (result-cm3/image, result-cm3/rauc-bundle, ...)
+nix build .#cm3 -o result-cm3
 
-# Build the flashable CM3 IO Board image
-nix build .#image-cm3 -o result-image-cm3
+# Build only the flashable ROCK64 image
+nix build .#rock64.image -o result-rock64-image
 
-# Build only the squashfs
-nix build .#squashfs -o result-squashfs
+# Build only the ROCK64 squashfs
+nix build .#rock64.squashfs -o result-rock64-squashfs
 ```
 
 ## Image Naming

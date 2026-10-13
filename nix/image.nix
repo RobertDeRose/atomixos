@@ -7,7 +7,7 @@
   util-linux,
   uboot,
   buildConfiguration,
-  board ? "rock64",
+  board ? nixosConfig.atomixos.board,
   nixosConfig,
   squashfsImage,
   bootPartition,

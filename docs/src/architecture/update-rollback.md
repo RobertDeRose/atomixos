@@ -111,8 +111,9 @@ The service sends `GET <server_url>/api/v1/updates/latest` with these headers:
 | `X-Compatible`      | Board's RAUC compatible: `rock64` or `radxa-cm3-io`                                               |
 
 The server answers with a JSON object containing `version`, `bundle_url` (HTTPS), and optionally `compatible`. It must
-choose a bundle built for the device's `X-Compatible`. If the response names a different `compatible`, the device skips
-the update without downloading it; a response without `compatible` is still accepted, and `rauc install` rejects a
-bundle for another board. If a newer matching bundle is available, the service downloads it to `/data`, installs it via
-`rauc install`, and reboots. The hawkBit path is reserved for future implementation and is not an operational update
-mode in the current image.
+choose a bundle built for the device's `X-Compatible`. Devices running images from before the header existed send none;
+all of them are ROCK64, so the server must treat a missing `X-Compatible` as `rock64`. If the response names a different
+`compatible`, the device skips the update without downloading it; a response without `compatible` is still accepted, and
+`rauc install` rejects a bundle for another board. If a newer matching bundle is available, the service downloads it to
+`/data`, installs it via `rauc install`, and reboots. The hawkBit path is reserved for future implementation and is not
+an operational update mode in the current image.

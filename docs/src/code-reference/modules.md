@@ -1,7 +1,8 @@
 # NixOS Modules
 
-All NixOS modules live in the `modules/` directory. `base.nix` imports all service modules and is itself imported by the
-hardware-specific modules (`hardware-rock64.nix`, `hardware-qemu.nix`).
+All NixOS modules live in the `modules/` directory. `base.nix` imports all service modules. Each NixOS configuration in
+`flake.nix` combines `base.nix` with one hardware-specific module (`hardware-rock64.nix`, `hardware-cm3.nix`, or
+`hardware-qemu.nix`). The two Rockchip board modules also import `hardware-rockchip.nix` for the settings they share.
 
 ## Module Dependency Graph
 
@@ -12,11 +13,14 @@ flowchart TD
     subgraph HARDWARE["hardware targets"]
         direction LR
         ROCK64["hardware-rock64.nix"]
+        CM3["hardware-cm3.nix"]
         QEMU["hardware-qemu.nix"]
     end
 
-    ROCK64 --> BASE["base.nix"]
-    QEMU --> BASE
+    ROCK64 --> ROCKCHIP["hardware-rockchip.nix<br/>shared Rockchip board settings"]
+    CM3 --> ROCKCHIP
+    FLAKE["flake.nix<br/>nixosConfigurations"] --> BASE["base.nix"]
+    FLAKE --> HARDWARE
 
     subgraph IMPORTS["base.nix imports"]
         direction LR
@@ -176,6 +180,23 @@ atomixos.rauc.slots = {
 ```
 
 **Serial console:** `ttyS2` at 1.5 Mbaud (Rock64 UART2), enabled via `serial-getty@ttyS2.service`.
+
+---
+
+## hardware-cm3.nix
+
+**Purpose**: Radxa CM3 (RK3566) on the CM3 IO Board: stock upstream kernel, `rk3566-radxa-cm3-io` device tree, internal
+watchdog, GMAC1 NIC match, and fixed `/dev/mmcblk0pN` eMMC paths for `/boot`, `/data`, systemd-repart, and the RAUC
+slots. The RAUC compatible is `radxa-cm3-io`, and `fw_env.config` points at the two redundant environment copies in the
+eMMC boot gap (`0x3f8000`, `0x3f0000`). See [Radxa CM3](../cm3.md).
+
+---
+
+## hardware-rockchip.nix
+
+**Purpose**: Settings shared by the ROCK64 and CM3 modules: no NixOS-managed bootloader, `vfat`/`f2fs` support in both
+stages, systemd-repart `discard = false` (protecting SPL and U-Boot in the eMMC gap), Realtek USB NIC firmware, the
+`ttyS2` serial getty, and `boot-storage-debug` disabled.
 
 ---
 

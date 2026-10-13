@@ -164,12 +164,12 @@ mise run check
 # Evaluate the flake without building checks
 ./scripts/nix-with-build-config.sh flake check --no-build
 
-# Build individual ROCK64 artifacts
-mise run build:squashfs        # result-squashfs/
-mise run build:rauc-bundle     # result-rauc-bundle/
-mise run build:boot-script     # result-boot-script/
-mise run build                 # .gcroots/images/image-rock64.1/ (default)
-mise run build --board cm3     # .gcroots/images/image-cm3.1/
+# Build individual artifacts (--board rock64|cm3, default rock64)
+mise run build:squashfs        # result-rock64-squashfs/
+mise run build:rauc-bundle     # result-rock64-rauc-bundle/
+mise run build:boot-script     # result-rock64-boot-script/
+mise run build                 # .gcroots/rock64/current/ (default)
+mise run build --board cm3     # .gcroots/cm3/current/
 
 # Build everything for a specific board
 mise run build --board rock64
@@ -305,50 +305,49 @@ a USB mass storage device over the Rock64 OTG USB port so you can reflash it dir
 
 All tasks are run with `mise run <task>`. Run `mise tasks` to list them.
 
-| Task                    | Description                                                 |
-|-------------------------|-------------------------------------------------------------|
-| `check`                 | Evaluate Linux targets, then run host-compatible checks     |
-| **Build**               |                                                             |
-| `build`                 | Build and retain board-specific artifacts (`--board`)       |
-| `build:squashfs`        | Build squashfs rootfs → `result-squashfs/`                  |
-| `build:rauc-bundle`     | Build signed RAUC bundle → `result-rauc-bundle/`            |
-| `build:boot-script`     | Build U-Boot boot script → `result-boot-script/`            |
-|                         | Optional `-o <path>` copies the latest `.img` to a path     |
-|                         | All `build:*` tasks accept `--lima` and `--vm <name>`       |
-| **E2E Tests**           |                                                             |
-| `e2e`                   | Run the core 9-task E2E suite sequentially                  |
-| `e2e:rauc-slots`        | RAUC slot detection after boot                              |
-| `e2e:rauc-update`       | Bundle install + slot switch A→B                            |
-| `e2e:rauc-rollback`     | Install → mark bad → rollback to previous slot              |
-| `e2e:rauc-confirm`      | os-verification health check → mark-good (~3 min)           |
-| `e2e:rauc-power-loss`   | Crash mid-install, verify recovery                          |
-| `e2e:rauc-watchdog`     | Watchdog + boot-count rollback                              |
-| `e2e:firewall`          | WAN/LAN/VPN port allow/deny (2-node VLAN)                   |
-| `e2e:network-isolation` | DHCP/NTP/WAN isolation (2-node VLAN)                        |
-| `e2e:ssh-wan-toggle`    | SSH-on-WAN flag enable/disable                              |
-| `e2e:debug`             | Interactive QEMU VM for debugging (`-t <test>`, `--keep`)   |
-| **Provisioning**        |                                                             |
-| `flash`                 | Flash image to disk device with dd + progress (macOS/Linux) |
-| **Configuration**       |                                                             |
-| `config:lan-range`      | Update built-in fallback LAN gateway/DHCP defaults          |
-| **Documentation**       |                                                             |
-| `docs:build`            | Build the documentation site (mdBook) → `book/`             |
-| `docs:serve`            | Serve the documentation site locally with hot-reload        |
+| Task                    | Description                                                   |
+|-------------------------|---------------------------------------------------------------|
+| `check`                 | Evaluate Linux targets, then run host-compatible checks       |
+| **Build**               |                                                               |
+| `build`                 | Build and retain board-specific artifacts (`--board`)         |
+| `build:squashfs`        | Build squashfs rootfs → `result-<board>-squashfs/`            |
+| `build:rauc-bundle`     | Build signed RAUC bundle → `result-<board>-rauc-bundle/`      |
+| `build:boot-script`     | Build U-Boot boot script → `result-<board>-boot-script/`      |
+|                         | Optional `-o <path>` copies the latest `.img` to a path       |
+|                         | All `build:*` tasks accept `--board`, `--lima`, `--vm <name>` |
+| **E2E Tests**           |                                                               |
+| `e2e`                   | Run the core 9-task E2E suite sequentially                    |
+| `e2e:rauc-slots`        | RAUC slot detection after boot                                |
+| `e2e:rauc-update`       | Bundle install + slot switch A→B                              |
+| `e2e:rauc-rollback`     | Install → mark bad → rollback to previous slot                |
+| `e2e:rauc-confirm`      | os-verification health check → mark-good (~3 min)             |
+| `e2e:rauc-power-loss`   | Crash mid-install, verify recovery                            |
+| `e2e:rauc-watchdog`     | Watchdog + boot-count rollback                                |
+| `e2e:firewall`          | WAN/LAN/VPN port allow/deny (2-node VLAN)                     |
+| `e2e:network-isolation` | DHCP/NTP/WAN isolation (2-node VLAN)                          |
+| `e2e:ssh-wan-toggle`    | SSH-on-WAN flag enable/disable                                |
+| `e2e:debug`             | Interactive QEMU VM for debugging (`-t <test>`, `--keep`)     |
+| **Provisioning**        |                                                               |
+| `flash`                 | Flash image to disk device with dd + progress (macOS/Linux)   |
+| **Configuration**       |                                                               |
+| `config:lan-range`      | Update built-in fallback LAN gateway/DHCP defaults            |
+| **Documentation**       |                                                               |
+| `docs:build`            | Build the documentation site (mdBook) → `book/`               |
+| `docs:serve`            | Serve the documentation site locally with hot-reload          |
 
 ## Flake outputs
 
-| Output                                | Description                                              |
-|---------------------------------------|----------------------------------------------------------|
-| `nixosConfigurations.rock64`          | Real hardware NixOS system                               |
-| `nixosConfigurations.rock64-qemu`     | QEMU aarch64-virt testing target                         |
-| `packages.aarch64-linux.squashfs`     | Compressed squashfs root filesystem                      |
-| `packages.aarch64-linux.rauc-bundle`  | Signed multi-slot `.raucb` bundle                        |
-| `packages.aarch64-linux.boot-script`  | Compiled U-Boot `boot.scr`                               |
-| `packages.aarch64-linux.image-rock64` | Flashable ROCK64 eMMC image (legacy alias: `image`)      |
-| `packages.aarch64-linux.image-cm3`    | Flashable CM3 IO Board eMMC image                        |
-| `apps.aarch64-linux.rock64-qemu-vm`   | QEMU VM runner                                           |
-| `checks.aarch64-linux.*`              | Full VM test suite from `nix/tests/`                     |
-| `checks.aarch64-darwin.*`             | Same VM test suite, run natively on macOS via apple-virt |
+| Output                              | Description                                                    |
+|-------------------------------------|----------------------------------------------------------------|
+| `nixosConfigurations.rock64`        | Real hardware NixOS system                                     |
+| `nixosConfigurations.rock64-qemu`   | QEMU aarch64-virt testing target                               |
+| `nixosConfigurations.cm3`           | Radxa CM3 IO Board NixOS system                                |
+| `packages.aarch64-linux.rock64`     | Shipped ROCK64 artifacts, one subdirectory each                |
+| `packages.aarch64-linux.cm3`        | Shipped CM3 artifacts, one subdirectory each                   |
+| `packages.aarch64-linux.<board>.*`  | One artifact: `image`, `rauc-bundle`, `squashfs`, `uboot`, ... |
+| `apps.aarch64-linux.rock64-qemu-vm` | QEMU VM runner                                                 |
+| `checks.aarch64-linux.*`            | Full VM test suite from `nix/tests/`                           |
+| `checks.aarch64-darwin.*`           | Same VM test suite, run natively on macOS via apple-virt       |
 
 ## Versioned Image Naming
 

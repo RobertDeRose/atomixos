@@ -240,14 +240,18 @@ filename must include `-dev`; an unmarked destination is rejected before evaluat
 ## Failure and Retention Contract
 
 Effective policy is evaluated before a configured command creates or replaces an output link. The full retained build
-runs an explicit preflight before creating `.gcroots`, builds all replacements under temporary `.new` links, and renames
-them over the selected board's retained links only after every build succeeds. ROCK64 and CM3 roots are independent.
-Renames use platform-specific no-dereference behavior so a symlink to a Nix store directory is replaced rather than
-treated as a destination directory.
+runs an explicit preflight before creating `.gcroots`, builds all replacements under temporary `.new` links, and only
+after every build succeeds points the selected board's `.gcroots/<board>/current`, `previous`, and `toplevel` links at the
+new store paths. Each final link is written by `nix build <store-path> -o <link>`, which replaces it atomically and
+registers it as a Nix GC root; a renamed link would leave Nix tracking the old path. ROCK64 and CM3 roots are independent.
 
-A syntax, schema, evaluation, or later build failure preserves all previous retained kernel, system, bootloader, image,
-and bundle roots. Temporary links are removed on exit. Correct the document—or remove `build.dev.toml` to return to
+A syntax, schema, evaluation, or later build failure preserves the board's previous `current`, `previous`, and `toplevel`
+roots. Temporary links are removed on exit. Correct the document—or remove `build.dev.toml` to return to
 committed policy—and rerun the same command.
+
+Before publishing, the outgoing build is rooted under `previous.new`. If publishing itself is interrupted, the build stops
+with an error and keeps every `.new` link, each a GC root, so neither build can be collected; rerunning the build
+finishes publishing. A `current` link whose store path no longer exists is replaced without becoming `previous`.
 
 ## Security Boundary
 
