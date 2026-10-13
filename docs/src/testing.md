@@ -140,8 +140,9 @@ Additional flake-only checks:
 | `watchdog-module`             | 0     | Watchdog option defaults and opt-in systemd manager settings                                                       |
 | `build-configuration`         | 0     | Schema, canonical policy, provenance, module mapping, and sidecar inputs                                           |
 | `build-config-workflow`       | 0     | Local override wrapper, task matrix, Lima behavior, and per-board retained GC roots                                |
-| `cm3-board`                   | 0     | CM3 eMMC paths, RAUC compatible, U-Boot env offsets matching `fw_env.config`, UMS and FAT write in U-Boot          |
+| `cm3-board`                   | 0     | CM3 eMMC paths and RAUC compatible; every U-Boot setting survives into the resolved `.config`; env order           |
 | `boot-partition-size`         | 0     | An oversized boot payload fails with a size breakdown; a fitting one builds                                        |
+| `device-tree-overlay`         | 0     | Boot slot DTB comes from the NixOS device-tree package with overlays; ROCK64 watchdog overlay wiring               |
 | `os-upgrade-query`            | 0     | Update query sends `X-Compatible`; another board's bundle is skipped before download                               |
 | `watchdog-missing-device`     | 1     | Enabled policy without hardware boots, preserves RAUC state, and emits an actionable warning                       |
 | `kernel-security`             | 1     | BPF LSM/BTF support is active and unsupported hardware/sysctl startup diagnostics are absent                       |

@@ -67,4 +67,11 @@
     CONFIG_FAT_WRITE=y
   ''
   + import ./uboot-start-ums.nix;
-})
+}).overrideAttrs
+  (old: {
+    # Ship the resolved Kconfig: U-Boot silently drops unknown or renamed
+    # symbols, and the cm3-board check compares this against extraConfig.
+    postInstall = (old.postInstall or "") + ''
+      install -m0444 .config "$out/u-boot.config"
+    '';
+  })

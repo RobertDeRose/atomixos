@@ -4,16 +4,18 @@
   ...
 }:
 pkgs.runCommand "test-device-tree-overlay" { } ''
-  image_script=${../../scripts/build-image.sh}
-  bundle_script=${../../scripts/build-rauc-bundle.sh}
+  boot_partition=${../../nix/boot-partition.nix}
   overlay=${../../dts/rock64-i2c-header.dts}
   internal_overlay=${../../dts/rock64-internal-watchdog.dts}
   hardware_module=${../../modules/hardware-rock64.nix}
   kernel_config=${../../modules/kernel-config.nix}
   watchdog_module=${../../modules/watchdog.nix}
 
-  grep -F '"@deviceTree@/@dtbPath@"' "$image_script"
-  grep -F '"@deviceTree@/@dtbPath@"' "$bundle_script"
+  # The boot slot (shared by the image and the RAUC bundle) takes the DTB from
+  # the NixOS device-tree package, which has the overlays applied.
+  grep -F 'deviceTree = nixosConfig.hardware.deviceTree.package;' "$boot_partition"
+  grep -F 'dtbPath = nixosConfig.hardware.deviceTree.name;' "$boot_partition"
+  grep -F '${"$"}{deviceTree}/${"$"}{dtbPath} ::dtbs/${"$"}{dtbPath}' "$boot_partition"
   grep -F 'compatible = "pine64,rock64", "rockchip,rk3328";' "$overlay"
   grep -F 'compatible = "pine64,rock64", "rockchip,rk3328";' "$internal_overlay"
   grep -F '&wdt {' "$internal_overlay"

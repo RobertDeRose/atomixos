@@ -45,7 +45,7 @@ nix/
     build-configuration.nix        Schema, provenance, option, and sidecar assertions
     build-config-workflow.nix      Wrapper/task/retained-root command test derivation
     build-config-workflow.sh       Isolated fake-Nix workflow scenarios
-    cm3-board.nix                  CM3 storage, RAUC, and U-Boot environment agreement
+    cm3-board.nix                  CM3 storage, RAUC, and resolved U-Boot config agreement
     boot-partition-size.nix        Boot slot overflow reporting
     os-upgrade-query.nix           Stubbed os-upgrade query and compatible checks
     os-upgrade-query.sh            os-upgrade-query scenarios
