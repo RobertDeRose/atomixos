@@ -83,7 +83,8 @@ upper/work directories:
 The overlay is assembled in the initrd before `switch_root`:
 
 1. `boot.scr` passes `root=fstab` and `atomixos.lowerdev=/dev/...` for the selected squashfs slot
-2. `initrd-prepare-overlay-lower.service` mounts that slot read-only at `/run/rootfs-base`
+2. `initrd-prepare-overlay-lower.service` waits up to 90 seconds for that block device (eMMC can probe after
+   `initrd-root-device.target`), then mounts it read-only at `/run/rootfs-base`
 3. `sysroot.mount` mounts `/` as overlay with `lowerdir=/run/rootfs-base`, `upperdir=/run/overlay-root/upper`, and `workdir=/run/overlay-root/work`
 4. `sysroot-run.mount` bind-mounts `/run` into the switched root
 
