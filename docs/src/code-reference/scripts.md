@@ -79,18 +79,21 @@ RAUC bootloader backend.
 **Location:** `scripts/boot.cmd`
 
 U-Boot boot script loaded after RAUC bootmeth selects the slot and decrements the boot-count. Compiled to `boot.scr` by
-`mkimage`.
+`mkimage`. A `START_UMS=1` request is handled earlier, by U-Boot's `PREBOOT` (`nix/uboot-start-ums.nix`), so USB recovery
+works even when this script is unreadable.
 
 **Key logic:**
 
 1. Echo build ID (squashfs store hash) to console for identification
 2. On Rock64 only, if the reset button (Linux `gpiochip3` line 4, U-Boot GPIO `100`) is held low for 5 seconds, run
-   `ums 0 mmc 1` so the OTG port exposes the full eMMC to a host computer; CM3 builds leave the recovery pin empty
+   `ums 0 mmc ${devnum}` so the OTG port exposes the full eMMC to a host computer; CM3 builds leave the recovery pin empty
 3. Auto-detect boot device number from `devnum`
 4. On Rock64, override `ramdisk_addr_r=0x08000000` (avoids kernel overlap); CM3 keeps the U-Boot default
 5. Read RAUC bootmeth variables for selected boot/root partitions
 6. Set `rauc.slot` and `atomixos.lowerdev`
-7. Load kernel/initrd/DTB from the selected boot partition, set `root=fstab`, and `booti`
+7. Load kernel/initrd/DTB from the selected boot partition; if any load fails, print the first failing file and `reset`
+   so the decremented try counter falls back instead of booting a stale initrd size
+8. Set the kernel command line (NixOS `boot.kernelParams`, the board base, `root=fstab`) and `booti`
 
 **Console:** `ttyS2,1500000` (Rock64 UART2)
 

@@ -39,6 +39,7 @@ nix/
   image.nix                        Flashable eMMC disk image derivation
   uboot.nix                        ROCK64 U-Boot (SPI env, RAUC bootmeth, UMS)
   uboot-cm3.nix                    Radxa CM3 IO U-Boot (redundant eMMC env, RAUC bootmeth, UMS)
+  uboot-start-ums.nix              Shared U-Boot PREBOOT for START_UMS recovery
   rtl815x-firmware.nix             Realtek USB NIC firmware blobs shared by both boards
   tests/                           Evaluation, command, and NixOS VM integration tests
     build-configuration.nix        Schema, provenance, option, and sidecar assertions
