@@ -30,7 +30,8 @@ on-module eMMC and ignores the IO board SD card:
 
 - Device numbering is fixed by the device tree aliases: `mmc0` is the eMMC (`fe310000.mmc`) and `mmc1` is the SD slot,
   in both U-Boot and Linux. Linux therefore always sees the eMMC as `/dev/mmcblk0`.
-- U-Boot scans only `mmc0` (`bootflow scan -lb mmc0`); Rockchip's default order would try the SD card first.
+- U-Boot scans only `mmc0` (`bootflow scan -lb mmc0`); Rockchip's default order would try the SD card first. If the
+  selected slot fails to boot, the boot command resets so the RAUC try counter can fall back.
 - Root, `/boot`, `/data`, the RAUC slots, `systemd-repart`, and `fw_env.config` use fixed `/dev/mmcblk0pN` paths rather
   than GPT labels, because every AtomixOS image shares the same labels and an inserted SD card could otherwise win.
 - U-Boot A/B environment: two 32-KiB records in the reserved eMMC user-area boot gap at offsets `0x3f8000` and `0x3f0000`.

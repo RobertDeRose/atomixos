@@ -62,6 +62,13 @@ The failed slot's data is preserved for diagnostics but is not booted.
 - And U-Boot boots slot A (the previous working image)
 - And slot A still has its original content
 
+#### Scenario: A slot whose boot files fail to load still rolls back
+
+- Given slot B is preferred and its `boot.scr`, kernel, or DTB cannot be loaded
+- When U-Boot's boot command fails to boot it
+- Then the boot command resets the board instead of stopping at the U-Boot prompt
+- And the next boot sees the decremented `BOOT_B_LEFT`, reaching slot A after the tries are used
+
 ### ADDED: Board-specific U-Boot environment
 
 On ROCK64, the U-Boot environment is stored in SPI flash exposed to Linux as `/dev/mtd0` at offset `0x140000` with size

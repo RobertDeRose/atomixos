@@ -47,8 +47,9 @@ On each boot, U-Boot RAUC bootmeth selects the slot and decrements the boot atte
 4. Boots with the NixOS kernel parameters (`boot.kernelParams`, such as `lsm=bpf`), the board's console arguments, and
    `root=fstab` so initrd mounts the selected squashfs by lower device
 
-If a slot's counter reaches 0, RAUC bootmeth skips it and tries the next slot in `BOOT_ORDER`. This ensures automatic
-rollback after 3 consecutive boot failures.
+If the selected slot fails to load or boot, the U-Boot boot command ends with `reset`, so the board restarts with the
+already decremented counter rather than stopping at the U-Boot prompt. If a slot's counter reaches 0, RAUC bootmeth skips
+it and tries the next slot in `BOOT_ORDER`. This ensures automatic rollback after 3 consecutive boot failures.
 
 A kernel panic counts as a failed boot without anyone power-cycling the device: `kernel.panic` is 10, so the kernel
 reboots itself 10 seconds after a panic, and the next boot uses another try. The value is a sysctl applied by stage-2
