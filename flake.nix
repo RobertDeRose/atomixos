@@ -379,6 +379,7 @@
           evalChecks = {
             cm3-board = import ./nix/tests/cm3-board.nix netTestArgs;
             boot-script = import ./nix/tests/boot-script.nix netTestArgs;
+            boot-partition-size = import ./nix/tests/boot-partition-size.nix netTestArgs;
             device-tree-overlay = import ./nix/tests/device-tree-overlay.nix netTestArgs;
             build-config-workflow = import ./nix/tests/build-config-workflow.nix netTestArgs;
             os-upgrade-query = import ./nix/tests/os-upgrade-query.nix netTestArgs;
@@ -407,6 +408,7 @@
           };
           darwinTests = {
             cm3-board = import ./nix/tests/cm3-board.nix darwinNetTestArgs;
+            boot-partition-size = import ./nix/tests/boot-partition-size.nix darwinNetTestArgs;
             build-config-workflow = import ./nix/tests/build-config-workflow.nix darwinNetTestArgs;
             os-upgrade-query = import ./nix/tests/os-upgrade-query.nix darwinNetTestArgs;
             build-configuration = import ./nix/tests/build-configuration.nix darwinNetTestArgs;
