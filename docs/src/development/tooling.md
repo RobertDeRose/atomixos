@@ -52,8 +52,9 @@ need a Mac with the Linux builder configured. See [GitHub's runner limitations](
 
 `.github/workflows/pytest.yml` runs the provisioning package test suite on the same events. It runs on
 `ubuntu-26.04-arm`, matching the device's aarch64 Linux file APIs, which macOS host runs only emulate. It executes
-`uv run --extra dev pytest` through `mise x uv` in `scripts/atomixos_provision`, installing only uv, pins the
-interpreter to the Python series that the pinned nixpkgs `python3` provides on the device, and has a 15-minute limit.
+`uv run --python 3.13 --extra dev pytest` through `mise x uv` in `scripts/atomixos_provision`, installing only uv.
+The interpreter pin matches the Python series that the pinned nixpkgs `python3` provides on the device. The job has a
+15-minute limit.
 
 CI does not regenerate the lock. Dependency-update branches and fork PRs are not excluded from the pull-request gate.
 
