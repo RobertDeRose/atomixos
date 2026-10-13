@@ -59,8 +59,9 @@ CI does not regenerate the lock. Dependency-update branches and fork PRs are not
 
 ## Hooks and recovery
 
-Setup installs repository-local hk hooks when the destination is a Git repository. To restore tooling after an offline
-or degraded setup, run:
+Setup installs repository-local hk hooks when the destination is a Git repository. The mise `postinstall` hook runs
+`hk install --mise` only when hk is on the `PATH`, so a partial install such as the pytest job's uv-only install skips
+Git hook setup instead of logging a failed hook. To restore tooling after an offline or degraded setup, run:
 
 ```bash
 python3 scripts/setup-tooling.py --json
