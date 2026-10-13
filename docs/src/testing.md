@@ -143,6 +143,7 @@ Additional flake-only checks:
 | `build-config-workflow`       | 0     | Local override wrapper, task matrix, Lima behavior, and per-board retained GC roots                                |
 | `cm3-board`                   | 0     | CM3 eMMC paths and RAUC compatible; every U-Boot setting survives into the resolved `.config`; env order           |
 | `boot-partition-size`         | 0     | An oversized boot payload fails with a size breakdown; a fitting one builds                                        |
+| `uboot-scripts`               | 0     | U-Boot sandbox runs `boot.scr` (failed loads reset, `START_UMS`) and the `PREBOOT`; also a CI job                  |
 | `device-tree-overlay`         | 0     | Boot slot DTB comes from the NixOS device-tree package with overlays; ROCK64 watchdog overlay wiring               |
 | `os-upgrade-query`            | 0     | Update query sends `X-Compatible`; another board's bundle is skipped before download                               |
 | `watchdog-missing-device`     | 1     | Enabled policy without hardware boots, preserves RAUC state, and emits an actionable warning                       |

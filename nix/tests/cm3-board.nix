@@ -32,7 +32,7 @@ assert cm3.hardware.deviceTree.name == "rockchip/rk3566-radxa-cm3-io.dtb";
 assert cm3.atomixos.rauc.compatible == "radxa-cm3-io";
 assert cm3.boot.initrd.systemd.repart.device == "/dev/mmcblk0";
 assert cm3.atomixos.board == "cm3";
-# boot.cmd runs `ums` for START_UMS recovery on every board.
+# PREBOOT and boot.cmd run `ums` for START_UMS recovery on every board.
 assert ubootConfig "CMD_USB_MASS_STORAGE" == "y";
 assert ubootConfig "USB_DWC3_GADGET" == "y";
 assert ubootConfig "FAT_WRITE" == "y";

@@ -57,8 +57,19 @@ if test -z "${recovery_mmc_dev}"; then
   setenv recovery_mmc_dev ${devnum}
 fi
 
-# START_UMS is handled by U-Boot's PREBOOT before slot selection
+# U-Boot's PREBOOT handles START_UMS before slot selection
 # (nix/uboot-start-ums.nix), so it works even when this script is unreadable.
+# RAUC bundles update this script but not U-Boot, so keep this fallback for
+# boards whose U-Boot predates that PREBOOT.
+if test "${START_UMS}" = "1"; then
+  echo "START_UMS=1 requested, entering USB mass storage mode"
+  setenv START_UMS
+  saveenv
+  echo "Write a new image over the OTG USB cable, then unplug to reboot"
+  ums ${recovery_usb_controller} mmc ${recovery_mmc_dev}
+  echo "USB mass storage exited, resetting..."
+  reset
+fi
 
 if test -n "${recovery_button_pin}"; then
   if gpio input ${recovery_button_pin}; then
@@ -131,5 +142,7 @@ setenv initrd_size ${filesize}
 setenv bootargs "@kernelParams@ ${bootargs_base} root=fstab rw atomixos.lowerdev=${atomixos_lowerdev} atomixos.lowerfstype=squashfs init=@systemClosure@/init rauc.slot=${rauc_slot}"
 booti ${kernel_addr_r} ${ramdisk_addr_r}:${initrd_size} ${fdt_addr_r}
 
-echo "ERROR: booti failed!"
-echo "Returning to U-Boot, which resets so the RAUC try counter can fall back to the other slot"
+# Reset here too: U-Boot builds flashed before CONFIG_BOOTCOMMAND gained
+# "; reset" would otherwise stop at the prompt.
+echo "ERROR: booti failed; resetting so the RAUC try counter can fall back to the other slot"
+reset

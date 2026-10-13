@@ -38,3 +38,25 @@ jobs:
       - name: Evaluate Nix checks
         # Each runner evaluates its own platform without building checks.
         run: ./scripts/nix-with-build-config.sh flake check --no-build --system "${{ matrix.system }}"
+
+  uboot-scripts:
+    # Separate job, so it runs in parallel with the evaluations above.
+    name: U-Boot scripts (sandbox)
+    runs-on: ubuntu-26.04-arm
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+      - name: Set up Nix
+        uses: cachix/install-nix-action@96951a368ba55167b55f1c916f7d416bac6505fe # v31.10.3
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+      - name: Run boot.scr and PREBOOT in a U-Boot sandbox
+        # Builds a U-Boot sandbox binary and executes the compiled boot script
+        # and the START_UMS PREBOOT, which U-Boot only parses at boot time.
+        run: ./scripts/nix-with-build-config.sh build --no-link --print-build-logs .#checks.aarch64-linux.uboot-scripts

@@ -80,7 +80,8 @@ RAUC bootloader backend.
 
 U-Boot boot script loaded after RAUC bootmeth selects the slot and decrements the boot-count. Compiled to `boot.scr` by
 `mkimage`. A `START_UMS=1` request is handled earlier, by U-Boot's `PREBOOT` (`nix/uboot-start-ums.nix`), so USB recovery
-works even when this script is unreadable.
+works even when this script is unreadable. The script also handles `START_UMS=1` itself, for boards whose U-Boot
+predates that `PREBOOT`: RAUC bundles update `boot.scr` but never U-Boot.
 
 **Key logic:**
 
@@ -93,7 +94,8 @@ works even when this script is unreadable.
 6. Set `rauc.slot` and `atomixos.lowerdev`
 7. Load kernel/initrd/DTB from the selected boot partition; if any load fails, print the first failing file and `reset`
    so the decremented try counter falls back instead of booting a stale initrd size
-8. Set the kernel command line (NixOS `boot.kernelParams`, the board base, `root=fstab`) and `booti`
+8. Set the kernel command line (NixOS `boot.kernelParams`, the board base, `root=fstab`) and `booti`; if `booti`
+   returns, `reset`, even on U-Boot builds whose boot command doesn't
 
 **Console:** `ttyS2,1500000` (Rock64 UART2)
 
