@@ -49,6 +49,10 @@ On each boot, U-Boot RAUC bootmeth selects the slot and decrements the boot atte
 If a slot's counter reaches 0, RAUC bootmeth skips it and tries the next slot in `BOOT_ORDER`. This ensures automatic
 rollback after 3 consecutive boot failures.
 
+`/boot` is boot slot A's partition, which RAUC overwrites while slot B runs, and RAUC refuses to install to a mounted
+slot. It is therefore an automount: it mounts when accessed (first boot reads the fresh-flash `/boot/config.toml` seed)
+and unmounts after a minute idle, so it is not mounted during later updates.
+
 ## Health Check Details
 
 The `os-verification.service` performs these checks before committing a slot:

@@ -29,6 +29,9 @@ assert cm3.atomixos.board == "cm3";
 assert ubootConfig "CMD_USB_MASS_STORAGE" == "y";
 assert ubootConfig "USB_DWC3_GADGET" == "y";
 assert ubootConfig "FAT_WRITE" == "y";
+# RAUC refuses to install to a mounted slot, so boot slot A is not kept mounted.
+assert builtins.elem "x-systemd.automount" cm3.fileSystems."/boot".options;
+assert builtins.elem "noauto" cm3.fileSystems."/boot".options;
 pkgs.runCommand "test-cm3-board" { } ''
   grep -F 'defconfig = "radxa-cm3-io-rk3566_defconfig";' ${../../nix/uboot-cm3.nix}
   grep -F 'CONFIG_ENV_IS_IN_MMC=y' ${../../nix/uboot-cm3.nix}

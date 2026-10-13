@@ -22,6 +22,16 @@
     "f2fs"
   ];
 
+  # /boot is boot slot A, which RAUC overwrites when B is running, and RAUC
+  # refuses to install to a mounted slot. Mount it only on access (first-boot
+  # reads the fresh-flash /boot/config.toml seed) and unmount it when idle, so
+  # it is not mounted during later updates.
+  fileSystems."/boot".options = [
+    "noauto"
+    "x-systemd.automount"
+    "x-systemd.idle-timeout=1min"
+  ];
+
   # The eMMC gap before the first GPT partition holds SPL and U-Boot (and on
   # CM3 the U-Boot environment). systemd-repart's default discard pass trims
   # that gap, which destroys the bootloader and breaks subsequent reboots.
