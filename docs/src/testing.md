@@ -16,8 +16,11 @@ contention noise, and reports the result consistently. The interactive debug tas
 ```sh
 cd scripts/atomixos_provision
 uv run --extra dev pytest
-uv run --extra dev ruff check .
+ruff check .
 ```
+
+The `dev` extra holds only test dependencies. Ruff comes from the mise toolchain, which pins its version, and
+`mise run check` runs it through hk together with the rest of the repository lint steps.
 
 These tests cover the Litestar API, SSH-signature auth helpers, config parsing,
 bundle import, Quadlet rendering/sync, activation, job tracking, and service
