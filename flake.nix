@@ -409,6 +409,7 @@
           darwinTests = {
             cm3-board = import ./nix/tests/cm3-board.nix darwinNetTestArgs;
             boot-partition-size = import ./nix/tests/boot-partition-size.nix darwinNetTestArgs;
+            device-tree-overlay = import ./nix/tests/device-tree-overlay.nix darwinNetTestArgs;
             build-config-workflow = import ./nix/tests/build-config-workflow.nix darwinNetTestArgs;
             os-upgrade-query = import ./nix/tests/os-upgrade-query.nix darwinNetTestArgs;
             build-configuration = import ./nix/tests/build-configuration.nix darwinNetTestArgs;
