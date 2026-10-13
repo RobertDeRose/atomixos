@@ -44,7 +44,8 @@ On each boot, U-Boot RAUC bootmeth selects the slot and decrements the boot atte
 1. Reads the bootmeth-provided boot partition and root partition variables
 2. Sets `rauc.slot` and `atomixos.lowerdev` for the selected slot
 3. Loads kernel, initrd, and DTB from that slot's boot partition
-4. Boots with `root=fstab` so initrd mounts the selected squashfs by lower device
+4. Boots with the NixOS kernel parameters (`boot.kernelParams`, such as `lsm=bpf`), the board's console arguments, and
+   `root=fstab` so initrd mounts the selected squashfs by lower device
 
 If a slot's counter reaches 0, RAUC bootmeth skips it and tries the next slot in `BOOT_ORDER`. This ensures automatic
 rollback after 3 consecutive boot failures.
