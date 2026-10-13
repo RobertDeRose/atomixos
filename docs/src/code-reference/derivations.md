@@ -70,6 +70,9 @@ It copies the kernel `Image`, initrd, the board's device tree (`hardware.deviceT
 compiled `boot.scr` into a filesystem sized by `nix/partition-layout.nix`. Its inputs are `nixosConfig`, `bootScript`,
 `partitionLayout`, and `board` (default `atomixos.board`).
 
+Before creating the filesystem it totals the payload and fails with a size breakdown if the files plus a 4 MiB FAT reserve
+exceed the slot, instead of failing later with mtools' "Disk full". The build log reports the space left.
+
 **Output:** `$out/boot.vfat`
 
 ---
