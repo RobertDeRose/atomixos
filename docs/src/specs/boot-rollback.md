@@ -67,6 +67,23 @@ The failed slot's data is preserved for diagnostics but is not booted.
 - Then the boot command resets the board instead of stopping at the U-Boot prompt
 - And the next boot sees the decremented `BOOT_B_LEFT`, reaching slot A after the tries are used
 
+### ADDED: Boot script works with factory-flashed U-Boot
+
+RAUC bundles replace `boot.scr` but not U-Boot, so the boot script SHALL keep working with the U-Boot a device was
+flashed with, and SHALL NOT depend on features added to U-Boot later.
+
+#### Scenario: USB recovery after an OTA update on an older U-Boot
+
+- Given a device whose U-Boot has no `START_UMS` `PREBOOT` installs a new bundle
+- When `START_UMS=1` is set and the device reboots
+- Then the new `boot.scr` enters USB mass storage mode
+
+#### Scenario: A failed load resets without the U-Boot reset fallback
+
+- Given a device whose U-Boot boot command doesn't end in `reset`
+- When `boot.scr` cannot load the kernel, DTB, or initrd, or `booti` rejects them
+- Then `boot.scr` resets the board itself
+
 ### ADDED: Board-specific U-Boot environment
 
 On ROCK64, the U-Boot environment is stored in SPI flash exposed to Linux as `/dev/mtd0` at offset `0x140000` with size

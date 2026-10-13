@@ -50,7 +50,7 @@ Git rejects merges that require a merge commit.
 | `.config/cog-changelog.tera`        | Renders plain Markdown changelogs without author noise.                   |
 | `scripts/enable-docs-deployment.py` | Configures workflow-built Pages through external `gh`.                    |
 | `.github/workflows/hk.yml`          | Runs the hk quality checks on pull requests and manual dispatches.        |
-| `.github/workflows/nix.yml`         | Evaluates the flake on aarch64-linux and aarch64-darwin runners.          |
+| `.github/workflows/nix.yml`         | Evaluates the flake per platform; runs U-Boot scripts in a sandbox.       |
 | `.github/workflows/docs.yml`        | Builds gated docs from the default branch or manual dispatch.             |
 | `.github/workflows/pytest.yml`      | Runs provisioning package tests on aarch64 Linux for PRs and dispatches.  |
 
@@ -58,8 +58,10 @@ Git rejects merges that require a merge commit.
 
 `.github/workflows/hk.yml` runs `mise x -- hk check -a` (formatting, linting, and documentation checks) on pull
 requests and manual dispatches. `.github/workflows/nix.yml` independently evaluates the flake with
-`flake check --no-build --system <system>` on `aarch64-linux` and `aarch64-darwin` runners. Neither workflow builds
-packages, runs NixOS VM tests, or regenerates the lock. Full build and VM validation stays local through
+`flake check --no-build --system <system>` on `aarch64-linux` and `aarch64-darwin` runners. In parallel, its
+`uboot-scripts` job builds `checks.aarch64-linux.uboot-scripts`: a U-Boot sandbox binary that executes the compiled
+`boot.scr` and the `START_UMS` `PREBOOT`, because U-Boot only parses those scripts at boot time. No workflow builds
+images, runs NixOS VM tests, or regenerates the lock. Full build and VM validation stays local through
 `./scripts/nix-with-build-config.sh flake check` or individual `nix build` commands, separately from `mise run check`.
 The hk and Nix jobs have a 45-minute limit.
 

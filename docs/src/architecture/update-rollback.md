@@ -51,6 +51,18 @@ If the selected slot fails to load or boot, the U-Boot boot command ends with `r
 already decremented counter rather than stopping at the U-Boot prompt. If a slot's counter reaches 0, RAUC bootmeth skips
 it and tries the next slot in `BOOT_ORDER`. This ensures automatic rollback after 3 consecutive boot failures.
 
+### Bootloader updates
+
+RAUC bundles update the boot and root slots, including `boot.scr`, but never U-Boot itself. U-Boot changes, such as the
+`; reset` boot command or the `START_UMS` `PREBOOT`, reach a device only when it is flashed with a new image. So
+`boot.cmd` must keep working with the U-Boot already on deployed devices:
+
+- New U-Boot features are additive. `boot.cmd` doesn't rely on them, and keeps any behavior older U-Boot builds
+  provide only through the script, such as the `START_UMS` handler.
+- `boot.cmd` resets itself when a boot file fails to load or `booti` fails, so a ROCK64 flashed before the `; reset`
+  boot command still falls back after a bad kernel, DTB, or initrd. Only an unreadable `boot.scr` on such a device
+  stops at the U-Boot prompt.
+
 `/boot` is boot slot A's partition, which RAUC overwrites while slot B runs, and RAUC refuses to install to a mounted
 slot. It is therefore an automount: it mounts when accessed (first boot reads the fresh-flash `/boot/config.toml` seed)
 and unmounts after a minute idle, so it is not mounted during later updates.

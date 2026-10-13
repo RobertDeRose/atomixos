@@ -40,6 +40,7 @@ nix/
   uboot.nix                        ROCK64 U-Boot (SPI env, RAUC bootmeth, UMS)
   uboot-cm3.nix                    Radxa CM3 IO U-Boot (redundant eMMC env, RAUC bootmeth, UMS)
   uboot-start-ums.nix              Shared U-Boot PREBOOT for START_UMS recovery
+  uboot-sandbox.nix                U-Boot sandbox binary for running boot scripts on the build host
   rtl815x-firmware.nix             Realtek USB NIC firmware blobs shared by both boards
   tests/                           Evaluation, command, and NixOS VM integration tests
     build-configuration.nix        Schema, provenance, option, and sidecar assertions
@@ -47,6 +48,7 @@ nix/
     build-config-workflow.sh       Isolated fake-Nix workflow scenarios
     cm3-board.nix                  CM3 storage, RAUC, and resolved U-Boot config agreement
     boot-partition-size.nix        Boot slot overflow reporting
+    uboot-scripts.nix              boot.scr and PREBOOT executed in the U-Boot sandbox
     os-upgrade-query.nix           Stubbed os-upgrade query and compatible checks
     os-upgrade-query.sh            os-upgrade-query scenarios
     rauc-slots.nix                 RAUC slot detection + custom backend

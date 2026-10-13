@@ -55,10 +55,10 @@ exercise the RAUC mark-good, simulated failed boot, and rollback cycle. Confirm 
 The board may have no populated SPI NOR flash (as on some CM3 modules). This target uses eMMC for the environment and
 does not access `/dev/mtd0`. U-Boot has the same USB mass storage (UMS) recovery as ROCK64 on the RK3566 OTG port
 (DWC3): setting `START_UMS=1` with `fw_setenv` exposes the eMMC over USB on the next boot. U-Boot checks it in `PREBOOT`,
-before slot selection, so it works even if the selected slot's boot files are broken. Only the hold-button trigger
-is disabled, because the ROCK64 recovery GPIO is not valid on CM3. Rockchip Maskrom recovery remains available as a
-fallback. A stale SPL or bootloader in SPI NOR (when fitted) may override the image on eMMC, so verify U-Boot's
-version via serial output.
+before slot selection, so it works even if the selected slot's boot files are broken (`boot.scr` checks it too). Only
+the hold-button trigger is disabled, because the ROCK64 recovery GPIO is not valid on CM3. Rockchip Maskrom recovery
+remains available as a fallback. A stale SPL or bootloader in SPI NOR (when fitted) may override the image on eMMC, so
+verify U-Boot's version via serial output.
 
 ## Current validation status
 
