@@ -77,6 +77,13 @@ hawkBit path is reserved for future server-push updates.
 - And `rauc install` is run
 - And the device reboots into the new slot
 
+#### Scenario: Polling identifies the board
+
+- Given a device whose RAUC compatible is `radxa-cm3-io`
+- When the timer fires
+- Then the update query includes `X-Compatible: radxa-cm3-io`
+- And a response whose `compatible` is `rock64` is skipped without downloading the bundle
+
 ### ADDED: Swappable with hawkBit
 
 The `os-upgrade` module has a `useHawkbit` option that disables the polling service and installs the

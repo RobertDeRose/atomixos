@@ -139,10 +139,11 @@ OTA update polling script. Checks for new RAUC bundles and installs them.
 
 **Steps:**
 
-1. Get current version from `rauc status` and compact lowercase 12-hex device ID from eth0 MAC
-2. Query `$URL/api/v1/updates/latest` with version and device headers
-3. If newer version found: download to `/data/config/bundles/`, `rauc install`, reboot
-4. Non-fatal on network errors (timer retries later)
+1. Get current version and RAUC compatible from `rauc status` and compact lowercase 12-hex device ID from eth0 MAC
+2. Query `$URL/api/v1/updates/latest` with version, compatible, and device headers
+3. Skip a response whose `compatible` names another board
+4. If newer version found: download to `/data/config/bundles/`, `rauc install`, reboot
+5. Non-fatal on network errors (timer retries later)
 
 **Forensics:** Emits Tier 0 install and managed reboot markers, but avoids noisy
 polling or "no update" chatter in the durable forensic log.
