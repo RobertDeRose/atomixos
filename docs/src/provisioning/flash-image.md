@@ -35,10 +35,10 @@ diskutil list
 Flash using the mise task:
 
 ```sh
-# Auto-detect image, specify target disk
-mise run flash /dev/disk4  # ROCK64 default
+# Flash the latest build of the only board you have built
+mise run flash /dev/disk4
 
-# Select the CM3 image explicitly
+# With builds for both boards, choose one
 mise run flash --board cm3 /dev/disk4
 
 # Specify image explicitly
@@ -50,21 +50,26 @@ mise run flash -y /dev/disk4
 
 The flash task automatically:
 
-- Uses `.gcroots/<board>/current/image/` unless `-i` names an image
+- Uses `.gcroots/<board>/current/image/` unless `-i` names an image. Without `--board`, it uses the only board with a
+  build and refuses to guess when both have one, so a ROCK64 image is never written to a CM3 eMMC by default
 - Converts `/dev/diskN` to `/dev/rdiskN` (raw device for faster writes)
-- Unmounts all partitions on the target disk
-- Refuses to write to the macOS boot disk
+- On macOS, unmounts all partitions on the target disk and refuses to write to the boot disk
+- On Linux, writes only a whole removable or USB disk that nothing uses, as `lsblk` reports it; the same disks are
+  offered when no disk is given. A disk is in use when any partition or volume on it (including through LVM, LUKS, or
+  RAID) is mounted or is swap, or when it carries a `zfs_member`, `LVM2_member`, `linux_raid_member`, `crypto_LUKS`,
+  or `swap` signature. Unmount the disk first; clear an old signature with `wipefs -a`. Flash never unmounts on Linux
 - Runs `dd` with `bs=4M` and progress reporting
 - Syncs and ejects when done
 
 ### Linux
 
 ```sh
-# With mise (ROCK64 default; use --board cm3 to select the CM3 image)
-mise run flash -y /dev/mmcblk0
+# With mise: pick from the removable or USB disks, or name one (add --board with builds for both boards)
+mise run flash
+mise run flash -y /dev/sdb
 
 # With dd directly (select the correct image and target disk)
-sudo dd if=atomixos-rock64-26.05.img of=/dev/mmcblk0 bs=4M status=progress
+sudo dd if=atomixos-rock64-26.05.img of=/dev/sdb bs=4M status=progress
 sudo sync
 ```
 

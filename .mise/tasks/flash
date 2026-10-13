@@ -2,38 +2,64 @@
 #MISE description="Flash image to disk device (eMMC/SD) using dd with progress"
 #USAGE flag "-y --yes" help="Skip confirmation prompt"
 #USAGE flag "-i --image <path>" help="Path to image file (default: .gcroots/<board>/current/image)"
-#USAGE flag "--board <board>" help="Target board when --image is omitted" default="rock64" {
+#USAGE flag "--board <board>" help="Board whose latest build to flash (required with several builds and no --image)" {
 #USAGE   choices "rock64" "cm3"
 #USAGE }
 #USAGE arg "[disk]" help="Target disk device (e.g. /dev/disk4 on macOS, /dev/mmcblk0 on Linux)"
 set -euo pipefail
 
-BOARD=${usage_board:-rock64}
-case "$BOARD" in
-rock64 | cm3) ;;
-*)
-	echo "ERROR: unsupported board '$BOARD' (expected rock64 or cm3)" >&2
-	exit 1
-	;;
-esac
-
-# ── Resolve image path ─────────────────────────────────────────────────────────
-
-IMAGE_PATH="${usage_image:-}"
-if [ -z "$IMAGE_PATH" ]; then
-	for candidate in ".gcroots/$BOARD/current/image"/*.img; do
+board_image() {
+	local candidate
+	for candidate in ".gcroots/$1/current/image"/*.img; do
 		if [ -f "$candidate" ]; then
-			IMAGE_PATH="$candidate"
-			break
+			printf '%s\n' "$candidate"
+			return 0
 		fi
 	done
+	return 1
+}
+
+# ── Resolve image path ─────────────────────────────────────────────────────────
+# Never guess the board: a ROCK64 image on a CM3 eMMC (or the reverse) writes the
+# wrong bootloader. Without --image or --board, use the only board with a build.
+
+BOARD=${usage_board:-}
+IMAGE_PATH="${usage_image:-}"
+if [ -z "$IMAGE_PATH" ]; then
+	if [ -z "$BOARD" ]; then
+		built=()
+		for candidate_board in rock64 cm3; do
+			if board_image "$candidate_board" >/dev/null; then
+				built+=("$candidate_board")
+			fi
+		done
+		if [ ${#built[@]} -ne 1 ]; then
+			echo "ERROR: choose a board with --board rock64|cm3, or pass --image <path>." >&2
+			if [ ${#built[@]} -gt 1 ]; then
+				echo "Builds exist for: ${built[*]}" >&2
+			else
+				echo "No build found; run 'mise run build --board <board>' first." >&2
+			fi
+			exit 1
+		fi
+		BOARD=${built[0]}
+		echo "Using the only built board: $BOARD"
+	fi
+	case "$BOARD" in
+	rock64 | cm3) ;;
+	*)
+		echo "ERROR: unsupported board '$BOARD' (expected rock64 or cm3)" >&2
+		exit 1
+		;;
+	esac
+	IMAGE_PATH=$(board_image "$BOARD" || true)
 fi
 
 if [ -z "$IMAGE_PATH" ] || [ ! -f "$IMAGE_PATH" ]; then
 	echo "ERROR: No image file found."
 	echo ""
 	echo "Either:"
-	echo "  1. Run 'mise run build --board $BOARD' to build the selected board image"
+	echo "  1. Run 'mise run build --board ${BOARD:-<board>}' to build the selected board image"
 	echo "  2. Specify the image path: mise run flash --image /path/to/image.img /dev/diskN"
 	exit 1
 fi
@@ -85,24 +111,58 @@ select_macos_disk() {
 	done
 }
 
+# Removable or USB whole disks, one "NAME TRAN SIZE MODEL" line each. These are
+# the only disks flash will write on Linux.
+linux_external_disks() {
+	lsblk -dpno NAME,TYPE,RM,TRAN,SIZE,MODEL |
+		awk '$2 == "disk" && ($3 == "1" || $4 == "usb") {
+			model = ""
+			for (i = 6; i <= NF; i++) {
+				model = model (i == 6 ? "" : " ") $i
+			}
+			printf "%s %s %s %s\n", $1, $4, $5, model
+		}'
+}
+
+# Print why a disk is in use and succeed, or fail when it is free. A disk is in
+# use when any device on it, or layered on it (LVM, LUKS, RAID), is mounted or
+# is swap, or carries a storage-stack signature. lsblk can't map ZFS dataset
+# mounts back to pool disks, so a pool member counts even with no mountpoint.
+linux_disk_in_use() {
+	local mountpoints fstypes fstype
+	if ! mountpoints=$(lsblk -nlpo MOUNTPOINTS "$1") || ! fstypes=$(lsblk -nlpo FSTYPE "$1"); then
+		echo "lsblk cannot inspect it"
+		return 0
+	fi
+	mountpoints=$(printf '%s\n' "$mountpoints" | sed '/^[[:space:]]*$/d' | paste -sd ' ' -)
+	if [ -n "$mountpoints" ]; then
+		echo "in use at $mountpoints; unmount it (or swapoff) first"
+		return 0
+	fi
+	for fstype in $fstypes; do
+		case "$fstype" in
+		zfs_member | LVM2_member | linux_raid_member | crypto_LUKS | swap)
+			echo "holds a $fstype signature; clear it with 'wipefs -a $1' to flash it"
+			return 0
+			;;
+		esac
+	done
+	return 1
+}
+
 select_linux_disk() {
-	local external_disks selection index line disk desc
+	local external_disks selection index line disk desc reason
 	external_disks=()
 	while IFS= read -r line; do
+		if reason=$(linux_disk_in_use "${line%% *}"); then
+			echo "Skipping ${line%% *}: $reason" >&2
+			continue
+		fi
 		external_disks+=("$line")
-	done < <(
-		lsblk -dpno NAME,TYPE,RM,TRAN,SIZE,MODEL |
-			awk '$2 == "disk" && ($3 == "1" || $4 == "usb") {
-				model = ""
-				for (i = 6; i <= NF; i++) {
-					model = model (i == 6 ? "" : " ") $i
-				}
-				printf "%s %s %s %s\n", $1, $4, $5, model
-			}'
-	)
+	done < <(linux_external_disks)
 
 	if [ ${#external_disks[@]} -eq 0 ]; then
-		echo "ERROR: No removable or USB disks found." >&2
+		echo "ERROR: No unused removable or USB disks found." >&2
 		echo "" >&2
 		echo "Connect the eMMC USB adapter and try again, or specify a disk explicitly." >&2
 		exit 1
@@ -113,7 +173,7 @@ select_linux_disk() {
 		return
 	fi
 
-	echo "Multiple removable or USB disks found:" >&2
+	echo "Multiple unused removable or USB disks found:" >&2
 	for index in "${!external_disks[@]}"; do
 		line="${external_disks[$index]}"
 		disk="${line%% *}"
@@ -169,6 +229,41 @@ else
 	# Linux: check block device exists
 	if [ ! -b "$DISK" ]; then
 		echo "ERROR: Not a block device: $DISK"
+		exit 1
+	fi
+
+	if ! command -v lsblk >/dev/null; then
+		echo "ERROR: lsblk is required to check the target disk"
+		exit 1
+	fi
+
+	# The image holds a partition table, so the target must be a whole disk.
+	if [ "$(lsblk -ndo TYPE "$DISK")" != "disk" ]; then
+		echo "ERROR: Not a whole disk: $DISK (pass the disk, not a partition)"
+		exit 1
+	fi
+
+	# Safety: only write removable or USB disks, the same ones the interactive
+	# selection offers. Internal system disks are neither, whatever their
+	# filesystems (ZFS, btrfs, LVM, LUKS, RAID).
+	target_disk=$(readlink -f "$DISK")
+	is_external=false
+	while read -r external_disk _; do
+		if [ -n "$external_disk" ] && [ "$(readlink -f "$external_disk")" = "$target_disk" ]; then
+			is_external=true
+		fi
+	done < <(linux_external_disks)
+	if [ "$is_external" != "true" ]; then
+		echo "ERROR: Not a removable or USB disk: $DISK"
+		echo "Available removable or USB disks:"
+		linux_external_disks | sed 's/^/  /'
+		exit 1
+	fi
+
+	# Never write a disk anything is using, including the running system's own
+	# disk when it boots from USB.
+	if reason=$(linux_disk_in_use "$DISK"); then
+		echo "ERROR: $DISK is in use: $reason"
 		exit 1
 	fi
 fi
@@ -254,17 +349,11 @@ if [ "$SKIP_CONFIRM" != "true" ]; then
 fi
 
 # ── Unmount partitions ─────────────────────────────────────────────────────────
+# Linux targets are already known to be unmounted; flash never unmounts there.
 
-echo "Unmounting partitions on $DISK..."
 if [ "$OS" = "Darwin" ]; then
+	echo "Unmounting partitions on $DISK..."
 	diskutil unmountDisk "$DISK" 2>/dev/null || true
-else
-	# Linux: unmount any mounted partitions
-	for part in "${DISK}"*; do
-		if [ -b "$part" ] && grep -q "^$part " /proc/mounts 2>/dev/null; then
-			umount "$part" 2>/dev/null || true
-		fi
-	done
 fi
 
 # ── Flash ──────────────────────────────────────────────────────────────────────
