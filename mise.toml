@@ -203,11 +203,14 @@ exec "$host_runner"
 """
 
 [tasks.build]
-description = "Build artifacts and retain the last 2 distinct images"
+description = "Build board-specific artifacts and retain the last 2 distinct images per board"
 usage = """
+flag "--board <board>" help="Target board" default="rock64" {
+  choices "rock64" "cm3"
+}
 flag "--lima" help="Build inside a Lima VM"
 flag "--vm <name>" help="Lima VM instance name" default="default"
-flag "-o --output <path>" help="Copy .img to this path (default: cwd)"
+flag "-o --output <path>" help="Copy .img to this path (default: retain under .gcroots)"
 """
 run = "./scripts/build.sh"
 

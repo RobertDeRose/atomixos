@@ -4,6 +4,22 @@
 set -euo pipefail
 
 REPO_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
+BOARD=${usage_board:-rock64}
+case "$BOARD" in
+rock64)
+	UBOOT_OUTPUT=uboot
+	UBOOT_ENV_TOOLS_OUTPUT=uboot-env-tools
+	;;
+cm3)
+	UBOOT_OUTPUT=uboot-cm3
+	UBOOT_ENV_TOOLS_OUTPUT=uboot-env-tools-cm3
+	;;
+*)
+	echo "ERROR: unsupported board '$BOARD' (expected rock64 or cm3)" >&2
+	exit 1
+	;;
+esac
+
 if [[ -n "${usage_output:-}" && -f "$REPO_ROOT/build.dev.toml" ]]; then
 	output_name=${usage_output%/}
 	output_name=${output_name##*/}
@@ -27,6 +43,8 @@ fi
 GCROOTS=.gcroots
 IMGROOT="$GCROOTS/images"
 BUNDLEROOT="$GCROOTS/bundles"
+IMAGE_ROOT="$IMGROOT/image-$BOARD"
+BUNDLE_ROOT="$BUNDLEROOT/rauc-bundle-$BOARD"
 NIX=./scripts/nix-with-build-config.sh
 
 # Validate the effective configuration before creating or replacing any output link.
@@ -35,12 +53,12 @@ NIX=./scripts/nix-with-build-config.sh
 "${cmd[@]}" mkdir -p "$IMGROOT" "$BUNDLEROOT"
 
 temporary_links=(
-	"$GCROOTS/kernel.new"
-	"$GCROOTS/toplevel.new"
-	"$GCROOTS/uboot.new"
-	"$GCROOTS/uboot-env-tools.new"
-	"$IMGROOT/image.1.new"
-	"$BUNDLEROOT/rauc-bundle.1.new"
+	"$GCROOTS/kernel-$BOARD.new"
+	"$GCROOTS/toplevel-$BOARD.new"
+	"$GCROOTS/uboot-$BOARD.new"
+	"$GCROOTS/uboot-env-tools-$BOARD.new"
+	"$IMAGE_ROOT.1.new"
+	"$BUNDLE_ROOT.1.new"
 )
 cleanup() {
 	"${cmd[@]}" rm -f "${temporary_links[@]}" || true
@@ -57,45 +75,63 @@ trap cleanup EXIT
 cleanup
 
 # Build every replacement first. Existing retained links remain untouched on failure.
-"${cmd[@]}" "$NIX" build .#nixosConfigurations.rock64.config.system.build.kernel \
-	-o "$GCROOTS/kernel.new"
-"${cmd[@]}" "$NIX" build .#nixosConfigurations.rock64.config.system.build.toplevel \
-	-o "$GCROOTS/toplevel.new"
-"${cmd[@]}" "$NIX" build .#uboot -o "$GCROOTS/uboot.new"
-"${cmd[@]}" "$NIX" build .#uboot-env-tools -o "$GCROOTS/uboot-env-tools.new"
-"${cmd[@]}" "$NIX" build .#image -o "$IMGROOT/image.1.new"
-"${cmd[@]}" "$NIX" build .#rauc-bundle -o "$BUNDLEROOT/rauc-bundle.1.new"
+"${cmd[@]}" "$NIX" build ".#nixosConfigurations.$BOARD.config.system.build.kernel" \
+	-o "$GCROOTS/kernel-$BOARD.new"
+"${cmd[@]}" "$NIX" build ".#nixosConfigurations.$BOARD.config.system.build.toplevel" \
+	-o "$GCROOTS/toplevel-$BOARD.new"
+"${cmd[@]}" "$NIX" build ".#$UBOOT_OUTPUT" -o "$GCROOTS/uboot-$BOARD.new"
+"${cmd[@]}" "$NIX" build ".#$UBOOT_ENV_TOOLS_OUTPUT" -o "$GCROOTS/uboot-env-tools-$BOARD.new"
+"${cmd[@]}" "$NIX" build ".#image-$BOARD" -o "$IMAGE_ROOT.1.new"
+"${cmd[@]}" "$NIX" build ".#rauc-bundle-$BOARD" -o "$BUNDLE_ROOT.1.new"
+
+# One-time migration of pre-board ROCK64 roots, only after every build succeeds.
+# This also preserves the previous .1/.2 images across the naming transition.
+if [[ "$BOARD" == rock64 ]]; then
+	for root in kernel toplevel uboot uboot-env-tools; do
+		if [[ -L "$GCROOTS/$root" && ! -e "$GCROOTS/$root-rock64" && ! -L "$GCROOTS/$root-rock64" ]]; then
+			atomic_replace "$GCROOTS/$root" "$GCROOTS/$root-rock64"
+		fi
+	done
+	for generation in 1 2; do
+		if [[ -L "$IMGROOT/image.$generation" && ! -e "$IMAGE_ROOT.$generation" && ! -L "$IMAGE_ROOT.$generation" ]]; then
+			atomic_replace "$IMGROOT/image.$generation" "$IMAGE_ROOT.$generation"
+		fi
+		if [[ -L "$BUNDLEROOT/rauc-bundle.$generation" && ! -e "$BUNDLE_ROOT.$generation" && ! -L "$BUNDLE_ROOT.$generation" ]]; then
+			atomic_replace "$BUNDLEROOT/rauc-bundle.$generation" "$BUNDLE_ROOT.$generation"
+		fi
+	done
+fi
 
 prev_image_target=
-if [[ -L "$IMGROOT/image.1" ]]; then
-	prev_image_target=$(readlink "$IMGROOT/image.1")
+if [[ -L "$IMAGE_ROOT.1" ]]; then
+	prev_image_target=$(readlink "$IMAGE_ROOT.1")
 fi
-new_image_target=$(readlink "$IMGROOT/image.1.new")
+new_image_target=$(readlink "$IMAGE_ROOT.1.new")
 
 prev_bundle_target=
-if [[ -L "$BUNDLEROOT/rauc-bundle.1" ]]; then
-	prev_bundle_target=$(readlink "$BUNDLEROOT/rauc-bundle.1")
+if [[ -L "$BUNDLE_ROOT.1" ]]; then
+	prev_bundle_target=$(readlink "$BUNDLE_ROOT.1")
 fi
-new_bundle_target=$(readlink "$BUNDLEROOT/rauc-bundle.1.new")
+new_bundle_target=$(readlink "$BUNDLE_ROOT.1.new")
 
 # All builds succeeded. Rename prepared links over retained links as the commit point.
 for root in kernel toplevel uboot uboot-env-tools; do
-	atomic_replace "$GCROOTS/$root.new" "$GCROOTS/$root"
+	atomic_replace "$GCROOTS/$root-$BOARD.new" "$GCROOTS/$root-$BOARD"
 done
 
 if [[ -n "$prev_image_target" && "$prev_image_target" != "$new_image_target" ]]; then
-	atomic_replace "$IMGROOT/image.1" "$IMGROOT/image.2"
+	atomic_replace "$IMAGE_ROOT.1" "$IMAGE_ROOT.2"
 fi
-atomic_replace "$IMGROOT/image.1.new" "$IMGROOT/image.1"
+atomic_replace "$IMAGE_ROOT.1.new" "$IMAGE_ROOT.1"
 
 if [[ -n "$prev_bundle_target" && "$prev_bundle_target" != "$new_bundle_target" ]]; then
-	atomic_replace "$BUNDLEROOT/rauc-bundle.1" "$BUNDLEROOT/rauc-bundle.2"
+	atomic_replace "$BUNDLE_ROOT.1" "$BUNDLE_ROOT.2"
 fi
-atomic_replace "$BUNDLEROOT/rauc-bundle.1.new" "$BUNDLEROOT/rauc-bundle.1"
+atomic_replace "$BUNDLE_ROOT.1.new" "$BUNDLE_ROOT.1"
 
 trap - EXIT
 
-IMG=$("${cmd[@]}" sh -c 'set -- "$1"/*.img; [ -e "$1" ] && printf "%s\n" "$1"' _ "$IMGROOT/image.1")
+IMG=$("${cmd[@]}" sh -c 'set -- "$1"/*.img; [ -e "$1" ] && printf "%s\n" "$1"' _ "$IMAGE_ROOT.1")
 
 if [[ -n "${usage_output:-}" ]]; then
 	DEST=$usage_output

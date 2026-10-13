@@ -164,14 +164,15 @@ mise run check
 # Evaluate the flake without building checks
 ./scripts/nix-with-build-config.sh flake check --no-build
 
-# Build individual artifacts
+# Build individual ROCK64 artifacts
 mise run build:squashfs        # result-squashfs/
 mise run build:rauc-bundle     # result-rauc-bundle/
 mise run build:boot-script     # result-boot-script/
-mise run build                 # .gcroots/images/image.1/
+mise run build                 # .gcroots/images/image-rock64.1/ (default)
+mise run build --board cm3     # .gcroots/images/image-cm3.1/
 
-# Build everything
-mise run build
+# Build everything for a specific board
+mise run build --board rock64
 
 # Build via Lima VM (when nix-darwin linux-builder is not available)
 mise run build -- --lima
@@ -308,7 +309,7 @@ All tasks are run with `mise run <task>`. Run `mise tasks` to list them.
 |-------------------------|-------------------------------------------------------------|
 | `check`                 | Evaluate Linux targets, then run host-compatible checks     |
 | **Build**               |                                                             |
-| `build`                 | Build and retain image artifacts under `.gcroots/`          |
+| `build`                 | Build and retain board-specific artifacts (`--board`)       |
 | `build:squashfs`        | Build squashfs rootfs → `result-squashfs/`                  |
 | `build:rauc-bundle`     | Build signed RAUC bundle → `result-rauc-bundle/`            |
 | `build:boot-script`     | Build U-Boot boot script → `result-boot-script/`            |
@@ -336,26 +337,27 @@ All tasks are run with `mise run <task>`. Run `mise tasks` to list them.
 
 ## Flake outputs
 
-| Output                               | Description                                              |
-|--------------------------------------|----------------------------------------------------------|
-| `nixosConfigurations.rock64`         | Real hardware NixOS system                               |
-| `nixosConfigurations.rock64-qemu`    | QEMU aarch64-virt testing target                         |
-| `packages.aarch64-linux.squashfs`    | Compressed squashfs root filesystem                      |
-| `packages.aarch64-linux.rauc-bundle` | Signed multi-slot `.raucb` bundle                        |
-| `packages.aarch64-linux.boot-script` | Compiled U-Boot `boot.scr`                               |
-| `packages.aarch64-linux.image`       | Flashable eMMC disk image (U-Boot + boot-a + rootfs-a)   |
-| `apps.aarch64-linux.rock64-qemu-vm`  | QEMU VM runner                                           |
-| `checks.aarch64-linux.*`             | Full VM test suite from `nix/tests/`                     |
-| `checks.aarch64-darwin.*`            | Same VM test suite, run natively on macOS via apple-virt |
-| `devShells.*.default`                | Development shell with mdBook                            |
+| Output                                | Description                                              |
+|---------------------------------------|----------------------------------------------------------|
+| `nixosConfigurations.rock64`          | Real hardware NixOS system                               |
+| `nixosConfigurations.rock64-qemu`     | QEMU aarch64-virt testing target                         |
+| `packages.aarch64-linux.squashfs`     | Compressed squashfs root filesystem                      |
+| `packages.aarch64-linux.rauc-bundle`  | Signed multi-slot `.raucb` bundle                        |
+| `packages.aarch64-linux.boot-script`  | Compiled U-Boot `boot.scr`                               |
+| `packages.aarch64-linux.image-rock64` | Flashable ROCK64 eMMC image (legacy alias: `image`)      |
+| `packages.aarch64-linux.image-cm3`    | Flashable CM3 IO Board eMMC image                        |
+| `apps.aarch64-linux.rock64-qemu-vm`   | QEMU VM runner                                           |
+| `checks.aarch64-linux.*`              | Full VM test suite from `nix/tests/`                     |
+| `checks.aarch64-darwin.*`             | Same VM test suite, run natively on macOS via apple-virt |
+| `devShells.*.default`                 | Development shell with mdBook                            |
 
 ## Versioned Image Naming
 
 The flashable image filename includes the pinned NixOS release series from your flake lock.
 
-- Current pinned input: `nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11"`
-- Output image name pattern: `atomixos-<series>.img` (for example, `atomixos-25.11.img`)
-- Source of truth: `flake.nix` nixpkgs input ref
+- Current pinned input: `nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05"`
+- Output image name pattern: `atomixos-<board>-<series>.img` (for example, `atomixos-cm3-26.05.img`)
+- Source of truth: `flake.nix` nixpkgs input ref and selected board
 
 When you move to a new series (for example `nixos-26.05`), update `flake.nix`/`flake.lock` and rebuild. The image name
 updates automatically everywhere it is produced.

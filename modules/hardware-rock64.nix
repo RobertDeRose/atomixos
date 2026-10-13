@@ -4,26 +4,13 @@
   config,
   lib,
   pkgs,
-  self,
   ...
 }:
 
 let
   kernelConfig = import ./kernel-config.nix { inherit lib; };
-  ubootEnvTools = self.packages.${pkgs.stdenv.hostPlatform.system}.uboot-env-tools;
-  rtl815xFirmware = pkgs.runCommand "rtl815x-firmware" { } ''
-    mkdir -p "$out/lib/firmware/rtl_nic"
-
-    for fw in \
-      rtl8153a-2.fw \
-      rtl8153a-3.fw \
-      rtl8153a-4.fw \
-      rtl8153b-2.fw \
-      rtl8153c-1.fw
-    do
-      install -m0644 "${pkgs.linux-firmware}/lib/firmware/rtl_nic/$fw" "$out/lib/firmware/rtl_nic/$fw"
-    done
-  '';
+  ubootEnvTools = config.atomixos.ubootEnvTools;
+  rtl815xFirmware = pkgs.callPackage ../nix/rtl815x-firmware.nix { };
   watchdogDevice =
     {
       internal = "/dev/watchdog-internal";

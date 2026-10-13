@@ -12,7 +12,6 @@
   config,
   lib,
   pkgs,
-  self,
   ...
 }:
 
@@ -89,7 +88,7 @@ let
     export ATOMIXOS_PROVISION_WORKER_ACTIVE=1
     exec ${provisionCli}/bin/atomixos-provision finalize-staged /data/config --runtime-root /run/atomixos-provision
   '';
-  ubootEnvTools = self.packages.${pkgs.stdenv.hostPlatform.system}.uboot-env-tools;
+  ubootEnvTools = config.atomixos.ubootEnvTools;
   firstBootEnv = {
     ATOMIXOS_RAUC_ENABLE = if config.atomixos.rauc.enable then "1" else "0";
     ATOMIXOS_APPLY_USERS_SCRIPT = "${applyUsersScript}";

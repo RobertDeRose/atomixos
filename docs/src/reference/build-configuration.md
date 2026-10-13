@@ -241,8 +241,9 @@ filename must include `-dev`; an unmarked destination is rejected before evaluat
 
 Effective policy is evaluated before a configured command creates or replaces an output link. The full retained build
 runs an explicit preflight before creating `.gcroots`, builds all replacements under temporary `.new` links, and renames
-them over retained links only after every build succeeds. Renames use platform-specific no-dereference behavior so a
-symlink to a Nix store directory is replaced rather than treated as a destination directory.
+them over the selected board's retained links only after every build succeeds. ROCK64 and CM3 roots are independent.
+Renames use platform-specific no-dereference behavior so a symlink to a Nix store directory is replaced rather than
+treated as a destination directory.
 
 A syntax, schema, evaluation, or later build failure preserves all previous retained kernel, system, bootloader, image,
 and bundle roots. Temporary links are removed on exit. Correct the document—or remove `build.dev.toml` to return to

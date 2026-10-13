@@ -16,6 +16,7 @@
   - [Authentication (EN18031)](./architecture/authentication.md)
   - [Nixstasis Enrollment](./architecture/overwatch-enrollment.md)
 - [Building](./building.md)
+- [Radxa CM3 IO Board](./cm3.md)
 - [Testing](./testing.md)
 - [Provisioning](./provisioning.md)
   - [Flashable Disk Image](./provisioning/flash-image.md)

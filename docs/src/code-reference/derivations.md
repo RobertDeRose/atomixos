@@ -97,16 +97,17 @@ It copies the kernel `Image`, initrd, overlaid Rock64 DTB, and compiled `boot.sc
 
 1. Copy the shared `boot.vfat` into the bundle directory
 2. Copy `rootfs.squashfs` into the bundle directory
-3. Generate `manifest.raucm` with `compatible=rock64` and image definitions
+3. Generate `manifest.raucm` with the board's `atomixos.rauc.compatible` string (`rock64` or `radxa-cm3-io`) and
+   image definitions
 4. Sign and package with `rauc bundle`
 
-**Output:** `$out/rock64.raucb`
+**Output:** `$out/<board><artifactSuffix>.raucb` (for example `rock64.raucb` or `cm3.raucb`)
 
 **Manifest structure:**
 
 ```ini
 [update]
-compatible=rock64
+compatible=<nixosConfig.atomixos.rauc.compatible>
 version=<nixosConfig.system.nixos.version>
 
 [image.boot]
@@ -127,12 +128,15 @@ type=raw
 **Function signature:**
 
 ```nix
-{ stdenv, ubootTools, buildId }:
+{ stdenv, ubootTools, buildId, systemClosure, board, dtbPath, bootargsBase,
+  rootfsPathA, rootfsPathB, recoveryButtonPin, ramdiskAddr }:
 ```
 
-| Parameter | Source      | Description                                |
-|-----------|-------------|--------------------------------------------|
-| `buildId` | `flake.nix` | Build identifier echoed during U-Boot boot |
+| Parameter                   | Source                                  | Description                                |
+|-----------------------------|-----------------------------------------|--------------------------------------------|
+| `buildId`                   | `flake.nix`                             | Build identifier echoed during U-Boot boot |
+| `rootfsPathA`/`rootfsPathB` | `atomixos.rauc.slots.rootfs0`/`rootfs1` | Kernel `atomixos.lowerdev` per slot        |
+| `dtbPath`                   | `hardware.deviceTree.name`              | DTB loaded from the boot slot              |
 
 **Build step:**
 
@@ -151,13 +155,13 @@ mkimage -C none -A arm64 -T script -d boot.cmd boot.scr
 **Function signature:**
 
 ```nix
-{ stdenv, util-linux, ubootRock64, nixosConfig,
+{ stdenv, util-linux, uboot, buildConfiguration, board, nixosConfig,
   squashfsImage, bootPartition, partitionLayout }:
 ```
 
 | Parameter         | Source                     | Description                              |
 |-------------------|----------------------------|------------------------------------------|
-| `ubootRock64`     | nixpkgs                    | U-Boot package for Rock64                |
+| `uboot`           | `packages.uboot[-cm3]`     | Board U-Boot (idbloader + u-boot.itb)    |
 | `nixosConfig`     | `rock64System.config`      | Provides kernel, initrd, DTB             |
 | `squashfsImage`   | `packages.squashfs`        | Squashfs derivation                      |
 | `bootPartition`   | `packages.boot-partition`  | Shared boot-slot filesystem              |
@@ -174,11 +178,11 @@ mkimage -C none -A arm64 -T script -d boot.cmd boot.scr
 | 144 MB  | 1024 MB   | rootfs-a    | squashfs   |
 | 1168 MB | remaining | unallocated | --         |
 
-**Output:** `$out/atomixos-<series>.img`
+**Output:** `$out/atomixos-<board>-<series>.img`
 
-The image name is derived from the pinned NixOS release series (e.g., `atomixos-26.05.img`). The image leaves the
-remaining eMMC space unallocated so initrd `systemd-repart` can create `boot-b`, `rootfs-b`, and `/data` on first
-boot.
+The image name includes the selected board and the pinned NixOS release series (e.g., `atomixos-cm3-26.05.img`).
+The image leaves the remaining eMMC space unallocated so initrd `systemd-repart` can create `boot-b`, `rootfs-b`, and
+`/data` on first boot.
 
 **GPT partition types:** Boot partitions use the xbootldr GUID (`BC13C2FF-...`). Rootfs partitions use the Linux root
 aarch64 GUID (`B921B045-...`), which is the architecturally correct type for aarch64 root filesystems.
