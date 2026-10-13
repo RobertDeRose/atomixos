@@ -349,11 +349,15 @@ if [ "$SKIP_CONFIRM" != "true" ]; then
 fi
 
 # ── Unmount partitions ─────────────────────────────────────────────────────────
-# Linux targets are already known to be unmounted; flash never unmounts there.
+# Flash never unmounts on Linux. Check the target again right before writing: a
+# desktop can automount it while the confirmation prompt waits.
 
 if [ "$OS" = "Darwin" ]; then
 	echo "Unmounting partitions on $DISK..."
 	diskutil unmountDisk "$DISK" 2>/dev/null || true
+elif reason=$(linux_disk_in_use "$DISK"); then
+	echo "ERROR: $DISK is in use: $reason"
+	exit 1
 fi
 
 # ── Flash ──────────────────────────────────────────────────────────────────────
