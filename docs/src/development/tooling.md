@@ -39,20 +39,26 @@ in this workflow.
 `.github/workflows/nix.yml` independently evaluates Nix on the same events. It installs Nix on `ubuntu-26.04-arm`
 (`aarch64-linux`) and `macos-latest` (`aarch64-darwin`). Each runner verifies its Nix platform, then evaluates it with
 `flake check --no-build --system <system>`. Evaluating platforms separately reduces peak evaluator memory compared
-with checking both platforms in one process. All validation jobs have a 45-minute limit.
+with checking both platforms in one process. The hk and Nix jobs have a 45-minute limit.
 
 PR validation checks flake evaluation without building packages or executing NixOS VM tests. Full build and VM
 validation remains available locally through `./scripts/nix-with-build-config.sh flake check` or individual
 `nix build` commands, separately from `mise run check`. Darwin VM tests
 need a Mac with the Linux builder configured. See [GitHub's runner limitations](https://docs.github.com/en/actions/reference/runners/github-hosted-runners#limitations-for-arm64-macos-runners).
 
+`.github/workflows/pytest.yml` runs the provisioning package test suite on the same events. It runs on
+`ubuntu-26.04-arm`, matching the device's aarch64 Linux file APIs, which macOS host runs only emulate. It executes
+`uv run --python 3.13 --extra dev pytest` through `mise x uv` in `scripts/atomixos_provision`, installing only uv.
+The interpreter pin matches the Python series that the pinned nixpkgs `python3` provides on the device. The job has a
+15-minute limit.
+
 CI does not regenerate the lock. Dependency-update branches and fork PRs are not excluded from the pull-request gate.
-The provisioning package test suite remains separate.
 
 ## Hooks and recovery
 
-Setup installs repository-local hk hooks when the destination is a Git repository. To restore tooling after an offline
-or degraded setup, run:
+Setup installs repository-local hk hooks when the destination is a Git repository. The mise `postinstall` hook runs
+`hk install --mise` only when hk is on the `PATH`, so a partial install such as the pytest job's uv-only install skips
+Git hook setup instead of logging a failed hook. To restore tooling after an offline or degraded setup, run:
 
 ```bash
 python3 scripts/setup-tooling.py --json

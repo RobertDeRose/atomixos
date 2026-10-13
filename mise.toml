@@ -3,6 +3,8 @@
 [settings]
 experimental = true
 env_shell_expand = true
+# Platforms recorded in mise.lock; keeps CI from completing entries for other platforms.
+lockfile_platforms = ["macos-arm64", "linux-arm64", "linux-x64"]
 
 [tools]
 "aqua:Mic92/nixfmt-rs" = "latest"
@@ -34,7 +36,8 @@ HK_MISE = 1
 _.file = ".env"
 
 [hooks]
-postinstall = "hk install --mise"
+# Partial installs (CI installing only uv) have no hk; skip the Git hook setup instead of failing.
+postinstall = "if command -v hk >/dev/null 2>&1; then hk install --mise; fi"
 
 # ── Tasks ──────────────────────────────────────────────────────────────────────
 
