@@ -26,13 +26,10 @@ jobs:
         uses: jdx/mise-action@4444d8fd7a1b92f1821c12f435db40f58b743d26 # v4.0.1
         with:
           install: false
-      - name: Install uv
-        env:
-          MISE_IGNORED_CONFIG_PATHS: /home/runner/.config/mise/config.toml
-        run: mise install uv
       - name: Run provisioning package tests
         env:
           MISE_IGNORED_CONFIG_PATHS: /home/runner/.config/mise/config.toml
-          # Only uv is needed; do not install the rest of the project toolchain.
+          # With auto-install off, `mise x uv` installs only uv, not the rest of the toolchain.
           MISE_EXEC_AUTO_INSTALL: "false"
-        run: mise x -- uv run --extra dev pytest
+        # Pin the interpreter to the nixpkgs python3 series the device ships, not the runner's.
+        run: mise x uv -- uv run --python 3.13 --extra dev pytest

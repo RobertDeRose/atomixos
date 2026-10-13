@@ -43,7 +43,7 @@ in this workflow.
 `.github/workflows/nix.yml` independently evaluates Nix on the same events. It installs Nix on `ubuntu-26.04-arm`
 (`aarch64-linux`) and `macos-latest` (`aarch64-darwin`). Each runner verifies its Nix platform, then evaluates it with
 `flake check --no-build --system <system>`. Evaluating platforms separately reduces peak evaluator memory compared
-with checking both platforms in one process. All validation jobs have a 45-minute limit.
+with checking both platforms in one process. The hk and Nix jobs have a 45-minute limit.
 
 PR validation checks flake evaluation without building packages or executing NixOS VM tests. Full build and VM
 validation remains available locally through `./scripts/nix-with-build-config.sh flake check` or individual
@@ -52,7 +52,8 @@ need a Mac with the Linux builder configured. See [GitHub's runner limitations](
 
 `.github/workflows/pytest.yml` runs the provisioning package test suite on the same events. It runs on
 `ubuntu-26.04-arm`, matching the device's aarch64 Linux file APIs, which macOS host runs only emulate. It executes
-`uv run --extra dev pytest` through mise in `scripts/atomixos_provision`, installing only uv, and has a 15-minute limit.
+`uv run --extra dev pytest` through `mise x uv` in `scripts/atomixos_provision`, installing only uv, pins the
+interpreter to the Python series that the pinned nixpkgs `python3` provides on the device, and has a 15-minute limit.
 
 CI does not regenerate the lock. Dependency-update branches and fork PRs are not excluded from the pull-request gate.
 
