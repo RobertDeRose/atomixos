@@ -54,6 +54,10 @@ reboots itself 10 seconds after a panic, and the next boot uses another try. The
 `systemd-sysctl`; a panic earlier in boot, including in the initrd, still hangs until the hardware watchdog or a power
 cycle resets the device.
 
+`/boot` is boot slot A's partition, which RAUC overwrites while slot B runs, and RAUC refuses to install to a mounted
+slot. It is therefore an automount: it mounts when accessed (first boot reads the fresh-flash `/boot/config.toml` seed)
+and unmounts after a minute idle, so it is not mounted during later updates.
+
 ## Health Check Details
 
 The `os-verification.service` performs these checks before committing a slot:
