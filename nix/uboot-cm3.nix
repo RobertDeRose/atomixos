@@ -65,5 +65,6 @@
 
     CONFIG_EFI_LOADER=n
     CONFIG_FAT_WRITE=y
-  '';
+  ''
+  + import ./uboot-start-ums.nix;
 })

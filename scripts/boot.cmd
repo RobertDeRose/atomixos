@@ -57,15 +57,8 @@ if test -z "${recovery_mmc_dev}"; then
   setenv recovery_mmc_dev ${devnum}
 fi
 
-if test "${START_UMS}" = "1"; then
-  echo "START_UMS=1 requested, entering USB mass storage mode"
-  setenv START_UMS
-  saveenv
-  echo "Write a new image over the OTG USB cable, then unplug to reboot"
-  ums ${recovery_usb_controller} mmc ${recovery_mmc_dev}
-  echo "USB mass storage exited, resetting..."
-  reset
-fi
+# START_UMS is handled by U-Boot's PREBOOT before slot selection
+# (nix/uboot-start-ums.nix), so it works even when this script is unreadable.
 
 if test -n "${recovery_button_pin}"; then
   if gpio input ${recovery_button_pin}; then
@@ -120,10 +113,18 @@ if test -n "@ramdiskAddr@"; then
   setenv ramdisk_addr_r @ramdiskAddr@
 fi
 
-# Load kernel, DTB, and initrd from the selected boot partition
-fatload mmc ${devnum}:${distro_bootpart} ${kernel_addr_r} Image
-fatload mmc ${devnum}:${distro_bootpart} ${fdt_addr_r} dtbs/@dtbPath@
-fatload mmc ${devnum}:${distro_bootpart} ${ramdisk_addr_r} initrd
+# Load kernel, DTB, and initrd from the selected boot partition. A failed load
+# must not reach booti (a stale ${filesize} would give a wrong initrd size), so
+# reset and let the decremented RAUC try counter fall back. Report the first
+# file that failed.
+setenv atomixos_load_failed
+fatload mmc ${devnum}:${distro_bootpart} ${kernel_addr_r} Image || test -n "${atomixos_load_failed}" || setenv atomixos_load_failed Image
+fatload mmc ${devnum}:${distro_bootpart} ${fdt_addr_r} dtbs/@dtbPath@ || test -n "${atomixos_load_failed}" || setenv atomixos_load_failed dtbs/@dtbPath@
+fatload mmc ${devnum}:${distro_bootpart} ${ramdisk_addr_r} initrd || test -n "${atomixos_load_failed}" || setenv atomixos_load_failed initrd
+if test -n "${atomixos_load_failed}"; then
+  echo "ERROR: cannot load ${atomixos_load_failed} from mmc ${devnum}:${distro_bootpart}; resetting"
+  reset
+fi
 setenv initrd_size ${filesize}
 
 # NixOS boot.kernelParams first, so the board's console and loglevel win.

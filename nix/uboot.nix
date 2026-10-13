@@ -65,7 +65,8 @@
 
     # ── FAT write support (for slot_good flag file from Linux) ────────────
     CONFIG_FAT_WRITE=y
-  '';
+  ''
+  + import ./uboot-start-ums.nix;
 }).overrideAttrs
   (old: {
     postPatch = (old.postPatch or "") + ''
