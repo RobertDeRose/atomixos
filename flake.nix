@@ -411,6 +411,7 @@
             boot-script = import ./nix/tests/boot-script.nix netTestArgs;
             device-tree-overlay = import ./nix/tests/device-tree-overlay.nix netTestArgs;
             build-config-workflow = import ./nix/tests/build-config-workflow.nix netTestArgs;
+            os-upgrade-query = import ./nix/tests/os-upgrade-query.nix netTestArgs;
             build-configuration = import ./nix/tests/build-configuration.nix netTestArgs;
             e2e-launcher = import ./nix/tests/e2e-launcher.nix netTestArgs;
             lan-defaults = import ./nix/tests/lan-defaults.nix netTestArgs;
@@ -437,6 +438,7 @@
           darwinTests = {
             cm3-board = import ./nix/tests/cm3-board.nix darwinNetTestArgs;
             build-config-workflow = import ./nix/tests/build-config-workflow.nix darwinNetTestArgs;
+            os-upgrade-query = import ./nix/tests/os-upgrade-query.nix darwinNetTestArgs;
             build-configuration = import ./nix/tests/build-configuration.nix darwinNetTestArgs;
             e2e-launcher = import ./nix/tests/e2e-launcher.nix darwinNetTestArgs;
             lan-defaults = import ./nix/tests/lan-defaults.nix darwinNetTestArgs;
