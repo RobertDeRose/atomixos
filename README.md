@@ -113,7 +113,7 @@ The image ships with no embedded credentials. During provisioning:
 - `/data/config/ssh-authorized-keys/admin` -- operator's SSH public key
 - `/data/config/nixstasis/` -- planned persistent state for Nixstasis enrollment and agent credentials
 
-Normal operator access is SSH-key-only. On Rock64, `_RUT_OH_=1` in U-Boot
+Normal operator access is SSH-key-only. On every board, `_RUT_OH_=1` in U-Boot
 enables a deterministic physical serial-root recovery path on the next boot.
 
 Remote management is intended to flow through Nixstasis using device-approved enrollment, reverse tunnels, and short-lived

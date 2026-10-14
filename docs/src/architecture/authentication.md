@@ -24,10 +24,14 @@ Persisted device-local state lives on `/data`:
 
 ### Physical Recovery
 
-Rock64 keeps a separate physical break-glass path. If `_RUT_OH_=1` is set in
-U-Boot, the next boot starts a serial-only root autologin on `ttyS2` and clears
-that flag after use. This is a local recovery mechanism, not part of normal
+Every hardware board keeps a separate physical break-glass path. If `_RUT_OH_=1` is
+set in U-Boot, the next boot starts a serial-only root autologin on `ttyS2` and
+clears that flag after use. This is a local recovery mechanism, not part of normal
 network authentication.
+
+Set the flag with `fw_setenv _RUT_OH_ 1` from a running system, or, when no login is
+available, from the U-Boot prompt on the serial console: interrupt autoboot, then run
+`setenv _RUT_OH_ 1; saveenv; reset`.
 
 ### Nixstasis Enrollment
 

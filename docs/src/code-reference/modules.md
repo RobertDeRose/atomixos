@@ -112,10 +112,10 @@ on first boot.
 
 **User accounts:**
 
-| User     | Groups | Authentication                                                        |
-|----------|--------|-----------------------------------------------------------------------|
-| `root`   | --     | Locked by default; Rock64 serial-root recovery only when `_RUT_OH_=1` |
-| `appsvc` | --     | Runtime system account for rootless application containers            |
+| User     | Groups | Authentication                                                 |
+|----------|--------|----------------------------------------------------------------|
+| `root`   | --     | Locked by default; serial-root recovery only when `_RUT_OH_=1` |
+| `appsvc` | --     | Runtime system account for rootless application containers     |
 
 Operator users are declared by provisioning config under `[users]`. Admin users are added to `wheel`, use SSH keys from
 `/data/config/ssh-authorized-keys/<user>`, and keep password authentication locked.
@@ -197,7 +197,8 @@ eMMC boot gap (`0x3f8000`, `0x3f0000`). See [Radxa CM3](../cm3.md).
 
 **Purpose**: Settings shared by the ROCK64 and CM3 modules: no NixOS-managed bootloader, `vfat`/`f2fs` support in both
 stages, systemd-repart `discard = false` (protecting SPL and U-Boot in the eMMC gap), `/boot` as an idle-unmounting
-automount (RAUC refuses to install to a mounted slot), Realtek USB NIC firmware, the `ttyS2` serial getty, and
+automount (RAUC refuses to install to a mounted slot), Realtek USB NIC firmware, the `ttyS2` serial getty, the
+one-shot `_RUT_OH_` serial root recovery (`serial-root-debug-gate` and `serial-root-debug@ttyS2`), and
 `boot-storage-debug` disabled.
 
 ---

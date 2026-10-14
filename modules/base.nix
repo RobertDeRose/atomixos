@@ -30,8 +30,8 @@ in
     type = lib.types.bool;
     default = false;
     description = ''
-      Enable the Rock64 serial-only root debug escape hatch triggered by the
-      `_RUT_OH_` U-Boot environment variable.
+      Enable the serial-only root debug escape hatch triggered by the
+      `_RUT_OH_` U-Boot environment variable. Every hardware board enables it.
     '';
   };
 
@@ -588,11 +588,11 @@ in
 
     users.mutableUsers = false;
     # This appliance intentionally ships without any built-in login credential.
-    # The admin SSH key is provisioned onto /data on first boot, and Rock64 has
-    # a separate physical serial recovery path via `_RUT_OH_`.
+    # The admin SSH key is provisioned onto /data on first boot, and every
+    # hardware board has a separate physical serial recovery path via `_RUT_OH_`.
     users.allowNoPasswordLogin = true;
 
-    # Root stays locked by default. Rock64 can still expose a physical
+    # Root stays locked by default. Hardware boards can still expose a physical
     # serial-only root recovery path separately via `_RUT_OH_`.
     users.users.root = {
       hashedPassword = "!";

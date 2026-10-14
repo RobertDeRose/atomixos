@@ -389,24 +389,9 @@ let
     # ── Workarounds for removed options in kernel 6.19+ ──
     USB_SERIAL_CONSOLE = lib.mkForce unset;
   };
-
-  serialRootDebugScript = pkgs.writeShellScript "rock64-serial-root-debug" ''
-    set -euo pipefail
-
-    env_value="$(${ubootEnvTools}/bin/fw_printenv -n _RUT_OH_ 2>/dev/null || true)"
-    if [ "$env_value" != "1" ]; then
-      exit 0
-    fi
-
-    ${pkgs.systemd}/bin/systemctl stop serial-getty@ttyS2.service
-    ${pkgs.systemd}/bin/systemctl start serial-root-debug@ttyS2.service
-    ${ubootEnvTools}/bin/fw_setenv _RUT_OH_
-  '';
 in
 {
   imports = [ ./hardware-rockchip.nix ];
-
-  atomixos.serialRootDebug.enable = true;
 
   # The onboard RK3328 GMAC is the WAN port.
   atomixos.network.wanLinkMatch.Path = "platform-ff540000.ethernet";
@@ -516,42 +501,6 @@ in
   };
 
   # ── Serial console (UART2) ─────────────────────────────────────────────────
-  # hardware-rockchip.nix enables the ttyS2 getty on the Rock64's 3-pin header.
-
-  systemd.services."serial-root-debug@" = lib.mkIf config.atomixos.serialRootDebug.enable {
-    description = "Serial root debug autologin on %I";
-    after = [ "systemd-user-sessions.service" ];
-    serviceConfig = {
-      Type = "idle";
-      ExecStart = "${pkgs.util-linux}/sbin/agetty --autologin root --keep-baud 1500000,115200,57600,38400 -8 -L %I vt220";
-      Restart = "always";
-      RestartSec = "0";
-      TTYPath = "/dev/%I";
-      TTYReset = true;
-      TTYVHangup = true;
-      IgnoreSIGPIPE = false;
-      SendSIGHUP = true;
-    };
-  };
-
-  systemd.services.serial-root-debug-gate = lib.mkIf config.atomixos.serialRootDebug.enable {
-    description = "Enable serial root debug when _RUT_OH_=1";
-    after = [
-      "data.mount"
-      "serial-getty@ttyS2.service"
-    ];
-    wants = [ "data.mount" ];
-    wantedBy = [ "multi-user.target" ];
-    unitConfig.RequiresMountsFor = [ "/data" ];
-    path = [
-      pkgs.coreutils
-      pkgs.systemd
-      ubootEnvTools
-    ];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      ExecStart = serialRootDebugScript;
-    };
-  };
+  # hardware-rockchip.nix enables the ttyS2 getty and the `_RUT_OH_` serial
+  # root recovery on the Rock64's 3-pin header.
 }
