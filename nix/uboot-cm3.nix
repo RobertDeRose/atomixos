@@ -28,6 +28,9 @@
     # Do not let the ordinary 'script' bootmeth run boot.scr before RAUC has
     # selected a slot and persisted the decrementing try counter. Scan only
     # mmc0 (eMMC): Rockchip's default boot_targets tries mmc1 (SD) first.
+    # Restrict boot_targets rather than passing a label: a labelled or
+    # per-device scan skips global bootmeths, which U-Boot refuses once
+    # `bootmeth order` is set, so `bootflow scan -b mmc0` finds nothing.
     # Reset if the selected slot fails to boot, so the decremented try counter
     # falls back to the other slot instead of stopping at the prompt.
     CONFIG_BOOTSTD=y
@@ -36,7 +39,7 @@
     CONFIG_USE_BOOTCOMMAND=y
     CONFIG_CMD_BOOTMETH=y
     CONFIG_CMD_BOOTFLOW=y
-    CONFIG_BOOTCOMMAND="bootmeth order rauc; bootflow scan -lb mmc0; reset"
+    CONFIG_BOOTCOMMAND="setenv boot_targets mmc0; bootmeth order rauc; bootflow scan -b; reset"
 
     CONFIG_BOOTMETH_RAUC=y
     CONFIG_BOOTMETH_RAUC_PARTITIONS="1,2 3,4"

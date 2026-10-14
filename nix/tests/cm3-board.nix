@@ -38,6 +38,15 @@ assert ubootConfig "USB_DWC3_GADGET" == "y";
 assert ubootConfig "FAT_WRITE" == "y";
 # A failed slot resets so the RAUC try counter can fall back.
 assert lib.hasSuffix "; reset\"" (ubootConfig "BOOTCOMMAND");
+# Only the eMMC is scanned, and only by the RAUC bootmeth.
+assert lib.hasInfix "setenv boot_targets mmc0;" (ubootConfig "BOOTCOMMAND");
+assert lib.hasInfix "bootmeth order rauc;" (ubootConfig "BOOTCOMMAND");
+# With `bootmeth order` set, U-Boot refuses scans that skip global bootmeths
+# (-G, a label, or a bootdev) and reports zero bootflows: scan boot_targets.
+assert builtins.match ".*bootflow scan -[a-z]*G.*" (ubootConfig "BOOTCOMMAND") == null;
+assert
+  builtins.match ''.*bootflow scan( -[a-zA-Z]+)? [^-;"][^;"]*[;"].*'' (ubootConfig "BOOTCOMMAND")
+  == null;
 # The squashfs slot can appear after initrd-root-device.target; wait for it.
 assert lib.hasInfix ''until [ -b "$lower_device" ]''
   cm3.boot.initrd.systemd.services.initrd-prepare-overlay-lower.script;
@@ -63,7 +72,6 @@ pkgs.runCommand "test-cm3-board"
     grep -F 'defconfig = "radxa-cm3-io-rk3566_defconfig";' ${../../nix/uboot-cm3.nix}
     grep -F 'CONFIG_ENV_IS_IN_MMC=y' ${../../nix/uboot-cm3.nix}
     grep -F 'CONFIG_ENV_REDUNDANT=y' ${../../nix/uboot-cm3.nix}
-    grep -F 'CONFIG_BOOTCOMMAND="bootmeth order rauc; bootflow scan -lb mmc0; reset"' ${../../nix/uboot-cm3.nix}
     grep -F 'dtbPath = nixosConfig.hardware.deviceTree.name;' ${../../nix/boot-partition.nix}
     grep -F 'atomixos.lowerdev=''${atomixos_lowerdev}' ${../../scripts/boot.cmd}
     grep -F '"@compatible@" "''${nixosConfig.atomixos.rauc.compatible}"' ${../../nix/rauc-bundle.nix}
