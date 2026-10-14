@@ -20,6 +20,7 @@ from atomixos_provision.activation import (
     restore_rollback,
     write_managed_state,
 )
+from atomixos_provision.state import is_provisioned_config_root
 
 
 class ProgressRecorder:
@@ -207,6 +208,32 @@ class TestDiscardInitialConfig:
         assert not config_root.exists()
         assert not candidate.exists()
         assert not rollback.exists()
+        assert not marker.exists()
+
+    def test_keeps_managed_users_of_failed_apply(self, tmp_path):
+        config_root = tmp_path / "config"
+        config_root.mkdir()
+        (config_root / "config.toml").write_text("failed")
+        (config_root / ".first-config").write_text("")
+        write_managed_state(config_root, {"admin"})
+
+        discard_initial_config(config_root)
+
+        assert sorted(path.name for path in config_root.iterdir()) == ["managed-users.json"]
+        assert read_managed_state(config_root) == {"admin"}
+        assert not is_provisioned_config_root(config_root)
+
+    def test_interrupted_initial_promotion_keeps_managed_users(self, tmp_path):
+        config_root = tmp_path / "config"
+        config_root.mkdir()
+        write_managed_state(config_root, {"admin"})
+        marker = tmp_path / "config.atomixos-promotion-pending"
+        marker.write_text("pending\n")
+
+        recover_config_root(config_root)
+
+        assert read_managed_state(config_root) == {"admin"}
+        assert not is_provisioned_config_root(config_root)
         assert not marker.exists()
 
 

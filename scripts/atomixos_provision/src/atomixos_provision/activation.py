@@ -163,12 +163,7 @@ def recover_config_root(config_root: Path) -> None:
             marker_path.unlink(missing_ok=True)
             _fsync_directory(config_root.parent)
             return
-        if config_root.exists():
-            shutil.rmtree(config_root)
-        if candidate_root.exists():
-            shutil.rmtree(candidate_root)
-        marker_path.unlink(missing_ok=True)
-        _fsync_directory(config_root.parent)
+        discard_initial_config(config_root)
         return
 
     if (config_root / "config.toml").exists():
@@ -243,16 +238,26 @@ def cleanup_rollback(config_root: Path) -> None:
 
 
 def discard_initial_config(config_root: Path) -> None:
-    """Remove a failed initial config so the device remains in bootstrap mode."""
+    """Remove a failed initial config so the device remains in bootstrap mode.
+
+    Accounts the failed apply created still exist, so keep their managed-user
+    record in an otherwise empty root. The root stays unprovisioned, and the
+    next initial apply carries the record forward instead of refusing to touch
+    those accounts.
+    """
     candidate_root = candidate_root_path(config_root)
     rollback_root = rollback_root_path(config_root)
     marker_path = promotion_marker_path(config_root)
+    failed_managed = read_managed_state(config_root)
     if config_root.exists():
         shutil.rmtree(config_root)
     if candidate_root.exists():
         shutil.rmtree(candidate_root)
     if rollback_root.exists():
         shutil.rmtree(rollback_root)
+    if failed_managed:
+        config_root.mkdir()
+        write_managed_state(config_root, failed_managed)
     marker_path.unlink(missing_ok=True)
     _fsync_directory(config_root.parent)
 

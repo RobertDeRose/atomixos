@@ -1103,6 +1103,8 @@ def _provision_prepared_sync(
             warnings = write_imported_state(
                 parsed, config_path, files_path, candidate_root, config_root, progress
             )
+            # A discarded initial apply keeps its managed-user record.
+            carry_forward_managed_state(config_root, candidate_root)
         except Exception:
             shutil.rmtree(candidate_root, ignore_errors=True)
             raise
@@ -1447,8 +1449,8 @@ def _render_verified_staged_candidate_sync(
         warnings = write_imported_state(
             parsed, source_config, None, candidate_root, config_root, progress
         )
-        if _is_provisioned_config_root(config_root):
-            carry_forward_managed_state(config_root, candidate_root)
+        # A discarded initial apply keeps its managed-user record too.
+        carry_forward_managed_state(config_root, candidate_root)
         bundle_manifest_root = bundle_root or (snapshot / "missing-bundle-files")
         rendered_manifest = {
             **manifest,
