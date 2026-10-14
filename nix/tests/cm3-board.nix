@@ -50,6 +50,11 @@ assert
 # The squashfs slot can appear after initrd-root-device.target; wait for it.
 assert lib.hasInfix ''until [ -b "$lower_device" ]''
   cm3.boot.initrd.systemd.services.initrd-prepare-overlay-lower.script;
+# Every hardware board has the one-shot `_RUT_OH_` serial root recovery.
+assert cm3.atomixos.serialRootDebug.enable;
+assert cm3.systemd.services.serial-root-debug-gate.wantedBy == [ "multi-user.target" ];
+assert lib.hasInfix "--autologin root"
+  cm3.systemd.services."serial-root-debug@".serviceConfig.ExecStart;
 # RAUC refuses to install to a mounted slot, so boot slot A is not kept mounted.
 assert builtins.elem "x-systemd.automount" cm3.fileSystems."/boot".options;
 assert builtins.elem "noauto" cm3.fileSystems."/boot".options;
