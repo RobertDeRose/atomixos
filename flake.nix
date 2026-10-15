@@ -385,6 +385,7 @@
             chrony-wan-recovery = import ./nix/tests/chrony-wan-recovery.nix netTestArgs;
             network-isolation = import ./nix/tests/network-isolation.nix netTestArgs;
             kernel-security = import ./nix/tests/kernel-security.nix netTestArgs;
+            rootless-storage = import ./nix/tests/rootless-storage.nix netTestArgs;
             ssh-wan-toggle = import ./nix/tests/ssh-wan-toggle.nix netTestArgs;
           };
 

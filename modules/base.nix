@@ -310,6 +310,9 @@ in
       "d /var/lib/appsvc/.config 0750 appsvc appsvc -"
       "d /var/lib/appsvc/.config/containers 0750 appsvc appsvc -"
       "d /var/lib/appsvc/.config/containers/systemd 0750 appsvc appsvc -"
+      # Persistent rootless image store (rootless_storage_path below).
+      "d /data/containers/rootless 0755 root root -"
+      "d /data/containers/rootless/appsvc 0700 appsvc appsvc -"
       "d /var/cache/nscd 0755 nscd nscd -"
       "d /var/log/journal 2755 root systemd-journal -"
       "d /var/db 0755 root root -"
@@ -616,10 +619,14 @@ in
     };
 
     # Persist container image/layer storage on /data for application workloads.
+    # Rootless stores (the appsvc runtime) default to the account's home on the
+    # overlay root, which every boot resets, so their images would be pulled
+    # again on each boot and fail whenever the registry is unreachable.
     virtualisation.containers.storage.settings = {
       storage = {
         graphroot = "/data/containers/storage";
         runroot = "/run/containers/storage";
+        rootless_storage_path = "/data/containers/rootless/$USER";
       };
     };
 
