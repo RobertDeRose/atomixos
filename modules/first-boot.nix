@@ -215,7 +215,9 @@ in
       PrivateTmp = true;
       NoNewPrivileges = true;
       ProtectSystem = "strict";
-      ProtectHome = true;
+      # Activation checks and restarts rootless services through the appsvc
+      # user bus in /run/user, which ProtectHome = true hides.
+      ProtectHome = "read-only";
       ReadWritePaths = [
         "/data"
         "/run/atomixos-provision"

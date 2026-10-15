@@ -94,6 +94,13 @@ nixos-lib.runTest {
         systemd.services.first-boot.enable = false;
         systemd.services.quadlet-sync.enable = false;
         systemd.services.atomixos-apply-users.enable = false;
+        # The rootless application account that activation checks reach.
+        users.users.appsvc = {
+          isSystemUser = true;
+          group = "appsvc";
+          home = "/var/lib/appsvc";
+        };
+        users.groups.appsvc = { };
       };
     };
 
@@ -123,5 +130,21 @@ nixos-lib.runTest {
     gateway.succeed("python3 ${client} failure")
     gateway.succeed("rm /data/config/files/escape")
     gateway.wait_until_succeeds("test -z \"$(ls -A /run/atomixos-provision/export/results)\"")
+
+    # ── activation reaches the appsvc user bus inside the hardened apply unit ──
+    # Run the real rootless health check in atomixos-provision-apply.service
+    # itself: the drop-in replaces only the command, so the unit's sandbox
+    # (ProtectHome, ProtectSystem, PrivateTmp) still applies.
+    gateway.succeed("loginctl enable-linger appsvc")
+    gateway.wait_until_succeeds("systemctl is-active user@$(id -u appsvc).service")
+    gateway.succeed("runuser -u appsvc -- env XDG_RUNTIME_DIR=/run/user/$(id -u appsvc) systemd-run --user --unit=probe --remain-after-exit /run/current-system/sw/bin/true")
+    gateway.succeed("mkdir -p /run/atomixos-provision/probe-root")
+    gateway.succeed("printf '[\"probe\"]\n' >/run/atomixos-provision/probe-root/health-required.json")
+    gateway.succeed("printf '{\"app_user\":\"appsvc\",\"units\":[{\"name\":\"probe\",\"filename\":\"probe.container\",\"service\":\"probe.service\",\"mode\":\"rootless\"}]}\n' >/run/atomixos-provision/probe-root/quadlet-runtime.json")
+    gateway.succeed("mkdir -p /run/systemd/system/atomixos-provision-apply.service.d")
+    gateway.succeed("printf '[Unit]\nConditionPathExistsGlob=\n[Service]\nExecStart=\nExecStart=/run/current-system/sw/bin/sh -c \"first-boot-provision check-health /run/atomixos-provision/probe-root\"\nExecStopPost=\n' >/run/systemd/system/atomixos-provision-apply.service.d/probe.conf")
+    gateway.succeed("systemctl daemon-reload")
+    gateway.succeed("systemctl start atomixos-provision-apply.service")
+    gateway.succeed("rm -rf /run/systemd/system/atomixos-provision-apply.service.d /run/atomixos-provision/probe-root && systemctl daemon-reload")
   '';
 }
