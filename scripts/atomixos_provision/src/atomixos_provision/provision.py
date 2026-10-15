@@ -1079,7 +1079,12 @@ def _provision_prepared_sync(
     progress: ProgressReporter | None = None,
     allow_reapply: bool = True,
 ) -> dict[str, Any]:
-    """Apply a prepared config source using the shared promotion flow."""
+    """Apply a prepared config source using the shared promotion flow.
+
+    The candidate always inherits the active root's managed-user record,
+    including one kept by a discarded initial apply, so a retry treats the
+    accounts that apply created as managed.
+    """
     config_root = validate_config_root(config_root)
     if progress:
         progress.set_stage("recover", "checking for interrupted promotion")
@@ -1394,8 +1399,10 @@ def _render_verified_staged_candidate_sync(
 
     Recover pending promotion first. Signed re-applies use the verified request;
     partial operations are applied to the current config. Initial and locally
-    trusted jobs use the staged source config after checking its hash.
-    Authorization, validation, activation, and I/O errors propagate.
+    trusted jobs use the staged source config after checking its hash. Every
+    candidate inherits the root's managed-user record, including one kept by a
+    discarded initial apply. Authorization, validation, activation, and I/O
+    errors propagate.
     """
     recover_config_root(config_root)
     request_payload, authorization = _verify_staged_authorization(

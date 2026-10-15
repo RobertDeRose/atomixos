@@ -1302,7 +1302,10 @@ def test_retry_after_failed_initial_import_keeps_managed_users(tmp_path, monkeyp
     seen_managed = []
 
     def activation(succeed):
+        """Return a fake complete_reapply whose health check passes or fails."""
+
         def complete_reapply(root, _progress=None):
+            """Record the managed users seen, then manage admin like apply-users."""
             # apply-users records what it manages before health checks run.
             seen_managed.append(
                 sorted(json.loads((root / "managed-users.json").read_text()))
