@@ -37,6 +37,8 @@ QUADLET_ACTIVE_DIR="/etc/containers/systemd"
 APP_RUNTIME_USER="appsvc"
 APP_RUNTIME_HOME="/var/lib/appsvc"
 ROOTLESS_QUADLET_DIR="$APP_RUNTIME_HOME/.config/containers/systemd"
+# Matches rootless_storage_path in modules/base.nix.
+ROOTLESS_STORAGE_ROOT="/data/containers/rootless"
 RUNTIME_METADATA_FILE="$CONFIG_ROOT/quadlet-runtime.json"
 MANAGED_QUADLET_MANIFEST=".atomixos-managed-quadlets.json"
 CHRONY_WAIT_TIMEOUT_SECONDS="${ATOMIXOS_CHRONY_WAIT_TIMEOUT_SECONDS:-10}"
@@ -99,6 +101,10 @@ prepare_rootless_runtime() {
 	install -d -o "$APP_RUNTIME_USER" -g "$APP_RUNTIME_USER" -m 0700 "$APP_RUNTIME_HOME/.config"
 	install -d -o "$APP_RUNTIME_USER" -g "$APP_RUNTIME_USER" -m 0700 "$APP_RUNTIME_HOME/.config/containers"
 	install -d -o "$APP_RUNTIME_USER" -g "$APP_RUNTIME_USER" -m 0700 "$ROOTLESS_QUADLET_DIR"
+	# /data is a nofail mount, so boot tmpfiles can run before it and leave
+	# the image store on the root it covers. Create it again once /data is up.
+	install -d -o root -g root -m 0755 "$ROOTLESS_STORAGE_ROOT"
+	install -d -o "$APP_RUNTIME_USER" -g "$APP_RUNTIME_USER" -m 0700 "$ROOTLESS_STORAGE_ROOT/$APP_RUNTIME_USER"
 	loginctl enable-linger "$APP_RUNTIME_USER"
 	systemctl start "user@$uid.service"
 	run_as_appsvc systemctl --user daemon-reload
