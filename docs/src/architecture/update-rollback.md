@@ -64,9 +64,15 @@ RAUC bundles update the boot and root slots, including `boot.scr`, but never U-B
 
 - New U-Boot features are additive. `boot.cmd` doesn't rely on them, and keeps any behavior older U-Boot builds
   provide only through the script, such as the `START_UMS` handler.
-- `boot.cmd` resets itself when a boot file fails to load or `booti` fails, so a ROCK64 flashed before the `; reset`
-  boot command still falls back after a bad kernel, DTB, or initrd. Only an unreadable `boot.scr` on such a device
-  stops at the U-Boot prompt.
+- `boot.cmd` resets itself when a boot file fails to load or `booti` fails, so a ROCK64 whose boot command lacks
+  `; reset` still falls back after a bad kernel, DTB, or initrd. Only an unreadable `boot.scr` on such a device stops
+  at the U-Boot prompt.
+
+The boot command and `PREBOOT` are U-Boot's default `bootcmd` and `preboot` variables, and the RAUC bootmeth saves the
+whole environment on every boot. A saved environment keeps the `bootcmd` and `preboot` of the U-Boot that first saved
+it, so a newer U-Boot's defaults apply only once that environment is reset. Flashing a CM3 image clears its eMMC
+environment. The ROCK64 environment is in SPI flash, which flashing the eMMC never touches: after flashing a ROCK64 with
+a newer U-Boot, run `env default bootcmd preboot; saveenv` at the U-Boot prompt to adopt its defaults.
 
 `/boot` is boot slot A's partition, which RAUC overwrites while slot B runs, and RAUC refuses to install to a mounted
 slot. It is therefore an automount: it mounts when accessed (first boot reads the fresh-flash `/boot/config.toml` seed)

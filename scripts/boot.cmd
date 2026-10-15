@@ -60,7 +60,8 @@ fi
 # U-Boot's PREBOOT handles START_UMS before slot selection
 # (nix/uboot-start-ums.nix), so it works even when this script is unreadable.
 # RAUC bundles update this script but not U-Boot, so keep this fallback for
-# boards whose U-Boot predates that PREBOOT.
+# boards whose U-Boot, or saved environment, predates that PREBOOT (the ROCK64
+# SPI environment survives reflashing the eMMC).
 if test "${START_UMS}" = "1"; then
   echo "START_UMS=1 requested, entering USB mass storage mode"
   setenv START_UMS
@@ -142,7 +143,7 @@ setenv initrd_size ${filesize}
 setenv bootargs "@kernelParams@ ${bootargs_base} root=fstab rw atomixos.lowerdev=${atomixos_lowerdev} atomixos.lowerfstype=squashfs init=@systemClosure@/init rauc.slot=${rauc_slot}"
 booti ${kernel_addr_r} ${ramdisk_addr_r}:${initrd_size} ${fdt_addr_r}
 
-# Reset here too: U-Boot builds flashed before CONFIG_BOOTCOMMAND gained
-# "; reset" would otherwise stop at the prompt.
+# Reset here too: a U-Boot build, or a saved environment, whose boot command
+# predates "; reset" would otherwise stop at the prompt.
 echo "ERROR: booti failed; resetting so the RAUC try counter can fall back to the other slot"
 reset

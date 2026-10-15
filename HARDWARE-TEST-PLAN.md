@@ -1,7 +1,6 @@
 # Hardware Test Plan
 
-Physical verification of AtomixOS on Rock64 (RK3328). Covers the 18 remaining tasks that cannot be validated in
-software alone.
+Physical verification of AtomixOS on Rock64 (RK3328). Covers the checks that cannot be validated in software alone.
 
 ## Prerequisites
 
