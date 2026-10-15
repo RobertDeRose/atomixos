@@ -248,8 +248,9 @@ multiple `-m` flags or escaped `\n` text. Verify the resulting message before re
 Feature branches use `feat/<slug>`. When `wt` is available, treat JSON output from `wt switch --format json` as
 authoritative for branch and path.
 
-Only fast-forward merges into `dev` are accepted. Use `git merge --ff-only`; never create a merge commit and never fall
-back to one when fast-forwarding fails.
+Merges into `dev` must keep history linear: fast-forward locally with `git merge --ff-only`, or squash-merge a pull
+request. Never create a merge commit, and never fall back to one when fast-forwarding fails. A squash commit follows
+the commit message rules above and summarizes the whole pull request.
 
 A no-mode `/close-feature` completes close-out and then asks for one explicit action:
 
