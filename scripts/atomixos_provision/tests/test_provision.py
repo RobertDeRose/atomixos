@@ -1292,6 +1292,67 @@ Image = "docker.io/library/alpine:latest"
     assert not (tmp_path / "config-rollback").exists()
 
 
+def test_retry_after_failed_initial_import_keeps_managed_users(tmp_path, monkeypatch):
+    """A failed first apply's accounts stay managed, so a retry can update them."""
+    monkeypatch.setenv("ATOMIXOS_BOOTSTRAP_ACTIVATION", "/tmp/fake-activation")
+    monkeypatch.setattr(
+        "atomixos_provision.config.load_config_schema",
+        lambda: {"type": "object", "additionalProperties": True},
+    )
+    seen_managed = []
+
+    def activation(succeed):
+        """Return a fake complete_reapply whose health check passes or fails."""
+
+        def complete_reapply(root, _progress=None):
+            """Record the managed users seen, then manage admin like apply-users."""
+            # apply-users records what it manages before health checks run.
+            seen_managed.append(
+                sorted(json.loads((root / "managed-users.json").read_text()))
+                if (root / "managed-users.json").exists()
+                else []
+            )
+            (root / "managed-users.json").write_text('["admin"]\n')
+            return (True, [], False) if succeed else (False, ["app.service"], False)
+
+        return complete_reapply
+
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        f"""\
+version = 1
+
+[users.admin]
+isAdmin = true
+ssh_key = "{VALID_ED25519_KEY} admin@example"
+
+[activation]
+required = ["app"]
+
+[containers.container.app]
+privileged = false
+
+[containers.container.app.Container]
+Image = "docker.io/library/alpine:latest"
+"""
+    )
+    config_root = tmp_path / "config"
+
+    monkeypatch.setattr("atomixos_provision.provision.complete_reapply", activation(False))
+    with pytest.raises(ProvisionError) as exc_info:
+        import_config_from_path(config_path, config_root)
+    assert exc_info.value.rollback_status == "discarded"
+    assert sorted(path.name for path in config_root.iterdir()) == ["managed-users.json"]
+
+    monkeypatch.setattr("atomixos_provision.provision.complete_reapply", activation(True))
+    result = import_config_from_path(config_path, config_root)
+
+    assert result["reapply"] is False
+    assert seen_managed == [[], ["admin"]]
+    assert (config_root / "config.toml").exists()
+    assert json.loads((config_root / "managed-users.json").read_text()) == ["admin"]
+
+
 def test_write_imported_state_grants_service_read_access_when_root(tmp_path, monkeypatch):
     from atomixos_provision import provision
 

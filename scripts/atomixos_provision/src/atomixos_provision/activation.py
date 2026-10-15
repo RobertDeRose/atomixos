@@ -10,6 +10,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
 
+from atomixos_provision.state import FIRST_CONFIG_MARKER
+
 __all__ = [
     "activate_services",
     "atomic_promote",
@@ -129,10 +131,18 @@ def read_managed_state(config_root: Path) -> set[str]:
 
 
 def write_managed_state(config_root: Path, names: set[str]) -> None:
-    """Write the managed user names set to config root."""
+    """Durably replace the managed user names record in config root.
+
+    The record is written to a temporary file, flushed, and renamed into place,
+    so an interruption leaves either the previous record or the new one.
+    """
     state_path = config_root / "managed-users.json"
-    state_path.write_text(json.dumps(sorted(names), indent=2) + "\n")
-    state_path.chmod(0o600)
+    tmp_path = config_root / ".managed-users.json.tmp"
+    tmp_path.write_text(json.dumps(sorted(names), indent=2) + "\n")
+    tmp_path.chmod(0o600)
+    _fsync_file(tmp_path)
+    os.replace(tmp_path, state_path)
+    _fsync_directory(config_root)
 
 
 # --- Crash Recovery ---
@@ -163,12 +173,7 @@ def recover_config_root(config_root: Path) -> None:
             marker_path.unlink(missing_ok=True)
             _fsync_directory(config_root.parent)
             return
-        if config_root.exists():
-            shutil.rmtree(config_root)
-        if candidate_root.exists():
-            shutil.rmtree(candidate_root)
-        marker_path.unlink(missing_ok=True)
-        _fsync_directory(config_root.parent)
+        discard_initial_config(config_root)
         return
 
     if (config_root / "config.toml").exists():
@@ -243,18 +248,55 @@ def cleanup_rollback(config_root: Path) -> None:
 
 
 def discard_initial_config(config_root: Path) -> None:
-    """Remove a failed initial config so the device remains in bootstrap mode."""
+    """Remove a failed initial config so the device remains in bootstrap mode.
+
+    Accounts the failed apply created still exist, so keep their managed-user
+    record in an otherwise empty root. The root stays unprovisioned, and the
+    next initial apply carries the record forward instead of refusing to touch
+    those accounts.
+
+    The record never leaves disk during cleanup: the root is pruned around it,
+    and a record that survives only in an interrupted retry candidate is merged
+    into the root before the candidate is removed. An interrupted discard can
+    therefore be repeated by recovery without losing it.
+    """
     candidate_root = candidate_root_path(config_root)
     rollback_root = rollback_root_path(config_root)
     marker_path = promotion_marker_path(config_root)
+    managed = read_managed_state(config_root) | read_managed_state(candidate_root)
     if config_root.exists():
-        shutil.rmtree(config_root)
+        if managed:
+            _prune_to_managed_state(config_root)
+        else:
+            shutil.rmtree(config_root)
+    if managed:
+        config_root.mkdir(exist_ok=True)
+        write_managed_state(config_root, managed)
+        _fsync_directory(config_root.parent)
     if candidate_root.exists():
         shutil.rmtree(candidate_root)
     if rollback_root.exists():
         shutil.rmtree(rollback_root)
     marker_path.unlink(missing_ok=True)
     _fsync_directory(config_root.parent)
+
+
+def _prune_to_managed_state(config_root: Path) -> None:
+    """Remove everything in config root except its managed-user record.
+
+    Provisioning markers go first, so an interruption never leaves a root that
+    still looks provisioned after other files are gone.
+    """
+    provisioning_markers = (FIRST_CONFIG_MARKER, "config.toml")
+    entries = sorted(config_root.iterdir(), key=lambda p: p.name not in provisioning_markers)
+    for entry in entries:
+        if entry.name == "managed-users.json":
+            continue
+        if entry.is_dir() and not entry.is_symlink():
+            shutil.rmtree(entry)
+        else:
+            entry.unlink()
+    _fsync_directory(config_root)
 
 
 def restore_rollback(config_root: Path) -> bool:

@@ -1,7 +1,11 @@
 """Tests for atomixos_provision.activation module."""
 
 import json
+import shutil
 import subprocess
+from pathlib import Path
+
+import pytest
 
 from atomixos_provision.activation import (
     activate_services,
@@ -20,6 +24,7 @@ from atomixos_provision.activation import (
     restore_rollback,
     write_managed_state,
 )
+from atomixos_provision.state import is_provisioned_config_root
 
 
 class ProgressRecorder:
@@ -207,6 +212,80 @@ class TestDiscardInitialConfig:
         assert not config_root.exists()
         assert not candidate.exists()
         assert not rollback.exists()
+        assert not marker.exists()
+
+    def test_keeps_managed_users_of_failed_apply(self, tmp_path):
+        """A discarded root keeps only its managed-user record and stays unprovisioned."""
+        config_root = tmp_path / "config"
+        config_root.mkdir()
+        (config_root / "config.toml").write_text("failed")
+        (config_root / ".first-config").write_text("")
+        write_managed_state(config_root, {"admin"})
+
+        discard_initial_config(config_root)
+
+        assert sorted(path.name for path in config_root.iterdir()) == ["managed-users.json"]
+        assert read_managed_state(config_root) == {"admin"}
+        assert not is_provisioned_config_root(config_root)
+
+    def test_interrupted_initial_promotion_keeps_managed_users(self, tmp_path):
+        """Recovery of a pending initial promotion keeps the active root's record."""
+        config_root = tmp_path / "config"
+        config_root.mkdir()
+        write_managed_state(config_root, {"admin"})
+        marker = tmp_path / "config.atomixos-promotion-pending"
+        marker.write_text("pending\n")
+
+        recover_config_root(config_root)
+
+        assert read_managed_state(config_root) == {"admin"}
+        assert not is_provisioned_config_root(config_root)
+        assert not marker.exists()
+
+    def test_interrupted_discard_keeps_managed_users(self, tmp_path, monkeypatch):
+        """A discard that stops after pruning the root leaves the record for recovery."""
+        config_root = tmp_path / "config"
+        config_root.mkdir()
+        (config_root / "config.toml").write_text("failed")
+        write_managed_state(config_root, {"admin"})
+        candidate = tmp_path / "config-candidate"
+        candidate.mkdir()
+        marker = tmp_path / "config.atomixos-promotion-pending"
+        marker.write_text("pending\n")
+        real_rmtree = shutil.rmtree
+
+        def interrupted_rmtree(path, *args, **kwargs):
+            if Path(path) == candidate:
+                raise KeyboardInterrupt("worker stopped")
+            real_rmtree(path, *args, **kwargs)
+
+        monkeypatch.setattr("atomixos_provision.activation.shutil.rmtree", interrupted_rmtree)
+        with pytest.raises(KeyboardInterrupt):
+            discard_initial_config(config_root)
+        monkeypatch.setattr("atomixos_provision.activation.shutil.rmtree", real_rmtree)
+
+        recover_config_root(config_root)
+
+        assert read_managed_state(config_root) == {"admin"}
+        assert not is_provisioned_config_root(config_root)
+        assert not candidate.exists()
+        assert not marker.exists()
+
+    def test_interrupted_retry_promotion_keeps_candidate_record(self, tmp_path):
+        """Recovery keeps a record that survives only in the retry candidate."""
+        config_root = tmp_path / "config"
+        candidate = tmp_path / "config-candidate"
+        candidate.mkdir()
+        (candidate / "config.toml").write_text("retry")
+        write_managed_state(candidate, {"admin"})
+        marker = tmp_path / "config.atomixos-promotion-pending"
+        marker.write_text("pending\n")
+
+        recover_config_root(config_root)
+
+        assert sorted(path.name for path in config_root.iterdir()) == ["managed-users.json"]
+        assert read_managed_state(config_root) == {"admin"}
+        assert not candidate.exists()
         assert not marker.exists()
 
 
