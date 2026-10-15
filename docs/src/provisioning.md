@@ -206,7 +206,9 @@ discards an uncommitted initial configuration or restores and reactivates
 rollback state. A discarded initial configuration keeps only its
 `managed-users.json` record, so the accounts it created stay managed: the device
 remains unprovisioned, and the next initial apply carries the record forward
-instead of refusing to modify those accounts. If the worker stops while reactivating restored rollback state,
+instead of refusing to modify those accounts. The record stays on disk throughout
+the discard, including when an interrupted retry left it only in the candidate, so
+recovery can repeat an interrupted discard without losing it. If the worker stops while reactivating restored rollback state,
 finalization reruns that activation before publishing a result. Claimed jobs
 remain pending until root publishes a terminal result, including when result I/O
 temporarily fails. While a claim remains, a retry timer restarts the apply
