@@ -38,7 +38,9 @@ transient service failures, network regressions, and required provisioned-unit f
 ### ADDED: Successful confirmation commits slot
 
 When all checks pass (services and sustained), the service runs `rauc status mark-good` to commit the current
-slot. This resets the boot counter and prevents further rollback.
+slot. This resets the boot counter and prevents further rollback. It does this on every healthy boot, including when
+RAUC already reports the slot as good: RAUC reports a slot good while it has boot tries left, and U-Boot uses one try
+on every boot, so skipping the call would let three plain reboots exhaust the slot.
 
 #### Scenario: Slot committed on success
 
@@ -46,6 +48,33 @@ slot. This resets the boot counter and prevents further rollback.
 - When `rauc status mark-good` is called
 - Then the booted slot is committed as "good"
 - And `BOOT_x_LEFT` is reset to the maximum value
+
+#### Scenario: Healthy boot of a good slot restores its tries
+
+- Given the booted slot is already good and U-Boot decremented `BOOT_x_LEFT` for this boot
+- When all health checks pass
+- Then `rauc status mark-good` is called
+- And `BOOT_x_LEFT` is reset to the maximum value
+
+### ADDED: WAN check separates regressions from outages
+
+The WAN check fails when `eth0` is missing or networkd reports its configuration as failed, because committing such an
+image would strand a device that receives updates over WAN. A missing WAN address only warns: it usually means a cable,
+ISP, or DHCP outage, which must not roll back a working image.
+
+#### Scenario: WAN outage during an update boot
+
+- Given `eth0` exists and is configured but has no address
+- When the health checks run
+- Then the service logs a warning
+- And the slot is committed if every other check passes
+
+#### Scenario: WAN interface missing after an update
+
+- Given the new image no longer provides `eth0`
+- When the health checks run
+- Then the WAN check fails
+- And the slot is not committed
 
 ### ADDED: Failed confirmation leaves slot uncommitted
 

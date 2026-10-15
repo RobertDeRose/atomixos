@@ -32,6 +32,7 @@ let
     fi
 
     if [ "''${1:-}" = "status" ] && [ "''${2:-}" = "mark-good" ]; then
+      echo "mark-good ''${3:-}" >>/tmp/rauc-mark-good.log
       if [ "''${ATOMIXOS_TEST_FAIL_MARK_GOOD:-0}" = "1" ]; then
         exit 1
       fi
@@ -254,6 +255,31 @@ nixos-lib.runTest {
     gateway.succeed("PATH=${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=1 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ${verificationScript} >/tmp/os-verification-invalid-gateway-type.log 2>&1")
     gateway.succeed("grep 'All checks passed, marking slot as good: boot.0' /tmp/os-verification-invalid-gateway-type.log")
     gateway.succeed("test \"$(cat /var/lib/rauc/state.A)\" = good")
+
+    gateway.succeed("rm -f /data/config/lan-settings.json")
+
+    # An already-good slot is marked good again, so U-Boot's per-boot try
+    # decrement is restored after every healthy boot, not only the first.
+    gateway.succeed("printf 'good\n' > /var/lib/rauc/state.A && rm -f /tmp/rauc-mark-good.log")
+    gateway.succeed("PATH=${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=1 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ${verificationScript} >/tmp/os-verification-good-slot.log 2>&1")
+    gateway.succeed("grep 'All checks passed, marking slot as good: boot.0' /tmp/os-verification-good-slot.log")
+    gateway.succeed("grep -x 'mark-good boot.0' /tmp/rauc-mark-good.log")
+
+    # A missing WAN address is an outage: warn, and still confirm the slot.
+    gateway.succeed("ip link set eth0 down && ip -4 addr flush dev eth0")
+    gateway.succeed("printf 'pending\n' > /var/lib/rauc/state.A")
+    gateway.succeed("PATH=${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=1 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ${verificationScript} >/tmp/os-verification-no-wan-address.log 2>&1")
+    gateway.succeed("grep 'WARN eth0 has no WAN address' /tmp/os-verification-no-wan-address.log")
+    gateway.fail("grep 'FAIL eth0' /tmp/os-verification-no-wan-address.log")
+    gateway.succeed("test \"$(cat /var/lib/rauc/state.A)\" = good")
+
+    # A missing WAN interface is an image regression: do not confirm the slot.
+    gateway.succeed("ip link set eth0 name wan0")
+    gateway.succeed("printf 'pending\n' > /var/lib/rauc/state.A")
+    gateway.fail("PATH=${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=1 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ${verificationScript} >/tmp/os-verification-no-wan.log 2>&1")
+    gateway.succeed("grep 'FAIL eth0 (WAN) interface is missing' /tmp/os-verification-no-wan.log")
+    gateway.succeed("test \"$(cat /var/lib/rauc/state.A)\" = pending")
+    gateway.succeed("ip link set wan0 name eth0 && ip link set eth0 up")
 
     gateway.log("os-verification confirmation test passed — slot marked good after health checks")
   '';
