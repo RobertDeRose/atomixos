@@ -198,8 +198,8 @@ eMMC boot gap (`0x3f8000`, `0x3f0000`). See [Radxa CM3](../cm3.md).
 **Purpose**: Settings shared by the ROCK64 and CM3 modules: no NixOS-managed bootloader, `vfat`/`f2fs` support in both
 stages, systemd-repart `discard = false` (protecting SPL and U-Boot in the eMMC gap), `/boot` as an idle-unmounting
 automount (RAUC refuses to install to a mounted slot), Realtek USB NIC firmware, the `ttyS2` serial getty, the
-one-shot `_RUT_OH_` serial root recovery (`serial-root-debug-gate` and `serial-root-debug@ttyS2`), and
-`boot-storage-debug` disabled.
+one-shot `_RUT_OH_` serial root recovery (`serial-root-debug-gate` and `serial-root-debug@ttyS2`), the `boot_to_ums`
+command (sets `START_UMS=1` and reboots into U-Boot USB mass storage), and `boot-storage-debug` disabled.
 
 ---
 
