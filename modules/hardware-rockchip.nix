@@ -22,6 +22,17 @@ let
     ${pkgs.systemd}/bin/systemctl start serial-root-debug@ttyS2.service
     ${ubootEnvTools}/bin/fw_setenv _RUT_OH_
   '';
+
+  # Request U-Boot USB mass storage recovery on the next boot (START_UMS PREBOOT).
+  bootToUms = pkgs.writeShellScriptBin "boot_to_ums" ''
+    set -euo pipefail
+
+    echo "Setting START_UMS=1 in the U-Boot environment"
+    ${ubootEnvTools}/bin/fw_setenv START_UMS 1
+
+    echo "Rebooting so U-Boot enters USB mass storage mode"
+    exec ${pkgs.systemd}/bin/systemctl reboot
+  '';
 in
 {
   # U-Boot handles booting — no bootloader managed by NixOS
@@ -57,6 +68,8 @@ in
   # Realtek RTL8153 USB NIC revisions request rtl_nic patch blobs. Install only
   # those instead of all of linux-firmware (~700 MB).
   hardware.firmware = [ (pkgs.callPackage ../nix/rtl815x-firmware.nix { }) ];
+
+  environment.systemPackages = [ bootToUms ];
 
   # Login prompt on the debug serial console (UART2, ttyS2 @ 1.5 Mbaud).
   systemd.services."serial-getty@ttyS2" = {

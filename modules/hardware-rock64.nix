@@ -16,15 +16,6 @@ let
       external = "/dev/watchdog-external";
     }
     .${config.atomixos.watchdog.backend};
-  bootToUms = pkgs.writeShellScriptBin "boot_to_ums" ''
-    set -euo pipefail
-
-    echo "Setting START_UMS=1 in SPI U-Boot environment"
-    ${ubootEnvTools}/bin/fw_setenv START_UMS 1
-
-    echo "Rebooting so U-Boot enters USB mass storage mode"
-    exec ${pkgs.systemd}/bin/systemctl reboot
-  '';
 
   rock64KernelConfig = with lib.kernel; {
     # Keep arm64 platform support focused on Rock64/RK3328 so kernel config
@@ -394,7 +385,8 @@ in
   imports = [ ./hardware-rockchip.nix ];
 
   # ── Boot partition ────────────────────────────────────────────────────────────
-  # Mount the active boot slot's FAT partition at /boot (slot A).
+  # Boot slot A's FAT partition, whichever slot is active; hardware-rockchip.nix
+  # makes /boot an idle-unmounting automount.
   fileSystems."/boot" = {
     device = "/dev/mmcblk1p1";
     fsType = "vfat";
@@ -409,7 +401,6 @@ in
   # bug. first-boot.service uses fw_setenv to confirm the boot slot.
   environment.systemPackages = [
     ubootEnvTools
-    bootToUms
     pkgs.i2c-tools
   ];
   environment.etc."fw_env.config".text = ''
