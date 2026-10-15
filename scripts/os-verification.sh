@@ -73,8 +73,11 @@ BOOT_GOOD=$(printf '%s\n' "$RAUC_STATUS_JSON" | jq -r '
 	| select(.key == $booted)
 	| .value.boot_status // "unknown"
 ' 2>/dev/null || true)
+# RAUC reports a slot good while U-Boot still has boot tries left for it, and
+# U-Boot uses one try on every boot. Mark the slot good after every healthy
+# boot, not only the first, so the tries are restored.
 if [ "$BOOT_GOOD" = "good" ]; then
-	log "Slot already marked good, running health checks without marking slot"
+	log "Slot is good, running health checks to restore its boot tries..."
 else
 	log "Slot is pending confirmation, running health checks..."
 fi
@@ -97,18 +100,28 @@ check_service() {
 	fi
 }
 
-check_interface_ipv4() {
-	local iface="$1"
-	local description="$2"
-	local ip_addr
-	ip_addr=$(ip -4 addr show "$iface" 2>/dev/null | grep -oP 'inet \K[\d.]+' || true)
-	if [ -n "$ip_addr" ]; then
-		log "  OK $description: $ip_addr"
-		return 0
-	else
-		log "  FAIL $description"
+# A missing WAN interface or failed WAN configuration is an image regression:
+# committing it would strand a device that receives updates over WAN. A missing
+# address is usually an outage (no cable, ISP or DHCP down), so it only warns.
+check_wan_interface() {
+	local setup="" ip_addr
+	if ! ip link show eth0 >/dev/null 2>&1; then
+		log "  FAIL eth0 (WAN) interface is missing"
 		return 1
 	fi
+	# networkctl columns: IDX LINK TYPE OPERATIONAL SETUP
+	read -r _ _ _ _ setup _ < <(networkctl list --no-legend --no-pager eth0 2>/dev/null) || true
+	if [ "$setup" = "failed" ]; then
+		log "  FAIL eth0 (WAN) network configuration failed"
+		return 1
+	fi
+	ip_addr=$(ip -4 addr show eth0 2>/dev/null | grep -oP 'inet \K[\d.]+' || true)
+	if [ -n "$ip_addr" ]; then
+		log "  OK eth0 has WAN address: $ip_addr"
+	else
+		log "  WARN eth0 has no WAN address"
+	fi
+	return 0
 }
 
 check_lan_gateway_ip() {
@@ -195,7 +208,7 @@ run_health_checks() {
 	check_service "chronyd.service" || system_ok=false
 	check_apply_unit "lan-gateway-apply.service" || system_ok=false
 	check_apply_unit "provisioned-firewall-inbound.service" || system_ok=false
-	check_interface_ipv4 "eth0" "eth0 has WAN address" || log "  WARN eth0 has no WAN address"
+	check_wan_interface || system_ok=false
 	check_lan_gateway_ip || system_ok=false
 	check_required_units "$required_units" || system_ok=false
 
@@ -227,11 +240,6 @@ while [ "$ELAPSED" -lt "$SUSTAIN_DURATION" ]; do
 done
 
 log "Sustained health check passed (${SUSTAIN_DURATION}s)"
-
-if [ "$BOOT_GOOD" = "good" ]; then
-	log "Slot was already good; health verification complete"
-	exit 0
-fi
 
 # ── Step 4: Commit the slot ──
 BOOT_SLOT="$(current_boot_slot || true)"

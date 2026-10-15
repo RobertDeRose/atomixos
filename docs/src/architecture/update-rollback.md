@@ -54,11 +54,13 @@ rollback after 3 consecutive boot failures.
 The `os-verification.service` performs these checks before committing a slot:
 
 1. **Service checks**: dnsmasq and chronyd must be active
-2. **Network checks**: eth0 must have a WAN IP; eth1 must have the expected LAN gateway IP
+2. **Network checks**: eth0 must exist with networkd configuration that has not failed (a missing WAN address only
+   warns, so an outage does not roll back a working image); eth1 must have the expected LAN gateway IP
 3. **Sustained check**: all above conditions must hold for 60 seconds (checked every 5 seconds) to catch restart loops
 
 Only after all checks pass does the service run `rauc status mark-good`, which resets the boot counter and commits the
-slot.
+slot. It does this on every healthy boot, not only the first after an update, because U-Boot uses one boot try on every
+boot.
 
 ## First Boot Exception
 

@@ -115,14 +115,14 @@ Post-update health check. Runs after every boot (except first).
 
 **Checks performed:**
 
-1. RAUC slot status -- skip if already committed
+1. RAUC slot status must be readable
 2. `dnsmasq.service` is active
 3. `chronyd.service` is active
-4. `eth0` has a WAN IP
+4. `eth0` exists and its networkd configuration has not failed; a missing WAN address only warns
 5. `eth1` has the provisioned gateway IP, falling back to `172.20.30.1`
 6. Provisioned required units from `/data/config/health-required.json` are active
 7. Sustained 60s check (every 5s): all service, network, and required-unit checks still pass
-8. On success: `rauc status mark-good`
+8. On success: `rauc status mark-good`, on every healthy boot, which restores the boot tries U-Boot used
 
 **Logging:** Emits progress and failure details through normal service output,
 which is captured by `journald` and forwarded to `/data/logs` by `rsyslog`.
