@@ -128,7 +128,8 @@ re-apply. It runs before `sshd.service` so accounts exist before SSH accepts con
 
 `os-upgrade.service` reads `/data/config/os-upgrade.json` and skips polling cleanly when no provisioned update server is
 configured. When polling is configured, it sends
-the compact lowercase 12-hex eth0 MAC in `X-Device-ID`, compares available bundle metadata with the booted version,
+the compact lowercase 12-hex eth0 MAC in `X-Device-ID` and the board's RAUC compatible in `X-Compatible`, skips a bundle
+offered for another board, compares available bundle metadata with the booted version,
 downloads the bundle to `/data`, installs it with RAUC, and reboots into the newly selected slot.
 
 `os-verification.service` commits a slot only after service, network, LAN, and required-unit checks remain healthy through

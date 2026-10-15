@@ -44,10 +44,34 @@ On each boot, U-Boot RAUC bootmeth selects the slot and decrements the boot atte
 1. Reads the bootmeth-provided boot partition and root partition variables
 2. Sets `rauc.slot` and `atomixos.lowerdev` for the selected slot
 3. Loads kernel, initrd, and DTB from that slot's boot partition
-4. Boots with `root=fstab` so initrd mounts the selected squashfs by lower device
+4. Boots with the NixOS kernel parameters (`boot.kernelParams`, such as `lsm=bpf`), the board's console arguments, and
+   `root=fstab` so initrd mounts the selected squashfs by lower device
 
-If a slot's counter reaches 0, RAUC bootmeth skips it and tries the next slot in `BOOT_ORDER`. This ensures automatic
-rollback after 3 consecutive boot failures.
+If the selected slot fails to load or boot, the U-Boot boot command ends with `reset`, so the board restarts with the
+already decremented counter rather than stopping at the U-Boot prompt. If a slot's counter reaches 0, RAUC bootmeth skips
+it and tries the next slot in `BOOT_ORDER`. This ensures automatic rollback after 3 consecutive boot failures.
+
+### Bootloader updates
+
+RAUC bundles update the boot and root slots, including `boot.scr`, but never U-Boot itself. U-Boot changes, such as the
+`; reset` boot command or the `START_UMS` `PREBOOT`, reach a device only when it is flashed with a new image. So
+`boot.cmd` must keep working with the U-Boot already on deployed devices:
+
+- New U-Boot features are additive. `boot.cmd` doesn't rely on them, and keeps any behavior older U-Boot builds
+  provide only through the script, such as the `START_UMS` handler.
+- `boot.cmd` resets itself when a boot file fails to load or `booti` fails, so a ROCK64 whose boot command lacks
+  `; reset` still falls back after a bad kernel, DTB, or initrd. Only an unreadable `boot.scr` on such a device stops
+  at the U-Boot prompt.
+
+The boot command and `PREBOOT` are U-Boot's default `bootcmd` and `preboot` variables, and the RAUC bootmeth saves the
+whole environment on every boot. A saved environment keeps the `bootcmd` and `preboot` of the U-Boot that first saved
+it, so a newer U-Boot's defaults apply only once that environment is reset. Flashing a CM3 image clears its eMMC
+environment. The ROCK64 environment is in SPI flash, which flashing the eMMC never touches: after flashing a ROCK64 with
+a newer U-Boot, run `env default bootcmd preboot; saveenv` at the U-Boot prompt to adopt its defaults.
+
+`/boot` is boot slot A's partition, which RAUC overwrites while slot B runs, and RAUC refuses to install to a mounted
+slot. It is therefore an automount: it mounts when accessed (first boot reads the fresh-flash `/boot/config.toml` seed)
+and unmounts after a minute idle, so it is not mounted during later updates.
 
 ## Health Check Details
 
@@ -97,6 +121,18 @@ The `os-upgrade.service` runs on a systemd timer:
 - Subsequent checks: every 1 hour (configurable)
 - Random delay: up to 10 minutes (prevents thundering herd across fleet)
 
-The service queries the update server with the compact lowercase 12-hex eth0 MAC as `X-Device-ID` and the current
-version. If a newer bundle is available, it downloads to `/data`, installs via `rauc install`, and reboots. The hawkBit
-path is reserved for future implementation and is not an operational update mode in the current image.
+The service sends `GET <server_url>/api/v1/updates/latest` with these headers:
+
+| Header              | Value                                                         |
+|---------------------|---------------------------------------------------------------|
+| `X-Device-ID`       | Compact lowercase 12-hex eth0 MAC, for example `aabbccddeeff` |
+| `X-Current-Version` | Booted bundle version from `rauc status`                      |
+| `X-Compatible`      | Board's RAUC compatible: `rock64` or `radxa-cm3-io`           |
+
+The server answers with a JSON object containing `version`, `bundle_url` (HTTPS), and optionally `compatible`. It must
+choose a bundle built for the device's `X-Compatible`. Devices running images from before the header existed send none;
+all of them are ROCK64, so the server must treat a missing `X-Compatible` as `rock64`. If the response names a different
+`compatible`, the device skips the update without downloading it; a response without `compatible` is still accepted, and
+`rauc install` rejects a bundle for another board. If a newer matching bundle is available, the service downloads it to
+`/data`, installs it via `rauc install`, and reboots. The hawkBit path is reserved for future implementation and is not
+an operational update mode in the current image.

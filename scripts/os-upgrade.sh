@@ -24,7 +24,8 @@ if [ -z "$UPDATE_URL" ]; then
 	exit 0
 fi
 
-RAUC_STATUS_JSON="$(rauc status --output-format=json 2>/dev/null || true)"
+# --detailed adds slot_status, which carries the installed bundle version.
+RAUC_STATUS_JSON="$(rauc status --detailed --output-format=json 2>/dev/null || true)"
 BOOT_STATUS=$(printf '%s\n' "$RAUC_STATUS_JSON" | jq -r '
   .booted as $booted
   | .slots[]
@@ -59,6 +60,14 @@ if [[ ! "$CURRENT_VERSION" =~ ^[A-Za-z0-9._-]{1,128}$ ]]; then
 	exit 1
 fi
 
+# The RAUC compatible identifies the board (rock64, radxa-cm3-io). The server
+# uses it to pick a bundle; RAUC would reject any other board's bundle anyway.
+COMPATIBLE=$(printf '%s\n' "$RAUC_STATUS_JSON" | jq -r '.compatible // empty' 2>/dev/null || true)
+if [[ ! "$COMPATIBLE" =~ ^[A-Za-z0-9._-]{1,128}$ ]]; then
+	log "ERROR: cannot determine a valid RAUC compatible from rauc status"
+	exit 1
+fi
+
 case "$UPDATE_URL" in
 https://*) ;;
 *)
@@ -90,7 +99,14 @@ slot_letter_to_boot_slot() {
 
 target_boot_slot_from_status() {
 	local current_letter target_letter
-	current_letter="$(rauc status --output-format=json 2>/dev/null | jq -r '.booted // empty' 2>/dev/null || true)"
+	# .booted is the rauc.slot= value (boot.0); its bootname is the A/B letter.
+	current_letter="$(printf '%s\n' "$RAUC_STATUS_JSON" | jq -r '
+	  .booted as $booted
+	  | .slots[]
+	  | to_entries[]
+	  | select(.key == $booted)
+	  | .value.bootname // empty
+	' 2>/dev/null || true)"
 	if [ -z "$current_letter" ]; then
 		return 1
 	fi
@@ -102,12 +118,13 @@ target_boot_slot_from_status() {
 	slot_letter_to_boot_slot "$target_letter"
 }
 
-log "Checking for updates (current version: $CURRENT_VERSION, device: $DEVICE_ID)..."
+log "Checking for updates (current version: $CURRENT_VERSION, compatible: $COMPATIBLE, device: $DEVICE_ID)..."
 
 # Query update server for latest version
 RESPONSE=$(curl -sfL -m 30 --proto '=https' --proto-redir '=https' \
 	-H "X-Device-ID: $DEVICE_ID" \
 	-H "X-Current-Version: $CURRENT_VERSION" \
+	-H "X-Compatible: $COMPATIBLE" \
 	"$UPDATE_URL/api/v1/updates/latest" 2>/dev/null) || {
 	log "Failed to reach update server at $UPDATE_URL"
 	exit 0 # Not an error — we'll try again next interval
@@ -120,6 +137,7 @@ fi
 
 LATEST_VERSION=$(echo "$RESPONSE" | jq -r '.version // empty')
 BUNDLE_URL=$(echo "$RESPONSE" | jq -r '.bundle_url // empty')
+BUNDLE_COMPATIBLE=$(echo "$RESPONSE" | jq -r '.compatible // empty')
 
 if [ -z "$LATEST_VERSION" ] || [ -z "$BUNDLE_URL" ]; then
 	log "No update available or invalid response"
@@ -129,6 +147,13 @@ fi
 if [[ ! "$LATEST_VERSION" =~ ^[A-Za-z0-9._-]{1,128}$ ]]; then
 	log "Invalid update version from server: $LATEST_VERSION"
 	exit 1
+fi
+
+# A server that ignores X-Compatible can offer another board's bundle. Skip it
+# here rather than download the whole bundle on every poll for RAUC to reject.
+if [ -n "$BUNDLE_COMPATIBLE" ] && [ "$BUNDLE_COMPATIBLE" != "$COMPATIBLE" ]; then
+	log "Ignoring update for a different RAUC compatible (device: $COMPATIBLE)"
+	exit 0
 fi
 
 # Validate BUNDLE_URL is HTTPS

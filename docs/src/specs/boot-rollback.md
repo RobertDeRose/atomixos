@@ -60,13 +60,46 @@ The failed slot's data is preserved for diagnostics but is not booted.
 - And U-Boot boots slot A (the previous working image)
 - And slot A still has its original content
 
-### ADDED: SPI flash U-Boot environment
+#### Scenario: A slot whose boot files fail to load still rolls back
 
-The U-Boot environment is stored in SPI flash exposed to Linux as `/dev/mtd0` at offset `0x140000` with size `0x2000`.
-AtomixOS does not store redundant U-Boot environment copies on eMMC.
+- Given slot B is preferred and its `boot.scr`, kernel, or DTB cannot be loaded
+- When U-Boot's boot command fails to boot it
+- Then the boot command resets the board instead of stopping at the U-Boot prompt
+- And the next boot sees the decremented `BOOT_B_LEFT`, reaching slot A after the tries are used
 
-#### Scenario: Userspace tools address SPI env
+### ADDED: Boot script works with factory-flashed U-Boot
 
-- Given the device has booted
+RAUC bundles replace `boot.scr` but not U-Boot, so the boot script SHALL keep working with the U-Boot a device was
+flashed with, and SHALL NOT depend on features added to U-Boot later.
+
+#### Scenario: USB recovery after an OTA update on an older U-Boot
+
+- Given a device whose U-Boot has no `START_UMS` `PREBOOT` installs a new bundle
+- When `START_UMS=1` is set and the device reboots
+- Then the new `boot.scr` enters USB mass storage mode
+
+#### Scenario: A failed load resets without the U-Boot reset fallback
+
+- Given a device whose U-Boot boot command doesn't end in `reset`
+- When `boot.scr` cannot load the kernel, DTB, or initrd, or `booti` rejects them
+- Then `boot.scr` resets the board itself
+
+### ADDED: Board-specific U-Boot environment
+
+On ROCK64, the U-Boot environment is stored in SPI flash exposed to Linux as `/dev/mtd0` at offset `0x140000` with size
+`0x2000`, with no redundant copy on eMMC. On the Radxa CM3, which may have no SPI NOR, it is stored as two redundant
+32 KiB copies in the reserved eMMC gap before the first partition, at `0x3F8000` (primary) and `0x3F0000` (redundant).
+
+#### Scenario: Userspace tools address the ROCK64 SPI env
+
+- Given a ROCK64 device has booted
 - When `/etc/fw_env.config` is inspected
 - Then it points to `/dev/mtd0 0x140000 0x2000 0x1000`
+
+#### Scenario: Userspace tools address the CM3 redundant eMMC env
+
+- Given a CM3 device has booted
+- When `/etc/fw_env.config` is inspected
+- Then its first line is `/dev/mmcblk0 0x3F8000 0x8000`
+- And its second line is `/dev/mmcblk0 0x3F0000 0x8000`
+- And U-Boot is built with `CONFIG_ENV_REDUNDANT` and the same offsets

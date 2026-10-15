@@ -154,8 +154,8 @@ let
   fleetSystem = (evalSystem fleet).config;
   networkWithNixstasisSystem = (evalSystem networkWithNixstasis).config;
   effective = self.lib.effectiveBuildConfiguration;
-  imagePackage = self.packages.aarch64-linux.image;
-  raucBundlePackage = self.packages.aarch64-linux.rauc-bundle;
+  imagePackage = self.packages.aarch64-linux.rock64.image;
+  raucBundlePackage = self.packages.aarch64-linux.rock64.rauc-bundle;
   evaluationFails = args: !(builtins.tryEval (builtins.deepSeq (evaluate args) true)).success;
   baseFails = text: evaluationFails { baseText = text; };
   overlayFails =

@@ -11,7 +11,7 @@
 
 let
   cfg = config.atomixos.rauc;
-  ubootEnvTools = self.packages.${pkgs.stdenv.hostPlatform.system}.uboot-env-tools;
+  ubootEnvTools = config.atomixos.ubootEnvTools;
   statusDir = builtins.dirOf cfg.statusFile;
 
   # Custom bootloader backend script for QEMU/test environments.
@@ -44,6 +44,18 @@ let
   '';
 in
 {
+  # Board-matched fw_printenv/fw_setenv; hardware modules select the board.
+  options.atomixos.ubootEnvTools = lib.mkOption {
+    type = lib.types.package;
+    internal = true;
+    default =
+      self.packages.${pkgs.stdenv.hostPlatform.system}.${
+        config.atomixos.board or "rock64"
+      }.uboot-env-tools;
+    defaultText = lib.literalExpression "self.packages.\${system}.\${config.atomixos.board}.uboot-env-tools";
+    description = "U-Boot environment tools matching the selected board's environment layout.";
+  };
+
   options.atomixos.rauc = {
     enable = lib.mkOption {
       type = lib.types.bool;

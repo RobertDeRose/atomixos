@@ -639,12 +639,12 @@ The flake SHALL define `nixosConfigurations.rock64` for the real Rock64 hardware
 
 ### Requirement: The flake produces a read-only squashfs root filesystem
 
-The flake SHALL produce a squashfs image as `packages.aarch64-linux.squashfs`. The image SHALL contain the system
+The flake SHALL produce a squashfs image as `packages.aarch64-linux.rock64.squashfs`. The image SHALL contain the system
 closure required for the appliance baseline and SHALL be sized to fit within the 1 GiB rootfs slot.
 
 #### Scenario: Squashfs image builds successfully
 
-- **WHEN** `nix build .#squashfs` is run
+- **WHEN** `nix build .#rock64.squashfs` is run
 - **THEN** a squashfs image is produced
 
 #### Scenario: Squashfs image fits the slot budget
@@ -654,17 +654,17 @@ closure required for the appliance baseline and SHALL be sized to fit within the
 
 ### Requirement: The flake produces a signed RAUC bundle and flashable image
 
-The flake SHALL expose a signed RAUC bundle as `packages.aarch64-linux.rauc-bundle` and a flashable device image as
-`packages.aarch64-linux.image`.
+The flake SHALL expose a signed RAUC bundle as `packages.aarch64-linux.rock64.rauc-bundle` and a flashable device
+image as `packages.aarch64-linux.rock64.image`.
 
 #### Scenario: RAUC bundle builds successfully
 
-- **WHEN** `nix build .#rauc-bundle` is run
+- **WHEN** `nix build .#rock64.rauc-bundle` is run
 - **THEN** a signed `.raucb` file is produced that passes `rauc info`
 
 #### Scenario: Flashable image builds successfully
 
-- **WHEN** `nix build .#image` is run
+- **WHEN** `nix build .#rock64.image` is run
 - **THEN** a flashable Rock64 disk image is produced containing U-Boot, `boot-a`, and `rootfs-a`
 
 ### Requirement: The configuration uses a stripped kernel with modular USB peripheral support

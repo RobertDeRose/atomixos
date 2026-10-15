@@ -10,11 +10,12 @@
   bootPartition,
   signingCert,
   signingKeyPath,
+  board ? nixosConfig.atomixos.board,
 }:
 
 let
   version = nixosConfig.system.nixos.version;
-  bundleName = "rock64${buildConfiguration.artifactSuffix}.raucb";
+  bundleName = "${board}${buildConfiguration.artifactSuffix}.raucb";
 
   buildScript = stdenv.mkDerivation {
     name = "build-rauc-bundle-script";
@@ -27,13 +28,15 @@ let
         --replace-fail "@bootPartition@" "${bootPartition}" \
         --replace-fail "@signingCert@" "${signingCert}" \
         --replace-fail "@signingKey@" "${signingKeyPath}" \
-        --replace-fail "@version@" "${version}"
+        --replace-fail "@version@" "${version}" \
+        --replace-fail "@compatible@" "${nixosConfig.atomixos.rauc.compatible}" \
+        --replace-fail "@board@" "${board}"
       chmod +x $out
     '';
   };
 in
 stdenv.mkDerivation {
-  name = "rock64-rauc-bundle";
+  name = "${board}-rauc-bundle";
   inherit version;
 
   nativeBuildInputs = [
@@ -50,7 +53,7 @@ stdenv.mkDerivation {
 
   installPhase = ''
     mkdir -p "$out"
-    install -m 0444 rock64.raucb "$out/${bundleName}"
+    install -m 0444 ${board}.raucb "$out/${bundleName}"
     install -m 0444 ${buildConfiguration.tomlFile} "$out/build.toml"
     install -m 0444 ${buildConfiguration.metadataFile} "$out/build-metadata.json"
     echo "RAUC bundle created: $out/${bundleName}"
