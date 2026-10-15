@@ -281,6 +281,13 @@ nixos-lib.runTest {
     gateway.succeed("test \"$(cat /var/lib/rauc/state.A)\" = pending")
     gateway.succeed("ip link set wan0 name eth0 && ip link set eth0 up")
 
+    # Failed WAN configuration is an image regression: do not confirm the slot.
+    gateway.succeed("mkdir -p /tmp/networkctl-failed && printf '#!/bin/sh\\necho \"2 eth0 ether routable failed\"\\n' >/tmp/networkctl-failed/networkctl && chmod +x /tmp/networkctl-failed/networkctl")
+    gateway.succeed("printf 'pending\n' > /var/lib/rauc/state.A")
+    gateway.fail("PATH=/tmp/networkctl-failed:${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=1 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ${verificationScript} >/tmp/os-verification-wan-failed.log 2>&1")
+    gateway.succeed("grep 'FAIL eth0 (WAN) network configuration failed' /tmp/os-verification-wan-failed.log")
+    gateway.succeed("test \"$(cat /var/lib/rauc/state.A)\" = pending")
+
     gateway.log("os-verification confirmation test passed — slot marked good after health checks")
   '';
 }
