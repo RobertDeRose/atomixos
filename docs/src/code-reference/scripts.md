@@ -80,8 +80,9 @@ RAUC bootloader backend.
 
 U-Boot boot script loaded after RAUC bootmeth selects the slot and decrements the boot-count. Compiled to `boot.scr` by
 `mkimage`. A `START_UMS=1` request is handled earlier, by U-Boot's `PREBOOT` (`nix/uboot-start-ums.nix`), so USB recovery
-works even when this script is unreadable. The script also handles `START_UMS=1` itself, for boards whose U-Boot
-predates that `PREBOOT`: RAUC bundles update `boot.scr` but never U-Boot.
+works even when this script is unreadable. The script also handles `START_UMS=1` itself, for boards whose U-Boot or
+saved environment predates that `PREBOOT`: RAUC bundles update `boot.scr` but never U-Boot, and a saved environment
+keeps its `preboot` (see [Bootloader updates](../architecture/update-rollback.md#bootloader-updates)).
 
 **Key logic:**
 

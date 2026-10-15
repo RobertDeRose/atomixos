@@ -65,7 +65,8 @@ The flash task automatically:
 When the board exposes its eMMC through U-Boot USB mass storage (`START_UMS` or `ums 0 mmc 0`), any host eject ends
 `ums`. U-Boot reports that as `CTRL+C - Operation aborted`, and the disk disappears. On macOS, the "disk not readable"
 dialog ejects the disk if you choose **Eject**, so choose **Ignore** and let the flash task unmount the disk. The flash
-task's own eject at the end also ends `ums`, which then returns the board to the U-Boot prompt.
+task's own eject at the end also ends `ums`. A `START_UMS` or hold-button session then resets the board into the new
+image; a `ums 0 mmc 0` typed at the U-Boot prompt returns to that prompt.
 
 ### Linux
 

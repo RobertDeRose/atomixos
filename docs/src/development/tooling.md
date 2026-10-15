@@ -29,8 +29,8 @@ lock diff, and commit it. To add a tool, add it to `mise.toml` as `latest` and r
 | `docs:deployment:enable` | Configure Pages and enable its repository gate through external `gh`. |
 | `docs:serve`             | Serve mdBook on port 3000 by default or a supplied port.              |
 
-The committed lock targets `linux-x64`, `linux-arm64`, `macos-x64`, and `macos-arm64`. hk and nixfmt-rs publish no
-`macos-x64` release, so Intel Macs cannot run the hook suite. Windows is not supported.
+The committed lock targets the `lockfile_platforms` in `mise.toml`: `linux-x64`, `linux-arm64`, and `macos-arm64`.
+Intel Macs (`macos-x64`) are not targeted, since hk and nixfmt-rs publish no release for them. Windows is not supported.
 
 The mise environment routes hooks through mise with `HK_MISE=1` and sets `GIT_CONFIG_PARAMETERS="'merge.ff=only'"`, so
 Git rejects merges that require a merge commit.
