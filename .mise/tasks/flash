@@ -130,7 +130,9 @@ linux_external_disks() {
 # mounts back to pool disks, so a pool member counts even with no mountpoint.
 linux_disk_in_use() {
 	local mountpoints fstypes fstype
-	if ! mountpoints=$(lsblk -nlpo MOUNTPOINTS "$1") || ! fstypes=$(lsblk -nlpo FSTYPE "$1"); then
+	# MOUNTPOINT, not MOUNTPOINTS: util-linux before 2.37 lacks the plural
+	# column, and one mountpoint per device is enough to detect use.
+	if ! mountpoints=$(lsblk -nlpo MOUNTPOINT "$1") || ! fstypes=$(lsblk -nlpo FSTYPE "$1"); then
 		echo "lsblk cannot inspect it"
 		return 0
 	fi
