@@ -44,6 +44,8 @@ nixos-lib.runTest {
     gateway.fail("journalctl -b --no-pager | grep 'mtd_probe'")
     gateway.fail("journalctl -b --no-pager | grep 'boot-storage-debug'")
     gateway.succeed("systemctl is-active systemd-sysctl.service")
+    # A panic reboots the device instead of leaving it hung.
+    gateway.succeed("test \"$(cat /proc/sys/kernel/panic)\" = 10")
     gateway.fail("journalctl -b --no-pager | grep 'kernel/hung_task_timeout_secs'")
   '';
 }
