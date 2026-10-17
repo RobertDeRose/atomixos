@@ -9,8 +9,8 @@
 # NixOS test VMs always have eth0 as a management backdoor.  VLAN 1 becomes
 # eth1.  We therefore define test-local nftables rules and toggle scripts
 # that reference eth1 (the "WAN" interface inside the test VM) rather than
-# importing the production firewall.nix which hard-codes eth0/eth1 for
-# WAN/LAN.
+# importing the production firewall.nix, whose WAN/LAN names come from
+# atomixos.network (wan/lan on hardware).
 #
 # Run:  nix build .#checks.aarch64-linux.ssh-wan-toggle
 {

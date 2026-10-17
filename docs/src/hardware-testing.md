@@ -9,11 +9,11 @@ require a physical Rock64 board with eMMC, serial console, and network connectiv
 
 - Rock64 v2 board with 16 GB eMMC module
 - USB-to-serial adapter connected to UART2 (1.5 Mbaud)
-- USB Ethernet adapter (for eth1/LAN interface)
-- Supported USB Ethernet adapter for eth1/LAN (`r8152`, `ax88179_178a`, or `cdc_ether`)
+- USB Ethernet adapter (for lan/LAN interface)
+- Supported USB Ethernet adapter for lan/LAN (`r8152`, `ax88179_178a`, or `cdc_ether`)
 - Built disk image (`atomixos-26.05.img`)
 - Built RAUC bundle (`rock64.raucb`)
-- Network with DHCP and internet access (for WAN/eth0)
+- Network with DHCP and internet access (for WAN/wan)
 - A second device on the LAN subnet for client testing
 
 ## Phase 1: Provisioning & First Boot
@@ -89,21 +89,21 @@ ip link show
 
 ## Phase 3: Network Configuration
 
-### Test 3.1: eth0 is onboard Ethernet
+### Test 3.1: wan is onboard Ethernet
 
 ```sh
-udevadm info /sys/class/net/eth0 | grep ID_PATH
-ip addr show eth0
+udevadm info /sys/class/net/wan | grep ID_PATH
+ip addr show wan
 ```
 
 **Pass criteria**:
 
-- `eth0` matches the onboard GMAC (platform path `platform-ff540000.ethernet`)
-- eth0 has a DHCP-assigned IP address
+- `wan` matches the onboard GMAC (platform path `platform-ff540000.ethernet`)
+- wan has a DHCP-assigned IP address
 
 ### Test 3.2: DHCP server on LAN
 
-Connect a client device to eth1 (USB Ethernet adapter).
+Connect a client device to lan (USB Ethernet adapter).
 
 ```sh
 # On the gateway
@@ -457,7 +457,7 @@ last -x reboot | head
 | 1.2 | First-boot service    |                                                                      |
 | 2.1 | eMMC + core hardware  |                                                                      |
 | 2.2 | USB Ethernet module   |                                                                      |
-| 3.1 | eth0 is onboard       |                                                                      |
+| 3.1 | wan is onboard        |                                                                      |
 | 3.2 | DHCP server on LAN    |                                                                      |
 | 3.3 | NTP server on LAN     |                                                                      |
 | 3.4 | LAN isolation         |                                                                      |

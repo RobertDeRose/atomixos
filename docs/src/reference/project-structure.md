@@ -15,7 +15,7 @@ modules/
   build-configuration.nix          Effective build-policy mapping and immutable audit files
   hardware-rock64.nix              RK3328 kernel, DTB, eMMC/watchdog drivers
   hardware-qemu.nix                QEMU aarch64-virt target for testing
-  networking.nix                   NIC naming (.link files), eth0/eth1 config
+  networking.nix                   NIC naming (.link files), wan/lan config
   firewall.nix                     nftables rules (WAN/LAN/VPN/FORWARD)
   lan-gateway.nix                  dnsmasq DHCP, chrony NTP, IP forwarding off
   rauc.nix                         RAUC system.conf, slot definitions

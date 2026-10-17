@@ -128,7 +128,7 @@ re-apply. It runs before `sshd.service` so accounts exist before SSH accepts con
 
 `os-upgrade.service` reads `/data/config/os-upgrade.json` and skips polling cleanly when no provisioned update server is
 configured. When polling is configured, it sends
-the compact lowercase 12-hex eth0 MAC in `X-Device-ID`, compares available bundle metadata with the booted version,
+the compact lowercase 12-hex wan MAC in `X-Device-ID`, compares available bundle metadata with the booted version,
 downloads the bundle to `/data`, installs it with RAUC, and reboots into the newly selected slot.
 
 `os-verification.service` commits a slot only after service, network, LAN, and required-unit checks remain healthy through
@@ -137,7 +137,7 @@ the sustained verification window.
 ## Firewall and LAN Apply Flow
 
 `lan-gateway-apply.service` consumes `/data/config/lan-settings.json` and `/data/config/host-network.json`. It writes
-drop-ins for built-in `eth0`/`eth1`, generated host interface `.network` files for additional Ethernet interfaces, dnsmasq
+drop-ins for built-in `wan`/`lan`, generated host interface `.network` files for additional Ethernet interfaces, dnsmasq
 runtime snippets, and chrony runtime snippets, then restarts affected services only when derived files change.
 `host-network.json` is candidate-rendered state, so resolver, route, and interface changes roll back with the rest of
 `/data/config`.

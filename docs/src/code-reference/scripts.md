@@ -118,8 +118,8 @@ Post-update health check. Runs after every boot (except first).
 1. RAUC slot status must be readable
 2. `dnsmasq.service` is active
 3. `chronyd.service` is active
-4. `eth0` exists and its networkd configuration has not failed; a missing WAN address only warns
-5. `eth1` has the provisioned gateway IP, falling back to `172.20.30.1`
+4. `wan` exists and its networkd configuration has not failed; a missing WAN address only warns
+5. `lan` has the provisioned gateway IP, falling back to `172.20.30.1`
 6. Provisioned required units from `/data/config/health-required.json` are active
 7. Sustained 60s check (every 5s): all service, network, and required-unit checks still pass
 8. On success: `rauc status mark-good`, on every healthy boot, which restores the boot tries U-Boot used
@@ -139,7 +139,7 @@ OTA update polling script. Checks for new RAUC bundles and installs them.
 
 **Steps:**
 
-1. Get current version from `rauc status` and compact lowercase 12-hex device ID from eth0 MAC
+1. Get current version from `rauc status` and compact lowercase 12-hex device ID from wan MAC
 2. Query `$URL/api/v1/updates/latest` with version and device headers
 3. If newer version found: download to `/data/config/bundles/`, `rauc install`, reboot
 4. Non-fatal on network errors (timer retries later)
@@ -217,7 +217,7 @@ AtomixOS provisioning ownership.
 
 Boot-time SSH-on-WAN rule application.
 
-**Logic:** If `/data/config/ssh-wan-enabled` exists, add nftables rule `iifname "eth0" tcp dport 22 accept` with
+**Logic:** If `/data/config/ssh-wan-enabled` exists, add nftables rule `iifname "wan" tcp dport 22 accept` with
 comment `SSH-WAN-dynamic`.
 
 ### ssh-wan-reload.sh
@@ -286,7 +286,7 @@ resolve the minicom binary.
 **Location:** `.mise/tasks/config/lan-range`
 
 Updates the built-in fallback LAN gateway/DHCP fields in `defaults/lan.json`. Nix, Python, and boot-time shell consumers
-load that contract; runtime LAN changes should use `[network.dnsmasq]` or `[network.interfaces.eth1]` in `config.toml`
+load that contract; runtime LAN changes should use `[network.dnsmasq]` or `[network.interfaces.lan]` in `config.toml`
 instead.
 
 | Flag             | Default          | Description           |

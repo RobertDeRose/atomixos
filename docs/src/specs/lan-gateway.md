@@ -6,31 +6,31 @@
 
 ### ADDED: Deterministic NIC naming
 
-The onboard RK3328 GMAC is always named `eth0` via a systemd `.link` file matching the platform path
+The onboard RK3328 GMAC is always named `wan` via a systemd `.link` file matching the platform path
 (`platform-ff540000.ethernet`). USB Ethernet adapters receive kernel-assigned names. USB WiFi dongles are unsupported
 until specific hardware and firmware are selected.
 
-#### Scenario: Onboard Ethernet is eth0
+#### Scenario: Onboard Ethernet is wan
 
 - Given the Rock64 boots with the onboard Ethernet connected
-- Then `ip link` shows `eth0` as the onboard GMAC
+- Then `ip link` shows `wan` as the onboard GMAC
 - Regardless of USB device enumeration order
 
-### ADDED: eth0 as WAN (DHCP client)
+### ADDED: wan as WAN (DHCP client)
 
 The WAN interface acquires its address via DHCP v4. IPv6 RA is disabled. The DHCP-provided DNS servers are used.
 
 #### Scenario: WAN gets DHCP address
 
-- Given eth0 is connected to a network with a DHCP server
+- Given wan is connected to a network with a DHCP server
 - When the device boots
-- Then eth0 acquires an IPv4 address
+- Then wan acquires an IPv4 address
 - And DNS resolution works
 
-### ADDED: eth1 as LAN (static IP)
+### ADDED: lan as LAN (static IP)
 
 The LAN interface has a static IP from the provisioned LAN config. `network.dnsmasq.gateway_cidr` and
-`network.interfaces.eth1.address` describe the same effective LAN gateway CIDR; if both are present they must match before
+`network.interfaces.lan.address` describe the same effective LAN gateway CIDR; if both are present they must match before
 candidate promotion. When no provisioned LAN config exists or it is malformed, the fallback static IP is
 `172.20.30.1/24`. It does not run a DHCP client.
 
@@ -38,12 +38,12 @@ candidate promotion. When no provisioned LAN config exists or it is malformed, t
 
 - Given the device has booted
 - And `/data/config/lan-settings.json` contains `gateway_ip`
-- Then `ip addr show eth1` shows the configured `gateway_ip` with its provisioned prefix
+- Then `ip addr show lan` shows the configured `gateway_ip` with its provisioned prefix
 
 #### Scenario: LAN gateway sources must agree
 
 - Given `config.toml` sets `network.dnsmasq.gateway_cidr`
-- And `config.toml` sets `network.interfaces.eth1.address`
+- And `config.toml` sets `network.interfaces.lan.address`
 - When the values differ
 - Then provisioning validation fails before candidate promotion
 
@@ -51,7 +51,7 @@ candidate promotion. When no provisioned LAN config exists or it is malformed, t
 
 - Given the device has booted
 - And no valid provisioned LAN config is available
-- Then `ip addr show eth1` shows `172.20.30.1/24`
+- Then `ip addr show lan` shows `172.20.30.1/24`
 
 ### ADDED: IP forwarding disabled
 
@@ -62,16 +62,16 @@ with no exceptions. This creates a hard network boundary compliant with EN18031.
 
 - Given a LAN client sends a packet destined for the internet
 - Then the packet is dropped at the gateway
-- And it never reaches eth0
+- And it never reaches wan
 
 ### ADDED: DHCP server on LAN
 
-dnsmasq runs on eth1 only. It assigns addresses from the provisioned DHCP range with a 24-hour lease and serves
+dnsmasq runs on lan only. It assigns addresses from the provisioned DHCP range with a 24-hour lease and serves
 gateway-local DNS names without forwarding queries upstream.
 
 #### Scenario: LAN client gets DHCP lease
 
-- Given a client is connected to eth1
+- Given a client is connected to lan
 - When it sends a DHCP discover
 - Then it receives an address in the provisioned DHCP range
 - And the gateway is the provisioned `gateway_ip`
@@ -108,8 +108,8 @@ The firewall uses nftables with per-interface rules:
 
 | Interface  | Allowed Inbound                                                           |
 |------------|---------------------------------------------------------------------------|
-| eth0 (WAN) | established/related; provisioned inbound only                             |
-| eth1 (LAN) | UDP 53, UDP 67-68, UDP 123, TCP 22, TCP 53, TCP 8080, established/related |
+| wan (WAN)  | established/related; provisioned inbound only                             |
+| lan (LAN)  | UDP 53, UDP 67-68, UDP 123, TCP 22, TCP 53, TCP 8080, established/related |
 | tun0 (VPN) | TCP 22, established/related                                               |
 | FORWARD    | DROP all                                                                  |
 
@@ -121,14 +121,14 @@ replacing them.
 #### Scenario: WAN ports are closed before provisioning
 
 - Given no provisioned firewall state exists
-- When a connection is attempted to eth0 on TCP 443 or UDP 1194
+- When a connection is attempted to wan on TCP 443 or UDP 1194
 - Then the packet is dropped
 
 #### Scenario: Provisioned WAN ports are allowed
 
 - Given `/data/config/firewall-inbound.json` includes TCP 443 and UDP 1194
 - And `provisioned-firewall-inbound.service` has applied it
-- Then inbound traffic on eth0 TCP 443 and UDP 1194 is accepted
+- Then inbound traffic on wan TCP 443 and UDP 1194 is accepted
 
 #### Scenario: WAN SSH blocked by default
 
@@ -149,11 +149,11 @@ mechanism to enable it remotely -- this is a deliberate security constraint.
 
 ### ADDED: Device identity via MAC address
 
-The device is identified by the MAC address of eth0 (the onboard Ethernet). This MAC is stable across reboots and
+The device is identified by the MAC address of wan (the onboard Ethernet). This MAC is stable across reboots and
 updates, and is used as the `X-Device-ID` header when polling for updates.
 
 #### Scenario: MAC-based identity
 
-- Given `eth0` has MAC `aa:bb:cc:dd:ee:ff`
+- Given `wan` has MAC `aa:bb:cc:dd:ee:ff`
 - When `os-upgrade.service` polls for updates
 - Then the request includes `X-Device-ID: aabbccddeeff`

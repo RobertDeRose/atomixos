@@ -10,7 +10,8 @@ set -euo pipefail
 
 OS_UPGRADE_CONFIG="${ATOMIXOS_OS_UPGRADE_CONFIG:-/data/config/os-upgrade.json}"
 UPDATE_URL=""
-DEVICE_ID=$(cat /sys/class/net/eth0/address 2>/dev/null | tr -d ':' || echo "unknown")
+WAN_INTERFACE="${ATOMIXOS_WAN_INTERFACE:-wan}"
+DEVICE_ID=$(cat "/sys/class/net/$WAN_INTERFACE/address" 2>/dev/null | tr -d ':' || echo "unknown")
 BUNDLE_DIR="${ATOMIXOS_RAUC_BUNDLE_DIR:-/data/rauc/bundles}"
 
 log() { echo "[os-upgrade] $*"; }

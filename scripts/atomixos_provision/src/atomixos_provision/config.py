@@ -70,7 +70,10 @@ def load_lan_defaults(path: Path | None = None) -> dict[str, Any]:
     raise provision_error(f"unable to find LAN defaults (checked: {searched})")
 
 
-SUPPORTED_INTERFACE_RE = re.compile(r"eth[0-9]+")
+# "wan" and "lan" name the board's WAN and LAN interfaces; extra NICs keep
+# their kernel names.
+SUPPORTED_INTERFACE_RE = re.compile(r"wan|lan|eth[0-9]+")
+LAN_INTERFACE_KEY = "lan"
 
 RESERVED_USERNAMES = frozenset(
     {
@@ -620,28 +623,28 @@ def load_network_settings(network_value: Any) -> dict[str, Any]:
         raise provision_error(message)
     if "interface" in dnsmasq_settings:
         interface = require_string(dnsmasq_settings["interface"], "network.dnsmasq.interface")
-        if interface != "eth1":
-            message = "network.dnsmasq.interface must be eth1"
+        if interface != LAN_INTERFACE_KEY:
+            message = "network.dnsmasq.interface must be lan"
             raise provision_error(message)
 
     lan_input = {k: v for k, v in dnsmasq_settings.items() if k not in ("enable", "interface")}
     interfaces = load_network_interfaces(network.get("interfaces"))
-    eth1 = interfaces.get("eth1")
-    if eth1 and eth1.get("mode") == "static":
-        eth1_gateway = require_ipv4_interface(eth1["address"], "network.interfaces.eth1.address")
+    lan = interfaces.get(LAN_INTERFACE_KEY)
+    if lan and lan.get("mode") == "static":
+        lan_gateway = require_ipv4_interface(lan["address"], "network.interfaces.lan.address")
         if "gateway_cidr" in lan_input:
             dnsmasq_gateway = require_ipv4_interface(
                 lan_input["gateway_cidr"], "network.dnsmasq.gateway_cidr"
             )
         else:
             dnsmasq_gateway = None
-        if dnsmasq_gateway is not None and dnsmasq_gateway != eth1_gateway:
+        if dnsmasq_gateway is not None and dnsmasq_gateway != lan_gateway:
             message = (
-                "network.interfaces.eth1.address must match "
+                "network.interfaces.lan.address must match "
                 "network.dnsmasq.gateway_cidr when both are set"
             )
             raise provision_error(message)
-        lan_input["gateway_cidr"] = str(eth1_gateway)
+        lan_input["gateway_cidr"] = str(lan_gateway)
 
     lan_settings = load_lan_settings(lan_input, "network.dnsmasq")
     ntp = require_mapping(network.get("ntp", {}), "network.ntp")
@@ -688,8 +691,8 @@ def load_network_interfaces(interfaces_value: Any) -> dict[str, dict[str, Any]]:
         if mode not in {"dhcp", "static"}:
             message = f"{path}.mode must be one of: dhcp, static"
             raise provision_error(message)
-        if name == "eth1" and mode != "static":
-            message = "network.interfaces.eth1.mode must be static because eth1 is the LAN gateway"
+        if name == LAN_INTERFACE_KEY and mode != "static":
+            message = "network.interfaces.lan.mode must be static because lan is the LAN gateway"
             raise provision_error(message)
 
         normalized_interface: dict[str, Any] = {"mode": mode}

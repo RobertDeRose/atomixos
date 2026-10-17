@@ -132,10 +132,10 @@ dns_servers = ["1.1.1.1"]
 dns_search_domains = ["lan.example"]
 default_gateway = "192.0.2.1"
 
-[network.interfaces.eth0]
+[network.interfaces.wan]
 mode = "dhcp"
 
-[network.interfaces.eth1]
+[network.interfaces.lan]
 mode = "static"
 address = "172.20.30.1/24"
 
@@ -172,8 +172,8 @@ omitted fields use the fallback LAN gateway contract. `[network.ntp]` is optiona
 Top-level `network.dns_servers`, `network.dns_search_domains`, `network.default_gateway`, and
 `network.interfaces.<ethN>` are optional host network controls. Interface-specific DNS/search values override top-level
 DNS/search values for that interface. Absence means no static gateway is rendered; empty gateway strings are invalid.
-The top-level IPv4 default gateway applies to `eth0`; use an interface-specific IPv4 gateway for other Ethernet
-interfaces. `eth1` must remain static because it is the LAN gateway.
+The top-level IPv4 default gateway applies to `wan`; use an interface-specific IPv4 gateway for other Ethernet
+interfaces. `lan` must remain static because it is the LAN gateway.
 The machine-readable schema is committed at
 `schemas/config.schema.json` and the import path validates against it with the maintained Draft 2020-12 `jsonschema`
 validator before applying semantic normalization and cross-field policy checks.
@@ -201,7 +201,7 @@ optional `tcp` and `udp` arrays of integer ports in `1..65535`.
 }
 ```
 
-Provisioned rules are added to WAN `eth0` or LAN `eth1` only when the matching scope is present. WAN remains
+Provisioned rules are added to WAN `wan` or LAN `lan` only when the matching scope is present. WAN remains
 deny-by-default for new inbound traffic. LAN is open by default, but an explicit `lan` scope replaces that default-open
 rule with the configured allowlist. Forwarding remains dropped.
 
@@ -227,7 +227,7 @@ rule with the configured allowlist. Forwarding remains dropped.
 The DHCP range must stay inside the gateway subnet, must be ordered, and must not include the gateway IP. Supported LAN
 gateway prefixes are `/16` through `/30`.
 
-`network.interfaces.eth1.address` and `network.dnsmasq.gateway_cidr` both describe the LAN gateway CIDR. If either is set,
+`network.interfaces.lan.address` and `network.dnsmasq.gateway_cidr` both describe the LAN gateway CIDR. If either is set,
 the import path renders one effective LAN gateway CIDR into `lan-settings.json`; if both are set and differ, validation
 fails before candidate promotion.
 
@@ -235,7 +235,7 @@ fails before candidate promotion.
 
 `/data/config/host-network.json` is generated from `config.toml` and includes the validated host resolver, route, and
 interface fields consumed by `lan-gateway-apply.py`. Top-level DNS/search/default-gateway values render into the generated
-`10-wan.network` drop-in for `eth0` unless an explicit `eth0` value overrides them. Additional Ethernet interfaces render
+`10-wan.network` drop-in for `wan` unless an explicit `wan` value overrides them. Additional Ethernet interfaces render
 as `30-atomixos-ethN.network` units when explicitly configured.
 
 ```json
@@ -244,8 +244,8 @@ as `30-atomixos-ethN.network` units when explicitly configured.
   "dns_search_domains": ["lan.example"],
   "default_gateway": "192.0.2.1",
   "interfaces": {
-    "eth0": {"mode": "dhcp"},
-    "eth1": {
+    "wan": {"mode": "dhcp"},
+    "lan": {
       "mode": "static",
       "address": "172.20.30.1/24",
       "dns_servers": ["172.20.30.1"],

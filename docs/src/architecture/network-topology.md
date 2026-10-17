@@ -7,8 +7,8 @@ application ingress.
 
 ```mermaid
 flowchart LR
-    WAN["WAN<br/>internet"] --> ETH0["eth0<br/>DHCP client<br/>Deny-by-default inbound"]
-    LAN["LAN<br/>isolated devices"] --> ETH1["eth1<br/>Provisioned static IP<br/>DHCP/DNS: dnsmasq<br/>NTP: chrony"]
+    WAN["WAN<br/>internet"] --> ETH0["wan<br/>DHCP client<br/>Deny-by-default inbound"]
+    LAN["LAN<br/>isolated devices"] --> ETH1["lan<br/>Provisioned static IP<br/>DHCP/DNS: dnsmasq<br/>NTP: chrony"]
 
     subgraph DEVICE["AtomixOS device"]
         direction TB
@@ -22,7 +22,7 @@ flowchart LR
     APPS -. local service access .-> ETH1
 ```
 
-## WAN Interface (eth0)
+## WAN Interface (wan)
 
 - Mapped to the onboard RK3328 GMAC via systemd `.link` file (platform path `platform-ff540000.ethernet`)
 - DHCP v4 client via systemd-networkd
@@ -30,7 +30,7 @@ flowchart LR
 - Firewall drops new inbound traffic by default
 - Provisioned firewall state may open application or VPN ports from `/data/config/firewall-inbound.json`
 
-## LAN Interface (eth1)
+## LAN Interface (lan)
 
 - USB Ethernet adapter (any supported chipset: r8152, ax88179, cdc_ether)
 - Static IP: provisioned LAN gateway, falling back to `172.20.30.1/24`
@@ -50,29 +50,31 @@ boot.kernel.sysctl = {
 ```
 
 The nftables `FORWARD` chain has a `drop` policy with no exceptions. LAN devices get DHCP, DNS, NTP, SSH, and first-boot
-bootstrap access on eth1, but no packet-level internet routing. WAN application or VPN exposure is created only from
+bootstrap access on lan, but no packet-level internet routing. WAN application or VPN exposure is created only from
 provisioned firewall state.
 
 ## NIC Naming
 
 Deterministic interface naming uses systemd `.link` files rather than udev rules:
 
-| Link File        | Match                                            | Name                                       |
-|------------------|--------------------------------------------------|--------------------------------------------|
-| `10-onboard-eth` | Platform path `platform-ff540000.ethernet`       | `eth0`                                     |
-| `20-usb-eth`     | USB Ethernet drivers (r8152, ax88179, cdc_ether) | enabled as modules in Rock64 kernel config |
-| WiFi             | Unsupported until hardware selection             | not part of current Rock64 image           |
+| Link File | Match                                                                                                             | Name        |
+|-----------|-------------------------------------------------------------------------------------------------------------------|-------------|
+| `10-wan`  | The board's onboard NIC (`atomixos.network.wanLinkMatch`), e.g. ROCK64 platform path `platform-ff540000.ethernet` | `wan`       |
+| `20-lan`  | USB Ethernet drivers `r8152`, `ax88179_178a`, `cdc_ether` (`atomixos.network.lanLinkMatch`)                       | `lan`       |
+| WiFi      | Unsupported until hardware selection                                                                              | kernel name |
 
-The onboard Ethernet is always `eth0` regardless of USB device enumeration order. USB Ethernet adapters receive
-kernel-assigned names (e.g., `eth1`, `eth2`).
+`wan` and `lan` are names the kernel never assigns, so the result does not depend on which NIC registers first. A
+rename to a kernel name such as `eth0` fails when another NIC already took it, which could leave the onboard WAN port
+with the LAN name. The first USB adapter becomes `lan`; further adapters keep their kernel names (`eth0`, `eth1`, ...)
+and can be configured as additional interfaces. QEMU test VMs keep kernel names (`eth0` WAN, `eth1` LAN).
 
 ## Firewall Summary
 
 | Interface  | Direction | Allowed Ports                                                            |
 |------------|-----------|--------------------------------------------------------------------------|
-| eth0 (WAN) | Inbound   | provisioned firewall ports only                                          |
-| eth0 (WAN) | Inbound   | TCP 22 (SSH) -- only with flag file                                      |
-| eth1 (LAN) | Inbound   | open by default; explicit `lan` scope switches to allowlisted ports only |
+| wan (WAN)  | Inbound   | provisioned firewall ports only                                          |
+| wan (WAN)  | Inbound   | TCP 22 (SSH) -- only with flag file                                      |
+| lan (LAN)  | Inbound   | open by default; explicit `lan` scope switches to allowlisted ports only |
 | tun0 (VPN) | Inbound   | TCP 22 (SSH)                                                             |
 | any        | Forward   | DROP (no exceptions)                                                     |
 

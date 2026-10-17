@@ -8,7 +8,7 @@ bootstrap by default; fleet images opt into a separate loopback-only transport a
 The default `bootstrap_transport = "network"` policy preserves the existing local recovery path:
 
 1. The device boots with no embedded remote-management credential.
-2. The Nixstasis client identifies the device using the `eth0` MAC address.
+2. The Nixstasis client identifies the device using the `wan` MAC address.
 3. Nixstasis checks that MAC against an approved inventory list.
 4. If approved, Nixstasis returns a device UUID and runtime token.
 5. The device persists that identity at `/data/nixstasis/id` for future authenticated requests.

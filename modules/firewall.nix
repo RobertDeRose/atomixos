@@ -53,13 +53,15 @@ in
   options.atonic.firewall = {
     wanInterface = lib.mkOption {
       type = lib.types.str;
-      default = "eth0";
+      default = config.atomixos.network.wanInterface or "wan";
+      defaultText = lib.literalExpression ''config.atomixos.network.wanInterface or "wan"'';
       description = "WAN interface name used by nftables and provisioned inbound rules.";
     };
 
     lanInterface = lib.mkOption {
       type = lib.types.str;
-      default = "eth1";
+      default = config.atomixos.network.lanInterface or "lan";
+      defaultText = lib.literalExpression ''config.atomixos.network.lanInterface or "lan"'';
       description = "LAN interface name used by nftables rules.";
     };
 
@@ -92,7 +94,7 @@ in
 
           # First-boot WAN bootstrap access is reconciled by bootstrap-wan-toggle.service.
 
-          # -- eth1 (LAN) rules --
+          # -- LAN rules --
           iifname "${cfg.lanInterface}" accept comment "ATOMIXOS_LAN_DEFAULT_OPEN"
 
           # -- tun0 (VPN) rules --
@@ -114,11 +116,12 @@ in
 
     # ── Dynamic SSH-on-WAN toggle ──────────────────────────────────────────────
     #
-    # SSH on eth0 is controlled by the presence of /data/config/ssh-wan-enabled
+    # SSH on WAN is controlled by the presence of /data/config/ssh-wan-enabled
     # A systemd service checks this flag and adds/removes the nftables rule.
 
     systemd.services.ssh-wan-toggle = {
       description = "Toggle SSH access on WAN based on flag file";
+      environment.ATOMIXOS_WAN_INTERFACE = cfg.wanInterface;
       after = [
         "nftables.service"
         "network-online.target"
@@ -169,6 +172,7 @@ in
     # Also provide a reload path so the flag can be toggled at runtime
     systemd.services.ssh-wan-reload = {
       description = "Reload SSH-on-WAN firewall rule";
+      environment.ATOMIXOS_WAN_INTERFACE = cfg.wanInterface;
       after = [ "ssh-wan-toggle.service" ];
 
       path = [

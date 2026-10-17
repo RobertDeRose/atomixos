@@ -54,8 +54,8 @@ rollback after 3 consecutive boot failures.
 The `os-verification.service` performs these checks before committing a slot:
 
 1. **Service checks**: dnsmasq and chronyd must be active
-2. **Network checks**: eth0 must exist with networkd configuration that has not failed (a missing WAN address only
-   warns, so an outage does not roll back a working image); eth1 must have the expected LAN gateway IP
+2. **Network checks**: wan must exist with networkd configuration that has not failed (a missing WAN address only
+   warns, so an outage does not roll back a working image); lan must have the expected LAN gateway IP
 3. **Sustained check**: all above conditions must hold for 60 seconds (checked every 5 seconds) to catch restart loops
 
 Only after all checks pass does the service run `rauc status mark-good`, which resets the boot counter and commits the
@@ -97,6 +97,6 @@ The `os-upgrade.service` runs on a systemd timer:
 - Subsequent checks: every 1 hour (configurable)
 - Random delay: up to 10 minutes (prevents thundering herd across fleet)
 
-The service queries the update server with the compact lowercase 12-hex eth0 MAC as `X-Device-ID` and the current
+The service queries the update server with the compact lowercase 12-hex wan MAC as `X-Device-ID` and the current
 version. If a newer bundle is available, it downloads to `/data`, installs via `rauc install`, and reboots. The hawkBit
 path is reserved for future implementation and is not an operational update mode in the current image.

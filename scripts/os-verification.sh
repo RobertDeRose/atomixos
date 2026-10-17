@@ -12,6 +12,8 @@ LAN_SETTINGS_FILE="/data/config/lan-settings.json"
 RUNTIME_METADATA_FILE="/data/config/quadlet-runtime.json"
 LAN_DEFAULTS_FILE="${ATOMIXOS_LAN_DEFAULTS_FILE:-/etc/atomixos/lan-defaults.json}"
 APP_RUNTIME_USER="${ATOMIXOS_APP_RUNTIME_USER:-appsvc}"
+WAN_INTERFACE="${ATOMIXOS_WAN_INTERFACE:-wan}"
+LAN_INTERFACE="${ATOMIXOS_LAN_INTERFACE:-lan}"
 
 log() { echo "[os-verification] $*" >&2; }
 
@@ -105,34 +107,34 @@ check_service() {
 # address is usually an outage (no cable, ISP or DHCP down), so it only warns.
 check_wan_interface() {
 	local setup="" ip_addr
-	if ! ip link show eth0 >/dev/null 2>&1; then
-		log "  FAIL eth0 (WAN) interface is missing"
+	if ! ip link show "$WAN_INTERFACE" >/dev/null 2>&1; then
+		log "  FAIL $WAN_INTERFACE (WAN) interface is missing"
 		return 1
 	fi
 	# networkctl columns: IDX LINK TYPE OPERATIONAL SETUP
-	read -r _ _ _ _ setup _ < <(networkctl list --no-legend --no-pager eth0 2>/dev/null) || true
+	read -r _ _ _ _ setup _ < <(networkctl list --no-legend --no-pager "$WAN_INTERFACE" 2>/dev/null) || true
 	if [ "$setup" = "failed" ]; then
-		log "  FAIL eth0 (WAN) network configuration failed"
+		log "  FAIL $WAN_INTERFACE (WAN) network configuration failed"
 		return 1
 	fi
-	ip_addr=$(ip -4 addr show eth0 2>/dev/null | grep -oP 'inet \K[\d.]+' || true)
+	ip_addr=$(ip -4 addr show "$WAN_INTERFACE" 2>/dev/null | grep -oP 'inet \K[\d.]+' || true)
 	if [ -n "$ip_addr" ]; then
-		log "  OK eth0 has WAN address: $ip_addr"
+		log "  OK $WAN_INTERFACE has WAN address: $ip_addr"
 	else
-		log "  WARN eth0 has no WAN address"
+		log "  WARN $WAN_INTERFACE has no WAN address"
 	fi
 	return 0
 }
 
 check_lan_gateway_ip() {
-	local expected_ip eth1_ip
+	local expected_ip lan_ip
 	expected_ip="$(read_gateway_ip)"
-	eth1_ip=$(ip -4 addr show eth1 2>/dev/null | grep -oP 'inet \K[\d.]+' || true)
-	if [ "$eth1_ip" = "$expected_ip" ]; then
-		log "  OK eth1 is $expected_ip"
+	lan_ip=$(ip -4 addr show "$LAN_INTERFACE" 2>/dev/null | grep -oP 'inet \K[\d.]+' || true)
+	if [ "$lan_ip" = "$expected_ip" ]; then
+		log "  OK $LAN_INTERFACE is $expected_ip"
 		return 0
 	else
-		log "  FAIL eth1 is not $expected_ip (got: $eth1_ip)"
+		log "  FAIL $LAN_INTERFACE is not $expected_ip (got: $lan_ip)"
 		return 1
 	fi
 }

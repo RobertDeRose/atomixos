@@ -546,8 +546,8 @@ def test_write_imported_state_uses_private_permissions_and_cleans_quadlet(tmp_pa
             "dns_search_domains": ["lan.example"],
             "default_gateway": "192.0.2.1",
             "interfaces": {
-                "eth0": {"mode": "dhcp"},
-                "eth1": {"mode": "static", "address": "172.20.30.1/24"},
+                "wan": {"mode": "dhcp"},
+                "lan": {"mode": "static", "address": "172.20.30.1/24"},
             },
         },
         "os_upgrade": {"server_url": "https://updates.example"},
@@ -1155,7 +1155,7 @@ ssh_key = "{VALID_ED25519_KEY} admin@example"
 [network]
 dns_servers = ["1.1.1.1"]
 
-[network.interfaces.eth1]
+[network.interfaces.lan]
 mode = "static"
 address = "172.20.30.1/24"
 
