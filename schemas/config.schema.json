@@ -39,7 +39,7 @@
           "type": "object",
           "propertyNames": {
             "type": "string",
-            "pattern": "^eth[0-9]+$"
+            "pattern": "^(wan|lan|eth[0-9]+)$"
           },
           "additionalProperties": {
             "$ref": "#/$defs/interfaceDefinition"

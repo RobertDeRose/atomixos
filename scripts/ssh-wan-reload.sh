@@ -5,6 +5,8 @@
 # Dependencies (must be on PATH): nft, awk
 set -euo pipefail
 
+WAN_INTERFACE="${ATOMIXOS_WAN_INTERFACE:-wan}"
+
 # Remove all existing dynamic SSH rules before optionally adding one.
 nft -a list chain inet filter input 2>/dev/null |
 	awk 'match($0, /comment "SSH-WAN-dynamic"/) {print $NF}' |
@@ -16,7 +18,7 @@ nft -a list chain inet filter input 2>/dev/null |
 # Re-add if flag exists
 if [ -f /data/config/ssh-wan-enabled ]; then
 	echo "Re-adding SSH-on-WAN rule"
-	nft add rule inet filter input iifname "eth0" tcp dport 22 accept comment \"SSH-WAN-dynamic\"
+	nft add rule inet filter input iifname "$WAN_INTERFACE" tcp dport 22 accept comment \"SSH-WAN-dynamic\"
 else
 	echo "SSH-on-WAN disabled"
 fi

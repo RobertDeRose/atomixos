@@ -113,6 +113,11 @@ nixos-lib.runTest {
       # Replicated from modules/os-verification.nix but without podman
       # dependency (no health manifest → podman is never called).
       systemd.services.os-verification = {
+        # QEMU keeps kernel names; production boards use wan/lan.
+        environment = {
+          ATOMIXOS_WAN_INTERFACE = "eth0";
+          ATOMIXOS_LAN_INTERFACE = "eth1";
+        };
         description = "OS update verification - local health check";
         after = [
           "multi-user.target"
@@ -214,17 +219,17 @@ nixos-lib.runTest {
     gateway.succeed("rm -f /tmp/rauc.status")
     gateway.succeed("systemctl restart rauc.service")
     gateway.wait_for_unit("rauc.service")
-    gateway.fail("PATH=${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH ATOMIXOS_TEST_FAIL_MARK_GOOD=1 ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=1 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ${verificationScript} >/tmp/os-verification-fail.log 2>&1")
+    gateway.fail("PATH=${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH ATOMIXOS_TEST_FAIL_MARK_GOOD=1 ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=1 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ATOMIXOS_WAN_INTERFACE=eth0 ATOMIXOS_LAN_INTERFACE=eth1 ${verificationScript} >/tmp/os-verification-fail.log 2>&1")
     gateway.succeed("grep 'Failed to mark slot good after successful health checks' /tmp/os-verification-fail.log")
     gateway.succeed("mkdir -p /data/config")
     gateway.succeed("printf '{bad json\n' >/data/config/lan-settings.json")
-    gateway.succeed("PATH=${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=1 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ${verificationScript} >/tmp/os-verification-malformed.log 2>&1")
+    gateway.succeed("PATH=${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=1 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ATOMIXOS_WAN_INTERFACE=eth0 ATOMIXOS_LAN_INTERFACE=eth1 ${verificationScript} >/tmp/os-verification-malformed.log 2>&1")
     gateway.succeed("grep 'All checks passed, marking slot as good: boot.0' /tmp/os-verification-malformed.log")
     gateway.succeed("printf 'pending\n' > /var/lib/rauc/state.A")
     gateway.succeed("rm -f /data/config/lan-settings.json /data/config/health-required.json")
     gateway.succeed("systemctl restart chronyd.service")
     gateway.wait_for_unit("chronyd.service")
-    gateway.fail("(while ! grep -q 'Starting sustained health check' /tmp/os-verification-chrony-regress.log; do sleep 0.1; done; sleep 1; systemctl stop chronyd.service) & PATH=${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=5 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ${verificationScript} >/tmp/os-verification-chrony-regress.log 2>&1")
+    gateway.fail("(while ! grep -q 'Starting sustained health check' /tmp/os-verification-chrony-regress.log; do sleep 0.1; done; sleep 1; systemctl stop chronyd.service) & PATH=${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=5 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ATOMIXOS_WAN_INTERFACE=eth0 ATOMIXOS_LAN_INTERFACE=eth1 ${verificationScript} >/tmp/os-verification-chrony-regress.log 2>&1")
     gateway.succeed("grep 'FAIL: System health regressed during sustained check' /tmp/os-verification-chrony-regress.log")
     gateway.succeed("test \"$(cat /var/lib/rauc/state.A)\" = pending")
     gateway.succeed("systemctl restart chronyd.service")
@@ -233,26 +238,26 @@ nixos-lib.runTest {
     gateway.succeed("ip addr add 172.20.30.1/24 dev eth1")
     gateway.succeed("ip link set eth1 up")
     gateway.succeed("printf 'pending\n' > /var/lib/rauc/state.A")
-    gateway.fail("PATH=${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH ATOMIXOS_TEST_INVALID_STATUS=1 ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=1 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ${verificationScript} >/tmp/os-verification-invalid-status.log 2>&1")
+    gateway.fail("PATH=${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH ATOMIXOS_TEST_INVALID_STATUS=1 ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=1 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ATOMIXOS_WAN_INTERFACE=eth0 ATOMIXOS_LAN_INTERFACE=eth1 ${verificationScript} >/tmp/os-verification-invalid-status.log 2>&1")
     gateway.succeed("grep 'Refusing to mark slot good without a parseable RAUC status' /tmp/os-verification-invalid-status.log")
     gateway.succeed("test \"$(cat /var/lib/rauc/state.A)\" = pending")
     gateway.succeed("printf '[\"edgeproxy\"\n' >/data/config/health-required.json")
-    gateway.fail("PATH=${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=1 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ${verificationScript} >/tmp/os-verification-health-required.log 2>&1")
+    gateway.fail("PATH=${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=1 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ATOMIXOS_WAN_INTERFACE=eth0 ATOMIXOS_LAN_INTERFACE=eth1 ${verificationScript} >/tmp/os-verification-health-required.log 2>&1")
     gateway.succeed("grep 'Invalid required unit manifest: /data/config/health-required.json' /tmp/os-verification-health-required.log")
     gateway.succeed("test \"$(cat /var/lib/rauc/state.A)\" = pending")
     gateway.succeed("printf '[\"edgeproxy\", 7]\n' >/data/config/health-required.json")
-    gateway.fail("PATH=${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=1 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ${verificationScript} >/tmp/os-verification-health-required-type.log 2>&1")
+    gateway.fail("PATH=${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=1 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ATOMIXOS_WAN_INTERFACE=eth0 ATOMIXOS_LAN_INTERFACE=eth1 ${verificationScript} >/tmp/os-verification-health-required-type.log 2>&1")
     gateway.succeed("grep 'Invalid required unit manifest: /data/config/health-required.json' /tmp/os-verification-health-required-type.log")
     gateway.succeed("test \"$(cat /var/lib/rauc/state.A)\" = pending")
     gateway.succeed("printf 'pending\n' > /var/lib/rauc/state.A")
     gateway.succeed("printf '[]\n' >/data/config/health-required.json")
-    gateway.succeed("PATH=${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=1 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ${verificationScript} >/tmp/os-verification-empty-required.log 2>&1")
+    gateway.succeed("PATH=${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=1 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ATOMIXOS_WAN_INTERFACE=eth0 ATOMIXOS_LAN_INTERFACE=eth1 ${verificationScript} >/tmp/os-verification-empty-required.log 2>&1")
     gateway.succeed("grep 'All checks passed, marking slot as good: boot.0' /tmp/os-verification-empty-required.log")
     gateway.succeed("test \"$(cat /var/lib/rauc/state.A)\" = good")
     gateway.succeed("printf 'pending\n' > /var/lib/rauc/state.A")
     gateway.succeed("rm -f /data/config/health-required.json")
     gateway.succeed("printf '{\"gateway_ip\": true}\n' >/data/config/lan-settings.json")
-    gateway.succeed("PATH=${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=1 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ${verificationScript} >/tmp/os-verification-invalid-gateway-type.log 2>&1")
+    gateway.succeed("PATH=${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=1 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ATOMIXOS_WAN_INTERFACE=eth0 ATOMIXOS_LAN_INTERFACE=eth1 ${verificationScript} >/tmp/os-verification-invalid-gateway-type.log 2>&1")
     gateway.succeed("grep 'All checks passed, marking slot as good: boot.0' /tmp/os-verification-invalid-gateway-type.log")
     gateway.succeed("test \"$(cat /var/lib/rauc/state.A)\" = good")
 
@@ -261,14 +266,14 @@ nixos-lib.runTest {
     # An already-good slot is marked good again, so U-Boot's per-boot try
     # decrement is restored after every healthy boot, not only the first.
     gateway.succeed("printf 'good\n' > /var/lib/rauc/state.A && rm -f /tmp/rauc-mark-good.log")
-    gateway.succeed("PATH=${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=1 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ${verificationScript} >/tmp/os-verification-good-slot.log 2>&1")
+    gateway.succeed("PATH=${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=1 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ATOMIXOS_WAN_INTERFACE=eth0 ATOMIXOS_LAN_INTERFACE=eth1 ${verificationScript} >/tmp/os-verification-good-slot.log 2>&1")
     gateway.succeed("grep 'All checks passed, marking slot as good: boot.0' /tmp/os-verification-good-slot.log")
     gateway.succeed("grep -x 'mark-good boot.0' /tmp/rauc-mark-good.log")
 
     # A missing WAN address is an outage: warn, and still confirm the slot.
     gateway.succeed("ip link set eth0 down && ip -4 addr flush dev eth0")
     gateway.succeed("printf 'pending\n' > /var/lib/rauc/state.A")
-    gateway.succeed("PATH=${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=1 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ${verificationScript} >/tmp/os-verification-no-wan-address.log 2>&1")
+    gateway.succeed("PATH=${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=1 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ATOMIXOS_WAN_INTERFACE=eth0 ATOMIXOS_LAN_INTERFACE=eth1 ${verificationScript} >/tmp/os-verification-no-wan-address.log 2>&1")
     gateway.succeed("grep 'WARN eth0 has no WAN address' /tmp/os-verification-no-wan-address.log")
     gateway.fail("grep 'FAIL eth0' /tmp/os-verification-no-wan-address.log")
     gateway.succeed("test \"$(cat /var/lib/rauc/state.A)\" = good")
@@ -276,7 +281,7 @@ nixos-lib.runTest {
     # A missing WAN interface is an image regression: do not confirm the slot.
     gateway.succeed("ip link set eth0 name wan0")
     gateway.succeed("printf 'pending\n' > /var/lib/rauc/state.A")
-    gateway.fail("PATH=${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=1 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ${verificationScript} >/tmp/os-verification-no-wan.log 2>&1")
+    gateway.fail("PATH=${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=1 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ATOMIXOS_WAN_INTERFACE=eth0 ATOMIXOS_LAN_INTERFACE=eth1 ${verificationScript} >/tmp/os-verification-no-wan.log 2>&1")
     gateway.succeed("grep 'FAIL eth0 (WAN) interface is missing' /tmp/os-verification-no-wan.log")
     gateway.succeed("test \"$(cat /var/lib/rauc/state.A)\" = pending")
     gateway.succeed("ip link set wan0 name eth0 && ip link set eth0 up")
@@ -284,7 +289,7 @@ nixos-lib.runTest {
     # Failed WAN configuration is an image regression: do not confirm the slot.
     gateway.succeed("mkdir -p /tmp/networkctl-failed && printf '#!/bin/sh\\necho \"2 eth0 ether routable failed\"\\n' >/tmp/networkctl-failed/networkctl && chmod +x /tmp/networkctl-failed/networkctl")
     gateway.succeed("printf 'pending\n' > /var/lib/rauc/state.A")
-    gateway.fail("PATH=/tmp/networkctl-failed:${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=1 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ${verificationScript} >/tmp/os-verification-wan-failed.log 2>&1")
+    gateway.fail("PATH=/tmp/networkctl-failed:${raucStub}/bin:${pkgs.jq}/bin:${pkgs.systemd}/bin:${pkgs.iproute2}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin:$PATH ATOMIXOS_VERIFICATION_SUSTAIN_DURATION=1 ATOMIXOS_VERIFICATION_CHECK_INTERVAL=1 ATOMIXOS_WAN_INTERFACE=eth0 ATOMIXOS_LAN_INTERFACE=eth1 ${verificationScript} >/tmp/os-verification-wan-failed.log 2>&1")
     gateway.succeed("grep 'FAIL eth0 (WAN) network configuration failed' /tmp/os-verification-wan-failed.log")
     gateway.succeed("test \"$(cat /var/lib/rauc/state.A)\" = pending")
 

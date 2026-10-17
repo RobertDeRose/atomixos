@@ -61,6 +61,7 @@ in
         Type = "oneshot";
         Environment = [
           "ATOMIXOS_OS_UPGRADE_CONFIG=${osUpgradeConfigFile}"
+          "ATOMIXOS_WAN_INTERFACE=${config.atomixos.network.wanInterface or "wan"}"
         ];
         ExecStart = upgradeScript;
         TimeoutStartSec = 900; # 15 minutes (download can be slow)

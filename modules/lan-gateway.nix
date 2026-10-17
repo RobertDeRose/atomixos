@@ -35,8 +35,8 @@ in
     resolveLocalQueries = false;
     settings = {
       # Only listen on LAN interface
-      interface = "eth1";
-      bind-dynamic = true; # Wait for eth1 to appear (unlike bind-interfaces which fails immediately)
+      interface = config.atomixos.network.lanInterface;
+      bind-dynamic = true; # Wait for the LAN NIC to appear (bind-interfaces fails immediately)
       local-service = true;
       no-resolv = true;
 
@@ -126,6 +126,8 @@ in
 
     environment = {
       ATOMIXOS_BOOTSTRAP_TRANSPORT = bootstrapTransport;
+      ATOMIXOS_WAN_INTERFACE = config.atomixos.network.wanInterface;
+      ATOMIXOS_LAN_INTERFACE = config.atomixos.network.lanInterface;
     };
     serviceConfig = {
       Type = "oneshot";

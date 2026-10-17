@@ -47,6 +47,11 @@ in
     unitConfig.ConditionPathExists = "/data/.completed_first_boot";
     unitConfig.RequiresMountsFor = [ "/data" ];
 
+    environment = {
+      ATOMIXOS_WAN_INTERFACE = config.atomixos.network.wanInterface or "wan";
+      ATOMIXOS_LAN_INTERFACE = config.atomixos.network.lanInterface or "lan";
+    };
+
     path = [
       pkgs.rauc
       pkgs.jq

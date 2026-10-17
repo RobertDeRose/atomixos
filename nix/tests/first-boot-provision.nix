@@ -182,8 +182,8 @@ nixos-lib.runTest {
         gateway.succeed("grep 'AAAAC3NzaC1lZDI1NTE5AAAAIFGTDzwiQNe3nwhmg/G81QDhQBbpgOyvrKXeYnQHYOUd' /tmp/operator-admin-root/admin-signers")
         gateway.succeed("grep 'AAAAC3NzaC1lZDI1NTE5AAAAIFGTDzwiQNe3nwhmg/G81QDhQBbpgOyvrKXeYnQHYOUd' /tmp/operator-admin-root/ssh-authorized-keys/operator")
 
-        gateway.succeed("mkdir -p /tmp/lan-apply/bin /tmp/lan-apply/etc/systemd/network/20-lan.network.d /tmp/lan-apply/sys/class/net/eth1")
-        gateway.succeed("printf '00:11:22:33:44:55\n' >/tmp/lan-apply/sys/class/net/eth1/address")
+        gateway.succeed("mkdir -p /tmp/lan-apply/bin /tmp/lan-apply/etc/systemd/network/20-lan.network.d /tmp/lan-apply/sys/class/net/lan")
+        gateway.succeed("printf '00:11:22:33:44:55\n' >/tmp/lan-apply/sys/class/net/lan/address")
         gateway.succeed("ln -s /tmp/lan-apply/store-network /tmp/lan-apply/etc/systemd/network/20-lan.network.d/50-atomixos.conf")
         gateway.succeed("ln -s /tmp/lan-apply/store-dnsmasq /tmp/lan-apply/atomixos-lan.conf")
         gateway.succeed("ln -s /tmp/lan-apply/store-hosts /tmp/lan-apply/dnsmasq-hosts")
@@ -490,7 +490,7 @@ nixos-lib.runTest {
 
         gateway.succeed("curl -fsS http://127.0.0.1:18081/api/nonce > /tmp/partial-network-nonce.json")
         gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nnonce = json.loads(Path('/tmp/partial-network-nonce.json').read_text())['nonce']\nPath('/tmp/partial-network-nonce.txt').write_text(nonce)\nPY")
-        gateway.succeed("cat > /tmp/partial-network.json <<'EOF'\n{\"dns_servers\": [\"9.9.9.9\"], \"interfaces\": {\"eth0\": {\"mode\": \"dhcp\"}}}\nEOF")
+        gateway.succeed("cat > /tmp/partial-network.json <<'EOF'\n{\"dns_servers\": [\"9.9.9.9\"], \"interfaces\": {\"wan\": {\"mode\": \"dhcp\"}}}\nEOF")
         gateway.succeed("/tmp/sign-reapply /tmp/partial-network-nonce.txt PATCH /api/config/network /tmp/partial-network.json /tmp/auth-test-key /tmp/partial-network-signature-b64.txt")
         gateway.succeed("curl -fsS -X PATCH -H 'Content-Type: application/json' -H \"X-AtomixOS-Nonce: $(cat /tmp/partial-network-nonce.txt)\" -H \"X-AtomixOS-Signature: $(cat /tmp/partial-network-signature-b64.txt)\" --data-binary @/tmp/partial-network.json http://127.0.0.1:18081/api/config/network > /tmp/partial-network-response.json")
         gateway.succeed("python3 /tmp/assert-api-job http://127.0.0.1:18081 /tmp/partial-network-response.json succeeded")

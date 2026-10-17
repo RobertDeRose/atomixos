@@ -20,7 +20,7 @@ On first boot:
    Quadlet files, and synced into the active rootful and rootless Quadlet paths
 7. `first-boot.service` applies managed users, Quadlets, LAN settings, and provisioned firewall rules, then marks the
    RAUC slot as good only if those runtime apply steps succeed
-8. Network interfaces come up (eth0 via DHCP, eth1 static); `systemd-networkd-wait-online` uses 30s timeout with `anyInterface=true`
+8. Network interfaces come up (wan via DHCP, lan static); `systemd-networkd-wait-online` uses 30s timeout with `anyInterface=true`
 9. Services start: dnsmasq, chrony, sshd, and the RAUC update timer when RAUC is enabled
 
 The device is then ready to receive OTA updates and serve LAN clients.
