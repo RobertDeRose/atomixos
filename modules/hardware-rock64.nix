@@ -420,6 +420,9 @@ in
 {
   atomixos.serialRootDebug.enable = true;
 
+  # The onboard RK3328 GMAC is the WAN port.
+  atomixos.network.wanLinkMatch.Path = "platform-ff540000.ethernet";
+
   # ── Boot partition ────────────────────────────────────────────────────────────
   # Mount the active boot slot's FAT partition at /boot (slot A).
   fileSystems."/boot" = {

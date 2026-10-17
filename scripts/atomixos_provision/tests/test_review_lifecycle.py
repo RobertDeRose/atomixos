@@ -170,7 +170,7 @@ def test_wan_firewall_uses_non_symlink_marker_or_config(
         "bootstrapWanToggle = pkgs.writeShellScript \"bootstrap-wan-toggle\" ''"
     )[1]
     script = script.split("  '';")[0]
-    script = script.replace("/data/config", str(root)).replace("${cfg.wanInterface}", "eth0")
+    script = script.replace("/data/config", str(root)).replace("${cfg.wanInterface}", "wan")
     fake_nft = 'nft() { if [ "$1" = add ]; then printf "open"; fi; }\n'
     result = subprocess.run(["bash", "-c", fake_nft + script], capture_output=True, check=True)
     assert (result.stdout == b"open") is open_wan

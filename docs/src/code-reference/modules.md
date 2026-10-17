@@ -229,18 +229,21 @@ atomixos.rauc = {
 
 **Link files:**
 
-| Priority         | Match                                        | Result                                     |
-|------------------|----------------------------------------------|--------------------------------------------|
-| `10-onboard-eth` | Platform `platform-ff540000.ethernet`        | Name = `eth0`                              |
-| `20-usb-eth`     | Drivers `r8152`, `ax88179_178a`, `cdc_ether` | Enabled as modules in Rock64 kernel config |
-| WiFi             | Unsupported until hardware selection         | not part of current Rock64 image           |
+| Priority | Match                                                  | Result       |
+|----------|--------------------------------------------------------|--------------|
+| `10-wan` | `atomixos.network.wanLinkMatch` (set per board)        | Name = `wan` |
+| `20-lan` | `atomixos.network.lanLinkMatch` (USB Ethernet drivers) | Name = `lan` |
+| WiFi     | Unsupported until hardware selection                   | kernel name  |
+
+Options `atomixos.network.wanInterface` and `lanInterface` (default `wan`, `lan`) give the names to networkd, the
+firewall, dnsmasq, and the WAN/LAN scripts; QEMU keeps `eth0`/`eth1`.
 
 **Network files:**
 
 | Priority | Interface | Configuration                            |
 |----------|-----------|------------------------------------------|
-| `10-wan` | `eth0`    | DHCP v4, uses DHCP DNS, no NTP from DHCP |
-| `20-lan` | `eth1`    | Static `172.20.30.1/24`, no DHCP         |
+| `10-wan` | `wan`     | DHCP v4, uses DHCP DNS, no NTP from DHCP |
+| `20-lan` | `lan`     | Static `172.20.30.1/24`, no DHCP         |
 
 **Sysctl:** `net.ipv4.ip_forward = 0`, `net.ipv6.conf.all.forwarding = 0`
 
@@ -252,11 +255,11 @@ atomixos.rauc = {
 
 **nftables rules (inet filter):**
 
-| Chain     | Policy | Rules                                                                  |
-|-----------|--------|------------------------------------------------------------------------|
-| `input`   | drop   | lo: accept; established: accept; eth1: accept by default; tun0: TCP 22 |
-| `forward` | drop   | (no exceptions)                                                        |
-| `output`  | accept |                                                                        |
+| Chain     | Policy | Rules                                                                 |
+|-----------|--------|-----------------------------------------------------------------------|
+| `input`   | drop   | lo: accept; established: accept; lan: accept by default; tun0: TCP 22 |
+| `forward` | drop   | (no exceptions)                                                       |
+| `output`  | accept |                                                                       |
 
 **Dynamic SSH toggle services:**
 
@@ -281,7 +284,7 @@ present with any ports, appends those ports to the platform-required LAN ports o
 
 | Setting        | Value                                                                    |
 |----------------|--------------------------------------------------------------------------|
-| Interface      | `eth1` (`bind-dynamic`)                                                  |
+| Interface      | `lan` (`bind-dynamic`)                                                   |
 | DHCP range     | provisioned range, fallback `172.20.30.10` -- `172.20.30.254`, 24h lease |
 | Gateway option | provisioned gateway IP, fallback `172.20.30.1`                           |
 | DNS option     | provisioned gateway IP (gateway-local DNS only)                          |

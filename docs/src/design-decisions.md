@@ -118,8 +118,10 @@ disabled.
 **Choice**: Use systemd `.link` files for deterministic NIC naming rather than udev rules.
 
 **Rationale**: `.link` files are the native systemd-networkd mechanism and are processed earlier in boot than udev
-rules. They match on stable platform paths (e.g., `platform-ff540000.ethernet` for the onboard GMAC), ensuring `eth0` is
-always the onboard Ethernet regardless of USB enumeration order.
+rules. They match the onboard NIC per board (e.g., platform path `platform-ff540000.ethernet` on ROCK64) and rename it
+to `wan`, and the USB Ethernet adapter to `lan`. These are names the kernel never assigns: renaming to a kernel name
+such as `eth0` fails when a USB adapter registered first and took it, which would leave the onboard WAN port with the
+LAN name and its open LAN firewall rule.
 
 ## Decision 12: nftables firewall
 

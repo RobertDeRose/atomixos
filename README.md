@@ -66,8 +66,8 @@ Offset     Size       Content          Filesystem
 
 ```mermaid
 flowchart LR
-    WAN["WAN (internet)"] --> ETH0["eth0\nDHCP client\nHTTPS (443)\nOpenVPN (1194)"]
-    LAN["LAN (isolated)"] --> ETH1["eth1\nLAN gateway IP (/24)\nDHCP server (dnsmasq)\nNTP server (chrony)"]
+    WAN["WAN (internet)"] --> ETH0["wan\nDHCP client\nHTTPS (443)\nOpenVPN (1194)"]
+    LAN["LAN (isolated)"] --> ETH1["lan\nLAN gateway IP (/24)\nDHCP server (dnsmasq)\nNTP server (chrony)"]
 
     subgraph GATEWAY["Gateway device"]
         ETH0
@@ -88,7 +88,7 @@ selectively bridges WAN and LAN with authentication.
 4. Device reboots into new slot
 5. U-Boot decrements BOOT_B_LEFT on each boot attempt
 6. os-verification.service runs health checks:
-   - eth0 has WAN address, eth1 has the configured LAN gateway IP
+   - wan has WAN address, lan has the configured LAN gateway IP
    - dnsmasq, chronyd running
    - sustained 60s stability check
 7a. All pass  → rauc status mark-good (slot committed)
@@ -121,7 +121,7 @@ SSH credentials. The device itself keeps SSH-based LAN recovery and local gatewa
 
 ## LAN Range Configuration
 
-Runtime LAN changes should use `[network.dnsmasq]` or `[network.interfaces.eth1]` in `config.toml` and the normal
+Runtime LAN changes should use `[network.dnsmasq]` or `[network.interfaces.lan]` in `config.toml` and the normal
 candidate promotion path. The `mise` helper task only updates built-in fallback LAN defaults for development images.
 
 ```sh
@@ -130,7 +130,7 @@ mise run config:lan-range --gateway-cidr 10.50.0.1/24 --dhcp-start 10.50.0.10 --
 
 This updates:
 
-- `modules/lan-gateway.nix` (fallback `eth1` address, DHCP pool, DHCP options, gateway hosts, chrony allow subnet)
+- `modules/lan-gateway.nix` (fallback `lan` address, DHCP pool, DHCP options, gateway hosts, chrony allow subnet)
 
 After changing the range, run quality checks, validate the flake, and rebuild:
 

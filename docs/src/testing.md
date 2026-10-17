@@ -142,6 +142,7 @@ Additional flake-only checks:
 | `build-config-workflow`       | 0     | Local override wrapper, task matrix, Lima behavior, and atomic retained links                                      |
 | `watchdog-missing-device`     | 1     | Enabled policy without hardware boots, preserves RAUC state, and emits an actionable warning                       |
 | `kernel-security`             | 1     | BPF LSM/BTF support is active and unsupported hardware/sysctl startup diagnostics are absent                       |
+| `interface-naming`            | 1     | WAN and LAN are renamed to `wan`/`lan` by hardware match, whichever NIC registers first                            |
 | `rootless-storage`            | 1     | Rootless application images are stored under `/data/containers/rootless`, not on the reset-on-boot overlay root    |
 | `first-boot-provision`        | 1     | Provisioning import, validation, apply, auth, rollback, and LAN transport behavior                                 |
 | `first-boot-source-discovery` | 1     | Boot/USB/bootstrap source precedence, marker behavior, and fleet rebind suppression                                |
