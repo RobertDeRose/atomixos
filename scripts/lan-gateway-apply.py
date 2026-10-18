@@ -444,7 +444,7 @@ def render_interface_network(
     if gateway:
         lines.append(f"Gateway={gateway}")
 
-    dns_servers = settings.get("dns_servers")
+    dns_servers = settings.get("dns_servers", [])
     if not dns_servers and interface == WAN_KEY:
         dns_servers = host_settings.get("dns_servers", [])
     for server in dns_servers:

@@ -152,6 +152,27 @@ def test_host_network_rejects_lan_dhcp(tmp_path, monkeypatch):
         module.load_host_network_settings()
 
 
+def test_interfaces_without_dns_servers_render_no_dns(tmp_path, monkeypatch):
+    module = isolated_module(tmp_path, monkeypatch)
+    host_file = tmp_path / "host-network.json"
+    host_file.write_text(
+        json.dumps(
+            {
+                "interfaces": {
+                    "lan": {"mode": "static", "address": "172.20.30.1/24"},
+                    "eth2": {"mode": "static", "address": "198.51.100.5/24"},
+                }
+            }
+        )
+    )
+    monkeypatch.setattr(module, "HOST_NETWORK_FILE", host_file)
+
+    settings = module.load_host_network_settings()
+    assert module.apply_host_network_settings(settings, "172.20.30.1/24") is True
+    assert "DNS=" not in module.NETWORK_FILE.read_text()
+    assert "DNS=" not in (module.HOST_NETWORK_CONFIG_DIR / "30-atomixos-eth2.network").read_text()
+
+
 def test_host_network_rejects_unknown_keys_and_ipv6_gateways(tmp_path, monkeypatch):
     module = isolated_module(tmp_path, monkeypatch)
     host_file = tmp_path / "host-network.json"
