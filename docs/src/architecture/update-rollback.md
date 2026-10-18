@@ -102,6 +102,7 @@ The `os-upgrade.service` runs on a systemd timer:
 - Subsequent checks: every 1 hour (configurable)
 - Random delay: up to 10 minutes (prevents thundering herd across fleet)
 
-The service queries the update server with the compact lowercase 12-hex wan MAC as `X-Device-ID` and the current
-version. If a newer bundle is available, it downloads to `/data`, installs via `rauc install`, and reboots. The hawkBit
-path is reserved for future implementation and is not an operational update mode in the current image.
+The service queries the update server with the compact lowercase 12-hex wan MAC as `X-Device-ID`, or `unknown` when
+the wan address cannot be read, and the current version. If a newer bundle is available, it downloads to `/data`,
+installs via `rauc install`, and reboots. The hawkBit path is reserved for future implementation and is not an
+operational update mode in the current image.

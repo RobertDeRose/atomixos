@@ -37,6 +37,7 @@
         },
         "interfaces": {
           "type": "object",
+          "description": "Per-interface settings. Use wan and lan for the built-in roles on every board; ethN keys configure additional Ethernet interfaces and never the WAN or LAN port.",
           "propertyNames": {
             "type": "string",
             "pattern": "^(wan|lan|eth[0-9]+)$"
