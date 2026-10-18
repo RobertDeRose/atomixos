@@ -55,7 +55,9 @@ The failed slot's data is preserved for diagnostics but is not booted.
 #### Scenario: Automatic rollback after 3 failures
 
 - Given slot B was just installed with `BOOT_ORDER=B A`
-- And slot B fails to boot 3 times (kernel panic, hang, or health check failure)
+- And slot B fails to boot 3 times (kernel panic, hang, or health check failure); a panic after `systemd-sysctl`
+  reboots on its own after 10 seconds (`kernel.panic = 10`), while an earlier initrd panic needs a watchdog reset or
+  power cycle
 - Then `BOOT_B_LEFT` reaches 0
 - And U-Boot boots slot A (the previous working image)
 - And slot A still has its original content

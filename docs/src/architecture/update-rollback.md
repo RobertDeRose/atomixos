@@ -49,6 +49,11 @@ On each boot, U-Boot RAUC bootmeth selects the slot and decrements the boot atte
 If a slot's counter reaches 0, RAUC bootmeth skips it and tries the next slot in `BOOT_ORDER`. This ensures automatic
 rollback after 3 consecutive boot failures.
 
+A kernel panic counts as a failed boot without anyone power-cycling the device: `kernel.panic` is 10, so the kernel
+reboots itself 10 seconds after a panic, and the next boot uses another try. The value is a sysctl applied by stage-2
+`systemd-sysctl`; a panic earlier in boot, including in the initrd, still hangs until the hardware watchdog or a power
+cycle resets the device.
+
 ## Health Check Details
 
 The `os-verification.service` performs these checks before committing a slot:
