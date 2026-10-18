@@ -11,6 +11,7 @@ let
   clientPackage = cfg.package;
   settings = {
     api.url = cfg.apiUrl;
+    identity.interface = cfg.identityInterface;
     poll.interval = cfg.pollInterval;
     scripts.dir = cfg.scriptsDir;
     frp = {
@@ -89,6 +90,16 @@ in
       type = lib.types.str;
       example = "https://nixstasis.example.com";
       description = "Base URL for the Nixstasis API.";
+    };
+
+    identityInterface = lib.mkOption {
+      type = lib.types.str;
+      default = config.atomixos.network.wanInterface or "wan";
+      defaultText = lib.literalExpression ''config.atomixos.network.wanInterface or "wan"'';
+      description = ''
+        Interface whose MAC identifies the device for Nixstasis registration and heartbeats.
+        The client fails rather than falling back to another interface when it is missing.
+      '';
     };
 
     pollInterval = lib.mkOption {

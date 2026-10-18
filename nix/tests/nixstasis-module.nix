@@ -63,6 +63,9 @@ pkgs.runCommand "nixstasis-module-check" { } ''
   set -euo pipefail
 
   grep -q 'url: https://nixstasis.example.test' ${cfg.environment.etc."nixstasis/config.yaml".source}
+  grep -q 'interface: ${cfg.atomixos.network.wanInterface}' ${
+    cfg.environment.etc."nixstasis/config.yaml".source
+  }
   grep -q 'interval: 30s' ${cfg.environment.etc."nixstasis/config.yaml".source}
   grep -q "name: '''" ${cfg.environment.etc."nixstasis/config.yaml".source}
   grep -q 'server_addr: frp.example.test' ${cfg.environment.etc."nixstasis/config.yaml".source}
