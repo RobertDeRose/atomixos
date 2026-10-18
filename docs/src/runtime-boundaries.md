@@ -255,8 +255,9 @@ as `30-atomixos-ethN.network` units when explicitly configured.
 }
 ```
 
-Only supported Ethernet names matching `ethN` are accepted. WiFi remains unsupported. Rendering these files does not add
-firewall rules, NAT, IP forwarding, or FORWARD-chain exceptions.
+Interface keys are `wan` and `lan` for the built-in roles and `ethN` for additional Ethernet interfaces. A key naming the
+physical WAN or LAN interface, such as `eth0` on QEMU, is rejected; use `wan` or `lan`. WiFi remains unsupported.
+Rendering these files does not add firewall rules, NAT, IP forwarding, or FORWARD-chain exceptions.
 
 ## Activation Policy JSON
 
