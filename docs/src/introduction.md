@@ -40,6 +40,9 @@ platform validation. It is not a general-purpose desktop or server distribution,
 universal router. Application workloads and external fleet-management infrastructure remain deployment-owned, and
 hardware support is added explicitly per board.
 
+AtomixOS has no stability guarantee before `v1.0.0`. Pre-1.0 releases may change interfaces, configuration schemas,
+and on-disk state without a migration path; upgrading across a breaking change requires reprovisioning.
+
 ## Supported Hardware
 
 | Board  | SoC    | Architecture | Storage    |
