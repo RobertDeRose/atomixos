@@ -100,7 +100,7 @@ then verifies boot continues, RAUC state is unchanged, and an actionable warning
 
 The `kernel-security` VM check verifies the stripped kernel exposes the BPF LSM and BTF required by systemd filesystem
 sandboxing. It also rejects unsupported-BPF, MTD-probe, boot-storage, and hung-task-sysctl startup diagnostics, and
-checks that `kernel.panic` is 10 so a panic reboots the device.
+checks that the runtime `kernel.panic` value is 10, so a panic after `systemd-sysctl` reboots the device.
 
 The `build-configuration` check covers strict schema parsing, merge behavior, timeout bounds, canonical bytes,
 provenance, NixOS option mapping, artifact sidecar inputs, and the network-versus-fleet bootstrap transport boundary.
@@ -142,7 +142,7 @@ Additional flake-only checks:
 | `build-configuration`         | 0     | Schema, canonical policy, provenance, module mapping, and sidecar inputs                                           |
 | `build-config-workflow`       | 0     | Local override wrapper, task matrix, Lima behavior, and atomic retained links                                      |
 | `watchdog-missing-device`     | 1     | Enabled policy without hardware boots, preserves RAUC state, and emits an actionable warning                       |
-| `kernel-security`             | 1     | BPF LSM/BTF support is active, a panic reboots after 10 s, and unsupported startup diagnostics are absent          |
+| `kernel-security`             | 1     | BPF LSM/BTF support is active, runtime `kernel.panic` is 10, and unsupported startup diagnostics are absent        |
 | `rootless-storage`            | 1     | Rootless application images are stored under `/data/containers/rootless`, not on the reset-on-boot overlay root    |
 | `first-boot-provision`        | 1     | Provisioning import, validation, apply, auth, rollback, and LAN transport behavior                                 |
 | `first-boot-source-discovery` | 1     | Boot/USB/bootstrap source precedence, marker behavior, and fleet rebind suppression                                |

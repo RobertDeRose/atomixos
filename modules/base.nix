@@ -49,7 +49,9 @@ in
 
     # Reboot 10 s after a kernel panic instead of waiting forever. Nobody is at a
     # console to power-cycle a remote device, and the hardware watchdog is
-    # optional (and on some boards does not recover a panicked kernel).
+    # optional (and on some boards does not recover a panicked kernel). This is
+    # a sysctl, so it applies only once stage-2 systemd-sysctl runs; a panic in
+    # early boot or the initrd still waits forever.
     boot.kernel.sysctl."kernel.panic" = 10;
 
     # ── Base system ──────────────────────────────────────────────────────────────
