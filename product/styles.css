@@ -1,6 +1,6 @@
 /*
- * AtomixOS product page. The page is laid out like a lab chart: graph-paper background, one periodic-table tile as the
- * brand mark, and the eMMC partition strip as the main illustration. Colors come from the atom logo.
+ * AtomixOS product page. The page is laid out like a lab chart: graph-paper background, the original logo in the hero,
+ * a periodic-table tile, and the eMMC partition strip as the main illustration. Colors come from the atom logo.
  * site:build copies the font files into fonts/ from the docs' npm packages.
  */
 
@@ -151,11 +151,8 @@ h3 {
 }
 
 .brand {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
   color: var(--ink);
-  font: 700 1.25rem var(--font-display);
+  font: 700 1.35rem var(--font-display);
   text-decoration: none;
 }
 
@@ -210,12 +207,17 @@ main > section {
   color: var(--ink-muted);
 }
 
-/* Hero: the element tile beside the headline. */
+/* Hero: the original logo beside the headline. */
 .hero {
   display: grid;
-  grid-template-columns: minmax(14rem, 19rem) 1fr;
+  grid-template-columns: minmax(16rem, 26rem) 1fr;
   align-items: center;
   gap: clamp(2rem, 6vw, 5rem);
+}
+
+.hero__logo {
+  width: 100%;
+  height: auto;
 }
 
 .hero h1 {
@@ -230,6 +232,19 @@ main > section {
   margin: 0 0 2rem;
   color: var(--ink-muted);
   font-size: 1.25rem;
+}
+
+/* The element tile introduces the slot layout. */
+.disk__intro {
+  display: grid;
+  grid-template-columns: 13rem 1fr;
+  align-items: center;
+  gap: clamp(1.5rem, 4vw, 3rem);
+  margin-bottom: 2rem;
+}
+
+.disk__intro .section-lede {
+  margin-bottom: 0;
 }
 
 .element {
@@ -273,7 +288,7 @@ main > section {
   align-self: center;
   margin: 0;
   color: var(--electron-text);
-  font-size: clamp(5rem, 11vw, 7.5rem);
+  font-size: clamp(4rem, 8vw, 5.25rem);
   font-weight: 800;
   line-height: 1;
   letter-spacing: -0.02em;
@@ -498,12 +513,17 @@ main > section {
 }
 
 @media (max-width: 860px) {
-  .hero {
+  .hero,
+  .disk__intro {
     grid-template-columns: 1fr;
   }
 
+  .hero__logo {
+    width: min(100%, 20rem);
+  }
+
   .element {
-    width: min(100%, 17rem);
+    width: min(100%, 14rem);
   }
 
   .steps,

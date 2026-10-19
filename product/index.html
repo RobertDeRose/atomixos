@@ -21,10 +21,7 @@
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
   <header class="site-header">
-    <a class="brand" href="./">
-      <img src="docs/img/atomixos-mark.png" alt="" width="36" height="36">
-      <span>AtomixOS</span>
-    </a>
+    <a class="brand" href="./">AtomixOS</a>
     <nav class="site-nav" aria-label="Main">
       <a href="docs/">Docs</a>
       <a href="https://github.com/RobertDeRose/atomixos">GitHub</a>
@@ -37,13 +34,8 @@
 
   <main id="main">
     <section class="hero">
-      <figure class="element" aria-label="AtomixOS as a periodic table element">
-        <div class="element__corner element__corner--start"><b>2</b><span>slots</span></div>
-        <div class="element__corner element__corner--end"><b>3</b><span>boot tries</span></div>
-        <p class="element__symbol">Ax</p>
-        <p class="element__name">AtomixOS</p>
-        <figcaption class="element__mass"><b>60 s</b> health check</figcaption>
-      </figure>
+      <img class="hero__logo" src="docs/img/atomixos-logo.png" width="512" height="512"
+        alt="AtomixOS logo: an atom around a hexagon, with the tagline The element of reproducibility">
       <div class="hero__copy">
         <h1>An operating system for single-board computers that boots the same way every time.</h1>
         <p class="lede">
@@ -58,12 +50,23 @@
     </section>
 
     <section class="disk" aria-labelledby="disk-title">
-      <h2 id="disk-title">Two copies of the system, one place for your data</h2>
-      <p class="section-lede">
-        The eMMC holds two boot and root slots. The device runs from one while an update is written to the other, so a
-        power cut mid-update never leaves it without a working system. Your configuration and logs live on
-        <code>/data</code>, which no update touches.
-      </p>
+      <div class="disk__intro">
+        <figure class="element" aria-label="AtomixOS as a periodic table element">
+          <div class="element__corner element__corner--start"><b>2</b><span>slots</span></div>
+          <div class="element__corner element__corner--end"><b>3</b><span>boot tries</span></div>
+          <p class="element__symbol">Ax</p>
+          <p class="element__name">AtomixOS</p>
+          <figcaption class="element__mass"><b>60 s</b> health check</figcaption>
+        </figure>
+        <div>
+          <h2 id="disk-title">Two copies of the system, one place for your data</h2>
+          <p class="section-lede">
+            The eMMC holds two boot and root slots. The device runs from one while an update is written to the other, so
+            a power cut mid-update never leaves it without a working system. Your configuration and logs live on
+            <code>/data</code>, which no update touches.
+          </p>
+        </div>
+      </div>
       <figure class="strip">
         <ol class="strip__parts">
           <li class="part part--raw"><b>U-Boot</b><span>16 MB</span></li>
