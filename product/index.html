@@ -35,6 +35,19 @@
 
   <main id="main">
     <section class="hero">
+      <svg class="orbits" viewBox="0 0 960 960" aria-hidden="true" focusable="false">
+        <g fill="none" stroke="currentColor" stroke-width="2">
+          <ellipse cx="480" cy="480" rx="460" ry="160" transform="rotate(-30 480 480)"/>
+          <ellipse cx="480" cy="480" rx="460" ry="160" transform="rotate(30 480 480)"/>
+          <ellipse cx="480" cy="480" rx="460" ry="160" transform="rotate(90 480 480)"/>
+          <circle cx="480" cy="480" r="300" stroke-dasharray="2 14"/>
+        </g>
+        <g fill="currentColor">
+          <circle cx="878" cy="250" r="9"/>
+          <circle cx="82" cy="710" r="9"/>
+          <circle cx="480" cy="20" r="9"/>
+        </g>
+      </svg>
       <img class="hero__logo" src="docs/img/atomixos-logo.png" width="512" height="512"
         alt="AtomixOS logo: an atom around a hexagon, with the tagline The element of reproducibility">
       <div class="hero__copy">
@@ -354,7 +367,8 @@ WantedBy = ["multi-user.target"]</code></pre>
   </main>
 
   <footer class="site-footer">
-    <p><a href="https://github.com/RobertDeRose/atomixos">AtomixOS on GitHub</a></p>
+    <p>Made with <span role="img" aria-label="love">💙</span> by <a href="https://github.com/RobertDeRose">Robert DeRose</a></p>
+    <p><small>© 2026 Robert DeRose. <a href="https://github.com/RobertDeRose/atomixos">AtomixOS on GitHub</a></small></p>
   </footer>
 </body>
 </html>

@@ -1,6 +1,6 @@
 /*
- * AtomixOS product page, laid out like a chemistry chart: graph-paper background, the original logo in the hero, and a
- * periodic table of AtomixOS features grouped into color-coded families. Colors come from the atom logo.
+ * AtomixOS product page: faint electron orbits behind the original logo in the hero, then a periodic table of AtomixOS
+ * features grouped into color-coded families. Colors come from the atom logo.
  * site:build copies the font files into fonts/ from the docs' npm packages.
  */
 
@@ -42,7 +42,9 @@
   --electron-text: #195abc;
   --on-electron: #ffffff;
   --silver: #c3cfdf;
-  --grid: rgba(28, 100, 209, 0.07);
+  --hatch: rgba(28, 100, 209, 0.07);
+  --orbit: rgba(28, 100, 209, 0.16);
+  --glow: rgba(58, 157, 240, 0.14);
   --line: rgba(19, 35, 63, 0.16);
 
   /* Element families. Filled tiles put --on-family text on the family color at 4.9:1 or better. */
@@ -66,7 +68,9 @@
   --electron-text: #6cb4ff;
   --on-electron: #07122a;
   --silver: #3b4d6b;
-  --grid: rgba(108, 180, 255, 0.07);
+  --hatch: rgba(108, 180, 255, 0.07);
+  --orbit: rgba(108, 180, 255, 0.14);
+  --glow: rgba(58, 157, 240, 0.16);
   --line: rgba(221, 232, 247, 0.16);
 
   --family-build: #a5b4fc;
@@ -93,12 +97,15 @@ html {
 body {
   margin: 0;
   background-color: var(--paper);
-  background-image:
-    linear-gradient(var(--grid) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
-  background-size: 24px 24px;
+  background-image: radial-gradient(70rem 45rem at 15% -10%, var(--glow), transparent 70%);
+  background-repeat: no-repeat;
   color: var(--ink);
   font: 400 1.125rem/1.6 var(--font-body);
+}
+
+/* The hero orbits reach past the viewport edge; clip them without adding a scrollbar. */
+main {
+  overflow-x: clip;
 }
 
 a {
@@ -230,6 +237,24 @@ main > section {
   grid-template-columns: minmax(16rem, 26rem) 1fr;
   align-items: center;
   gap: clamp(2rem, 6vw, 5rem);
+}
+
+/* Orbits: the logo's three electron paths, scaled up behind the hero and centered on the logo. */
+.hero {
+  position: relative;
+  isolation: isolate;
+}
+
+.orbits {
+  position: absolute;
+  z-index: -1;
+  top: 50%;
+  left: calc(min(13rem, 18vw) - 30rem);
+  width: 60rem;
+  height: 60rem;
+  translate: 0 -50%;
+  color: var(--orbit);
+  pointer-events: none;
 }
 
 /* One sentence per line. */
@@ -421,7 +446,7 @@ main > section {
 
 .part--data {
   flex-grow: 3;
-  background-image: repeating-linear-gradient(-45deg, var(--grid) 0 6px, transparent 6px 12px);
+  background-image: repeating-linear-gradient(-45deg, var(--hatch) 0 6px, transparent 6px 12px);
 }
 
 .strip figcaption {
@@ -483,6 +508,15 @@ main > section {
 .boards th {
   font-family: var(--font-display);
   font-weight: 650;
+}
+
+.site-footer p {
+  margin: 0.25rem 0;
+}
+
+.site-footer small {
+  color: var(--ink-muted);
+  font-size: 0.9rem;
 }
 
 .site-footer {
@@ -751,6 +785,11 @@ main > section {
 
   .hero__logo {
     width: min(100%, 20rem);
+  }
+
+  .orbits {
+    top: 10rem;
+    left: calc(min(10rem, 50%) - 30rem);
   }
 
   .element {
