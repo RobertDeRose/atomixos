@@ -63,11 +63,11 @@ pkgs.runCommand "nixstasis-module-check" { } ''
   set -euo pipefail
 
   grep -q 'url: https://nixstasis.example.test' ${cfg.environment.etc."nixstasis/config.yaml".source}
+  grep -q 'allow_loopback_http: false' ${cfg.environment.etc."nixstasis/config.yaml".source}
   grep -q 'interface: ${cfg.atomixos.network.wanInterface}' ${
     cfg.environment.etc."nixstasis/config.yaml".source
   }
   grep -q 'interval: 30s' ${cfg.environment.etc."nixstasis/config.yaml".source}
-  grep -q "name: '''" ${cfg.environment.etc."nixstasis/config.yaml".source}
   grep -q 'server_addr: frp.example.test' ${cfg.environment.etc."nixstasis/config.yaml".source}
   grep -q 'http_local_addr: 127.0.0.1:443' ${cfg.environment.etc."nixstasis/config.yaml".source}
   grep -q 'ssh_local_port: 22' ${cfg.environment.etc."nixstasis/config.yaml".source}
@@ -99,6 +99,18 @@ pkgs.runCommand "nixstasis-module-check" { } ''
     builtins.toJSON (
       cfg.systemd.services.nixstasis-registration.environment.NIXSTASIS_FRPC_CONFIG_PATH
       == "${cfg.atomixos.nixstasis.package}/share/nixstasis/frpc.toml"
+    )
+  } = true
+  test ${
+    builtins.toJSON (
+      cfg.systemd.services.nixstasis-registration.environment.NIXSTASIS_REGISTRATION_PATH
+      == "/data/nixstasis/registration"
+    )
+  } = true
+  test ${
+    builtins.toJSON (
+      cfg.systemd.services.nixstasis-poll.environment.NIXSTASIS_COMMAND_POLICY_PATH
+      == "/data/nixstasis/command-policy.json"
     )
   } = true
   test ${

@@ -10,13 +10,15 @@ let
   cfg = config.atomixos.nixstasis;
   clientPackage = cfg.package;
   settings = {
-    api.url = cfg.apiUrl;
+    api = {
+      url = cfg.apiUrl;
+      allow_loopback_http = cfg.allowLoopbackHttp;
+    };
     identity.interface = cfg.identityInterface;
     poll.interval = cfg.pollInterval;
     scripts.dir = cfg.scriptsDir;
     frp = {
       auth_token = "";
-      name = cfg.frp.name;
       server_addr = cfg.frp.serverAddr;
       server_port = cfg.frp.serverPort;
       web_server_addr = cfg.frp.webServerAddr;
@@ -44,6 +46,8 @@ let
   commonEnvironment = {
     NIXSTASIS_CONFIG_FILE = "/etc/nixstasis/config.yaml";
     NIXSTASIS_IDENTITY_PATH = "${toString cfg.stateDir}/id";
+    NIXSTASIS_REGISTRATION_PATH = "${toString cfg.stateDir}/registration";
+    NIXSTASIS_COMMAND_POLICY_PATH = "${toString cfg.stateDir}/command-policy.json";
     NIXSTASIS_FRPC_BINARY_PATH = "${clientPackage}/libexec/nixstasis/frpc";
     NIXSTASIS_FRPC_CONFIG_PATH = "${clientPackage}/share/nixstasis/frpc.toml";
   };
@@ -92,6 +96,15 @@ in
       description = "Base URL for the Nixstasis API.";
     };
 
+    allowLoopbackHttp = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Allow plain HTTP when apiUrl is a loopback address. For local tests only; the client
+        otherwise requires HTTPS.
+      '';
+    };
+
     identityInterface = lib.mkOption {
       type = lib.types.str;
       default = config.atomixos.network.wanInterface or "wan";
@@ -116,17 +129,11 @@ in
 
     scriptsDir = lib.mkOption {
       type = lib.types.str;
-      default = "/usr/libexec/nixstasis/scripts";
+      default = "/var/lib/nixstasis/scripts";
       description = "Directory where Nixstasis runtime scripts are discovered.";
     };
 
     frp = {
-      name = lib.mkOption {
-        type = lib.types.str;
-        default = "";
-        description = "Optional FRP proxy name override.";
-      };
-
       serverAddr = lib.mkOption {
         type = lib.types.str;
         example = "nixstasis.example.com";
