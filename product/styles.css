@@ -1,6 +1,6 @@
 /*
- * AtomixOS product page: faint electron orbits behind the original logo in the hero, then a periodic table of AtomixOS
- * features grouped into color-coded families. Colors come from the atom logo.
+ * AtomixOS product page: a field of free electrons that drift as you scroll (field.js), the original logo in the hero,
+ * and a periodic table of AtomixOS features grouped into color-coded families. Colors come from the atom logo.
  * site:build copies the font files into fonts/ from the docs' npm packages.
  */
 
@@ -43,7 +43,9 @@
   --on-electron: #ffffff;
   --silver: #c3cfdf;
   --hatch: rgba(28, 100, 209, 0.07);
-  --orbit: rgba(28, 100, 209, 0.16);
+  /* Electron field color (r, g, b) and strength, read by field.js. */
+  --electron-rgb: 28, 100, 209;
+  --electron-glow: 0.55;
   --glow: rgba(58, 157, 240, 0.14);
   --line: rgba(19, 35, 63, 0.16);
 
@@ -69,7 +71,8 @@
   --on-electron: #07122a;
   --silver: #3b4d6b;
   --hatch: rgba(108, 180, 255, 0.07);
-  --orbit: rgba(108, 180, 255, 0.14);
+  --electron-rgb: 108, 180, 255;
+  --electron-glow: 0.8;
   --glow: rgba(58, 157, 240, 0.16);
   --line: rgba(221, 232, 247, 0.16);
 
@@ -103,9 +106,14 @@ body {
   font: 400 1.125rem/1.6 var(--font-body);
 }
 
-/* The hero orbits reach past the viewport edge; clip them without adding a scrollbar. */
-main {
-  overflow-x: clip;
+/* The electron field sits behind everything and never takes input. */
+.field {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
 }
 
 a {
@@ -237,24 +245,6 @@ main > section {
   grid-template-columns: minmax(16rem, 26rem) 1fr;
   align-items: center;
   gap: clamp(2rem, 6vw, 5rem);
-}
-
-/* Orbits: the logo's three electron paths, scaled up behind the hero and centered on the logo. */
-.hero {
-  position: relative;
-  isolation: isolate;
-}
-
-.orbits {
-  position: absolute;
-  z-index: -1;
-  top: 50%;
-  left: calc(min(13rem, 18vw) - 30rem);
-  width: 60rem;
-  height: 60rem;
-  translate: 0 -50%;
-  color: var(--orbit);
-  pointer-events: none;
 }
 
 /* One sentence per line. */
@@ -511,15 +501,21 @@ main > section {
 }
 
 .site-footer p {
-  margin: 0.25rem 0;
+  margin: 0;
 }
 
-.site-footer small {
+.site-footer__copyright {
   color: var(--ink-muted);
-  font-size: 0.9rem;
+  font-size: 0.95rem;
 }
 
+/* Copyright on the left, credit on the right; they stack on narrow screens. */
 .site-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 2rem;
   max-width: 72rem;
   margin: 0 auto;
   padding: 2rem 1.5rem 3rem;
@@ -787,10 +783,6 @@ main > section {
     width: min(100%, 20rem);
   }
 
-  .orbits {
-    top: 10rem;
-    left: calc(min(10rem, 50%) - 30rem);
-  }
 
   .element {
     width: min(100%, 14rem);

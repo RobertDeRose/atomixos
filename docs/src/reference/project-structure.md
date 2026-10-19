@@ -111,7 +111,7 @@ docs/
     pages/                         Optional standalone React pages
   src/                             Documentation content; README.mdx is the docs introduction
 
-product/                           Product page at the Pages root (index.html, styles.css, theme.js, elements.js)
+product/                           Product page at the Pages root (index.html, styles.css, and its scripts)
 
 _typos.toml                        Typos checker config
 ```
