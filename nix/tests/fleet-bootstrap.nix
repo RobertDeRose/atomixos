@@ -119,7 +119,7 @@ let
       fi
       ${pkgs.coreutils}/bin/sleep 1
     done
-    test -e /tmp/nixstasis-fleet/upload-succeeded
+    test -e /data/fleet-bootstrap-upload-succeeded
 
     while true; do
       ${pkgs.coreutils}/bin/sleep 1
