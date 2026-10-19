@@ -14,6 +14,8 @@ modules/
   base.nix                         Shared NixOS config (systemd, ssh, auth, closure opts)
   build-configuration.nix          Effective build-policy mapping and immutable audit files
   hardware-rock64.nix              RK3328 kernel, DTB, eMMC/watchdog drivers
+  hardware-cm3.nix                 Radxa CM3 IO (RK3566) kernel, DTB, eMMC paths, env location
+  hardware-rockchip.nix            Settings shared by the Rockchip board modules
   hardware-qemu.nix                QEMU aarch64-virt target for testing
   networking.nix                   NIC naming (.link files), wan/lan config
   firewall.nix                     nftables rules (WAN/LAN/VPN/FORWARD)
@@ -35,10 +37,20 @@ nix/
   rauc-bundle.nix                  Multi-slot RAUC bundle derivation
   boot-script.nix                  U-Boot boot.scr compilation
   image.nix                        Flashable eMMC disk image derivation
+  uboot.nix                        ROCK64 U-Boot (SPI env, RAUC bootmeth, UMS)
+  uboot-cm3.nix                    Radxa CM3 IO U-Boot (redundant eMMC env, RAUC bootmeth, UMS)
+  uboot-start-ums.nix              Shared U-Boot PREBOOT for START_UMS recovery
+  uboot-sandbox.nix                U-Boot sandbox binary for running boot scripts on the build host
+  rtl815x-firmware.nix             Realtek USB NIC firmware blobs shared by both boards
   tests/                           Evaluation, command, and NixOS VM integration tests
     build-configuration.nix        Schema, provenance, option, and sidecar assertions
     build-config-workflow.nix      Wrapper/task/retained-root command test derivation
     build-config-workflow.sh       Isolated fake-Nix workflow scenarios
+    cm3-board.nix                  CM3 storage, RAUC, and resolved U-Boot config agreement
+    boot-partition-size.nix        Boot slot overflow reporting
+    uboot-scripts.nix              boot.scr and PREBOOT executed in the U-Boot sandbox
+    os-upgrade-query.nix           Stubbed os-upgrade query and compatible checks
+    os-upgrade-query.sh            os-upgrade-query scenarios
     rauc-slots.nix                 RAUC slot detection + custom backend
     rauc-update.nix                Bundle install + slot switch
     rauc-rollback.nix              Install -> mark-bad -> rollback

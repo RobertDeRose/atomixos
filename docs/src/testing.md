@@ -140,7 +140,12 @@ Additional flake-only checks:
 | `fleet-bootstrap`             | 1     | Loopback fleet socket, named AtomixOS route profile, Host rewrite, withdrawal, and token secrecy                   |
 | `watchdog-module`             | 0     | Watchdog option defaults and opt-in systemd manager settings                                                       |
 | `build-configuration`         | 0     | Schema, canonical policy, provenance, module mapping, and sidecar inputs                                           |
-| `build-config-workflow`       | 0     | Local override wrapper, task matrix, Lima behavior, and atomic retained links                                      |
+| `build-config-workflow`       | 0     | Local override wrapper, task matrix, Lima behavior, and per-board retained GC roots                                |
+| `cm3-board`                   | 0     | CM3 eMMC paths and RAUC compatible; every U-Boot setting survives into the resolved `.config`; env order           |
+| `boot-partition-size`         | 0     | An oversized boot payload fails with a size breakdown; a fitting one builds                                        |
+| `uboot-scripts`               | 0     | U-Boot sandbox runs `boot.scr` (failed loads reset, `START_UMS`) and the `PREBOOT`; also a CI job                  |
+| `device-tree-overlay`         | 0     | Boot slot DTB comes from the NixOS device-tree package with overlays; ROCK64 watchdog overlay wiring               |
+| `os-upgrade-query`            | 0     | Update query sends `X-Compatible`; another board's bundle is skipped before download                               |
 | `watchdog-missing-device`     | 1     | Enabled policy without hardware boots, preserves RAUC state, and emits an actionable warning                       |
 | `kernel-security`             | 1     | BPF LSM/BTF support is active, runtime `kernel.panic` is 10, and unsupported startup diagnostics are absent        |
 | `interface-naming`            | 1     | WAN and LAN are renamed to `wan`/`lan` by hardware match, whichever NIC registers first                            |

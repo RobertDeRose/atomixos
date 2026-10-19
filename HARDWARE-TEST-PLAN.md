@@ -1,7 +1,6 @@
 # Hardware Test Plan
 
-Physical verification of AtomixOS on Rock64 (RK3328). Covers the 18 remaining tasks that cannot be validated in
-software alone.
+Physical verification of AtomixOS on Rock64 (RK3328). Covers the checks that cannot be validated in software alone.
 
 ## Prerequisites
 
@@ -12,8 +11,8 @@ software alone.
 - USB Bluetooth dongle
 - Laptop or second device on the LAN switch for client-side verification
 - Serial console cable (USB-to-TTY, 1500000 baud, ttyS2) -- highly recommended for U-Boot and early boot debugging
-- Built image: `result-image/atomixos-25.11.img`
-- Built RAUC bundle: `result-rauc-bundle/`
+- Built image: `.gcroots/rock64/current/image/atomixos-rock64-<release>.img` (from `mise run build`)
+- Built RAUC bundle: `.gcroots/rock64/current/rauc-bundle/rock64.raucb`
 
 ## Phase 1: Provisioning and First Boot
 
@@ -21,11 +20,11 @@ software alone.
 
 ```sh
 # Flash with mise
-mise run build
-mise run flash /dev/diskN
+mise run build --board rock64
+mise run flash --board rock64 /dev/diskN
 
 # Or with dd directly
-dd if=atomixos-25.11.img of=/dev/mmcblkN bs=4M status=progress
+dd if=.gcroots/rock64/current/image/atomixos-rock64-<release>.img of=/dev/mmcblkN bs=4M status=progress
 ```
 
 ### Task 8.8 -- Provisioning boots to multi-user.target
@@ -304,7 +303,7 @@ Copy the RAUC bundle to the device and install:
 
 ```sh
 # From your workstation
-scp result-rauc-bundle/*.raucb admin@172.20.30.1:/tmp/
+scp .gcroots/rock64/current/rauc-bundle/rock64.raucb admin@172.20.30.1:/tmp/
 
 # On the device
 rauc install /tmp/*.raucb

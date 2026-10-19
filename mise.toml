@@ -9,24 +9,24 @@ lockfile_platforms = ["macos-arm64", "linux-arm64", "linux-x64"]
 [tools]
 "aqua:Mic92/nixfmt-rs" = "latest"
 "cargo:deadnix" = "latest"
-"github:KevinGimbel/mktoc" = "5.1.1"
-"github:badboy/mdbook-mermaid" = "0.17.1"
-"github:joshrotenberg/mdbook-lint" = "0.16.1"
-"npm:@commitlint/cli" = "21.2.3"
+"github:KevinGimbel/mktoc" = "latest"
+"github:RobertDeRose/mdbook-mermaid" = "latest"
+"github:joshrotenberg/mdbook-lint" = "latest"
+"npm:@commitlint/cli" = "latest"
 "npm:@contextlint/cli" = { version = "latest", aube_args = "--allow-low-downloads" }
-"npm:markdown-table-formatter" = "1.7.0"
-actionlint = "1.7.12"
+"npm:markdown-table-formatter" = "latest"
+actionlint = "latest"
 cargo-binstall = "latest"
 cocogitto = "latest"
-hk = "2.0.1"
+hk = "latest"
 node = "lts"
-pkl = "0.32.1"
-ruff = "0.16.8"
-rumdl = "0.2.75"
-shellcheck = "0.11.0"
-shfmt = "3.14.1"
-tombi = "1.5.5"
-typos = "1.50.2"
+pkl = "latest"
+ruff = "latest"
+rumdl = "latest"
+shellcheck = "latest"
+shfmt = "latest"
+tombi = "latest"
+typos = "latest"
 uv = "latest"
 "github:rust-lang/mdbook" = "latest"
 
@@ -70,52 +70,64 @@ limactl start "${usage_vm}" 2>/dev/null || true
 [tasks."build:squashfs"]
 description = "Build squashfs rootfs"
 usage = """
+flag "--board <board>" help="Target board" default="rock64" {
+  choices "rock64" "cm3"
+}
 flag "--lima" help="Build inside a Lima VM"
 flag "--vm <name>" help="Lima VM instance name" default="default"
 """
 run = """
 #!/usr/bin/env bash
 set -euo pipefail
+board="${usage_board:-rock64}"
 cmd=()
 if [ "${usage_lima:-false}" = "true" ]; then
   mise run _lima "${usage_vm}"
   cmd+=(limactl shell "${usage_vm}" --)
 fi
-"${cmd[@]}" ./scripts/nix-with-build-config.sh build .#squashfs -o result-squashfs
+"${cmd[@]}" ./scripts/nix-with-build-config.sh build ".#$board.squashfs" -o "result-$board-squashfs"
 """
 
 [tasks."build:rauc-bundle"]
 description = "Build signed RAUC bundle"
 usage = """
+flag "--board <board>" help="Target board" default="rock64" {
+  choices "rock64" "cm3"
+}
 flag "--lima" help="Build inside a Lima VM"
 flag "--vm <name>" help="Lima VM instance name" default="default"
 """
 run = """
 #!/usr/bin/env bash
 set -euo pipefail
+board="${usage_board:-rock64}"
 cmd=()
 if [ "${usage_lima:-false}" = "true" ]; then
   mise run _lima "${usage_vm}"
   cmd+=(limactl shell "${usage_vm}" --)
 fi
-"${cmd[@]}" ./scripts/nix-with-build-config.sh build .#rauc-bundle -o result-rauc-bundle
+"${cmd[@]}" ./scripts/nix-with-build-config.sh build ".#$board.rauc-bundle" -o "result-$board-rauc-bundle"
 """
 
 [tasks."build:boot-script"]
 description = "Build U-Boot boot script"
 usage = """
+flag "--board <board>" help="Target board" default="rock64" {
+  choices "rock64" "cm3"
+}
 flag "--lima" help="Build inside a Lima VM"
 flag "--vm <name>" help="Lima VM instance name" default="default"
 """
 run = """
 #!/usr/bin/env bash
 set -euo pipefail
+board="${usage_board:-rock64}"
 cmd=()
 if [ "${usage_lima:-false}" = "true" ]; then
   mise run _lima "${usage_vm}"
   cmd+=(limactl shell "${usage_vm}" --)
 fi
-"${cmd[@]}" ./scripts/nix-with-build-config.sh build .#boot-script -o result-boot-script
+"${cmd[@]}" ./scripts/nix-with-build-config.sh build ".#$board.boot-script" -o "result-$board-boot-script"
 """
 
 [tasks."vm:bundle-test"]
@@ -203,16 +215,19 @@ exec "$host_runner"
 """
 
 [tasks.build]
-description = "Build artifacts and retain the last 2 distinct images"
+description = "Build every artifact for a board into .gcroots/<board>/current, keeping the previous build"
 usage = """
+flag "--board <board>" help="Target board" default="rock64" {
+  choices "rock64" "cm3"
+}
 flag "--lima" help="Build inside a Lima VM"
 flag "--vm <name>" help="Lima VM instance name" default="default"
-flag "-o --output <path>" help="Copy .img to this path (default: cwd)"
+flag "-o --output <path>" help="Copy .img to this path (default: retain under .gcroots)"
 """
 run = "./scripts/build.sh"
 
 [tasks.gc]
-description = "Garbage collect unrooted Nix store paths"
+description = "Garbage collect Nix store paths not kept by .gcroots/<board>/ or other roots"
 usage = """
 flag "--lima" help="Run inside a Lima VM"
 flag "--vm <name>" help="Lima VM instance name" default="default"

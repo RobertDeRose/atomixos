@@ -76,7 +76,7 @@ let
     builtins.any (
       package: nixlib.getName package == "watchdog-boot-count"
     ) evaluatedConfig.environment.systemPackages;
-  ubootEnvTools = toString self.packages.${system}.uboot-env-tools;
+  ubootEnvTools = toString self.packages.${system}.rock64.uboot-env-tools;
   customService = customRauc.systemd.services.watchdog-boot-count;
   ubootService = ubootRauc.systemd.services.watchdog-boot-count;
   serviceContract =

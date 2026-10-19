@@ -1,50 +1,69 @@
 # Developer tooling
 
-The repository uses mise to provide project tools and named tasks. Install mise, then run:
+[mise](https://mise.jdx.dev/) manages every developer tool, its version, the repository hooks, and the named tasks.
+`mise.toml` declares the tools and tasks; `mise.lock` pins the resolved downloads. Install mise, then run:
 
 ```bash
 mise install --locked
 ```
 
-Use the same commands locally and in automation:
+That installs the locked tools and, through the `postinstall` hook, the repository-local hk Git hooks. Nothing else
+needs a separate install step. The hook runs `hk install --mise` only when hk is on the `PATH`, so a partial install,
+such as the pytest job's uv-only install, skips Git hook setup instead of logging a failed hook.
 
-```bash
-mise run check
-mise run fix
-mise run docs:build
-mise run docs:deployment:enable
-mise run docs:serve
-```
+`check` is read-only and runs the hk quality gate (no Nix evaluation). `fix` changes the working tree. The pre-commit
+hook runs the hk check/fix steps from `hk.pkl`; the commit-message hook enforces the rules below. Run `cog changelog`
+to preview the user-facing changelog.
 
-`check` is read-only and delegates to the hk quality gate. `fix` changes the working tree. Contextlint checks links,
-anchors, and image targets across README and `docs/**/*.md`. The pre-commit hook may fix files while safely stashing
-unrelated unstaged work. The commit-message hook enforces Conventional Commits, required scopes for changelog-visible
-changes, 72/100-character line limits, and canonical optional `Beads:` footers. Run `cog changelog` to preview
-the concise user-facing changelog. The hk policy uses native built-in steps whenever their behavior matches;
-hk's file locking coordinates independent steps. No dependency chain serializes unrelated checks. Go projects retain two
-output-sensitive edges: `gofumpt` follows `goimports`, then fix-only module tidy observes the final imports.
+`mise.toml` requests every tool as `latest` (Node as `lts`); `mise.lock` pins the exact version and download for each, so
+installs stay reproducible until the lock changes. To upgrade tools, run `mise lock`, review the version changes in the
+lock diff, and commit it. To add a tool, add it to `mise.toml` as `latest` and run `mise lock`.
 
-Mise installs the pinned `commitlint` CLI directly from `mise.toml` and `mise.lock`; the repository has no separate npm
-install step or root Node package manifest.
+## Tasks
 
-No recognized language profile is active; only the universal tooling baseline runs.
+| Task                     | Behavior                                                              |
+|--------------------------|-----------------------------------------------------------------------|
+| `check`                  | Run all hk checks without requesting fixes.                           |
+| `fix`                    | Apply deterministic hk fixes to the working tree.                     |
+| `docs:build`             | Build the mdBook site.                                                |
+| `docs:deployment:enable` | Configure Pages and enable its repository gate through external `gh`. |
+| `docs:serve`             | Serve mdBook on port 3000 by default or a supplied port.              |
+
+The committed lock targets the `lockfile_platforms` in `mise.toml`: `linux-x64`, `linux-arm64`, and `macos-arm64`.
+Intel Macs (`macos-x64`) are not targeted, since hk and nixfmt-rs publish no release for them. Windows is not supported.
+
+The mise environment routes hooks through mise with `HK_MISE=1` and sets `GIT_CONFIG_PARAMETERS="'merge.ff=only'"`, so
+Git rejects merges that require a merge commit.
+
+## Files
+
+| File                                | Contract                                                                  |
+|-------------------------------------|---------------------------------------------------------------------------|
+| `mise.toml`                         | Declares project tools, environment, hooks, and named tasks.              |
+| `mise.lock`                         | Project-owned resolved downloads; commit it.                              |
+| `hk.pkl`                            | Defines the shared check/fix/pre-commit/commit-msg step map.              |
+| `.config/rumdl.toml`                | Configures Markdown linting and deterministic fixes.                      |
+| `.editorconfig`                     | Keeps editor output on UTF-8, LF, final newlines, and no trailing spaces. |
+| `_typos.toml`                       | Ignores hash-like identifiers while retaining typo checks elsewhere.      |
+| `contextlint.config.json`           | Checks documentation links, anchors, and image targets.                   |
+| `cog.toml`                          | Configures Conventional Commits and concise changelogs.                   |
+| `.config/cog-changelog.tera`        | Renders plain Markdown changelogs without author noise.                   |
+| `scripts/enable-docs-deployment.py` | Configures workflow-built Pages through external `gh`.                    |
+| `.github/workflows/hk.yml`          | Runs the hk quality checks on pull requests and manual dispatches.        |
+| `.github/workflows/nix.yml`         | Evaluates the flake per platform; runs U-Boot scripts in a sandbox.       |
+| `.github/workflows/docs.yml`        | Builds gated docs from the default branch or manual dispatch.             |
+| `.github/workflows/pytest.yml`      | Runs provisioning package tests on aarch64 Linux for PRs and dispatches.  |
 
 ## GitHub validation
 
-`.github/workflows/hk.yml` runs formatting, linting, and documentation checks on pull requests and manual dispatches.
-It uses `mise-action` with tool installation disabled, then runs `mise x -- hk check -a` on `ubuntu-latest`.
-Mise provides hk and its tools when executing the command; there is no separate tool-install step or Nix evaluation
-in this workflow.
-
-`.github/workflows/nix.yml` independently evaluates Nix on the same events. It installs Nix on `ubuntu-26.04-arm`
-(`aarch64-linux`) and `macos-latest` (`aarch64-darwin`). Each runner verifies its Nix platform, then evaluates it with
-`flake check --no-build --system <system>`. Evaluating platforms separately reduces peak evaluator memory compared
-with checking both platforms in one process. The hk and Nix jobs have a 45-minute limit.
-
-PR validation checks flake evaluation without building packages or executing NixOS VM tests. Full build and VM
-validation remains available locally through `./scripts/nix-with-build-config.sh flake check` or individual
-`nix build` commands, separately from `mise run check`. Darwin VM tests
-need a Mac with the Linux builder configured. See [GitHub's runner limitations](https://docs.github.com/en/actions/reference/runners/github-hosted-runners#limitations-for-arm64-macos-runners).
+`.github/workflows/hk.yml` runs `mise x -- hk check -a` (formatting, linting, and documentation checks) on pull
+requests and manual dispatches. `.github/workflows/nix.yml` independently evaluates the flake with
+`flake check --no-build --system <system>` on `aarch64-linux` and `aarch64-darwin` runners. In parallel, its
+`uboot-scripts` job builds `checks.aarch64-linux.uboot-scripts`: a U-Boot sandbox binary that executes the compiled
+`boot.scr` and the `START_UMS` `PREBOOT`, because U-Boot only parses those scripts at boot time. No workflow builds
+images, runs NixOS VM tests, or regenerates the lock. Full build and VM validation stays local through
+`./scripts/nix-with-build-config.sh flake check` or individual `nix build` commands, separately from `mise run check`.
+The hk and Nix jobs have a 45-minute limit.
 
 `.github/workflows/pytest.yml` runs the provisioning package test suite on the same events. It runs on
 `ubuntu-26.04-arm`, matching the device's aarch64 Linux file APIs, which macOS host runs only emulate. It executes
@@ -52,24 +71,11 @@ need a Mac with the Linux builder configured. See [GitHub's runner limitations](
 The interpreter pin matches the Python series that the pinned nixpkgs `python3` provides on the device. The job has a
 15-minute limit.
 
-CI does not regenerate the lock. Dependency-update branches and fork PRs are not excluded from the pull-request gate.
+## Commit messages and changelogs
 
-## Hooks and recovery
+Changelog-visible `feat`, `fix`, `perf`, and `refactor` commits require a semantic scope. The commit hook also checks
+Conventional Commit syntax, a 72-character subject, 100-character body lines, and canonical optional `Beads:` footers.
+Internal build, chore, CI, documentation, release, style, and test commits are omitted from `cog changelog`.
 
-Setup installs repository-local hk hooks when the destination is a Git repository. The mise `postinstall` hook runs
-`hk install --mise` only when hk is on the `PATH`, so a partial install such as the pytest job's uv-only install skips
-Git hook setup instead of logging a failed hook. To restore tooling after an offline or degraded setup, run:
-
-```bash
-python3 scripts/setup-tooling.py --json
-```
-
-The command gives lock, install, and hook stages one temporary `MISE_CONFIG_DIR`, removes inherited global config
-overrides, and deletes the temporary directory on exit. It preserves the scaffold on failure, reports the failed stage,
-and uses the same command above for recovery. Nixfmt lock normalization recognizes the Aqua backend, requires Linux
-x64/ARM64 and macOS ARM64 entries, and removes the unsupported macOS x64 entry. A repository created without Git can
-install hooks after Git initialization with:
-
-```bash
-python3 scripts/setup-tooling.py --json
-```
+To constrain scopes, add a `scopes = ["..."]` allowlist to `cog.toml`, document each stable subsystem in README, and
+update `AGENTS.md` so agents apply the same taxonomy. Run `cog check` after changing the allowlist.

@@ -5,7 +5,6 @@
   config,
   lib,
   pkgs,
-  self,
   ...
 }:
 
@@ -119,7 +118,7 @@ in
         watchdogBootCountCli
       ]
       ++ lib.optionals (config.atomixos.rauc.bootloader == "uboot") [
-        self.packages.${pkgs.stdenv.hostPlatform.system}.uboot-env-tools
+        config.atomixos.ubootEnvTools
       ];
       serviceConfig = {
         Type = "oneshot";

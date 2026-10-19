@@ -39,6 +39,9 @@
     CONFIG_BOOTMETH_RAUC_BOOT_ORDER="A B"
     CONFIG_BOOTMETH_RAUC_DEFAULT_TRIES=3
     CONFIG_BOOTMETH_RAUC_RESET_ALL_ZERO_TRIES=y
+    # The default "bootflow scan" stops at the prompt when the selected slot
+    # fails to boot. Reset instead so the decremented try counter falls back.
+    CONFIG_BOOTCOMMAND="bootflow scan; reset"
 
     # ── Recovery mode over USB OTG ────────────────────────────────────────
     # If the reset button is held during boot, boot.cmd drops into `ums`
@@ -62,7 +65,8 @@
 
     # ── FAT write support (for slot_good flag file from Linux) ────────────
     CONFIG_FAT_WRITE=y
-  '';
+  ''
+  + import ./uboot-start-ums.nix;
 }).overrideAttrs
   (old: {
     postPatch = (old.postPatch or "") + ''

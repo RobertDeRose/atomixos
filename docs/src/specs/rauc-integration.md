@@ -59,7 +59,7 @@ atomically to the target slot pair.
 
 #### Scenario: Bundle structure
 
-- Given a bundle is built with `nix build .#rauc-bundle`
+- Given a bundle is built with `nix build .#rock64.rauc-bundle`
 - When `rauc info` is run on the bundle
 - Then it shows an image for `boot` (type: raw) and an image for `rootfs` (type: raw)
 - And the `compatible` field is `rock64`
@@ -76,6 +76,13 @@ hawkBit path is reserved for future server-push updates.
 - Then the bundle is downloaded to `/data`
 - And `rauc install` is run
 - And the device reboots into the new slot
+
+#### Scenario: Polling identifies the board
+
+- Given a device whose RAUC compatible is `radxa-cm3-io`
+- When the timer fires
+- Then the update query includes `X-Compatible: radxa-cm3-io`
+- And a response whose `compatible` is `rock64` is skipped without downloading the bundle
 
 ### ADDED: Swappable with hawkBit
 

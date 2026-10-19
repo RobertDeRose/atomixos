@@ -1,12 +1,12 @@
 # Installs boot storage debug tools and runs a oneshot service ordered after rauc.service to record storage diagnostics.
 {
+  config,
   pkgs,
-  self,
   ...
 }:
 
 let
-  ubootEnvTools = self.packages.${pkgs.stdenv.hostPlatform.system}.uboot-env-tools;
+  ubootEnvTools = config.atomixos.ubootEnvTools;
   debugScript = pkgs.writeShellScript "boot-storage-debug" (
     builtins.readFile ../scripts/boot-storage-debug.sh
   );

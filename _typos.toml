@@ -15,3 +15,7 @@ som = "som"
 Synopsys = "Synopsys"
 # The unified ecosystem's `devlop` package is spelled this way upstream.
 devlop = "devlop"
+
+[files]
+# Generated mise npm lockfiles carry third-party package names (e.g. devlop).
+extend-exclude = [".mise/locks/"]

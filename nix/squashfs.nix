@@ -6,6 +6,7 @@
   closureInfo,
   nixosConfig,
   maxSquashfsSize,
+  board ? nixosConfig.atomixos.board,
 }:
 
 let
@@ -31,7 +32,7 @@ let
   };
 in
 stdenv.mkDerivation {
-  name = "rock64-squashfs";
+  name = "${board}-squashfs";
   version = "0.1.0";
 
   nativeBuildInputs = [ squashfsTools ];

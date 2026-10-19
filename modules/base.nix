@@ -17,12 +17,21 @@ let
   partitionLayout = import ../nix/partition-layout.nix;
 in
 {
+  options.atomixos.board = lib.mkOption {
+    type = lib.types.enum [
+      "rock64"
+      "cm3"
+    ];
+    default = "rock64";
+    description = "Board-specific U-Boot environment tools and hardware integration.";
+  };
+
   options.atomixos.serialRootDebug.enable = lib.mkOption {
     type = lib.types.bool;
     default = false;
     description = ''
-      Enable the Rock64 serial-only root debug escape hatch triggered by the
-      `_RUT_OH_` U-Boot environment variable.
+      Enable the serial-only root debug escape hatch triggered by the
+      `_RUT_OH_` U-Boot environment variable. Every hardware board enables it.
     '';
   };
 
@@ -363,6 +372,8 @@ in
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
+        # Longer than the script's 90s device wait, so its error is the one seen.
+        TimeoutStartSec = "120s";
       };
       path = [
         pkgs.coreutils
@@ -389,6 +400,23 @@ in
           echo "initrd-prepare-overlay-lower: missing atomixos.lowerdev= kernel parameter" >&2
           exit 1
         fi
+
+        # The slot device is only known from the command line, so no unit can
+        # order on it. initrd-root-device.target does not wait for it either,
+        # and eMMC can probe late (CM3 sdhci waits on PMIC regulators), so wait
+        # for the block device rather than failing into emergency mode.
+        waited=0
+        until [ -b "$lower_device" ]; do
+          if [ "$waited" -ge 900 ]; then
+            echo "initrd-prepare-overlay-lower: $lower_device did not appear within 90s" >&2
+            exit 1
+          fi
+          if [ "$waited" -eq 0 ]; then
+            echo "initrd-prepare-overlay-lower: waiting for $lower_device"
+          fi
+          sleep 0.1
+          waited=$((waited + 1))
+        done
 
         /bin/mkdir -p /run/rootfs-base
         /bin/mount -t "$lower_fstype" -o ro "$lower_device" /run/rootfs-base
@@ -560,11 +588,11 @@ in
 
     users.mutableUsers = false;
     # This appliance intentionally ships without any built-in login credential.
-    # The admin SSH key is provisioned onto /data on first boot, and Rock64 has
-    # a separate physical serial recovery path via `_RUT_OH_`.
+    # The admin SSH key is provisioned onto /data on first boot, and every
+    # hardware board has a separate physical serial recovery path via `_RUT_OH_`.
     users.allowNoPasswordLogin = true;
 
-    # Root stays locked by default. Rock64 can still expose a physical
+    # Root stays locked by default. Hardware boards can still expose a physical
     # serial-only root recovery path separately via `_RUT_OH_`.
     users.users.root = {
       hashedPassword = "!";
