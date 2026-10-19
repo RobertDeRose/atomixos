@@ -24,6 +24,15 @@ lib.mkMerge [
   (lib.optionalAttrs (options ? atomixos.rauc.enable) {
     atomixos.rauc.enable = lib.mkDefault false;
   })
+  # VMs keep kernel names: the NixOS test driver wires NICs in a fixed order and
+  # tests address them as ethN.
+  (lib.optionalAttrs (options ? atomixos.network.wanInterface) {
+    atomixos.network = {
+      wanInterface = lib.mkDefault "eth0";
+      lanInterface = lib.mkDefault "eth1";
+      lanLinkMatch = lib.mkDefault null;
+    };
+  })
   {
     # QEMU VM runner uses a regular writable root disk, not the Rock64
     # squashfs+overlay layout from base.nix.

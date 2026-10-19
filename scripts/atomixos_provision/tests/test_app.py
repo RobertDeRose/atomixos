@@ -1139,7 +1139,7 @@ version = 1
 isAdmin = true
 ssh_key = "{VALID_ED25519_KEY} admin@test"
 
-[network.interfaces.eth1]
+[network.interfaces.lan]
 mode = "static"
 address = "172.20.30.1/24"
 

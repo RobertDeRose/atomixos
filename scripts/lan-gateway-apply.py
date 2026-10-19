@@ -34,14 +34,19 @@ NETWORK_FILE = Path(
     )
 )
 HOST_NETWORK_CONFIG_DIR = Path(os.environ.get("ATOMIXOS_HOST_NETWORK_CONFIG_DIR", "/etc/systemd/network"))
-ETH0_NETWORK_DROPIN = Path(
+WAN_NETWORK_DROPIN = Path(
     os.environ.get(
-        "ATOMIXOS_ETH0_NETWORK_DROPIN",
+        "ATOMIXOS_WAN_NETWORK_DROPIN",
         "/etc/systemd/network/10-wan.network.d/50-atomixos.conf",
     )
 )
 ETC_HOSTS_FILE = Path(os.environ.get("ATOMIXOS_ETC_HOSTS_FILE", "/etc/hosts"))
-LAN_INTERFACE = os.environ.get("ATOMIXOS_LAN_INTERFACE", "eth1")
+# Provisioned config names the WAN and LAN interfaces logically ("wan", "lan");
+# these are the board's actual interface names for them.
+WAN_INTERFACE = os.environ.get("ATOMIXOS_WAN_INTERFACE", "wan")
+LAN_INTERFACE = os.environ.get("ATOMIXOS_LAN_INTERFACE", "lan")
+WAN_KEY = "wan"
+LAN_KEY = "lan"
 SYS_CLASS_NET_DIR = Path(os.environ.get("ATOMIXOS_SYS_CLASS_NET_DIR", "/sys/class/net"))
 REQUIRED_STRING_FIELDS = (
     "gateway_cidr",
@@ -53,7 +58,7 @@ REQUIRED_STRING_FIELDS = (
     "domain",
 )
 DNS_LABEL_PATTERN = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
-HOST_INTERFACE_RE = re.compile(r"^eth[0-9]+$")
+HOST_INTERFACE_RE = re.compile(r"^(wan|lan|eth[0-9]+)$")
 
 
 def load_default_ntp_servers() -> list[str]:
@@ -343,6 +348,9 @@ def load_host_network_settings() -> dict[str, object]:
         if not isinstance(name, str) or not HOST_INTERFACE_RE.fullmatch(name):
             msg = f"unsupported interface name in {HOST_NETWORK_FILE}: {name!r}"
             raise ValueError(msg)
+        if name in {WAN_INTERFACE, LAN_INTERFACE} and name not in {WAN_KEY, LAN_KEY}:
+            msg = f"interfaces.{name} is the WAN or LAN interface; configure it as wan or lan in {HOST_NETWORK_FILE}"
+            raise ValueError(msg)
         if not isinstance(value, dict):
             msg = f"interfaces.{name} must be an object in {HOST_NETWORK_FILE}"
             raise ValueError(msg)
@@ -356,7 +364,7 @@ def load_host_network_settings() -> dict[str, object]:
         if mode not in {"dhcp", "static"}:
             msg = f"interfaces.{name}.mode must be dhcp or static in {HOST_NETWORK_FILE}"
             raise ValueError(msg)
-        if name == LAN_INTERFACE and mode != "static":
+        if name == LAN_KEY and mode != "static":
             msg = f"interfaces.{name}.mode must be static because {name} is the LAN gateway in {HOST_NETWORK_FILE}"
             raise ValueError(msg)
         normalized: dict[str, object] = {"mode": mode}
@@ -395,9 +403,9 @@ def network_unit_name(interface: str) -> str:
 
 
 def network_config_path(interface: str) -> Path:
-    if interface == "eth0":
-        return ETH0_NETWORK_DROPIN
-    if interface == LAN_INTERFACE:
+    if interface == WAN_KEY:
+        return WAN_NETWORK_DROPIN
+    if interface == LAN_KEY:
         return NETWORK_FILE
     return HOST_NETWORK_CONFIG_DIR / network_unit_name(interface)
 
@@ -412,7 +420,7 @@ def render_interface_network(
     host_settings: dict[str, object],
     lan_gateway_cidr: str | None = None,
 ) -> str:
-    is_dropin = interface in {"eth0", LAN_INTERFACE}
+    is_dropin = interface in {WAN_KEY, LAN_KEY}
     lines = [] if is_dropin else ["[Match]", f"Name={interface}", ""]
     lines.append("[Network]")
     mode = settings["mode"]
@@ -423,29 +431,26 @@ def render_interface_network(
         lines.append(f"Address={settings['address']}")
         lines.append("DHCP=no")
         lines.append("IPv6AcceptRA=false")
-        if interface == LAN_INTERFACE and settings["address"] != lan_gateway_cidr:
+        if interface == LAN_KEY and settings["address"] != lan_gateway_cidr:
             msg = (
                 f"interfaces.{interface}.address must match gateway_cidr in "
                 f"{CONFIG_FILE} and {HOST_NETWORK_FILE}"
             )
             raise ValueError(msg)
-        if not is_dropin and interface == LAN_INTERFACE:
-            lines.append("DHCPServer=false")
-            lines.append("ConfigureWithoutCarrier=true")
 
     gateway = settings.get("gateway")
-    if not gateway and interface == "eth0":
+    if not gateway and interface == WAN_KEY:
         gateway = host_settings.get("default_gateway")
     if gateway:
         lines.append(f"Gateway={gateway}")
 
-    dns_servers = settings.get("dns_servers")
-    if not dns_servers and interface == "eth0":
+    dns_servers = settings.get("dns_servers", [])
+    if not dns_servers and interface == WAN_KEY:
         dns_servers = host_settings.get("dns_servers", [])
     for server in dns_servers:
         lines.append(f"DNS={server}")
     domains = settings.get("dns_search_domains")
-    if not domains and interface == "eth0":
+    if not domains and interface == WAN_KEY:
         domains = host_settings.get("dns_search_domains", [])
     if domains:
         lines.append(f"Domains={render_domains(domains)}")
@@ -472,8 +477,8 @@ def apply_planned_host_network_settings(planned: dict[Path, str]) -> bool:
     for path, content in planned.items():
         changed = replace_file(path, content) or changed
 
-    if ETH0_NETWORK_DROPIN.exists() and ETH0_NETWORK_DROPIN not in desired_files:
-        ETH0_NETWORK_DROPIN.unlink()
+    if WAN_NETWORK_DROPIN.exists() and WAN_NETWORK_DROPIN not in desired_files:
+        WAN_NETWORK_DROPIN.unlink()
         changed = True
 
     if HOST_NETWORK_CONFIG_DIR.exists():
@@ -496,8 +501,8 @@ def plan_host_network_settings(
         host_settings.get("default_gateway")
         or host_settings.get("dns_servers")
         or host_settings.get("dns_search_domains")
-    ) and "eth0" not in interfaces:
-        interfaces = {"eth0": {"mode": "dhcp"}, **interfaces}
+    ) and WAN_KEY not in interfaces:
+        interfaces = {WAN_KEY: {"mode": "dhcp"}, **interfaces}
 
     planned: dict[Path, str] = {}
     for name, settings in interfaces.items():

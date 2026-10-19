@@ -18,9 +18,9 @@ Persisted device-local state lives on `/data`:
 
 ### SSH Access
 
-- **LAN (eth1)**: Key-only authentication via SSH public key
+- **LAN (lan)**: Key-only authentication via SSH public key
 - **VPN (tun0)**: Key-only authentication via SSH public key
-- **WAN (eth0)**: Disabled by default; enabled only when `/data/config/ssh-wan-enabled` flag file exists
+- **WAN (wan)**: Disabled by default; enabled only when `/data/config/ssh-wan-enabled` flag file exists
 
 ### Physical Recovery
 
@@ -33,7 +33,7 @@ network authentication.
 
 The target remote-management model is Nixstasis-managed enrollment and access:
 
-1. The device identifies itself to Nixstasis using the `eth0` MAC address.
+1. The device identifies itself to Nixstasis using the `wan` MAC address.
 2. Nixstasis checks that MAC against an approved inventory list.
 3. Approved devices receive a device UUID and runtime token, persisted as `/data/nixstasis/id`.
 4. Future device requests authenticate with that runtime identity.
@@ -50,7 +50,7 @@ device. The device remains responsible for SSH, LAN gateway services, update log
 
 ### Device Identity
 
-Each device is identified by the compact lowercase 12-hex MAC address of its onboard Ethernet (eth0). For example,
+Each device is identified by the compact lowercase 12-hex MAC address of its onboard Ethernet (wan). For example,
 `aa:bb:cc:dd:ee:ff` becomes `aabbccddeeff` in the `X-Device-ID` header when polling for updates.
 
 ## SSH Configuration

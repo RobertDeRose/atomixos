@@ -30,7 +30,7 @@ transient service failures, network regressions, and required provisioned-unit f
 
 #### Scenario: Network or required unit regression detected
 
-- Given eth0, eth1, and provisioned required units pass the initial check
+- Given wan, lan, and provisioned required units pass the initial check
 - But one check fails during the 60-second sustain window
 - Then the sustained health check fails
 - And the slot is not committed
@@ -58,20 +58,20 @@ on every boot, so skipping the call would let three plain reboots exhaust the sl
 
 ### ADDED: WAN check separates regressions from outages
 
-The WAN check fails when `eth0` is missing or networkd reports its configuration as failed, because committing such an
+The WAN check fails when `wan` is missing or networkd reports its configuration as failed, because committing such an
 image would strand a device that receives updates over WAN. A missing WAN address only warns: it usually means a cable,
 ISP, or DHCP outage, which must not roll back a working image.
 
 #### Scenario: WAN outage during an update boot
 
-- Given `eth0` exists and is configured but has no address
+- Given `wan` exists and is configured but has no address
 - When the health checks run
 - Then the service logs a warning
 - And the slot is committed if every other check passes
 
 #### Scenario: WAN interface missing after an update
 
-- Given the new image no longer provides `eth0`
+- Given the new image no longer provides `wan`
 - When the health checks run
 - Then the WAN check fails
 - And the slot is not committed

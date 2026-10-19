@@ -40,6 +40,9 @@ platform validation. It is not a general-purpose desktop or server distribution,
 universal router. Application workloads and external fleet-management infrastructure remain deployment-owned, and
 hardware support is added explicitly per board.
 
+AtomixOS has no stability guarantee before `v1.0.0`. Pre-1.0 releases may change interfaces, configuration schemas,
+and on-disk state without a migration path; upgrading across a breaking change requires reprovisioning.
+
 ## Supported Hardware
 
 | Board  | SoC    | Architecture | Storage    |
@@ -60,8 +63,8 @@ hardware support is added explicitly per board.
 
 Each AtomixOS device acts as a gateway between an isolated LAN and the internet:
 
-- **WAN (eth0)**: DHCP client, deny-by-default inbound; application/VPN ports are provisioned explicitly
-- **LAN (eth1)**: Provisioned static IP, runs DHCP/DNS server (dnsmasq) and NTP server (chrony) for local devices
+- **WAN (wan)**: DHCP client, deny-by-default inbound; application/VPN ports are provisioned explicitly
+- **LAN (lan)**: Provisioned static IP, runs DHCP/DNS server (dnsmasq) and NTP server (chrony) for local devices
 - **No routing**: IP forwarding is disabled; LAN devices have zero internet access
 - **Remote management**: Nixstasis-hosted management and SSH key-only access; before initial provisioning the bootstrap
   console is reachable on WAN and LAN, then the socket rebinds to the provisioned LAN gateway

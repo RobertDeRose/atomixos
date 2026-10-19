@@ -10,6 +10,10 @@ Start here when working in this repository.
 - Keep docs durable. Never record transient or variable state in docs: PR numbers or links, commit SHAs, branch
   names, review-pass notes, delivery or merge status, or validation run results. Beads (or Git history) owns that
   state. When editing a doc that already contains such state, remove it rather than updating it.
+- AtomixOS has no stability guarantee before `v1.0.0`. Any pre-1.0 release may break interfaces,
+  configuration schemas, and on-disk state; affected devices are reprovisioned, not upgraded in place.
+  Make breaking changes directly: add no migrations, legacy aliases, compatibility shims, or deprecation
+  periods. Reviewers must not flag missing backward compatibility or upgrade paths as defects.
 
 ## Commit Guidance
 

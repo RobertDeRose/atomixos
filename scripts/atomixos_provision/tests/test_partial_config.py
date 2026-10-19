@@ -114,13 +114,13 @@ def test_patch_network_deep_merges_and_deletes_null_values():
         {
             "dns_servers": ["9.9.9.9"],
             "default_gateway": "192.0.2.1",
-            "interfaces": {"eth0": {"mode": "dhcp"}},
+            "interfaces": {"wan": {"mode": "dhcp"}},
         },
     )
     updated = patch_network(updated, {"default_gateway": None})
 
     assert updated["network"]["dns_servers"] == ["9.9.9.9"]
-    assert updated["network"]["interfaces"]["eth0"]["mode"] == "dhcp"
+    assert updated["network"]["interfaces"]["wan"]["mode"] == "dhcp"
     assert "default_gateway" not in updated["network"]
 
 

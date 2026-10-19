@@ -285,7 +285,7 @@ Allowed keys:
 - `hostname_pattern`
 - `gateway_aliases`
 
-`enable` must remain true and `interface`, when provided, must be `eth1`.
+`enable` must remain true and `interface`, when provided, must be `lan`.
 
 ### `network.ntp`
 

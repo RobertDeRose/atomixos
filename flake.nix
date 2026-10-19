@@ -3,7 +3,7 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
-    nixstasis.url = "github:RobertDeRose/nixstasis/6afcb7641b3cd4ed3db467df26b1b8ffc780f863";
+    nixstasis.url = "github:RobertDeRose/nixstasis/cd9f13e3ae6e665d987c305dde0df8753b22b664";
   };
 
   outputs =
@@ -385,6 +385,7 @@
             chrony-wan-recovery = import ./nix/tests/chrony-wan-recovery.nix netTestArgs;
             network-isolation = import ./nix/tests/network-isolation.nix netTestArgs;
             kernel-security = import ./nix/tests/kernel-security.nix netTestArgs;
+            interface-naming = import ./nix/tests/interface-naming.nix netTestArgs;
             rootless-storage = import ./nix/tests/rootless-storage.nix netTestArgs;
             ssh-wan-toggle = import ./nix/tests/ssh-wan-toggle.nix netTestArgs;
           };

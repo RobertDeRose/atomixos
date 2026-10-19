@@ -92,7 +92,7 @@ let
     test -s "$upload"
     test -n "''${FRPS_AUTH_TOKEN:-}"
     ${pkgs.gnugrep}/bin/grep -F 'type = "http"' "$config"
-    ${pkgs.gnugrep}/bin/grep -F 'subdomain = "fleet-test-provisioning"' "$config"
+    ${pkgs.gnugrep}/bin/grep -F 'subdomain = "atom-22222222222242228222222222222222-provisioning"' "$config"
     ${pkgs.gnugrep}/bin/grep -F 'localIP = "127.0.0.1"' "$config"
     ${pkgs.gnugrep}/bin/grep -F 'localPort = 8080' "$config"
     ${pkgs.gnugrep}/bin/grep -F 'hostHeaderRewrite = "localhost"' "$config"
@@ -119,7 +119,7 @@ let
       fi
       ${pkgs.coreutils}/bin/sleep 1
     done
-    test -e /tmp/nixstasis-fleet/upload-succeeded
+    test -e /data/fleet-bootstrap-upload-succeeded
 
     while true; do
       ${pkgs.coreutils}/bin/sleep 1
@@ -189,9 +189,9 @@ nixos-lib.runTest {
       atomixos.nixstasis = {
         enable = lib.mkForce true;
         apiUrl = lib.mkForce "http://127.0.0.1:4000";
+        allowLoopbackHttp = true;
         pollInterval = "1s";
         frp = {
-          name = "fleet-test";
           serverAddr = lib.mkForce "frps.example.test";
           serverPort = lib.mkForce 7000;
         };
@@ -257,7 +257,7 @@ nixos-lib.runTest {
 
     gateway.succeed("test \"$(cat /tmp/nixstasis-fleet/profile)\" = 'atomixos-bootstrap:1'")
     gateway.succeed("grep -F 'type = \"http\"' /run/nixstasis/frpc.toml")
-    gateway.succeed("grep -F 'subdomain = \"fleet-test-provisioning\"' /run/nixstasis/frpc.toml")
+    gateway.succeed("grep -F 'subdomain = \"atom-22222222222242228222222222222222-provisioning\"' /run/nixstasis/frpc.toml")
     gateway.succeed("grep -F 'localIP = \"127.0.0.1\"' /run/nixstasis/frpc.toml")
     gateway.succeed("grep -F 'localPort = 8080' /run/nixstasis/frpc.toml")
     gateway.succeed("grep -F 'hostHeaderRewrite = \"localhost\"' /run/nixstasis/frpc.toml")

@@ -8,10 +8,14 @@ bootstrap by default; fleet images opt into a separate loopback-only transport a
 The default `bootstrap_transport = "network"` policy preserves the existing local recovery path:
 
 1. The device boots with no embedded remote-management credential.
-2. The Nixstasis client identifies the device using the `eth0` MAC address.
+2. The Nixstasis client identifies the device using the `wan` MAC address. `atomixos.nixstasis.identityInterface`
+   defaults to the WAN interface and renders as the client's `identity.interface`; if that interface is missing,
+   registration fails and heartbeats report no MAC rather than another NIC's MAC.
 3. Nixstasis checks that MAC against an approved inventory list.
 4. If approved, Nixstasis returns a device UUID and runtime token.
-5. The device persists that identity at `/data/nixstasis/id` for future authenticated requests.
+5. The device persists that identity, with the registered MAC, at `/data/nixstasis/id` for future authenticated
+   requests. Until approval, the enrollment proof and MAC live in `/data/nixstasis/registration`, so restarts reuse the
+   same MAC.
 6. Nixstasis can issue short-lived SSH credentials and establish remote sessions through the reverse tunnel managed by
    the device client.
 
@@ -52,6 +56,11 @@ The named route profile, fixed Host rewrite, and server delivery action are owne
 - The runtime token in `/data/nixstasis/id` is the first durable management credential.
 - A separate remote-access lease authorizes the temporary FRP route.
 - FRP credentials are runtime state only and do not enter `build.toml`, derivation metadata, or rendered route files.
+- The client derives the FRP proxy name from the registered device UUID; images cannot configure it.
+- Runtime scripts may run only commands in `atomixos.nixstasis.runtime.execCommands`, and may pass arguments only as
+  exact vectors listed in `runtime.execCommandArgs` under the command's absolute path.
+- The client requires HTTPS for the API. `atomixos.nixstasis.allowLoopbackHttp` permits plain HTTP to a loopback API
+  for tests only.
 - Short-lived SSH credentials are issued dynamically by Nixstasis and expire automatically.
 - Nixstasis-managed SSH keys are stored separately from provisioned operator keys at
   `/data/nixstasis/.ssh/authorized_keys`.

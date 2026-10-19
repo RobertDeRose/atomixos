@@ -60,7 +60,7 @@ Run all Phase 1-4 checks on a freshly provisioned device. This is the meta-task 
 uname -r                             # expect: 6.19.x
 cat /proc/cpuinfo                    # expect: AArch64 Cortex-A53
 lsblk                                # expect: mmcblk1 with p1-p5 partitions
-ip link show eth0                    # expect: onboard stmmac ethernet
+ip link show wan                    # expect: onboard stmmac ethernet
 ls /dev/watchdog*                    # expect: /dev/watchdog0 (dw_wdt)
 dmesg | grep -i 'mmc\|emmc\|dwmmc'  # expect: eMMC detected
 dmesg | grep -i 'stmmac\|ethernet'  # expect: ethernet driver loaded
@@ -89,25 +89,25 @@ hciconfig                            # expect: Bluetooth HCI device (if btusb lo
 
 ## Phase 3: Network Configuration
 
-### Task 5.6 -- Onboard NIC is always eth0
+### Task 5.6 -- Onboard NIC is always wan
 
 ```sh
 # With NO USB ethernet plugged in
-ip link show eth0
-cat /sys/class/net/eth0/device/uevent | grep DRIVER  # expect: stmmac
+ip link show wan
+cat /sys/class/net/wan/device/uevent | grep DRIVER  # expect: stmmac
 
 # Now plug in USB ethernet adapter
 sleep 5
-ip link show                         # expect: eth0 is still onboard, USB NIC is eth1 or ethN
-cat /sys/class/net/eth0/device/uevent | grep DRIVER  # still stmmac
+ip link show                         # expect: wan is still onboard, USB NIC is lan or ethN
+cat /sys/class/net/wan/device/uevent | grep DRIVER  # still stmmac
 ```
 
-**Pass criteria**: `eth0` is always the onboard RK3328 GMAC (stmmac driver), regardless of USB devices.
+**Pass criteria**: `wan` is always the onboard RK3328 GMAC (stmmac driver), regardless of USB devices.
 
 ### Task 5.7 -- Device identity via MAC address
 
 ```sh
-cat /sys/class/net/eth0/address      # expect: consistent onboard MAC (starts with Rock64 OUI)
+cat /sys/class/net/wan/address      # expect: consistent onboard MAC (starts with Rock64 OUI)
 ```
 
 **Pass criteria**: MAC address is the factory-assigned onboard MAC, not a random or USB adapter MAC.
@@ -384,7 +384,7 @@ Mark each task as you complete it. Update `docs/src/features/rock64-ab-image/tas
 | 16.1 | Full provisioning E2E on hardware            |        |
 | 2.4  | Kernel detects eMMC, ethernet, USB, watchdog |        |
 | 2.5  | WiFi/BT modules load with USB dongles        |        |
-| 5.6  | Onboard NIC is always eth0                   |        |
+| 5.6  | Onboard NIC is always wan                    |        |
 | 5.7  | Device identity (onboard MAC)                |        |
 | 6.4  | DHCP serves LAN clients                      |        |
 | 6.5  | NTP serves LAN clients                       |        |

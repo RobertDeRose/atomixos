@@ -8,6 +8,9 @@
 
 let
   nixos-lib = import (pkgs.path + "/nixos/lib") { };
+  # The NixOS test driver gives node 1's NIC on VLAN n the MAC 52:54:00:12:0n:01.
+  lanMac = "52:54:00:12:01:01";
+  wanMac = "52:54:00:12:02:01";
   mockApi = pkgs.writeText "nixstasis-mock-api.py" ''
     import json
     from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -31,7 +34,7 @@ let
                 return
             if path.startswith("/api/v1/devices/") and path.endswith("/heartbeat"):
                 (STATE / "heartbeat.json").write_bytes(body)
-                self.reply(200, {"data": {"remote_access_token": "frp-token", "commands": []}})
+                self.reply(200, {"data": {"remote_access_token": "frp-token", "remote_access_profile": {"name": "default", "version": 1}, "commands": []}})
                 return
             if path == "/mock/frpc":
                 (STATE / "frpc.started").write_bytes(body)
@@ -52,6 +55,27 @@ let
 
     HTTPServer(("127.0.0.1", 4000), Handler).serve_forever()
   '';
+  # Runtime scripts: one passes an allowlisted argument vector, one does not.
+  unameScript =
+    name: arg:
+    pkgs.writeText "${name}.stary" ''
+      ---
+      name: ${name}
+      version: "1"
+      schema:
+        type: object
+        required:
+          - out
+        properties:
+          out:
+            type: string
+      ---
+
+      def main():
+          return {"out": exec_cmd("uname", ["${arg}"])}
+    '';
+  allowedScript = unameScript "uname-allowed" "-s";
+  deniedScript = unameScript "uname-denied" "-r";
   mockFrpc = pkgs.writeShellScriptBin "nixstasis-test-frpc" ''
     set -eu
     test -n "''${FRPS_AUTH_TOKEN:-}"
@@ -81,20 +105,40 @@ nixos-lib.runTest {
       ];
 
       virtualisation.memorySize = 768;
+      # LAN registers before WAN, and the driver's own eth0 stays up with a MAC,
+      # so identity must come from the configured wan interface, not probe order.
+      virtualisation.vlans = [
+        1
+        2
+      ];
+      atomixos.network = {
+        wanInterface = "wan";
+        lanInterface = "lan";
+        wanLinkMatch.MACAddress = wanMac;
+        lanLinkMatch.MACAddress = lanMac;
+      };
       system.stateVersion = "25.11";
       atomixos.rauc.enable = lib.mkForce false;
       atomixos.nixstasis = {
         enable = true;
         apiUrl = "http://127.0.0.1:4000";
+        allowLoopbackHttp = true;
         pollInterval = "1s";
         frp = {
-          name = "atom-test";
           serverAddr = "127.0.0.1";
         };
-        runtime.execCommands.uname = "/run/current-system/sw/bin/uname";
+        runtime = {
+          execCommands.uname = "/run/current-system/sw/bin/uname";
+          execCommandArgs."/run/current-system/sw/bin/uname" = [ [ "-s" ] ];
+        };
       };
 
       environment.systemPackages = [ mockFrpc ];
+      systemd.tmpfiles.rules = [
+        "d /var/lib/nixstasis/scripts 0755 root root - -"
+        "C /var/lib/nixstasis/scripts/uname-allowed.stary 0644 root root - ${allowedScript}"
+        "C /var/lib/nixstasis/scripts/uname-denied.stary 0644 root root - ${deniedScript}"
+      ];
       systemd.services.nixstasis-poll.environment.NIXSTASIS_FRPC_BINARY_PATH =
         lib.mkForce "${mockFrpc}/bin/nixstasis-test-frpc";
 
@@ -119,12 +163,16 @@ nixos-lib.runTest {
     gateway.wait_until_succeeds("test -s /data/nixstasis/id", timeout=120)
     gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\ncreds = json.loads(Path('/data/nixstasis/id').read_text())\nassert creds['uuid'] == '11111111-1111-4111-8111-111111111111', creds\nassert creds['token'] == 'runtime-token', creds\nPY")
     gateway.succeed("test -s /tmp/nixstasis-mock/register.json")
+    gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nregister = json.loads(Path('/tmp/nixstasis-mock/register.json').read_text())\nassert register['mac_address'] == '${wanMac}', register\ncreds = json.loads(Path('/data/nixstasis/id').read_text())\nassert creds['mac_address'] == '${wanMac}', creds\nPY")
     gateway.succeed("test \"$(cat /tmp/nixstasis-mock/register.count)\" = 1")
     gateway.succeed("systemctl restart nixstasis-registration.service")
     gateway.succeed("test \"$(cat /tmp/nixstasis-mock/register.count)\" = 1")
 
     gateway.wait_until_succeeds("test -s /tmp/nixstasis-mock/heartbeat.json", timeout=120)
     gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nheartbeat = json.loads(Path('/tmp/nixstasis-mock/heartbeat.json').read_text())\nassert 'telemetry' in heartbeat, heartbeat\nassert 'connection_status' in heartbeat, heartbeat\nPY")
+    # Only the exact allowlisted argument vector may run.
+    gateway.wait_until_succeeds("grep -q '\"Linux\"' /tmp/nixstasis-mock/heartbeat.json", timeout=60)
+    gateway.succeed("grep -q 'uname-denied: arguments are not allowlisted' /tmp/nixstasis-mock/heartbeat.json")
 
     gateway.wait_until_succeeds("journalctl -u nixstasis-poll -b --no-pager | grep 'Server requested remote access'", timeout=120)
     gateway.wait_until_succeeds("systemctl is-active --quiet nixstasis-frpc.service", timeout=120)
