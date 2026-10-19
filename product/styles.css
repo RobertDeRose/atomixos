@@ -1,6 +1,6 @@
 /*
- * AtomixOS product page. The page is laid out like a lab chart: graph-paper background, the original logo in the hero,
- * a periodic-table tile, and the eMMC partition strip as the main illustration. Colors come from the atom logo.
+ * AtomixOS product page, laid out like a chemistry chart: graph-paper background, the original logo in the hero, and a
+ * periodic table of AtomixOS features grouped into color-coded families. Colors come from the atom logo.
  * site:build copies the font files into fonts/ from the docs' npm packages.
  */
 
@@ -45,6 +45,15 @@
   --grid: rgba(28, 100, 209, 0.07);
   --line: rgba(19, 35, 63, 0.16);
 
+  /* Element families. Filled tiles put --on-family text on the family color at 4.9:1 or better. */
+  --family-build: #4f46e5;
+  --family-provision: #0e7c86;
+  --family-run: #7c3aed;
+  --family-update: #1c64d1;
+  --family-network: #b45309;
+  --family-fleet: #be185d;
+  --on-family: #ffffff;
+
   color-scheme: light;
 }
 
@@ -59,6 +68,14 @@
   --silver: #3b4d6b;
   --grid: rgba(108, 180, 255, 0.07);
   --line: rgba(221, 232, 247, 0.16);
+
+  --family-build: #a5b4fc;
+  --family-provision: #5eead4;
+  --family-run: #c4b5fd;
+  --family-update: #6cb4ff;
+  --family-network: #fbbf24;
+  --family-fleet: #f9a8d4;
+  --on-family: #07122a;
 
   color-scheme: dark;
 }
@@ -213,6 +230,11 @@ main > section {
   grid-template-columns: minmax(16rem, 26rem) 1fr;
   align-items: center;
   gap: clamp(2rem, 6vw, 5rem);
+}
+
+/* One sentence per line. */
+.hero h1 span {
+  display: block;
 }
 
 .hero__logo {
@@ -443,24 +465,6 @@ main > section {
   color: var(--ink-muted);
 }
 
-/* Traits: a property list, read like an element's data sheet. */
-.traits__list {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 2rem 2.5rem;
-  margin: 1.5rem 0 0;
-}
-
-.traits__list dt {
-  margin-bottom: 0.35rem;
-  font: 650 1.2rem var(--font-display);
-}
-
-.traits__list dd {
-  margin: 0;
-  color: var(--ink-muted);
-}
-
 /* Boards */
 .boards table {
   width: 100%;
@@ -481,35 +485,262 @@ main > section {
   font-weight: 650;
 }
 
-/* Get started */
-.commands {
-  max-width: 44rem;
-  margin: 1.5rem 0;
-  padding-left: 1.5rem;
-}
-
-.commands li {
-  margin-bottom: 1rem;
-}
-
-.commands p {
-  margin: 0 0 0.4rem;
-}
-
-.commands pre {
-  margin: 0;
-  padding: 0.75rem 1rem;
-  overflow-x: auto;
-  border-left: 4px solid var(--electron);
-  border-radius: 0 6px 6px 0;
-  background: var(--surface);
-}
-
 .site-footer {
   max-width: 72rem;
   margin: 0 auto;
   padding: 2rem 1.5rem 3rem;
   border-top: 1px solid var(--line);
+}
+
+/* Periodic table: one column per family, like the groups of a real table. */
+.family--build { --family: var(--family-build); }
+.family--provision { --family: var(--family-provision); }
+.family--run { --family: var(--family-run); }
+.family--update { --family: var(--family-update); }
+.family--network { --family: var(--family-network); }
+.family--fleet { --family: var(--family-fleet); }
+
+.elements__layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(17rem, 21rem);
+  align-items: start;
+  gap: clamp(1.5rem, 4vw, 3rem);
+}
+
+.ptable {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  align-items: start;
+  gap: 0.5rem;
+}
+
+.family__name {
+  margin: 0 0 0.5rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 3px solid var(--family);
+  font-size: 0.95rem;
+  font-weight: 650;
+}
+
+.family__elements {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.el {
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+  width: 100%;
+  min-height: 6.25rem;
+  aspect-ratio: 1;
+  padding: 0.4rem 0.55rem 0.5rem;
+  border: 2px solid var(--family);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--family) 12%, var(--paper));
+  color: var(--ink);
+  font-family: var(--font-display);
+  text-align: left;
+  cursor: pointer;
+}
+
+.el:hover {
+  background: color-mix(in srgb, var(--family) 24%, var(--paper));
+}
+
+.el[aria-pressed='true'] {
+  background: var(--family);
+  color: var(--on-family);
+}
+
+.el__num {
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.el__sym {
+  align-self: center;
+  font-size: clamp(1.7rem, 2.6vw, 2.3rem);
+  font-weight: 750;
+  line-height: 1;
+}
+
+.el__name {
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.el__mass {
+  margin-top: 0.15rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  opacity: 0.85;
+}
+
+/* Element card: the picked element, enlarged, with its note. */
+.element-card {
+  position: sticky;
+  top: 1.5rem;
+}
+
+.element-card--build { --family: var(--family-build); }
+.element-card--provision { --family: var(--family-provision); }
+.element-card--run { --family: var(--family-run); }
+.element-card--update { --family: var(--family-update); }
+.element-card--network { --family: var(--family-network); }
+.element-card--fleet { --family: var(--family-fleet); }
+
+.element-card__tile {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  width: 12rem;
+  aspect-ratio: 1;
+  margin-bottom: 1.25rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  background: var(--family);
+  box-shadow: 8px 8px 0 var(--silver);
+  color: var(--on-family);
+  font-family: var(--font-display);
+}
+
+.element-card__num {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.element-card__sym {
+  align-self: center;
+  font-size: 5rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.element-card__mass {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+
+.element-card__family {
+  margin: 0;
+  color: var(--ink-muted);
+  font-weight: 600;
+}
+
+.element-card__name {
+  margin: 0.1rem 0 0.5rem;
+  font-size: 1.9rem;
+}
+
+.element-card__text {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+/* Without JavaScript, every note is listed instead of the card. */
+.notes[hidden] {
+  display: none;
+}
+
+.notes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+  gap: 1rem 2rem;
+  margin: 2rem 0 0;
+}
+
+.note {
+  padding-left: 0.75rem;
+  border-left: 4px solid var(--family);
+}
+
+.note--build { --family: var(--family-build); }
+.note--provision { --family: var(--family-provision); }
+.note--run { --family: var(--family-run); }
+.note--update { --family: var(--family-update); }
+.note--network { --family: var(--family-network); }
+.note--fleet { --family: var(--family-fleet); }
+
+.note dt {
+  font: 650 1.05rem var(--font-display);
+}
+
+.note dd {
+  margin: 0;
+  color: var(--ink-muted);
+}
+
+/* Bare board to fleet: the journey beside a real config.toml. */
+.fleet__layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  align-items: start;
+  gap: clamp(1.5rem, 4vw, 3rem);
+  margin: 1.5rem 0;
+}
+
+.journey {
+  margin: 0;
+  padding: 0;
+  counter-reset: journey;
+  list-style: none;
+}
+
+.journey li {
+  position: relative;
+  padding: 0 0 1.25rem 3rem;
+  counter-increment: journey;
+}
+
+.journey li::before {
+  content: counter(journey);
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  place-items: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  border: 2px solid var(--electron);
+  border-radius: 6px;
+  color: var(--electron-text);
+  font: 750 1rem var(--font-display);
+}
+
+.journey h3 {
+  margin: 0 0 0.2rem;
+  font-size: 1.15rem;
+}
+
+.journey p {
+  margin: 0;
+  color: var(--ink-muted);
+}
+
+.config {
+  margin: 0;
+  overflow: hidden;
+  border: 2px solid var(--electron);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.config figcaption {
+  padding: 0.45rem 1rem;
+  background: var(--electron);
+  color: var(--on-electron);
+  font: 600 0.9rem var(--font-mono);
+}
+
+.config pre {
+  margin: 0;
+  padding: 1rem;
+  overflow-x: auto;
+  font-size: 0.85rem;
+  line-height: 1.5;
 }
 
 @media (max-width: 860px) {
@@ -526,9 +757,44 @@ main > section {
     width: min(100%, 14rem);
   }
 
-  .steps,
-  .traits__list {
+  .steps {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .elements__layout,
+  .fleet__layout {
+    grid-template-columns: 1fr;
+  }
+
+  /* The card sits above the table so a pick is visible without scrolling. */
+  .element-card {
+    position: static;
+    order: -1;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    column-gap: 1.25rem;
+  }
+
+  .element-card[hidden] {
+    display: none;
+  }
+
+  .element-card__tile {
+    grid-row: span 4;
+    width: 7rem;
+  }
+
+  .element-card__sym {
+    font-size: 2.8rem;
+  }
+
+  .ptable {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .family__elements {
+    grid-template-columns: repeat(auto-fill, minmax(5rem, 1fr));
   }
 }
 
@@ -550,8 +816,15 @@ main > section {
     gap: 1rem;
   }
 
-  .steps,
-  .traits__list {
+  .steps {
     grid-template-columns: 1fr;
+  }
+
+  .element-card {
+    grid-template-columns: 1fr;
+  }
+
+  .element-card__tile {
+    grid-row: auto;
   }
 }
