@@ -30,8 +30,8 @@ let
     doCheck = false;
     postInstall = ''
       mkdir -p "$out/share/atomixos"
-      install -m0644 ${../../docs/src/atomixos.png} "$out/share/atomixos/atomixos.png"
-      install -m0644 ${../../docs/src/config_dropzone.png} "$out/share/atomixos/config_dropzone.png"
+      install -m0644 ${../../scripts/atomixos_provision/assets/atomixos.png} "$out/share/atomixos/atomixos.png"
+      install -m0644 ${../../scripts/atomixos_provision/assets/config_dropzone.png} "$out/share/atomixos/config_dropzone.png"
       install -m0644 ${../../schemas/config.schema.json} "$out/share/atomixos/config.schema.json"
       install -m0644 ${../../defaults/lan.json} "$out/share/atomixos/lan-defaults.json"
     '';
