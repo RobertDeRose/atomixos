@@ -16,7 +16,7 @@ const productPageHref = `pathname://${baseUrl}../`;
 const config: Config = {
   title: 'AtomixOS',
   tagline: 'The element of reproducibility',
-  favicon: 'img/atomixos-logo.svg',
+  favicon: 'img/atomixos-mark.png',
   url: 'https://robertderose.github.io',
   baseUrl,
   trailingSlash: false,
@@ -96,7 +96,7 @@ const config: Config = {
     },
     navbar: {
       title: 'AtomixOS',
-      logo: {alt: 'AtomixOS logo', src: 'img/atomixos-logo.svg', href: productPageHref, target: '_self'},
+      logo: {alt: 'AtomixOS logo', src: 'img/atomixos-mark.png', href: productPageHref, target: '_self'},
       items: [
         {to: '/', label: 'Docs', position: 'left', activeBaseRegex: '.*'},
         {href: repoUrl, label: 'GitHub', position: 'right'},

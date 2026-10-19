@@ -1,6 +1,6 @@
 <!-- rumdl-disable-file MD041 -->
 
-<p align="center"> <img src="docs/site/static/img/atomixos-logo.svg" alt="AtomixOS logo" width="240" height="240" /> </p>
+<p align="center"> <img src="docs/site/static/img/atomixos-logo.png" alt="AtomixOS logo" width="300" height="300" /> </p>
 
 AtomixOS is a secure, reproducible operating system for single-board computers, built on NixOS with atomic A/B OTA
 updates, automatic rollback, and a container-based application deployment model.

@@ -106,7 +106,8 @@ docs/
     css/custom.css                 Brand theme (colors, fonts, intro header, tables, Mermaid)
     client/index.ts                Fonts and Mermaid diagram zoom/fullscreen
     features.ts                    Publishes only delivered features
-    static/img/atomixos-logo.svg   Logo, favicon, and navbar image
+    static/img/atomixos-logo.png   Full logo with wordmark
+    static/img/atomixos-mark.png   Logo emblem: favicon and navbar image
     pages/                         Optional standalone React pages
   src/                             Documentation content; README.mdx is the docs introduction
 

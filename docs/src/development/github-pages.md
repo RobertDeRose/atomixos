@@ -12,7 +12,7 @@ Publishing is off until you enable it; building and previewing locally never nee
 `mise run site:build` builds the docs, then assembles the site in `_site/atomixos/`: the files from `product/` at the
 root, the docs build under `docs/`, the docs' `404.html` at the root, and the three web fonts the product page uses,
 copied from the docs' npm packages into `fonts/`. The product page loads its logo from the docs build
-(`docs/img/atomixos-logo.svg`), so the two always share one logo.
+(`docs/img/atomixos-mark.png`), so the two always share one logo.
 
 `mise run site:serve [port]` builds the same tree and serves it at `http://localhost:8000/atomixos/` by default. Use
 `mise run docs:serve` instead while writing docs; it reloads on every change but serves only the docs.
