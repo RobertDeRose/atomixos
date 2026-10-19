@@ -74,8 +74,8 @@ in
     };
   };
 
-  # RK3566 GMAC1 is at fe010000; Rock64's NIC match targets ff540000.
-  systemd.network.links."10-onboard-eth".matchConfig.Path = lib.mkForce "platform-fe010000.ethernet";
+  # The onboard RK3566 GMAC1 is the WAN port.
+  atomixos.network.wanLinkMatch.Path = "platform-fe010000.ethernet";
 
   # RK3566 watchdog differs from Rock64 (ff1a0000).
   services.udev.extraRules = ''

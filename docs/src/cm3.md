@@ -45,8 +45,8 @@ on-module eMMC and ignores the IO board SD card:
 - U-Boot A/B environment: two 32-KiB records in the reserved eMMC user-area boot gap at offsets `0x3f8000` and `0x3f0000`.
 - Kernel, DTB, and initrd use the RK3568 U-Boot default load addresses; the ROCK64 `ramdisk_addr_r` override is not
   applied.
-- Serial UART2 at 1,500,000 baud, 3.3 V, on the IO board's 40-pin header: pin 6 GND, pin 8 TX, pin 10 RX. GMAC1 is
-  `fe010000.ethernet`.
+- Serial UART2 at 1,500,000 baud, 3.3 V, on the IO board's 40-pin header: pin 6 GND, pin 8 TX, pin 10 RX. GMAC1
+  (`fe010000.ethernet`) is the WAN port, named `wan`; the USB Ethernet adapter is `lan`.
 - Root is locked. For a serial root shell, use the one-shot `_RUT_OH_` recovery described in
   [Physical Recovery](architecture/authentication.md#physical-recovery).
 
