@@ -472,7 +472,8 @@ async def serve_config_dropzone_image(state: State) -> Response[Any]:
 
 
 def _asset_path(filename: str) -> Path | None:
-    source_path = Path(__file__).resolve().parents[4] / "docs" / "src" / filename
+    # In a source checkout the images live in the package's assets/ directory, next to src/.
+    source_path = Path(__file__).resolve().parents[2] / "assets" / filename
     if source_path.exists():
         return source_path
     installed_path = Path(__file__).resolve().parents[5] / "share" / "atomixos" / filename

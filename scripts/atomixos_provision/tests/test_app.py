@@ -5,6 +5,7 @@ import json
 import threading
 from pathlib import Path
 
+import pytest
 from litestar import Litestar, post
 from litestar.response import Response
 from litestar.testing import AsyncTestClient
@@ -1286,6 +1287,18 @@ async def test_config_dropzone_image_returns_404_on_provisioned_device(tmp_path)
         response = await client.get("/assets/config_dropzone.png")
 
     assert response.status_code == 404
+
+
+@pytest.mark.parametrize("filename", ["atomixos.png", "config_dropzone.png"])
+async def test_bootstrap_images_served_from_source_tree(tmp_path, filename):
+    """Verify that an unprovisioned source checkout serves the bootstrap images from assets/."""
+    expected = (Path(__file__).resolve().parents[1] / "assets" / filename).read_bytes()
+    async with AsyncTestClient(app=create_app(config_root=tmp_path)) as client:
+        response = await client.get(f"/assets/{filename}")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/png"
+    assert response.content == expected
 
 
 async def test_apply_form_returns_404_on_provisioned_device(tmp_path):
