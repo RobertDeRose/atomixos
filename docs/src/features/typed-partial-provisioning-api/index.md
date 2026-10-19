@@ -1,71 +1,50 @@
 # Typed Partial Provisioning API
 
-## References
+The provisioning service has authenticated, typed endpoints for changing part of the configuration: users, network
+settings, containers, container networks, and container volumes, plus configuration export. Each change loads the
+current desired state, applies a typed transformation, produces a complete canonical `config.toml`, and runs through
+the normal asynchronous apply pipeline. The original plan is in the [design record](design.md); Beads tracks the work
+under `atomixos-c08`.
 
-- Beads feature root: `atomixos-c08`
-- Design record: [design.md](design.md)
+## What changed for users
 
-## Delivered Capability
+- **Client developers** sign partial requests with the existing nonce and SSH-signature contract.
+- Accepted changes return the same job model as a full import.
+- Invalid patches, missing configuration, concurrent work, activation failures, and rollbacks produce the same errors
+  and state transitions as a full submission.
 
-The provisioning service exposes authenticated typed partial endpoints for users, network settings, containers,
-container networks, and container volumes, plus config export. Every mutation loads current desired state, applies a
-typed transformation, produces a complete canonical `config.toml`, and reuses the normal asynchronous apply pipeline.
+## How it fits in
 
-## User-Facing Behavior
+Partial endpoints are a convenience for input, not a second state store. They never change derived JSON, Quadlet
+files, systemd state, users, or networking directly. The full desired state stays auditable and exportable, and the
+live OpenAPI schema defines the transport contract.
 
-Provisioned-device clients sign partial requests with the existing nonce and SSH-signature contract. Accepted mutations
-return the same job model as full imports. Invalid patches, missing current config, concurrent work, activation failures,
-and rollback results use the same errors and state transitions as full config submission.
+## Running it
 
-## Design Integration
+A partial change keeps the meaning of the configuration but not its comments or original TOML ordering. Changes run
+one at a time and can restart services or change networking, just like a full import. Export provides the backup and
+clone path.
 
-Partial endpoints are input conveniences, not a second state store. They never mutate derived JSON, Quadlet files,
-systemd state, users, or networking directly. Full desired state remains auditable and exportable, and the live OpenAPI
-schema owns the transport contract.
+## Differences from the design
 
-## Operational Impact
+Endpoints cover only operations with a stable typed model; flexible internal rendered state is not exposed.
 
-Partial rewrites preserve semantic desired state but not comments or original TOML ordering. Mutations remain
-single-flight and can trigger the same service restarts or network changes as a full import. Config export provides the
-backup and clone bookend.
+## Not included
 
-## Reference and Contracts
+- A VM test for activation failure through a partial endpoint; the shared pipeline is covered by focused partial tests
+  and the full re-apply rollback VM test.
+- Arbitrary JSON Patch, direct changes to derived state, a database, divergent desired state, and unauthenticated
+  partial changes after provisioning.
+
+## Tests
+
+- `scripts/atomixos_provision/tests/test_partial_config.py`: typed validation and conversion to full state.
+- Service, route, provisioning, and live-schema tests: authentication, conflicts, jobs, errors, and the shared apply
+  pipeline.
+- `nix/tests/first-boot-provision.nix`: selected partial updates on a VM.
+
+## Related pages
 
 - [Provisioning](../../provisioning.md)
 - [Runtime Boundaries](../../runtime-boundaries.md)
-- [Firmware Data Flow](../../data-flow.md)
-- Live route: `/schema/openapi.json`
-
-## Test Coverage
-
-- `scripts/atomixos_provision/tests/test_partial_config.py` covers typed validation and patch-to-full-state conversion.
-- Service, route, provisioning, and live-schema tests cover auth, conflicts, jobs, errors, and shared apply behavior.
-- `nix/tests/first-boot-provision.nix` covers selected partial updates through the device integration path.
-
-## Design Reconciliation
-
-### Delivered as Designed
-
-Typed user, network, container, network, and volume endpoints, full-state conversion, shared validation/apply/rollback,
-async jobs, config export, auth, and OpenAPI coverage were delivered.
-
-### Intentional Changes
-
-Endpoint scope was bounded to the operations with a stable typed model; flexible internal rendered state was not exposed.
-
-### Deferred Work
-
-A dedicated VM activation-failure case for partial updates remains deferred because the same pipeline is covered by
-focused partial tests and existing full re-apply rollback VM behavior.
-
-### Rejected or Removed Scope
-
-Arbitrary JSON Patch, direct derived-state mutation, a database, divergent desired state, and unauthenticated
-post-provision partial mutation remain rejected.
-
-## Documentation Updated
-
-- `docs/src/provisioning.md`
-- `docs/src/runtime-boundaries.md`
-- `docs/src/data-flow.md`
-- `docs/src/planned-features.md`
+- [Data Flow](../../data-flow.md)

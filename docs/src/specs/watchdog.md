@@ -1,101 +1,61 @@
 # Watchdog
 
-> Source: `docs/src/features/watchdog-enforcement/design.md`
+Acceptance contract for hardware watchdog enforcement. The settings are in
+[Build Configuration](../reference/build-configuration.md#watchdog-backend-selection), and the module is described in
+[NixOS Modules](../code-reference/modules.md#watchdognix).
 
 ## Requirements
 
-Rock64 runtime watchdog enforcement is opt-in and intentionally disabled by default. Enabling it in a release profile
-requires physical reset-timing, RAUC rollback, and 72-hour soak validation on the target hardware.
+### Hardware watchdog enforcement is opt-in
 
-### Hardware watchdog enforcement remains opt-in
+The onboard SoC watchdog and, on Rock64, the external UCC2946 path are available, but systemd watchdog manager settings
+are set only when `watchdog.enable_hardware = true` in build policy (`atomixos.watchdog.enableHardware`). The committed
+`build.toml` leaves enforcement off.
 
-The RK3328 hardware watchdog (`dw_wdt`) and the external UCC2946 path are available, but systemd manager watchdog
-settings are enabled only when `atomixos.watchdog.enableHardware = true`.
+#### Scenario: Default image leaves the watchdog unset
 
-#### Scenario: Watchdog triggers on hang
+- Given an image built from the committed `build.toml`
+- When it boots
+- Then systemd's `RuntimeWatchdogSec`, `RebootWatchdogSec`, and `WatchdogDevice` are unset
 
-- Given the current Rock64 image boots
-- Then AtomixOS leaves `RuntimeWatchdogSec` unset
-- And the opt-in target remains `RuntimeWatchdogSec=30s`
+#### Scenario: Enabled image arms the watchdog
 
-### Reboot watchdog
+- Given `watchdog.enable_hardware = true` with the default timeouts
+- When the image boots on hardware with the selected watchdog
+- Then systemd sets `RuntimeWatchdogSec=30s` and `RebootWatchdogSec=10min`
+- And `WatchdogDevice` is the selected backend's device
 
-A separate reboot watchdog (`RebootWatchdogSec`) remains disabled by default in committed policy. It is available in
-opt-in images; release-profile enablement remains gated on external reset timing, RAUC rollback, and soak validation.
+### Configurable timeouts
 
-#### Scenario: Reboot hang recovery
+Build policy sets `watchdog.runtime_timeout` (default `30s`) and `watchdog.reboot_timeout` (default `10min`) within the
+accepted ranges listed in [Build Configuration](../reference/build-configuration.md#version-1-schema). The runtime
+timeout catches a hung system quickly without false triggers during normal operation. The reboot timeout is generous
+because a clean shutdown may need time to stop containers.
 
-- Given the current Rock64 image boots
-- Then AtomixOS leaves `RebootWatchdogSec` unset
-- And the opt-in target remains `RebootWatchdogSec=10min`
+An accepted value is not proof that the hardware uses it exactly. systemd may pick the nearest timeout the driver and
+device support, so check the programmed value on the target board.
 
-### ADDED: Configurable timeouts
+### Backends expose stable device paths
 
-Immutable build policy configures the existing `atomixos.watchdog.*` NixOS options:
+`watchdog.backend = "internal"` exposes the onboard Synopsys DesignWare watchdog as `/dev/watchdog-internal`.
+`watchdog.backend = "external"` exposes the Rock64 external SOM watchdog as `/dev/watchdog-external`; its device-tree
+overlay is included only when both the external backend and enforcement are selected, so a disabled build never arms
+the external hardware. The CM3 always uses its internal watchdog. Systemd is the only watchdog owner; no userspace
+`i2cset` kicker is used. The hardware behind each backend is described in
+[Watchdog Backend Selection](../reference/build-configuration.md#watchdog-backend-selection).
 
-```toml
-version = 1
+#### Scenario: CM3 ignores the external backend
 
-[watchdog]
-enable_hardware = false
-backend = "external"
-runtime_timeout = "30s"
-reboot_timeout = "10min"
-```
+- Given a CM3 build with `watchdog.enable_hardware = true` and `backend = "external"`
+- When the configuration is evaluated
+- Then the build warns that the CM3 IO Board has no external watchdog
+- And systemd uses `/dev/watchdog-internal`
 
-The fields map to `enableHardware`, `backend`, `runtimeWatchdogSec`, and `rebootWatchdogSec` respectively. `backend`
-accepts `internal` for the RK3328 DesignWare watchdog or `external` for the UCC2946 path through the I2C GPIO
-expander. Runtime values must resolve to 10 seconds–5 minutes; reboot values must resolve to 1–10 minutes. The
-committed defaults remain:
+### Missing hardware fails open with a warning
 
-Build-time selection examples are:
-
-```toml
-# Onboard watchdog
-[watchdog]
-enable_hardware = true
-backend = "internal"
-
-# Or the external SOM watchdog:
-# backend = "external"
-
-# Or disable enforcement completely:
-# enable_hardware = false
-```
-
-The full committed document must retain both `enable_hardware` and `backend`; a partial `build.dev.toml` overlay may
-contain only the fields being tested. With `enable_hardware = false`, systemd leaves all watchdog manager settings
-unset, and the external always-running device-tree node is not included. The backend value is retained only so a future
-enablement is explicit.
-
-The committed defaults remain:
-
-- **Runtime**: 30 seconds -- aggressive enough to catch hangs quickly, long enough to avoid false triggers during normal
-  operation
-- **Reboot**: 10 minutes -- generous because clean shutdown may need time to stop containers
-
-Accepted policy is not proof that a physical watchdog implements the exact requested value. Systemd may select the
-nearest timeout supported by the driver and device. Physical validation must record the programmed hardware timeout and
-confirm observed reset timing before release enablement.
-
-### Internal RK3328 watchdog path
-
-The Rock64's onboard Synopsys DesignWare watchdog is selected with `backend = "internal"`. Its device-tree overlay
-supplies the RK3328 TOP interval table, and the image exposes it to systemd as `/dev/watchdog-internal`.
-
-### External SOM watchdog path
-
-The SOM watchdog is a TI UCC2946 driven through a four-bit I2C GPIO expander at address `0x41` on I2C bus 1. The
-expander's GPIO0 is held low to enable the watchdog and GPIO1 is toggled for `WDI`. The kernel `gpio-pca953x` and
-`gpio-wdt` drivers expose this path as `/dev/watchdog-external`; systemd selects that stable udev alias when hardware
-watchdog enforcement is enabled. The external device-tree node is included only when both the external backend and
-hardware enforcement are selected. The legacy userspace `i2cset` kicker is not used.
-
-### ADDED: Missing hardware fails open with a warning
-
-When hardware enforcement is enabled but systemd does not hold a usable watchdog device,
-`watchdog-device-check.service` logs an actionable warning and exits successfully. The device continues booting; the
-missing watchdog alone does not fail update verification or mutate RAUC slot state.
+When enforcement is enabled but systemd holds no usable watchdog device, `watchdog-device-check.service` logs a warning
+and exits successfully. Boot continues; a missing watchdog alone does not fail update verification or change RAUC slot
+state.
 
 #### Scenario: Enabled policy has no watchdog device
 
@@ -105,29 +65,25 @@ missing watchdog alone does not fail update verification or mutate RAUC slot sta
 - Then `watchdog-device-check.service` reports that hardware enforcement is unavailable
 - And boot continues without changing RAUC slot state
 
-### ADDED: Watchdog interacts with boot-count rollback
+### Watchdog resets feed boot-count rollback
 
-The `watchdog-boot-count` package and service exist only on RAUC-enabled profiles. RAUC-enabled U-Boot and custom-backend
-profiles retain the helper; non-RAUC profiles do not carry or run update rollback integration.
+`watchdog-boot-count.service` exists only on RAUC-enabled systems. To U-Boot, a watchdog reset is the same as any other
+abnormal reboot. Each one:
 
-A watchdog reboot is indistinguishable from any other abnormal reboot from U-Boot's perspective. Each watchdog-triggered
-reboot:
+1. decrements the current slot's boot counter;
+2. skips the slot once its counter reaches 0;
+3. boots the previous working slot instead.
 
-1. Decrements the boot counter for the current slot
-2. If the counter reaches 0, the slot is skipped
-3. The previous working slot boots instead
+A systemd hang on a newly updated slot therefore rolls back after three watchdog resets. The total time includes the
+watchdog timeout plus each reboot and slot selection.
 
-The intended hardware behavior is that a systemd hang on a newly updated slot triggers automatic rollback after 3
-watchdog-triggered failed boots. The rollback timing includes watchdog expiry plus the time needed for each reboot and
-slot-selection attempt.
-
-The QEMU `rauc-watchdog` check uses a custom RAUC backend and a two-attempt boot-count file to keep the simulation fast.
-Physical Rock64 validation uses the U-Boot `BOOT_*_LEFT` environment counter documented above.
+The QEMU `rauc-watchdog` check uses the `custom` RAUC backend with a two-attempt boot-count file to keep the test fast.
+On hardware the counter is the U-Boot `BOOT_*_LEFT` variable.
 
 #### Scenario: Watchdog-triggered rollback
 
-- Given slot B was just installed
-- And slot B causes a systemd hang on every boot
-- Then the watchdog reboots 3 times (30s each)
+- Given slot B was just installed with enforcement enabled
+- And slot B hangs systemd on every boot
+- Then the watchdog resets the board three times, 30 seconds after each hang
 - And `BOOT_B_LEFT` decrements from 3 to 0
 - And U-Boot falls back to slot A

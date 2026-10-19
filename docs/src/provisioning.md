@@ -1,217 +1,173 @@
 # Provisioning
 
-Deploy AtomixOS to a Rock64 device by building a [flashable disk image](./provisioning/flash-image.md) and writing it
-to eMMC with `dd` (or `mise run flash`).
+An AtomixOS image ships with no credentials and no operator account. You give each device its identity, users, network
+settings, and containers by provisioning it with one `config.toml`, or with a config bundle that holds `config.toml`
+plus a `files/` directory of payloads that the containers mount.
 
-## After Provisioning
+To get a device ready:
 
-On first boot:
+1. [Flash an image](provisioning/flash-image.md) to the eMMC.
+2. Provision it from one of the sources below.
+3. Change it later through the signed provisioning API, or reprovision it from scratch.
 
-1. U-Boot loads `boot.scr` from boot-a, echoes build ID, boots the kernel with initrd
-2. The initrd mounts the selected squashfs slot at `/run/rootfs-base`, then `sysroot.mount`
-   assembles `/` as OverlayFS with a tmpfs-backed upper/work directory under `/run/overlay-root`
-3. Initrd `systemd-repart` creates the `/data` partition (f2fs) on first boot using the remaining eMMC space
-4. Initrd persists a fresh-flash marker so switched-root provisioning can distinguish a new flash from a later
-   reprovisioned `/data` wipe
-5. `first-boot.service` looks for `/boot/config.toml` only on a fresh flash, then USB `config.toml`, then starts the
-   socket-activated bootstrap web console on WAN and LAN port `8080`; after provisioning the socket is rebound to the
-   LAN gateway endpoint and first boot waits indefinitely for operator input when no seed is present
-6. The imported config is validated, persisted under `/data/config/`, rendered into managed user inputs and canonical
-   Quadlet files, and synced into the active rootful and rootless Quadlet paths
-7. `first-boot.service` applies managed users, Quadlets, LAN settings, and provisioned firewall rules, then marks the
-   RAUC slot as good only if those runtime apply steps succeed
-8. Network interfaces come up (wan via DHCP, lan static); `systemd-networkd-wait-online` uses 30s timeout with `anyInterface=true`
-9. Services start: dnsmasq, chrony, sshd, and the RAUC update timer when RAUC is enabled
+Fleet images take their first configuration from Nixstasis instead; see [Fleet Bootstrap](provisioning/fleet-bootstrap.md).
 
-The device is then ready to receive OTA updates and serve LAN clients.
+## Provision a new device
 
-For the canonical persisted state and runtime schemas, see [Firmware Data Flow](./data-flow.md) and
-[Runtime Boundaries](./runtime-boundaries.md).
+On first boot, `first-boot.service` looks for configuration in this order and uses the first one it finds:
 
-## Reprovisioning
+1. **`/boot/config.toml`.** After flashing, copy `config.toml` onto the `boot-a` FAT partition. It is read only on the
+   first boot after a fresh flash, so it is never replayed later.
+2. **A USB stick.** Plug in a USB storage device with a labeled filesystem that has `config.toml` at its root. USB
+   discovery reads only a plain `config.toml`, not a bundle archive.
+3. **The bootstrap console.** If neither seed is present, the device waits for you. Open `http://<device-ip>:8080/` from
+   the WAN or LAN side and drop a `config.toml` or a bundle onto the page. Scripts can instead `POST` the same file to
+   `/api/config`, as described in [Change a provisioned device](#change-a-provisioned-device); no signature is needed
+   before the first configuration is applied.
 
-Wiping `/data` returns the device to the unprovisioned state without changing the A/B slot layout.
+Bundles are tar archives compressed with gzip (`.tar.gz`, `.tgz`) or zstd (`.tar.zst`, `.tar.zstd`, `.tzst`).
+Containers reach bundle payloads through the `${FILES_DIR}` token, and the payloads are mounted read-only unless you
+deliberately mount them writable. Use Podman's own spelling for mount options (`ro`, `rw`, `U`, `z`, `Z`); a
+misspelled option such as `RO` is rejected. [Runtime Boundaries](runtime-boundaries.md#managed-file-access) has the full
+rules.
 
-On the next boot:
+The device then validates the configuration, saves it under `/data/config/`, creates the declared users, renders the
+Quadlet containers, and applies the LAN and firewall settings. It marks the new A/B slot as good only if every step
+succeeds. Once provisioned, the bootstrap console and API stop listening on the WAN side and move to the LAN gateway
+address, port `8080`.
 
-1. Initrd sees that `boot-b` already exists, so it does not mark the boot as a fresh flash
-2. `/boot/config.toml` is not replayed
-3. `first-boot.service` searches USB `config.toml` sources first
-4. If no USB seed is found, the socket-activated bootstrap web console starts on WAN and LAN port `8080`
+To confirm the result, sign in as an admin user you declared, with its SSH key:
 
-Imported operator state remains bounded to `/data/config/`, including the imported `config.toml`, rendered Quadlet
-files, admin SSH authorized keys, and other provisioning-derived runtime inputs.
-
-## Provisioning Service API
-
-The bootstrap console is backed by a long-lived Litestar service running as the
-unprivileged `atomixos-provision` user. API routes are grouped by domain but
-still wired explicitly by the app factory:
-
-| Route                                          | Behavior                                                                        |
-|------------------------------------------------|---------------------------------------------------------------------------------|
-| `GET /api/health`                              | Returns service liveness.                                                       |
-| `GET /api/nonce`                               | Issues a single-use nonce for SSH-signature authentication.                     |
-| `POST /api/validate`                           | Validates a `config.toml` or config bundle without applying it.                 |
-| `POST /api/config`                             | Accepts a config source and returns `202 Accepted` with a job URL.              |
-| `GET /api/config/export`                       | Returns the complete deterministic `config-bundle.tar.gz` archive.              |
-| `PUT /api/config/users/{name}`                 | Creates or replaces a declared user and applies the full config.                |
-| `DELETE /api/config/users/{name}`              | Removes a declared user and applies the full config.                            |
-| `PATCH /api/config/network`                    | Merges network, LAN, NTP, DNS, and firewall fields and applies the full config. |
-| `PUT /api/config/containers/{name}`            | Creates or replaces a declared Quadlet container.                               |
-| `DELETE /api/config/containers/{name}`         | Removes a declared Quadlet container.                                           |
-| `PUT /api/config/container-networks/{name}`    | Creates or replaces a declared Quadlet network.                                 |
-| `DELETE /api/config/container-networks/{name}` | Removes a declared Quadlet network.                                             |
-| `PUT /api/config/container-volumes/{name}`     | Creates or replaces a declared Quadlet volume.                                  |
-| `DELETE /api/config/container-volumes/{name}`  | Removes a declared Quadlet volume.                                              |
-| `GET /api/jobs/{job_id}`                       | Returns current provisioning job status, events, result, and rollback state.    |
-
-### API authentication and transport
-
-On a provisioned device, `/api/validate`, `/api/config`, all typed partial routes,
-and `/api/config/export` require SSH-signature authentication. Clients request a
-single-use nonce from `GET /api/nonce`, then sign:
-
-```text
-atomixos-reapply-v2
-nonce:{nonce}
-method:{request_method}
-path:{request_path}
-sha256:{payload_sha256_hex}
+```sh
+ssh admin@<device-ip>
 ```
 
-The request carries the base64 SSH signature in `X-AtomixOS-Signature` and the
-nonce in `X-AtomixOS-Nonce`; nonces expire after five minutes and are single-use.
-The method is uppercase. Nonces are scoped to the current boot so queued work
-cannot carry authorization across a reboot.
-Binary config submissions use `application/octet-stream` and identify the source
-with `x-config-filename` (for example `config.toml` or `config.tar.zst`); the
-server also detects supported archive magic bytes. Signatures cover the exact raw
-request body. JSON partial requests sign their exact JSON body. A `GET` export has
-an empty body, so its signed digest is SHA-256 of zero bytes. The export response is
-`application/gzip` with a `config-bundle.tar.gz` attachment. The deterministic
-archive contains only top-level `config.toml` and managed `files/` payloads; it
-excludes generated runtime state, markers, signer material, and unrelated config
-files. The live transport contract is available at `/schema/openapi.json`.
+[Data Flow](data-flow.md) lists every file the device derives from your configuration.
 
-On production staged systems, mutating apply jobs are accepted into a bounded
-FIFO queue and applied one at a time. Clients receive `409 Conflict` when the
-queue is full, and otherwise poll the returned job URL for progress and final
-status. Non-staged development/test config roots keep the direct single-flight
-job guard. `POST /api/validate` always requires SSH-signature authentication;
-provisioned-device re-apply through `POST /api/config` requires the same nonce
-and signature headers, while first-boot programmatic config submission remains
-unauthenticated.
+## Change a provisioned device
 
-On production systems, mutating jobs are staged by the unprivileged API under
-`/run/atomixos-provision` after validation and candidate rendering. The staged
-job also retains the exact request bytes and verified authorization envelope. A root-owned
-`atomixos-provision-apply.path` unit watches ready markers and starts the
-`atomixos-provision-apply.service` oneshot worker. The worker verifies the staged
-manifest and tree, re-verifies the signature against the active administrator
-keys, consumes the nonce in root-owned state, and reconstructs the requested
-operation from the signed method, path, and body. It then renders verified state
-into `/data/config-candidate` and performs promotion, activation, rollback, and
-recovery. This keeps HTTP parsing unprivileged while preserving the same
-operator-visible API responses and rollback behavior. Result handoff files are
-root-writable/group-readable, and queue claim/abandon operations share a runtime
-lock so timed-out queued jobs cannot race with the root worker claiming them.
-Each result-timeout interval (`ATOMIXOS_PROVISION_RESULT_TIMEOUT_SECONDS`, 1200 by
-default) the API rechecks the queue. Jobs the worker has claimed, and queued jobs
-blocked behind an active or earlier job, keep waiting. An unblocked queued job is
-abandoned and fails as timed out, and a job that vanishes without a result fails.
-Errors reading a result are retried and fail the job only after persisting for a
-full interval without a successful read.
+Once a device is provisioned, every change goes through the provisioning API and must be signed with the SSH key of an
+admin user from the active configuration. Each request:
 
-Before initial provisioning, browser operators can use the Boot UI at `/` to
-upload or drop a config bundle or `config.toml`. Browser submissions post to
-`/apply` with the bootstrap CSRF token, receive an asynchronous job progress
-view, and poll first-boot-only HTML fragments until the apply job succeeds or
-fails. These UI routes are hidden from the live OpenAPI schema and are unavailable
-after provisioning completes, except for the one-time terminal status fragment for
-the job just submitted by the Boot UI.
+1. Gets a single-use nonce from `GET /api/nonce`. A nonce expires after five minutes, is spent by any attempt, and is
+   valid only until the device reboots.
+2. Signs this message with `ssh-keygen -Y sign -n atomixos-reapply`. The method is uppercase, the path is the request
+   path, and the digest is the hex SHA-256 of the exact request body (an empty body for `GET`):
 
-Partial config endpoints always require SSH-signature authentication, including before initial
-provisioning. Mutating partial endpoints load the current `/data/config/config.toml`, merge the typed
-request into a full desired-state document, render canonical generated TOML, and submit that full
-candidate through the same asynchronous validate/render/promote/activate/rollback job path as
-`POST /api/config`. On staged production systems, partial endpoints require the staged queue to be
-otherwise empty and return `409 Conflict` when another staged job is queued or active. They do not
-mutate derived JSON, Quadlet, firewall, network, or user state
-directly. The generated `config.toml` is the canonical desired-state member of the exported configuration bundle;
-comments and original TOML ordering are not preserved after a successful partial update. Bundle export also includes managed
-`/data/config/files/` payloads and excludes generated runtime state, markers, signer material, and unrelated config
-files. Managed payloads are installed read-only by default. Trusted integrators may deliberately mount `${FILES_DIR}`
-writable; AtomixOS accepts the Quadlet configuration and emits a warning because any resulting changes are included in
-later config exports. Managed-file `Volume` and `PodmanArgs --volume` options must use Podman's accepted casing
-(for example, `ro`, `rw`, `U`, `z`, or `Z`); invalid options such as `RO` are rejected before host permissions are derived.
-Mutable application data should normally use Podman volumes and is intentionally excluded from
-config export. Use Podman tooling when volume data must be backed up, restored, or transferred; AtomixOS provisioning
-does not own that runtime-data lifecycle. The archive can be imported through the same bundle importer into a clean
-config root.
+   ```text
+   atomixos-reapply-v2
+   nonce:{nonce}
+   method:{method}
+   path:{path}
+   sha256:{payload_sha256_hex}
+   ```
 
-Config export captures portable desired state for another device or a distributable bundle; it is not a backup system.
-Bundles can contain secrets stored in `config.toml` or managed files, such as TLS private keys; treat them as
-sensitive.
-Export applies the importer's member, size, and decompressed-size limits, so every exported bundle imports. A tree that
-exceeds them fails with an error naming the limit. Archives list files and empty directories; the importer recreates
-other parent directories.
+3. Sends the nonce in `X-AtomixOS-Nonce` and the base64-encoded signature file in `X-AtomixOS-Signature`.
 
-### Privileged bundle export
+For example, to apply a new `config.toml` from a workstation on the LAN:
 
-Production export uses a dedicated root worker, so private files and workload-remapped ownership do not prevent export.
-The API remains unprivileged and authenticates every export before publishing an empty UUID-named request under
-`/run/atomixos-provision/export/requests`. `atomixos-provision-export.path` starts the corresponding oneshot service,
-which reads only `config.toml` and `files/` under the provisioning lock. It does not change source ownership or modes.
-It rejects symbolic links, hard-linked files, and special files rather than following them or returning a partial archive.
+```sh
+device=http://172.20.30.1:8080
+key=~/.ssh/id_ed25519
+body=config.toml
+path=/api/config
 
-The worker atomically publishes `<uuid>.tar.gz` or `<uuid>.error` in the root-owned, API-group-readable `results`
-directory. The API serves only its matching completed archive, then publishes an acknowledgement for worker cleanup.
-At most four pending, active, or retained export UUIDs are admitted, including unprocessed acknowledgements; a full
-queue returns JSON `409`. Worker failures return
-JSON `500`, and an API wait exceeding 130 seconds returns JSON `504`. The worker has a 120-second service timeout;
-its finalizer has a separate 60-second limit to record interrupted requests as failures. A request stays claimed until
-its archive or error is published, so a failed result write is retried by the finalizer or the next worker run. A timer
-runs cleanup every minute while idle, expiring abandoned requests, acknowledgements, and results after five minutes.
-All export state is boot-local under `/run`.
+nonce=$(curl -fsS "$device/api/nonce" | jq -r .nonce)
+digest=$(shasum -a 256 "$body" | cut -d' ' -f1)
+signature=$(printf 'atomixos-reapply-v2\nnonce:%s\nmethod:POST\npath:%s\nsha256:%s\n' "$nonce" "$path" "$digest" \
+  | ssh-keygen -Y sign -f "$key" -n atomixos-reapply | base64 | tr -d '\n')
 
-For failures, inspect `journalctl -u atomixos-provision-export.service` and
-`systemctl status atomixos-provision-export.path atomixos-provision-export.timer`. Export waits for any active config
-apply to release the provisioning lock. This lock does not stop workload writes; quiesce workloads first when an
-application-consistent export of writable managed files is required. Direct test/development config roots retain the
-in-process exporter.
+curl -fsS -X POST "$device$path" \
+  -H 'Content-Type: application/octet-stream' \
+  -H "x-config-filename: $body" \
+  -H "X-AtomixOS-Nonce: $nonce" \
+  -H "X-AtomixOS-Signature: $signature" \
+  --data-binary @"$body"
+```
 
-## USB Recovery Mode
+The response is `202 Accepted` with a `job_id`, a `state`, and a `job_url` such as `/api/jobs/<job_id>`. Poll the job
+until its state is `succeeded` or `failed`; it also reports each step and whether a rollback ran.
 
-If the reset button is held from power-on for 5 seconds, U-Boot enters USB
-mass storage mode instead of booting Linux. The
-Rock64 OTG USB port then exposes the full eMMC as a removable disk, allowing the host to write a fresh image directly.
+A change never edits the running configuration in place. The device builds a complete candidate, swaps it in, restarts
+what changed, and runs the health checks. If any step fails, it restores the previous configuration and activates it
+again. Changes are applied one at a time; when the queue is full the API answers `409 Conflict`. A queued change that
+still has not started after 3,900 seconds, with nothing ahead of it, fails as timed out.
 
-## Privileged request verification
+### API routes
 
-Re-apply signatures bind the HTTP method, path, nonce, and exact request bytes.
-The HTTP service stages that evidence, and the root worker independently
-verifies it against active administrator signers before rendering configuration.
-Boot-scoped nonces are consumed once by the worker. Initial provisioning accepts
-unsigned input only while the device is unprovisioned. A regular, non-symlink
-`.first-config` marker or `config.toml` identifies provisioned state; missing
-signer state fails closed. Invalid submitted configuration returns a client
-error; invalid server-side validation setup remains a server error.
+| Route                                          | What it does                                                            |
+|------------------------------------------------|-------------------------------------------------------------------------|
+| `GET /api/health`                              | Reports that the service is running.                                    |
+| `GET /api/nonce`                               | Issues a single-use nonce for signing.                                  |
+| `POST /api/validate`                           | Validates a `config.toml` or bundle without applying it. Always signed. |
+| `POST /api/config`                             | Applies a `config.toml` or bundle and returns a job.                    |
+| `GET /api/config/export`                       | Downloads the current configuration as a bundle.                        |
+| `PUT /api/config/users/{name}`                 | Creates or replaces a user.                                             |
+| `DELETE /api/config/users/{name}`              | Removes a user.                                                         |
+| `PATCH /api/config/network`                    | Merges network, LAN, NTP, DNS, and firewall settings.                   |
+| `PUT /api/config/containers/{name}`            | Creates or replaces a Quadlet container.                                |
+| `DELETE /api/config/containers/{name}`         | Removes a Quadlet container.                                            |
+| `PUT /api/config/container-networks/{name}`    | Creates or replaces a Quadlet network.                                  |
+| `DELETE /api/config/container-networks/{name}` | Removes a Quadlet network.                                              |
+| `PUT /api/config/container-volumes/{name}`     | Creates or replaces a Quadlet volume.                                   |
+| `DELETE /api/config/container-volumes/{name}`  | Removes a Quadlet volume.                                               |
+| `GET /api/jobs/{job_id}`                       | Returns a job's state, events, result, and rollback status.             |
 
-## Interrupted apply recovery
+The device serves the full OpenAPI description at `/schema/openapi.json`.
 
-Staged applies persist an owner-only receipt through promoted and committed
-phases. Success is published only after activation commits. Finalization
-discards an uncommitted initial configuration or restores and reactivates
-rollback state. A discarded initial configuration keeps only its
-`managed-users.json` record, so the accounts it created stay managed: the device
-remains unprovisioned, and the next initial apply carries the record forward
-instead of refusing to modify those accounts. The record stays on disk throughout
-the discard, including when an interrupted retry left it only in the candidate, so
-recovery can repeat an interrupted discard without losing it. If the worker stops while reactivating restored rollback state,
-finalization reruns that activation before publishing a result. Claimed jobs
-remain pending until root publishes a terminal result, including when result I/O
-temporarily fails. While a claim remains, a retry timer restarts the apply
-service 30 seconds after each run so finalization publishes the result once
-result I/O recovers. Transport follow-ups require a matching unfinished claimed
-job and never replay after completion.
+The typed `PUT`, `PATCH`, and `DELETE` routes always need a signature, even before the first configuration. They load
+the current `config.toml`, merge your change, and apply the whole result like `POST /api/config`. Two consequences
+follow:
+
+- They are accepted only when no other change is queued or running; otherwise they return `409 Conflict`.
+- The device rewrites `config.toml` in canonical form, so comments and the original key order are lost.
+
+## Export a configuration
+
+`GET /api/config/export` (signed, with an empty body) returns `config-bundle.tar.gz`. It contains only `config.toml` and
+the managed `files/` directory, and the device's importer accepts it as-is, so you can use it to copy a configuration to
+another device.
+
+Keep these limits in mind:
+
+- **It is not a backup.** Container data in Podman volumes is not included; back that up with Podman tooling.
+- **It can contain secrets.** Anything in `config.toml` or `files/`, such as TLS private keys, is in the archive.
+- **Writes are not paused.** The export waits for any running change to finish, but containers keep writing. Stop
+  workloads first if you need an application-consistent copy of writable managed files.
+- **It fails rather than truncates.** A tree over the importer's size or member limits, or one that contains symbolic
+  links, hard links, or special files, fails with an error.
+
+The API answers `409` when four exports are already pending, `500` when the export fails, and `504` when no result
+arrives within 130 seconds. To investigate a failure:
+
+```sh
+journalctl -u atomixos-provision-export.service
+systemctl status atomixos-provision-export.path atomixos-provision-export.timer
+```
+
+## Reprovision a device
+
+To return a device to the unprovisioned state, wipe `/data` and reboot. The A/B slots are untouched. On the next boot
+`/boot/config.toml` is not replayed, so the device takes a USB `config.toml` if one is plugged in, and otherwise waits
+at the bootstrap console on port `8080`.
+
+## Recover a device
+
+**Rewrite the eMMC over USB.** U-Boot can expose the whole eMMC as a USB mass-storage disk on the board's OTG port, so
+you can [flash a new image](provisioning/flash-image.md) to it from your workstation:
+
+- **Any board, from a running device:** run `boot_to_ums` as root. It sets `START_UMS=1` in the U-Boot environment and
+  reboots. U-Boot checks the flag before choosing a slot, so it works even when the selected slot cannot boot.
+- **Rock64, with no login:** hold the reset button from power-on for five seconds. The CM3 has no button trigger; use
+  `boot_to_ums`, set `START_UMS=1` from the U-Boot prompt, or fall back to Rockchip Maskrom recovery.
+
+[Flash an Image](provisioning/flash-image.md#usb-mass-storage) explains how a host eject ends the session.
+
+**Get a root shell on the serial console.** The image keeps `root` locked. On every board, set the U-Boot environment
+variable `_RUT_OH_=1` (for example with `fw_setenv _RUT_OH_ 1`); on the next boot the debug UART (UART2, `ttyS2`,
+1,500,000 baud) logs in as root instead of showing a login prompt. The variable is cleared as soon as it is used, so it
+applies to one boot only. [Physical Recovery](architecture/authentication.md#physical-recovery) covers the details.
+
+**Recover an interrupted change.** If the device loses power or the worker stops in the middle of a change, the change
+is finished or rolled back on the next run, and its job reports the real outcome. You do not need to clean anything up.
+[Runtime Boundaries](runtime-boundaries.md#apply-transactions-and-finalization) describes how.

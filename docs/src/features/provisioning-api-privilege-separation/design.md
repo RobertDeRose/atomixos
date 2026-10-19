@@ -394,9 +394,7 @@ Root worker responsibilities:
   errors, or workflows change.
 - `docs/src/specs/`: update any provisioning API or config re-apply specs that
   describe host mutation behavior.
-- `docs/src/planned-features.md`: close out delivered behavior only after the
-  systemd-worker implementation lands.
-- Beads root `atomixos-vfi`: preserve implementation and validation evidence.
+- Beads root `atomixos-vfi`: tracks implementation and validation evidence.
 
 ## Validation
 
@@ -456,10 +454,3 @@ Root worker responsibilities:
   (`atomixos-apply-users`, `quadlet-sync`, LAN gateway, firewall, bootstrap
   rebind, and activation health checks), called by the root apply worker rather
   than moved into a new privileged daemon.
-
-## Review Readiness
-
-This spec is implementation-ready against the current repository direction. The
-affected runtime-boundary and provisioning docs have been updated alongside the
-spec, and there are no unresolved design questions that should block
-implementation.

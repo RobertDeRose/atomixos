@@ -285,7 +285,7 @@ Inputs:
 
 - authoritative docs under `docs/src/`
 - full codebase
-- mdBook docs under `docs/src/`
+- Docusaurus docs under `docs/src/`
 
 Output file: `SPEC_DRIFT_REPORT.md`
 
@@ -299,7 +299,7 @@ Required actions:
 
 1. Inspect all feature `design.md` and `tasks.md` files under `docs/src/features/**/`.
 2. Inspect additional source-of-truth files referenced by those docs.
-3. Inspect the related implementation and mdBook pages.
+3. Inspect the related implementation and documentation pages.
 4. Validate interfaces, contracts, boundaries, and data flows against the implementation.
 5. For docs/code conflicts not resolved by the current tree, inspect git history.
 6. Record every drift item with one Phase 1 category and one provisional required action.

@@ -1,12 +1,13 @@
-# Fleet Bootstrap via Nixstasis
+# Fleet Bootstrap
 
-Fleet images use Nixstasis as the first-boot trust gate. The AtomixOS provisioning API remains the component that
-validates and applies the canonical `config.toml` or complete config bundle; Nixstasis only authorizes and transports
-the initial request.
+A fleet image takes its first configuration through Nixstasis instead of the network bootstrap console. Nixstasis
+decides when a device may be provisioned and carries the request to it; the device's own provisioning API still
+validates and applies the `config.toml` or bundle exactly as it would locally. A `/boot/config.toml` or USB seed, if
+present, is still used first.
 
-## Build Policy
+## Build a fleet image
 
-Fleet exposure is an immutable build decision, not a runtime `config.toml` setting:
+Fleet mode is fixed when you build the image; `config.toml` cannot switch it. Set it in `build.toml`:
 
 ```toml
 [provisioning]
@@ -19,54 +20,49 @@ frp_server_addr = "frps.example.invalid"
 frp_server_port = 7000
 ```
 
-The policy requires Nixstasis to be enabled and requires the public API and FRP server addresses. It contains no device
-or FRP credentials. Standalone and development images retain the default `bootstrap_transport = "network"` behavior.
+Fleet mode requires Nixstasis to be enabled and its API and FRP server addresses to be set. The policy holds no device
+or FRP credentials. Images built with the default `bootstrap_transport = "network"` provision locally. The exact
+fields and their validation are in [Build Configuration](../reference/build-configuration.md).
 
-## Enrollment and Initial Upload
+In a fleet image the provisioning service listens only on `127.0.0.1:8080`. It is not reachable from the WAN or LAN
+side, and the browser bootstrap console is not used.
 
-1. Flash the reviewed fleet image.
-2. The device starts the immutable Nixstasis registration/polling client and keeps its identity under
-   `/data/nixstasis`.
+## Provision a fleet device
+
+1. Flash the fleet image.
+2. Power the device on. The Nixstasis client registers it, keeps its identity under `/data/nixstasis`, and polls the
+   Nixstasis server.
 3. Approve the device in Nixstasis.
-4. Request remote access for the device. Approval and remote access are separate gates.
-5. The Nixstasis server-side delivery action selects the `atomixos-bootstrap` route profile. The client uses the
-   existing FRPS connection and HTTP-vhost path, forwarding plain HTTP to the local `127.0.0.1:8080` provisioning
-   service and presenting `Host: localhost` to that service.
-6. The server action submits the initial complete config through the existing programmatic `POST /api/config` endpoint
-   and polls the returned job. The request is staged, validated, promoted, activated, health-checked, and rolled back
-   using the normal provisioning pipeline.
-7. The server action records the terminal provisioning result before withdrawing the remote-access lease. Successful and
-   failed terminal results withdraw access; an indeterminate result retains the lease for explicit reconciliation or
-   withdrawal. The client stops FRPC after withdrawal.
+4. Request remote access for the device. Approval and remote access are separate steps; both are needed before the
+   client opens a tunnel.
+5. Run the Nixstasis delivery action for the device's configuration. It uses the `atomixos-bootstrap` route profile:
+   the client forwards plain HTTP over its existing FRP connection to the local provisioning service at
+   `127.0.0.1:8080`, presenting `Host: localhost`.
+6. The action sends the configuration to `POST /api/config` as `application/octet-stream` and polls the returned
+   `/api/jobs/<job_id>`. The device applies it like any other change, including health checks and rollback.
+7. The action records the final result, then withdraws remote access, and the client stops its tunnel.
 
-The local API is not reachable on WAN or LAN in this mode. The browser-only Boot UI and its bootstrap CSRF token are not
-the fleet transport; the Nixstasis server-side action uses the programmatic API path. This delivery action is tracked in
-Nixstasis as `nixstasis-4gg`; the client route-profile/Host-rewrite dependencies are
-`nixstasis-255` and `nixstasis-fss`.
+The delivery action retries only documented `409 Conflict` responses. If an upload or a poll gives an unclear answer,
+it does not post the configuration again; the remote-access lease stays open so you can check the job and then withdraw
+access yourself, or let the lease expire. A failed result withdraws access just like a successful one.
 
-The server action sends the exact bounded `application/octet-stream` artifact bytes, expects `202 Accepted` with a
-relative `/api/jobs/<job_id>` location, and polls that job resource. It retries only documented `409 Conflict`
-admission responses. An ambiguous upload or polling result is not reposted, and the route lease remains available for
-reconciliation until a terminal result, explicit withdrawal, or expiry is recorded.
+After the first configuration, changes use the normal signed API described in
+[Change a provisioned device](../provisioning.md#change-a-provisioned-device).
 
-## Recovery and Failure
+## When Nixstasis is unreachable
 
-Nixstasis or FRP outages do not block boot, local SSH recovery, or the loopback provisioning service. The device remains
-unprovisioned until enrollment and remote access become available. The fleet image does not silently open a WAN or LAN
-fallback listener.
+A Nixstasis or FRP outage does not block booting, local SSH recovery, or the local provisioning service. The device
+simply stays unprovisioned until enrollment and remote access work again. It never falls back to opening the
+provisioning service on the WAN or LAN side. To change the transport, build and flash a new image.
 
-A transport change requires a new immutable image. Runtime `config.toml` cannot switch a device between network and
-Nixstasis bootstrap modes. After initial provisioning, re-apply requests use the existing SSH-signature authentication
-and never rely on the first-boot exception.
+## Check a fleet image before release
 
-## Verification
+- `/etc/atomixos/build.toml` on the device records `bootstrap_transport = "nixstasis"`.
+- The Nixstasis API and FRP server addresses are correct and contain no secrets.
+- `ss -ltn` shows the provisioning service only on `127.0.0.1:8080`.
+- The firewall has no WAN rule for port `8080`.
+- The client starts its tunnel only after the device is approved and granted remote access.
+- The delivery action can submit and poll a provisioning job without reposting an unclear request.
+- The final result is recorded before remote access is withdrawn.
 
-Before releasing a fleet image, verify:
-
-- `/etc/atomixos/build.toml` records `bootstrap_transport = "nixstasis"`;
-- the effective Nixstasis API and FRP server addresses are correct and non-secret;
-- `ss -ltn` shows the bootstrap service only on `127.0.0.1:8080`;
-- no pending WAN bootstrap rule is installed;
-- Nixstasis approval and remote-access lease are both required before FRPC starts;
-- the server can submit and poll the existing provisioning job without reposting an ambiguous request;
-- a terminal provisioning result is recorded before the remote-access lease is withdrawn.
+[Nixstasis Enrollment](../architecture/nixstasis-enrollment.md) explains the trust model behind these steps.

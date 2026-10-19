@@ -189,8 +189,7 @@ the simulated primary slot.
 ### Architecture Documentation Changes
 
 `docs/src/architecture/update-rollback.md` must state the unconfirmed-slot boundary, U-Boot decrement ownership, and
-fail-open missing-device behavior. `docs/src/unknowns.md` must distinguish compiled kernel support from physically
-verified runtime availability.
+fail-open missing-device behavior.
 
 ## Operational Considerations
 
@@ -201,22 +200,18 @@ method spike must stop without destructive execution if those prerequisites are 
 The selected method must be repeatable, stop watchdog kicks without corrupting persistent state, preserve a recovery
 path, and produce identifiable serial evidence. It must define a test-only startup fixture that prevents the updated
 slot from being marked good and triggers before `os-verification` can confirm it; that fixture must not enter a
-production profile. The current Rock64 fixture, `run0 kill -STOP 1`, has now been physically validated and remains
-board-specific rather than a general production command.
+production profile. The Rock64 fixture is `run0 kill -STOP 1`; it is board-specific rather than a general production command.
 
 ## Documentation Impact
 
-| Documentation concern      | Exact page                                             | Create or update                 | Planned change                                                                           | Owning Beads task                                   |
-|----------------------------|--------------------------------------------------------|----------------------------------|------------------------------------------------------------------------------------------|-----------------------------------------------------|
-| Architecture               | `docs/src/architecture/update-rollback.md`             | Update                           | Clarify U-Boot ownership, unconfirmed-slot rollback, and fail-open behavior              | `atomixos-aua.8`                                    |
-| Build usage                | `docs/src/building.md`                                 | Update after dependency delivery | Link the supported watchdog `build.toml` settings and defaults                           | `atomixos-mol-0ws` / `atomixos-aua.8`               |
-| Hardware operations        | `docs/src/hardware-testing.md`                         | Update                           | Add the selected safe method, prerequisites, evidence fields, and ordered execution      | Hardware implementation children / `atomixos-aua.8` |
-| Development validation     | `docs/src/testing.md`                                  | Update                           | Keep exact module and VM commands and distinguish their evidence limits                  | `atomixos-aua.8`                                    |
-| Reference contract         | `docs/src/specs/watchdog.md`                           | Update                           | Record canonical options, defaults, fail-open behavior, and physical acceptance boundary | `atomixos-aua.8`                                    |
-| Operational unknowns       | `docs/src/unknowns.md`                                 | Update                           | Separate compiled driver support from runtime hardware proof                             | `atomixos-aua.8`                                    |
-| Roadmap                    | `docs/src/planned-features.md`                         | Update                           | Record Build Configuration dependency and current physical gates                         | `atomixos-aua.8`                                    |
-| Feature navigation         | `docs/src/features/index.md` and `docs/src/SUMMARY.md` | Update at delivery               | Add the implemented record only after delivery                                           | `atomixos-aua.8`                                    |
-| Implemented feature record | `docs/src/features/watchdog-enforcement/index.md`      | Create during close-out          | Record delivered capability, test coverage, and limitations                              | `atomixos-aua.8`                                    |
+| Documentation concern      | Exact page                                        | Create or update                 | Planned change                                                                           | Owning Beads task                                   |
+|----------------------------|---------------------------------------------------|----------------------------------|------------------------------------------------------------------------------------------|-----------------------------------------------------|
+| Architecture               | `docs/src/architecture/update-rollback.md`        | Update                           | Clarify U-Boot ownership, unconfirmed-slot rollback, and fail-open behavior              | `atomixos-aua.8`                                    |
+| Build usage                | `docs/src/building.md`                            | Update after dependency delivery | Link the supported watchdog `build.toml` settings and defaults                           | `atomixos-mol-0ws` / `atomixos-aua.8`               |
+| Hardware operations        | `docs/src/hardware-testing.md`                    | Update                           | Add the selected safe method, prerequisites, evidence fields, and ordered execution      | Hardware implementation children / `atomixos-aua.8` |
+| Development validation     | `docs/src/testing.md`                             | Update                           | Keep exact module and VM commands and distinguish their evidence limits                  | `atomixos-aua.8`                                    |
+| Reference contract         | `docs/src/specs/watchdog.md`                      | Update                           | Record canonical options, defaults, fail-open behavior, and physical acceptance boundary | `atomixos-aua.8`                                    |
+| Implemented feature record | `docs/src/features/watchdog-enforcement/index.md` | Create                           | Record delivered capability, test coverage, and limitations                              | `atomixos-aua.8`                                    |
 
 No introduction page is needed; this feature changes build reference, architecture, testing, and operator procedures.
 
@@ -230,7 +225,7 @@ No introduction page is needed; this feature changes build reference, architectu
 - Coverage that disabled non-RAUC profiles do not install or start `watchdog-boot-count`.
 - Coverage that enabled missing-device behavior continues booting and emits a warning.
 - Build Configuration's watchdog schema/default/integration checks.
-- `mdbook build docs`
+- `mise run docs:build`
 - Repository-wide `mise run check` before delivery.
 
 Use the host-appropriate Nix output. Record remote-builder or hardware limitations rather than treating an unexecuted
@@ -314,14 +309,6 @@ supported `build.toml` schema and timeout validation policy are Build Configurat
 
 - A sacrificial Rock64, serial console, recovery media, and operator are available before physical execution.
 - Build Configuration will define a reproducible way to map `build.toml` into Nix evaluation.
-
-### Design Changes During Planning
-
-- Reconciled stale proposed option names and implementation claims with the existing module.
-- Narrowed rollback claims to newly updated, unconfirmed slots and corrected decrement semantics.
-- Added explicit physical execution and soak ownership instead of treating instructions as evidence.
-- Added fail-open missing-device semantics and RAUC-only boot-count service ownership.
-- Replaced runtime provisioning configuration with the separate Build Configuration dependency.
 
 ### Source Material
 

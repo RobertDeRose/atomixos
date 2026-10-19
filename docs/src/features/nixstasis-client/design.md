@@ -72,7 +72,7 @@ packaged binary/config contract; end-to-end tunnel transport remained outside th
 Seeded from `docs/src/planned-features.md` entry `nixstasis-client`, refined by
 review against the existing client implementation at
 the `packages/client` directory of the Nixstasis repository, and aligned with
-`docs/src/architecture/overwatch-enrollment.md`.
+`docs/src/architecture/nixstasis-enrollment.md`.
 
 ## Overview
 
@@ -251,14 +251,11 @@ from the device to the configured Nixstasis/FRP server.
 
 ## Documentation Impact
 
-- `docs/src/architecture/overwatch-enrollment.md`: update from future-tense model
+- `docs/src/architecture/nixstasis-enrollment.md`: update from future-tense model
   to the included client behavior.
 - `docs/src/runtime-boundaries.md`: document Nixstasis as immutable platform code
   with mutable state under `/data/nixstasis`.
 - `docs/src/testing.md`: document the Nixstasis mock-API VM validation.
-- `docs/src/planned-features.md`: mark this feature complete after closeout.
-- `docs/src/SUMMARY.md`: add the feature spec to the feature list if that is the
-  current convention for new specs.
 
 ## Validation
 

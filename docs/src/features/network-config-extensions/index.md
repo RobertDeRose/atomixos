@@ -1,75 +1,49 @@
 # Network Config Extensions
 
-## References
+Operators can set host DNS servers, search domains, a default route, and Ethernet interface settings in `config.toml`.
+The values go through the same validated candidate, promotion, activation, and rollback pipeline as the rest of the
+configuration. When the fields are absent, the isolated gateway defaults apply. The original plan is in the
+[design record](design.md); Beads tracks the work under `atomixos-ky9`.
 
-- Beads feature root: `atomixos-ky9`
-- Design record: [design.md](design.md)
+## What changed for users
 
-## Delivered Capability
+- **Operators** configure top-level DNS servers and search domains, a default gateway, and supported `ethN` interfaces.
+- A static interface address must come with a matching prefix.
+- The LAN gateway and dnsmasq values must agree.
+- Changing the LAN address no longer requires rebuilding the image.
 
-AtomixOS accepts bounded host DNS, search-domain, default-route, and Ethernet interface settings in `config.toml` and
-applies them through the same validated candidate, promotion, activation, and rollback pipeline as other desired state.
-The isolated gateway defaults remain intact when these fields are absent.
+## How it fits in
 
-## User-Facing Behavior
+Validated values render to derived network state under `/data/config`. `scripts/lan-gateway-apply.py` applies that
+state idempotently through systemd-networkd and the resolver configuration. A failed network activation rolls back with
+the rest of the configuration, and IP forwarding stays disabled.
 
-Operators can configure top-level DNS servers and search domains, a default gateway, and supported `ethN` interfaces.
-Static interface configuration is validated as a coherent address/prefix pair. LAN gateway and dnsmasq values must agree,
-and WiFi remains outside this contract.
+## Running it
 
-## Design Integration
+Keep the effective `lan` address and the dnsmasq gateway CIDR consistent. DNS and route changes can briefly affect
+connectivity during a re-apply; if activation fails, the previous desired state is restored.
 
-Validated values render to derived network state under `/data/config`. `lan-gateway-apply.py` applies that state
-idempotently through systemd-networkd and resolver configuration. A failed network activation participates in the shared
-config rollback path, and IP forwarding remains disabled.
+## Differences from the design
 
-## Operational Impact
+Network settings use the provisioning service's shared desired-state pipeline instead of a separate network management
+API.
 
-Supported LAN address changes no longer require rebuilding the immutable image. Operators must keep the effective
-`eth1` address and dnsmasq gateway CIDR consistent. DNS and route changes can temporarily affect connectivity during
-re-apply, so activation failures restore the prior desired state.
+## Not included
 
-## Reference and Contracts
+- Wi-Fi configuration, other interface classes, and DHCP client options beyond the bounded contract.
+- Routing or forwarding between interfaces, empty gateway placeholders, and unbounded interface names.
+
+## Tests
+
+- `tests/test_lan_gateway_apply.py`: applying derived state and handling failures.
+- `scripts/atomixos_provision/tests/`: accepted and rejected network values and the rendered state.
+- `nix/tests/first-boot-provision.nix`: candidate promotion and rollback on re-apply.
+
+## Related pages
 
 - [Provisioning](../../provisioning.md)
 - [LAN Range Configuration](../../provisioning/lan-range.md)
 - [Runtime Boundaries](../../runtime-boundaries.md)
-- [Firmware Data Flow](../../data-flow.md)
-- [LAN Gateway Specification](../../specs/lan-gateway.md)
+- [Data Flow](../../data-flow.md)
+- [LAN Gateway specification](../../specs/lan-gateway.md)
 - [NTP Settings](../../operations/ntp-settings.md)
-
-## Test Coverage
-
-- `tests/test_lan_gateway_apply.py` covers derived state application and failure handling.
-- Provisioning package tests cover accepted and rejected network schema values and rendered state.
-- Existing re-apply tests cover candidate promotion and rollback integration.
-
-## Design Reconciliation
-
-### Delivered as Designed
-
-DNS, search domains, default routes, supported Ethernet interface configuration, LAN CIDR reconciliation, preserved
-defaults, idempotent apply, rollback, and fail-closed forwarding behavior were delivered.
-
-### Intentional Changes
-
-The delivered implementation uses the provisioning service's common desired-state pipeline rather than a separate
-network management API.
-
-### Deferred Work
-
-WiFi configuration, arbitrary interface classes, DHCP client customization beyond the bounded contract, and routing or
-forwarding remain separate work.
-
-### Rejected or Removed Scope
-
-Empty gateway sentinels, unbounded interface names, and config paths that enable forwarding remain rejected.
-
-## Documentation Updated
-
-- `docs/src/provisioning.md`
-- `docs/src/provisioning/lan-range.md`
-- `docs/src/runtime-boundaries.md`
-- `docs/src/data-flow.md`
-- `docs/src/specs/lan-gateway.md`
-- `docs/src/operations/ntp-settings.md`

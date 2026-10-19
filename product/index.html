@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AtomixOS: an appliance OS that boots the same way every time</title>
+  <meta name="description" content="AtomixOS is a reproducible, read-only operating system for single-board computers, with atomic A/B updates that roll back on their own.">
+  <link rel="icon" href="docs/img/atomixos-logo.svg" type="image/svg+xml">
+  <script>
+    // Same storage key and values as the Docusaurus docs, so the color mode carries between them.
+    (function () {
+      var stored = null;
+      try { stored = localStorage.getItem('theme'); } catch (e) {}
+      var system = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', stored || system);
+    })();
+  </script>
+  <link rel="stylesheet" href="styles.css">
+  <script src="theme.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <a class="brand" href="./">
+      <img src="docs/img/atomixos-logo.svg" alt="" width="36" height="36">
+      <span>AtomixOS</span>
+    </a>
+    <nav class="site-nav" aria-label="Main">
+      <a href="docs/">Docs</a>
+      <a href="https://github.com/RobertDeRose/atomixos">GitHub</a>
+      <button class="theme-toggle" type="button" aria-label="Switch to dark mode">
+        <svg class="theme-icon theme-icon--moon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M12.3 3a9 9 0 1 0 8.7 11.3A7 7 0 0 1 12.3 3Z"/></svg>
+        <svg class="theme-icon theme-icon--sun" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="currentColor"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></svg>
+      </button>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="hero">
+      <figure class="element" aria-label="AtomixOS as a periodic table element">
+        <div class="element__corner element__corner--start"><b>2</b><span>slots</span></div>
+        <div class="element__corner element__corner--end"><b>3</b><span>boot tries</span></div>
+        <p class="element__symbol">Ax</p>
+        <p class="element__name">AtomixOS</p>
+        <figcaption class="element__mass"><b>60 s</b> health check</figcaption>
+      </figure>
+      <div class="hero__copy">
+        <h1>An operating system for single-board computers that boots the same way every time.</h1>
+        <p class="lede">
+          AtomixOS turns a small board into an appliance you can update from anywhere. Every image is built from one Nix
+          flake, the root filesystem is read-only, and a bad update rolls itself back.
+        </p>
+        <div class="actions">
+          <a class="button button--primary" href="docs/provisioning/flash-image">Flash your first board</a>
+          <a class="button" href="docs/">Read the docs</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="disk" aria-labelledby="disk-title">
+      <h2 id="disk-title">Two copies of the system, one place for your data</h2>
+      <p class="section-lede">
+        The eMMC holds two boot and root slots. The device runs from one while an update is written to the other, so a
+        power cut mid-update never leaves it without a working system. Your configuration and logs live on
+        <code>/data</code>, which no update touches.
+      </p>
+      <figure class="strip">
+        <ol class="strip__parts">
+          <li class="part part--raw"><b>U-Boot</b><span>16 MB</span></li>
+          <li class="part part--active"><b>boot-a</b><span>128 MB</span></li>
+          <li class="part part--active part--root"><b>rootfs-a</b><span>1 GB squashfs</span></li>
+          <li class="part"><b>boot-b</b><span>128 MB</span></li>
+          <li class="part part--root"><b>rootfs-b</b><span>1 GB squashfs</span></li>
+          <li class="part part--data"><b>data</b><span>the rest, f2fs</span></li>
+        </ol>
+        <figcaption>Partition layout, not to scale. Slot A is running; slot B receives the next update.</figcaption>
+      </figure>
+    </section>
+
+    <section class="update" aria-labelledby="update-title">
+      <h2 id="update-title">How an update lands</h2>
+      <ol class="steps">
+        <li>
+          <h3>Write the spare slot</h3>
+          <p>A signed RAUC bundle is verified, then written to the slot that is not running.</p>
+        </li>
+        <li>
+          <h3>Boot into it</h3>
+          <p>U-Boot switches to the new slot and counts the attempt.</p>
+        </li>
+        <li>
+          <h3>Prove it is healthy</h3>
+          <p>Services, the network, and your containers must stay healthy for 60 seconds before the slot is committed.</p>
+        </li>
+        <li>
+          <h3>Or fall back</h3>
+          <p>After three boots that never prove healthy, U-Boot returns to the slot that worked.</p>
+        </li>
+      </ol>
+    </section>
+
+    <section class="traits" aria-labelledby="traits-title">
+      <h2 id="traits-title">What you get</h2>
+      <dl class="traits__list">
+        <div>
+          <dt>Reproducible images</dt>
+          <dd>The same flake and inputs always build the same image, and each image carries its build policy.</dd>
+        </div>
+        <div>
+          <dt>A read-only root</dt>
+          <dd>The system is a squashfs image. Runtime changes vanish on reboot, so every boot starts clean.</dd>
+        </div>
+        <div>
+          <dt>Containers without rebuilds</dt>
+          <dd>Describe applications as Podman Quadlets in one <code>config.toml</code>; the base image never changes.</dd>
+        </div>
+        <div>
+          <dt>No default credentials</dt>
+          <dd>Each device is provisioned on first boot. SSH is key-only and closed on the WAN side unless you open it.</dd>
+        </div>
+        <div>
+          <dt>An isolated gateway</dt>
+          <dd>The LAN side gets DHCP, DNS, and NTP. Nothing is ever forwarded between LAN and WAN.</dd>
+        </div>
+        <div>
+          <dt>Optional fleet management</dt>
+          <dd>Enroll devices with Nixstasis to provision and reach them remotely, or leave it out entirely.</dd>
+        </div>
+      </dl>
+    </section>
+
+    <section class="boards" aria-labelledby="boards-title">
+      <h2 id="boards-title">Supported boards</h2>
+      <table>
+        <thead>
+          <tr><th scope="col">Board</th><th scope="col">SoC</th><th scope="col">Build</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Rock64</td><td>Rockchip RK3328</td><td><code>mise run build</code></td></tr>
+          <tr><td>Radxa CM3 IO</td><td>Rockchip RK3566</td><td><code>mise run build --board cm3</code></td></tr>
+        </tbody>
+      </table>
+      <p class="section-lede">Both boot from eMMC. New boards are added one at a time, each with its own tests.</p>
+    </section>
+
+    <section class="start" aria-labelledby="start-title">
+      <h2 id="start-title">Get started</h2>
+      <ol class="commands">
+        <li><p>Install the pinned tools.</p><pre><code>mise install --locked</code></pre></li>
+        <li><p>Build the image for your board.</p><pre><code>mise run build</code></pre></li>
+        <li><p>Flash it to the board's eMMC.</p><pre><code>mise run flash /dev/disk4</code></pre></li>
+        <li><p>Power on and provision the device from its first-boot console.</p></li>
+      </ol>
+      <p class="section-lede">
+        <a href="docs/provisioning">Provisioning</a> covers the first-boot console, USB seeds, and Nixstasis enrollment.
+      </p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p><a href="https://github.com/RobertDeRose/atomixos">AtomixOS on GitHub</a></p>
+  </footer>
+</body>
+</html>

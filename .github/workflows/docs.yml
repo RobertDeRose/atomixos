@@ -17,11 +17,11 @@ jobs:
       contents: read
     steps:
       - name: Check out repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # ratchet:actions/checkout@v6.0.3
         with:
           persist-credentials: false
       - name: Set up mise
-        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
+        uses: jdx/mise-action@4444d8fd7a1b92f1821c12f435db40f58b743d26 # ratchet:jdx/mise-action@v4.0.1
         with:
           install: false
           cache: false
@@ -30,15 +30,17 @@ jobs:
           MISE_IGNORED_CONFIG_PATHS: /home/runner/.config/mise/config.toml
         run: mise install --locked
       - name: Configure Pages
-        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
-      - name: Build documentation
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # ratchet:actions/configure-pages@v5
+      # The product page at the root, with the docs under docs/. docs:build installs the pinned npm
+      # dependencies from docs/package-lock.json first.
+      - name: Build site
         env:
           MISE_IGNORED_CONFIG_PATHS: /home/runner/.config/mise/config.toml
-        run: mise run docs:build
+        run: mise run site:build
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # ratchet:actions/upload-pages-artifact@v4
         with:
-          path: book
+          path: _site/atomixos
   deploy:
     if: vars.DOCS_DEPLOYMENT_ENABLED == 'true'
     needs: build
@@ -53,4 +55,4 @@ jobs:
     steps:
       - name: Deploy Pages
         id: deployment
-        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # ratchet:actions/deploy-pages@v4

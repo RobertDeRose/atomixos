@@ -35,9 +35,6 @@ Thumbs.db
 .local
 build.dev.toml
 
-# mdBook output
-book/
-
 # AI Agents
 .playwright-mcp/
 bkup/
@@ -48,9 +45,6 @@ config.toml
 .bundle-test-vm-runner
 
 # BEGIN DSTACK WORKFLOW
-# Generated mdBook output
-docs/book/
-
 # Local tooling and secret overrides
 mise.local.toml
 .mise.local.toml
@@ -74,3 +68,6 @@ mise.local.toml
 *.db
 .beads-credential-key
 .beads/proxieddb/
+
+# Assembled GitHub Pages site
+/_site/

@@ -1,71 +1,47 @@
 # Nixstasis Client
 
-## References
+AtomixOS can include the Nixstasis client in the immutable base system. An enabled device enrolls, keeps its identity
+under `/data/nixstasis`, polls the server without blocking local recovery, accepts bounded remote-access requests, and
+keeps a Nixstasis SSH authorization path separate from operator keys. The original plan is in the
+[design record](design.md); Beads tracks the work under `atomixos-4hw`.
 
-- Beads feature root: `atomixos-4hw`
-- Design record: [design.md](design.md)
+## What changed for users
 
-## Delivered Capability
+- With a valid API URL, the device registers, reuses its stored identity, and reports through the heartbeat endpoint.
+- The server can ask the device to start the configured FRP tunnel.
+- WAN or server outages back off without blocking boot or local recovery.
 
-AtomixOS can package the Nixstasis client in the immutable base system, enroll eligible devices, persist identity under
-`/data/nixstasis`, poll without blocking local recovery, accept bounded remote-access requests, and maintain a separate
-Nixstasis SSH authorization path.
+## How it fits in
 
-## User-Facing Behavior
+Nixstasis is base-system management code, not an application container. Its identity and authorized keys are separate
+from the provisioned operator configuration, and it runs nothing that is not explicitly allowed. Its services start
+after networking but are not required for a boot to count as successful.
 
-When enabled with a valid API URL, the device registers and reuses its persisted identity, periodically reports through
-the heartbeat endpoint, and can launch the configured FRP boundary from a server response. WAN or server outages back
-off without preventing local boot or operator recovery.
+## Running it
 
-## Design Integration
+Operators configure enablement, the API URL, storage paths, and poll and retry behavior through the options in
+`modules/nixstasis.nix`. Enrollment state lives on `/data`, so it survives OS updates. The Nixstasis server decides which
+devices are eligible and what they do; AtomixOS runs the bounded client and keeps local recovery available.
 
-Nixstasis is base-system management code rather than an application container. Its identity and authorized keys are
-separate from provisioned operator config, and its command surface is deny-by-default. Services order after networking
-but do not become a boot-success prerequisite.
+## Differences from the design
 
-## Operational Impact
+The VM test proves the transient FRP unit and the credential boundary with a mock `frpc` instead of a full tunnel.
+Tunnel reliability depends on the Nixstasis server and the deployment network.
 
-Operators configure the API URL, persistent paths, poll/retry behavior, and enablement through NixOS options. Enrollment
-state survives OS updates because it is stored on `/data`. The remote server owns inventory eligibility and orchestration;
-AtomixOS owns the bounded client execution and local recovery boundary.
+## Not included
 
-## Reference and Contracts
+- Validation against a production Nixstasis deployment.
+- Fleet orchestration on the device, a hosted management UI, replacing provisioned operator keys, and making boot
+  depend on the server.
 
-- [Nixstasis Enrollment](../../architecture/overwatch-enrollment.md)
+## Tests
+
+- `nix/tests/nixstasis-module.nix`: options and rendered configuration.
+- `nix/tests/nixstasis-client.nix`: registration, identity reuse, polling, outages, and a transient FRP unit, against a
+  mock API and a mock `frpc`.
+
+## Related pages
+
+- [Nixstasis Enrollment](../../architecture/nixstasis-enrollment.md)
 - [Runtime Boundaries](../../runtime-boundaries.md)
 - [Testing](../../testing.md)
-- `modules/nixstasis.nix`
-
-## Test Coverage
-
-- `nix/tests/nixstasis-module.nix` validates options and rendered configuration.
-- `nix/tests/nixstasis-client.nix` uses a mock API to validate registration, identity reuse, polling, outage behavior,
-  and a successful transient FRP unit with a mock `frpc`.
-
-## Design Reconciliation
-
-### Delivered as Designed
-
-Immutable packaging, persistent identity, registration and polling services, backoff, separate SSH keys, command
-allowlisting, and mock-server validation were delivered.
-
-### Intentional Changes
-
-Full FRP tunnel transport remains deferred; the VM proves the transient unit and credential boundary with a mock
-`frpc`, while remote tunnel reliability belongs to integration with the Nixstasis server and deployment network.
-
-### Deferred Work
-
-End-to-end validation against a production Nixstasis deployment remains operational integration work.
-
-### Rejected or Removed Scope
-
-On-device fleet orchestration, a hosted management UI, replacement of provisioned operator keys, and boot dependence on
-remote availability remain out of scope.
-
-## Documentation Updated
-
-- `docs/src/architecture/overwatch-enrollment.md`
-- `docs/src/runtime-boundaries.md`
-- `docs/src/testing.md`
-- `docs/src/planned-features.md`

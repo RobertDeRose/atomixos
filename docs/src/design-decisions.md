@@ -1,196 +1,179 @@
 # Design Decisions
 
-> Source: `docs/src/features/rock64-ab-image/design.md`
+The main architectural choices behind AtomixOS, why they were made, and what they cost. AtomixOS targets appliances
+deployed far from anyone who could fix them by hand, on aarch64 single-board computers that boot from eMMC (the ROCK64
+and the Radxa CM3), so most decisions favor recoverability over flexibility.
 
-This chapter documents the key architectural decisions made during the design of AtomixOS, including the rationale,
-alternatives considered, and known trade-offs.
+## RAUC for A/B updates
 
-## Context
+**Choice:** RAUC manages the A/B slots.
 
-AtomixOS is a greenfield project for secure, reproducible single-board computer appliances deployed remotely. The initial
-hardware target is Rock64 (RK3328, aarch64) with 16 GB eMMC storage.
+**Why:** RAUC integrates with U-Boot, has clear slot configuration, and has a NixOS module. SWUpdate offers more, such
+as scripted handlers and delta updates, but that flexibility is not needed here.
 
-## Decision 1: RAUC over SWUpdate
+**Cost:** Updates write whole images, never deltas. A full root filesystem write takes longer than a delta but is
+simpler and more reliable.
 
-**Choice**: RAUC for A/B slot management.
+## Squashfs root filesystem
 
-**Rationale**: RAUC has native U-Boot integration, well-documented slot configuration, and a straightforward NixOS
-module. SWUpdate offers more flexibility (scripted handlers, delta updates) but adds complexity that isn't needed for
-the current use case.
+**Choice:** A read-only squashfs root under an OverlayFS with a tmpfs upper layer.
 
-**Trade-off**: RAUC's update model is image-based (full slot writes), which means no delta updates. A full rootfs write
-(~300 MB) takes longer than a delta, but is simpler and more reliable.
+**Why:** Squashfs rules out drift: every boot starts from a known-good state. It compresses well (zstd, 1 MB blocks).
+The OverlayFS, assembled in the initrd, gives systemd the single writable root it needs for sandboxing options such as
+`PrivateTmp` and `ProtectHome`. Lasting state lives on `/data` (f2fs).
 
-## Decision 2: Squashfs rootfs
+**Cost:** Anything not written to `/data` is gone after a reboot. That is the point for an appliance, but writable
+directories have to be placed deliberately.
 
-**Choice**: Read-only squashfs root filesystem with OverlayFS (tmpfs upper layer).
+## Per-slot boot partitions
 
-**Rationale**: Squashfs eliminates runtime drift -- every boot starts from a known-good state. It compresses well (zstd,
-1 MB blocks), fitting the NixOS closure into the 1 GB slot with room to spare. A single OverlayFS (squashfs lower +
-tmpfs upper) set up in the initrd provides a unified writable root, which is required for systemd's mount namespace
-sandboxing (PrivateTmp, ProtectHome, etc.) to work correctly. Writable state lives on `/data` (f2fs).
+**Choice:** Each slot has its own vfat boot partition with the kernel, initrd, DTB, and boot script.
 
-**Trade-off**: Any runtime state not explicitly persisted to `/data` is lost on reboot. This is intentional for an
-appliance but requires careful placement of writable directories.
+**Why:** Pairing boot and root in one slot keeps them consistent. With separate slot sets, a failed update could leave a
+kernel and root filesystem from different versions.
 
-## Decision 3: Per-slot boot partitions
+**Rejected:** One shared boot partition holding both kernels. It would be a single point of failure and would complicate
+the boot script.
 
-**Choice**: Each A/B slot has its own boot partition (vfat) containing the kernel, initrd, DTB, and boot script.
+## Fixed eMMC layout
 
-**Rationale**: Pairing boot and rootfs in the same slot ensures they are always consistent. If kernel and rootfs were in
-different slot pairs, a failed update could leave mismatched versions.
+**Choice:** 16 MB of raw U-Boot, 128 MB boot and 1 GB root partitions per slot, and the rest for `/data`. See
+[Partition Layout](architecture/partition-layout.md).
 
-**Alternative considered**: Single shared boot partition with both kernels. Rejected because it creates a single point
-of failure and complicates the U-Boot boot script.
+**Why:** 128 MB comfortably holds a kernel, initrd, DTB, and script. 1 GB per root slot leaves room for the system
+closure to grow, and `/data` keeps most of the eMMC for containers, logs, and configuration.
 
-## Decision 4: eMMC partition layout
+**Risk:** If the closure outgrows 1 GB, the slots must grow, which shrinks `/data` and means reprovisioning every device.
+The build checks the squashfs size against the slot size to catch this early.
 
-**Choice**: Fixed layout: 16 MB raw U-Boot, 128 MB boot A/B, 1 GB rootfs A/B, remaining space for `/data`.
+## U-Boot built from nixpkgs
 
-**Rationale**: 128 MB per boot slot provides ample space for the kernel (~25 MB compressed), initrd, DTB, and boot
-script. 1 GB per rootfs slot gives 2-3x headroom over the current squashfs size (~300-400 MB). The `/data` partition
-(~13.3 GB) holds containers, logs, and configuration.
+**Choice:** Build each board's U-Boot from a nixpkgs package with a small configuration override, rather than
+maintaining a fork: `ubootRock64` in `nix/uboot.nix` for ROCK64, and `ubootRock3C` with the `radxa-cm3-io-rk3566`
+defconfig in `nix/uboot-cm3.nix` for the CM3.
 
-**Risk**: If the NixOS closure grows beyond 1 GB, the rootfs slot size must be increased, which reduces `/data` space
-and requires re-provisioning all devices.
+**Why:** The nixpkgs packages are tested, reproducible, and follow upstream. The overrides only change configuration:
+RAUC's boot method handles slot selection and boot counters, EFI boot is off, and SD cards are removed from the boot
+targets so nobody can hijack boot with a card. The environment lives in SPI flash on ROCK64 and in two redundant copies
+on the CM3's eMMC, because the CM3's SPI flash is optional.
 
-## Decision 5: U-Boot from nixpkgs
+**Cost:** AtomixOS uses whichever U-Boot version nixpkgs provides.
 
-**Choice**: Use `pkgs.ubootRock64` from nixpkgs rather than a custom U-Boot build.
+## Hardware watchdog off by default
 
-**Rationale**: The nixpkgs U-Boot package is tested, reproducible, and tracks upstream releases. Custom patches are
-applied via the kernel config (not U-Boot patches), keeping the build simple.
+**Choice:** systemd hardware watchdog enforcement is opt-in through `build.toml`, which also selects the watchdog
+device; see [Watchdog Backend Selection](reference/build-configuration.md#watchdog-backend-selection).
 
-**Trade-off**: Limited to the U-Boot version and configuration in nixpkgs. The current version (2025.10) lacks
-`setexpr`, requiring a manual if/elif chain for boot counter decrement.
+**Why:** A watchdog that resets a board before its timing and rollback behavior are proven on that hardware can trap a
+device in a reboot loop in the field. Keeping it off by default means each release profile turns it on only after
+physical reset-timing, rollback, and soak testing.
 
-## Decision 6: Watchdog strategy
+**How it fits:** systemd is the only watchdog owner, and watchdog resets use up boot tries like any failed boot, so they
+lead into the normal rollback path.
 
-**Choice**: keep active systemd hardware watchdog enforcement opt-in and disabled by default, while supporting
-build-time selection of the onboard RK3328 DesignWare watchdog or the external TI UCC2946 path. The target settings are
-30s runtime and 10min reboot.
+## Local health checks only
 
-**Rationale**: A hardware watchdog that resets a device before its reset timing, RAUC rollback interaction, and
-long-running stability are proven can cause reboot loops in the field. The default-disabled policy avoids enabling
-enforcement in release profiles that have not completed physical reset-timing, RAUC rollback, and 72-hour soak
-validation.
+**Choice:** `os-verification.service` confirms a slot from local checks alone and never contacts a server.
 
-**Integration**: When enabled, systemd is the sole watchdog owner and watchdog reboots feed into the U-Boot boot-count
-rollback path.
+**Why:** The device must decide on its own. If the WAN is down after an update, the device should still commit a healthy
+slot or roll back a broken one. Asking a server would make confirmation depend on the network at the worst moment.
 
-## Decision 7: Local health-check (no phone-home)
+## Remote management in Nixstasis
 
-**Choice**: `os-verification.service` runs local checks only. No external server is contacted for update confirmation.
+**Choice:** Keep remote web management out of the image and use Nixstasis as an optional control plane.
 
-**Rationale**: The device must be self-sufficient. If the WAN is down after an update, the device should still be able
-to commit the slot (or roll back) based on local service health. Phoning home would create a dependency on network
-availability during the critical confirmation window.
+**Why:** The Nixstasis client already opens reverse tunnels and handles remote-access credentials. Running the web
+management and its sign-in in Nixstasis avoids pulling container images on first boot, keeps the image smaller, and keeps
+the device focused on gateway and update work.
 
-## Decision 8: Optional Nixstasis-based remote management
+**Cost:** Remote management depends on enrollment and a working tunnel. Without them, local recovery is over SSH, not an
+on-device web UI.
 
-**Choice**: Move remote web management out of the device image and support Nixstasis as an optional control plane.
+## OpenVPN in the root filesystem
 
-**Rationale**: The Nixstasis client already establishes reverse tunnels and receives short-lived SSH credentials from the
-server. Hosting remote web management and the auth layer in Nixstasis removes first-boot registry pulls, reduces device
-complexity, and keeps the device focused on local gateway and update responsibilities.
+**Choice:** OpenVPN ships in the root filesystem, not in a container.
 
-**Trade-off**: Remote management now depends on successful Nixstasis enrollment and tunnel establishment. Local recovery
-falls back to SSH rather than an on-device HTTPS UI.
+**Why:** OpenVPN is a recovery tunnel. If it ran in a container and the container runtime broke, remote access would be
+lost too. In the root filesystem, it survives container failures. It starts only when
+`/data/config/openvpn/client.conf` exists.
 
-## Decision 9: OpenVPN in rootfs
+## No IP forwarding
 
-**Choice**: Include OpenVPN in the root filesystem (not as a container).
+**Choice:** IP forwarding is off in the kernel, and the nftables `forward` chain drops everything.
 
-**Rationale**: OpenVPN provides a recovery tunnel for remote management. If it ran as a container and the container
-runtime failed, there would be no remote access. Including it in the rootfs ensures it survives container-layer
-failures.
+**Why:** EN 18031 asks for a hard network boundary: LAN devices must not reach the internet. WAN ports for applications
+or a VPN open only when provisioned, and forwarding stays off regardless.
 
-## Decision 10: Network isolation (no IP forwarding)
+## NIC naming with .link files
 
-**Choice**: Disable IP forwarding at the kernel level. The nftables `FORWARD` chain drops all packets.
+**Choice:** systemd `.link` files name the interfaces, not udev rules.
 
-**Rationale**: EN18031 requires a hard network boundary. LAN devices must not be able to reach the internet.
-WAN application or VPN ports are opened only by provisioned firewall state. Packet forwarding between WAN and LAN stays
-disabled.
+**Why:** `.link` files are systemd's own mechanism and match each board's onboard NIC by a stable platform path. They
+rename it to `wan` and the USB Ethernet adapter to `lan`, names the kernel never assigns. Renaming to a kernel name such
+as `eth0` fails when a USB adapter registered first and took it, which would leave the onboard WAN port with the LAN
+name and its open LAN firewall rule. The match rules are in [NIC Naming](architecture/network-topology.md#nic-naming).
 
-## Decision 11: NIC naming via .link files
+## nftables firewall
 
-**Choice**: Use systemd `.link` files for deterministic NIC naming rather than udev rules.
+**Choice:** nftables with per-interface rules.
 
-**Rationale**: `.link` files are the native systemd-networkd mechanism and are processed earlier in boot than udev
-rules. They match the onboard NIC per board (e.g., platform path `platform-ff540000.ethernet` on ROCK64) and rename it
-to `wan`, and the USB Ethernet adapter to `lan`. These are names the kernel never assigns: renaming to a kernel name
-such as `eth0` fails when a USB adapter registered first and took it, which would leave the onboard WAN port with the
-LAN name and its open LAN firewall rule.
+**Why:** nftables is the current Linux firewall framework, with simpler rule syntax than iptables, and NixOS supports it
+directly through `networking.nftables`.
 
-## Decision 12: nftables firewall
+## Update polling first
 
-**Choice**: nftables with per-interface rules, replacing iptables.
+**Choice:** Updates come from simple HTTP polling (`os-upgrade.service`). The `os-upgrade.useHawkbit` option is kept as
+a seam for a hawkBit client later.
 
-**Rationale**: nftables is the modern Linux firewall framework with better performance and a cleaner rule syntax. The
-NixOS `networking.nftables` module provides native integration.
+**Why:** Polling needs no fleet server beyond a small HTTP endpoint and is enough for the current scale. hawkBit is not
+a working update path; see [Update Polling](architecture/update-rollback.md#update-polling).
 
-## Decision 13: hawkBit-ready architecture
+## QEMU test target
 
-**Choice**: Design the update system to be swappable between polling and hawkBit push models.
+**Choice:** A `rock64-qemu` NixOS configuration runs the same services as the hardware image on virtio devices, with a
+file-based RAUC backend.
 
-**Rationale**: The initial deployment uses simple HTTP polling (`os-upgrade.service`). As the fleet scales, migration to
-hawkBit can provide centralized update management, rollout policies, and device inventory. The `os-upgrade.useHawkbit`
-option currently reserves this path and installs the package, but AtomixOS does not configure an operational hawkBit
-service yet.
+**Why:** Hardware testing is slow and needs physical boards. The QEMU target exercises the RAUC lifecycle, firewall
+rules, and health checks in VMs that run in CI. Its RAUC backend imitates U-Boot's slot selection with files.
 
-## Decision 14: QEMU testing target
+## Key-only authentication
 
-**Choice**: Provide a `rock64-qemu` NixOS configuration that shares the full service stack with the hardware target but
-uses virtio devices and a file-based RAUC backend.
+**Choice:** No default passwords, a locked root password, no built-in operator account, key-only SSH, a serial
+break-glass path, and optional Nixstasis remote management. See [Authentication](architecture/authentication.md).
 
-**Rationale**: Hardware testing is slow and requires physical devices. QEMU testing validates all software behavior
-(RAUC lifecycle, firewall rules, health checks) in CI-friendly VMs. The custom RAUC backend simulates U-Boot's slot
-selection using files.
+**Why:** The image does not host a web management or sign-in stack. Key-only SSH and locked passwords leave nothing to
+brute-force, and Nixstasis keeps remote-management credentials outside the image.
 
-## Decision 15: EN18031 authentication
+## Small system closure
 
-**Choice**: no default passwords, locked local root password, no built-in operator account, SSH key-only access, serial
-break-glass recovery, and optional Nixstasis-based remote management.
+**Choice:** Cut the closure size hard with overlays, disabled features, and trimmed dependencies:
 
-**Rationale**: The base image does not host the web management/authentication stack. SSH key-only access and locked
-passwords prevent brute-force attacks on the device, while Nixstasis handles remote management credentials outside the
-device image.
+- `crun` built without CRIU, which drops Python from the closure
+- no documentation, man pages, fonts, XDG files, `sudo`, or bash completion
+- empty `defaultPackages` and `fsPackages`
+- bcache, kexec, and LVM support turned off
 
-## Decision 16: Squashfs closure optimization
+**Why:** A smaller closure leaves more headroom in the 1 GB root slot and makes every full-image update smaller.
 
-**Choice**: Aggressive closure size reduction through overlays, disabled features, and stripped dependencies.
+## Two-tier runtime logging
 
-**Techniques applied**:
+**Choice:** journald keeps host and container logs in memory, and rsyslog drains them through an in-memory queue into
+batched appends on `/data/logs`.
 
-- `crun` without CRIU (removes python3, saving ~102 MB)
-- Disabled: documentation, man pages, fonts, XDG, sudo, bash completion
-- Emptied `defaultPackages` and `fsPackages`
-- Disabled: bcache, kexec, LVM
+**Why:** A fully persistent journal would wear the eMMC with constant small writes. Keeping the journal in memory, capping
+its size, and sending Podman logs the same way keeps routine logging cheap, while `/data/logs` still holds lasting
+diagnostics written in larger batches.
 
-**Result**: Approximately 27% reduction in closure size compared to a default NixOS system with the same services.
+**Cost:** Durability is bounded, not absolute. A sudden power loss can lose the newest entries still in memory.
 
-## Decision 17: Two-tier runtime logging model
+## Risks and trade-offs
 
-**Choice**: Use tmpfs-first `journald` during runtime for host and container log ingress, then drain it through an
-`rsyslog` RAM queue that appends buffered logs to `/data/logs`.
-
-**Rationale**: Making the full journal always persistent would increase steady-state eMMC wear. The selected design keeps
-runtime logging memory-first, caps journal memory use, routes Podman logs through the same path, and still retains
-broader diagnostics durably on `/data/logs` in larger sequential batches instead of many small writes.
-
-**Trade-off**: This is a bounded-loss durability model rather than an always-durable one. Sudden power loss can still
-drop the newest in-memory journal or rsyslog queue entries, but routine runtime writes remain much friendlier to eMMC
-than fully persistent journal storage.
-
-## Risks and Trade-offs
-
-| Risk                                  | Mitigation                                                                                                                                                                            |
-|---------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| eMMC wear from frequent writes        | `/data` uses f2fs (wear-leveling aware); squashfs slots are written only during updates                                                                                               |
-| U-Boot env corruption                 | Single-copy environment storage; corruption is handled through normal recovery and reprovisioning flows                                                                               |
-| 1 GB rootfs slot too small            | Current closure is ~300-400 MB; aggressive optimization keeps headroom                                                                                                                |
-| Missing or empty health-required list | `first-boot.service` commits only when RAUC is enabled; `os-verification` uses gateway health checks alone unless `/data/config/health-required.json` names additional required units |
-| Provisioned application failure       | OpenVPN in rootfs and SSH key-only access provide alternate recovery paths                                                                                                            |
-| No delta updates                      | Full-image updates are ~300 MB; acceptable on broadband WAN connections                                                                                                               |
-| No automatic WAN SSH                  | Deliberate security constraint; manual flag file required                                                                                                                             |
+| Risk                            | Mitigation                                                                                        |
+|---------------------------------|---------------------------------------------------------------------------------------------------|
+| eMMC wear                       | `/data` uses f2fs; root slots are written only during updates; logs are batched                   |
+| U-Boot environment corruption   | The environment is on SPI flash, away from the eMMC; corruption is handled by normal recovery     |
+| Root slot too small             | The closure is kept small, and the build checks the squashfs against the slot size                |
+| No application health list      | `os-verification` checks the gateway alone unless `/data/config/health-required.json` names units |
+| A provisioned application fails | OpenVPN in the root filesystem and key-only SSH provide other ways in                             |
+| No delta updates                | Full-image updates cost more bandwidth but cannot leave a partial state                           |
+| No automatic WAN SSH            | Deliberate: an operator must create the flag file                                                 |

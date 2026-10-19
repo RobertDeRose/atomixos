@@ -1,14 +1,12 @@
 # Build Configuration
 
-Built-in LAN fallback values are owned by `defaults/lan.json`. NixOS modules,
-the provisioning service, and boot-time health scripts consume this same
-contract. Use `mise run config:lan-range --gateway-cidr ... --dhcp-start ...
---dhcp-end ...` to update it; do not edit generated consumers independently.
-
 AtomixOS build policy uses a strict versioned TOML schema. The evaluator recursively merges the parsed base and local
 overlay, then passes the result through one typed Nix module. That module owns field types, ranges, and cross-field
 assertions; canonical artifacts and consumer values are derived only from its evaluated policy. Build configuration is
 non-secret input fixed into artifacts; it is separate from mutable runtime provisioning in `config.toml`.
+
+Built-in LAN fallback values are not build policy. They live in `defaults/lan.json`; see
+[LAN Range](../provisioning/lan-range.md).
 
 ## Version 1 Schema
 
@@ -50,9 +48,8 @@ Duration strings contain a positive integer followed immediately by one of `ms`,
 decimals, compound spans, whitespace, unitless numbers, values that overflow conversion, and values outside the field's
 converted range are invalid.
 
-These ranges constrain accepted policy; they do not prove that a physical watchdog supports every accepted value.
-Hardware validation must record the timeout systemd actually programs and verify that observed behavior satisfies the
-intended timing.
+These ranges constrain accepted policy; they do not guarantee that a physical watchdog supports every accepted value.
+systemd may program the nearest timeout the driver supports, so check the value it reports on the target hardware.
 
 ## Local Overlay Schema
 
@@ -127,8 +124,9 @@ backend = "internal"
 
 ### External SOM Watchdog
 
-The external example path uses the TI UCC2946 through the PCA/TCA9536-compatible I2C expander at bus 1, address `0x41`.
-It is exposed as `/dev/watchdog-external`:
+The external example path on Rock64 uses the TI UCC2946 through the PCA/TCA9536-compatible four-bit I2C GPIO expander
+at bus 1, address `0x41`. GPIO0 is held low to enable the watchdog and GPIO1 toggles `WDI`; the kernel `gpio-pca953x`
+and `gpio-wdt` drivers expose it as `/dev/watchdog-external`:
 
 ```toml
 [watchdog]
@@ -137,6 +135,12 @@ backend = "external"
 ```
 
 Systemd remains the sole owner of either device. The legacy userspace `i2cset` kicker is not used.
+
+### Radxa CM3 Watchdog
+
+The CM3 IO Board has no external watchdog. CM3 builds always use the internal RK3566 watchdog (`fe600000`), exposed as
+`/dev/watchdog-internal`; selecting `backend = "external"` with enforcement enabled logs a build warning and still uses
+the internal device.
 
 ### Disable Watchdog Enforcement
 
@@ -219,16 +223,16 @@ mode, signing certificate trust, or release readiness. Without a local override,
 prints the warning, and appends `--impure` to the Nix command. The wrapper does not accept another configuration path or
 parse policy itself. Lima tasks invoke the same wrapper inside the repository mounted at the same path.
 
-| `mise` task                 | Applies local overlay | Contract                                              |
-|-----------------------------|-----------------------|-------------------------------------------------------|
-| `check`                     | No                    | Formatting, linting, and documentation only           |
-| `build`                     | Yes                   | Build and retain configured artifacts                 |
-| `build:squashfs`            | Yes                   | Build immutable configured system policy              |
-| `build:rauc-bundle`         | Yes                   | Build configured update and audit sidecars            |
-| `build:boot-script`         | Yes                   | Reference the configured closure and squashfs ID      |
-| `vm:bundle-test`            | Yes                   | Build an interactive configured-system test           |
-| `e2e`, `e2e:*`, `e2e:debug` | No                    | Fixtures own explicit isolated configuration          |
-| `serial:*`, `_lima`, `gc`   | No                    | Commands do not construct configured AtomixOS outputs |
+| `mise` task                 | Applies local overlay | Contract                                                     |
+|-----------------------------|-----------------------|--------------------------------------------------------------|
+| `check`                     | No                    | Formatting, linting, and documentation only                  |
+| `build [--board <board>]`   | Yes                   | Build and retain configured artifacts for one board          |
+| `build:squashfs`            | Yes                   | Build immutable configured system policy (`--board`)         |
+| `build:rauc-bundle`         | Yes                   | Build configured update and audit sidecars (`--board`)       |
+| `build:boot-script`         | Yes                   | Reference the configured closure and squashfs ID (`--board`) |
+| `vm:bundle-test`            | Yes                   | Build an interactive configured-system test                  |
+| `e2e`, `e2e:*`, `e2e:debug` | No                    | Fixtures own explicit isolated configuration                 |
+| `serial:*`, `_lima`, `gc`   | No                    | Commands do not construct configured AtomixOS outputs        |
 
 Use `./scripts/nix-with-build-config.sh flake check` to evaluate and test effective policy, including a local overlay.
 `mise run check` does not invoke Nix or apply build policy.
@@ -257,4 +261,4 @@ finishes publishing. A `current` link whose store path no longer exists is repla
 
 Build configuration must not contain credentials, signing keys, certificates, tokens, or arbitrary Nix expressions.
 Source revision, `flake.lock`, verification certificates, and signing credentials remain separately owned build inputs.
-Unknown future sections fail until an owning feature defines and documents their schema.
+Unknown sections fail validation.

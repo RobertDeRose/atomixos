@@ -1,0 +1,339 @@
+/* AtomixOS brand theme for Docusaurus (Infima). Colors come from the atom logo: deep navy, electric blue, silver. */
+
+:root {
+  --brand-font-heading: 'Exo 2 Variable', system-ui, sans-serif;
+  --brand-font-body: 'Atkinson Hyperlegible Next Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --brand-font-mono: 'Atkinson Hyperlegible Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --brand-bg: #f5f8fd;
+  --brand-surface: #e8f0fb;
+  --brand-header: #ffffff;
+  --brand-ink: #13233f;
+  --brand-ink-muted: #3f5373;
+  --brand-line: rgba(28, 100, 209, 0.18);
+  --brand-accent: #1c64d1;
+  --brand-code: #0e4aa3;
+
+  /* Fills use the primary; text-sized links use one shade darker to keep at least 6:1 contrast. */
+  --ifm-color-primary: #1c64d1;
+  --ifm-color-primary-dark: #195abc;
+  --ifm-color-primary-darker: #1855b2;
+  --ifm-color-primary-darkest: #144692;
+  --ifm-color-primary-light: #236fe2;
+  --ifm-color-primary-lighter: #2e76e3;
+  --ifm-color-primary-lightest: #4d8ae7;
+  --ifm-link-color: var(--ifm-color-primary-dark);
+  --ifm-menu-color-active: var(--ifm-color-primary-dark);
+
+  --ifm-background-color: var(--brand-bg);
+  --ifm-navbar-background-color: var(--brand-header);
+  --ifm-font-color-base: var(--brand-ink);
+  --ifm-color-content-secondary: var(--brand-ink-muted);
+  --ifm-menu-color: var(--brand-ink-muted);
+  --ifm-code-font-size: 95%;
+  --ifm-font-family-base: var(--brand-font-body);
+  --ifm-heading-font-family: var(--brand-font-heading);
+  --ifm-font-family-monospace: var(--brand-font-mono);
+  --ifm-heading-font-weight: 650;
+  --docusaurus-highlighted-code-line-bg: rgba(28, 100, 209, 0.1);
+
+  --ifm-table-head-background: var(--brand-surface);
+  --ifm-table-stripe-background: rgba(28, 100, 209, 0.03);
+  --ifm-table-border-color: rgba(19, 35, 63, 0.14);
+
+
+  --atomixos-diagram-node: #ffffff;
+  --atomixos-diagram-surface: var(--brand-surface);
+  --atomixos-diagram-accent: var(--brand-accent);
+  --atomixos-diagram-line: var(--brand-ink-muted);
+  --atomixos-diagram-text: var(--brand-ink);
+}
+
+html[data-theme='dark'] {
+  --brand-bg: #08111f;
+  --brand-surface: #0d1a2e;
+  --brand-header: #0b1626;
+  --brand-ink: #dde8f7;
+  --brand-ink-muted: #b4c5dd;
+  --brand-line: rgba(108, 180, 255, 0.22);
+  --brand-accent: #6cb4ff;
+  --brand-code: #a9d4ff;
+
+  --ifm-color-primary: #6cb4ff;
+  --ifm-color-primary-dark: #48a1ff;
+  --ifm-color-primary-darker: #3698ff;
+  --ifm-color-primary-darkest: #007cfe;
+  --ifm-color-primary-light: #90c7ff;
+  --ifm-color-primary-lighter: #a2d0ff;
+  --ifm-color-primary-lightest: #d9ecff;
+
+  /* Infima's dark theme redeclares these, so the brand values are restated here. */
+  --ifm-background-color: var(--brand-bg);
+  --ifm-navbar-background-color: var(--brand-header);
+  --ifm-font-color-base: var(--brand-ink);
+  --ifm-color-content-secondary: var(--brand-ink-muted);
+  --ifm-menu-color: var(--brand-ink-muted);
+  --ifm-background-surface-color: var(--brand-surface);
+  --ifm-table-head-background: var(--brand-surface);
+  --docusaurus-highlighted-code-line-bg: rgba(108, 180, 255, 0.12);
+  --ifm-table-stripe-background: rgba(108, 180, 255, 0.04);
+  --ifm-table-border-color: #1b2c47;
+
+
+  --atomixos-diagram-node: #0f2038;
+  --atomixos-diagram-line: #b4c5dd;
+}
+
+/* Inline code and tables. */
+:not(pre) > code {
+  color: var(--brand-code);
+  background: var(--brand-surface);
+  border: 1px solid var(--brand-line);
+}
+
+.markdown table {
+  display: table;
+  width: 100%;
+  font-size: 0.94rem;
+}
+
+.markdown table thead th {
+  font-family: var(--brand-font-heading);
+  font-weight: 600;
+  text-align: left;
+}
+
+/* On narrow screens a wide table scrolls inside its own box instead of widening the page. */
+@media (max-width: 996px) {
+  .markdown table {
+    display: block;
+    overflow-x: auto;
+  }
+}
+
+/* Brand keyboard focus ring for every control. */
+:focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 2px;
+}
+
+.table-of-contents__link--active {
+  color: var(--ifm-link-color);
+}
+
+/* Diagram expand control and dialog (site/client/index.ts). */
+.docusaurus-mermaid-container {
+  position: relative;
+  overflow-x: auto;
+}
+
+@media (max-width: 996px) {
+  .docusaurus-mermaid-container > svg {
+    min-width: var(--atomixos-diagram-min-width, 0);
+  }
+}
+
+.atomixos-diagram-control {
+  padding: 0.25rem 0.75rem;
+  border: 1px solid var(--atomixos-diagram-accent);
+  border-radius: 999px;
+  background: var(--ifm-background-color);
+  color: var(--ifm-font-color-base);
+  font: 500 0.8rem var(--ifm-font-family-base);
+  cursor: pointer;
+}
+
+.atomixos-diagram-control:hover {
+  background: var(--atomixos-diagram-surface);
+}
+
+.atomixos-diagram-expand {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.docusaurus-mermaid-container:hover .atomixos-diagram-expand,
+.atomixos-diagram-expand:focus-visible {
+  opacity: 1;
+}
+
+.atomixos-diagram-dialog {
+  width: min(96vw, 1600px);
+  height: min(92vh, 1100px);
+  padding: 0;
+  border: 1px solid var(--atomixos-diagram-accent);
+  border-radius: 12px;
+  background: var(--ifm-background-color);
+  color: var(--ifm-font-color-base);
+}
+
+.atomixos-diagram-dialog::backdrop {
+  background: rgba(4, 10, 20, 0.72);
+}
+
+.atomixos-diagram-dialog__toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: var(--ifm-background-color);
+  border-bottom: 1px solid var(--ifm-toc-border-color);
+}
+
+.atomixos-diagram-dialog__canvas {
+  padding: 1.5rem;
+  overflow: auto;
+  height: calc(100% - 3.5rem);
+}
+
+.atomixos-diagram-dialog__canvas svg {
+  display: block;
+  margin: 0 auto;
+}
+
+/* Touch screens have no hover, so the control stays visible. */
+@media (hover: none) {
+  .atomixos-diagram-expand {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .atomixos-diagram-expand {
+    transition: none;
+  }
+}
+
+/*
+ * Mermaid diagrams. Mermaid inlines ID-scoped theme styles into each SVG and its theme
+ * variables cannot differ per color mode, so brand colors are applied here with !important.
+ */
+.docusaurus-mermaid-container svg .node rect,
+.docusaurus-mermaid-container svg .node circle,
+.docusaurus-mermaid-container svg .node ellipse,
+.docusaurus-mermaid-container svg .node polygon,
+.docusaurus-mermaid-container svg .node path,
+.docusaurus-mermaid-container svg .actor rect,
+.docusaurus-mermaid-container svg rect.actor,
+.docusaurus-mermaid-container svg rect.note,
+.docusaurus-mermaid-container svg polygon.labelBox,
+.docusaurus-mermaid-container svg .stateGroup rect,
+.docusaurus-mermaid-container svg .statediagram-state rect,
+.docusaurus-mermaid-container svg .activation0,
+.docusaurus-mermaid-container svg .activation1,
+.docusaurus-mermaid-container svg .activation2 {
+  fill: var(--atomixos-diagram-node) !important;
+  stroke: var(--atomixos-diagram-accent) !important;
+}
+
+.docusaurus-mermaid-container svg .cluster rect,
+.docusaurus-mermaid-container svg .statediagram-cluster rect,
+.docusaurus-mermaid-container svg .rect {
+  fill: var(--atomixos-diagram-surface) !important;
+  stroke: var(--atomixos-diagram-line) !important;
+}
+
+.docusaurus-mermaid-container svg .flowchart-link,
+.docusaurus-mermaid-container svg .edgePath .path,
+.docusaurus-mermaid-container svg .transition,
+.docusaurus-mermaid-container svg .messageLine0,
+.docusaurus-mermaid-container svg .messageLine1,
+.docusaurus-mermaid-container svg .loopLine,
+.docusaurus-mermaid-container svg .actor-line,
+.docusaurus-mermaid-container svg line {
+  stroke: var(--atomixos-diagram-line) !important;
+}
+
+.docusaurus-mermaid-container svg marker path,
+.docusaurus-mermaid-container svg .arrowheadPath,
+.docusaurus-mermaid-container svg .state-start {
+  fill: var(--atomixos-diagram-line) !important;
+  stroke: var(--atomixos-diagram-line) !important;
+}
+
+.docusaurus-mermaid-container svg text,
+.docusaurus-mermaid-container svg tspan,
+.docusaurus-mermaid-container svg .nodeLabel,
+.docusaurus-mermaid-container svg .edgeLabel,
+.docusaurus-mermaid-container svg .messageText,
+.docusaurus-mermaid-container svg .noteText,
+.docusaurus-mermaid-container svg .labelText,
+.docusaurus-mermaid-container svg .loopText {
+  fill: var(--atomixos-diagram-text) !important;
+  color: var(--atomixos-diagram-text) !important;
+}
+
+/* Sequence step numbers: accent circles with page-colored digits. */
+.docusaurus-mermaid-container svg #sequencenumber circle {
+  fill: var(--atomixos-diagram-accent) !important;
+  stroke: var(--atomixos-diagram-accent) !important;
+}
+
+.docusaurus-mermaid-container svg text.sequenceNumber {
+  fill: var(--ifm-background-color) !important;
+}
+
+.docusaurus-mermaid-container svg .edgeLabel,
+.docusaurus-mermaid-container svg .edgeLabel rect,
+.docusaurus-mermaid-container svg .edgeLabel p,
+.docusaurus-mermaid-container svg .edgeLabel span,
+.docusaurus-mermaid-container svg .labelBkg {
+  background-color: var(--ifm-background-color) !important;
+  fill: var(--ifm-background-color) !important;
+}
+
+/* Introduction header (src/README.mdx): the "Ax" element tile from the product page, beside the title. */
+.intro-header {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  margin-bottom: 2rem;
+}
+
+/* `.markdown` matches the specificity of Docusaurus's first-heading margin rule. */
+.markdown .intro-header h1 {
+  margin: 0;
+  font-size: clamp(2rem, 5vw, 2.75rem);
+}
+
+.intro-header p {
+  margin: 0.25rem 0 0;
+  color: var(--ifm-color-content-secondary);
+}
+
+.element-tile {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-rows: auto 1fr auto;
+  width: 5.5rem;
+  aspect-ratio: 1;
+  padding: 0.4rem 0.55rem;
+  border: 2px solid var(--brand-accent);
+  border-radius: 6px;
+  background: var(--brand-surface);
+  color: var(--brand-ink);
+  font-family: var(--brand-font-heading);
+  line-height: 1;
+}
+
+.element-tile__number {
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.element-tile__symbol {
+  align-self: center;
+  color: var(--ifm-link-color);
+  font-size: 2.4rem;
+  font-weight: 750;
+}
+
+.element-tile__name {
+  font-size: 0.68rem;
+}

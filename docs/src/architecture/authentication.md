@@ -1,63 +1,26 @@
-# Authentication (EN18031)
+# Authentication
 
-AtomixOS ships with no embedded credentials. EN18031 compliance requires that each device has unique credentials
-provisioned at factory time -- there are no default passwords or shared secrets.
+AtomixOS images contain no credentials. There are no default passwords and no shared keys; each device gets its own
+credentials when it is provisioned. This is what the EN 18031 requirements for connected devices ask for, and it means
+one leaked image never unlocks a fleet.
 
-## Provisioning State
+## Credential Storage
 
-Persisted device-local state lives on `/data`:
+Device credentials live on `/data`, so they survive updates and rollbacks:
 
-| Item                      | Storage Path                              | Notes                                             |
+| Item                      | Path                                      | Purpose                                           |
 |---------------------------|-------------------------------------------|---------------------------------------------------|
-| Admin signer keys         | `/data/config/admin-signers`              | Admin SSH keys trusted for config re-apply        |
-| User SSH public keys      | `/data/config/ssh-authorized-keys/<user>` | Per-user LAN/VPN SSH access                       |
+| Admin signer keys         | `/data/config/admin-signers`              | SSH keys allowed to sign configuration re-applies |
+| User SSH public keys      | `/data/config/ssh-authorized-keys/<user>` | Per-user SSH login                                |
 | Nixstasis identity        | `/data/nixstasis/id`                      | Device UUID and runtime token issued by Nixstasis |
-| Nixstasis SSH public keys | `/data/nixstasis/.ssh/authorized_keys`    | Remote-access keys managed by Nixstasis commands  |
+| Nixstasis SSH public keys | `/data/nixstasis/.ssh/authorized_keys`    | Remote-access keys for the Nixstasis SSH user     |
 
-## Authentication Flows
+The local `root` password is locked, and the image has no built-in operator account. Accounts come from the `[users]`
+section of the provisioned `config.toml`; see [Data Flow](../data-flow.md#managed-users-flow).
 
-### SSH Access
+## SSH Access
 
-- **LAN (lan)**: Key-only authentication via SSH public key
-- **VPN (tun0)**: Key-only authentication via SSH public key
-- **WAN (wan)**: Disabled by default; enabled only when `/data/config/ssh-wan-enabled` flag file exists
-
-### Physical Recovery
-
-Every hardware board keeps a separate physical break-glass path. If `_RUT_OH_=1` is
-set in U-Boot, the next boot starts a serial-only root autologin on `ttyS2` and
-clears that flag after use. This is a local recovery mechanism, not part of normal
-network authentication.
-
-Set the flag with `fw_setenv _RUT_OH_ 1` from a running system, or, when no login is
-available, from the U-Boot prompt on the serial console: interrupt autoboot, then run
-`setenv _RUT_OH_ 1; saveenv; reset`.
-
-### Nixstasis Enrollment
-
-The target remote-management model is Nixstasis-managed enrollment and access:
-
-1. The device identifies itself to Nixstasis using the `wan` MAC address.
-2. Nixstasis checks that MAC against an approved inventory list.
-3. Approved devices receive a device UUID and runtime token, persisted as `/data/nixstasis/id`.
-4. Future device requests authenticate with that runtime identity.
-5. Nixstasis issues short-lived SSH credentials and establishes remote sessions over the reverse tunnel managed by the
-   Nixstasis client.
-
-The MAC address is an eligibility identifier, not a secret. The runtime token is the first durable credential in the
-management flow.
-
-### Remote Management
-
-Remote web access is intended to run from the Nixstasis environment rather than from services hosted directly on the
-device. The device remains responsible for SSH, LAN gateway services, update logic, and the Nixstasis client.
-
-### Device Identity
-
-Each device is identified by the compact lowercase 12-hex MAC address of its onboard Ethernet (wan). For example,
-`aa:bb:cc:dd:ee:ff` becomes `aabbccddeeff` in the `X-Device-ID` header when polling for updates.
-
-## SSH Configuration
+SSH accepts keys only. Root login and password authentication are off:
 
 ```nix
 services.openssh = {
@@ -69,8 +32,43 @@ services.openssh = {
 };
 ```
 
-User authorized keys are read from `/data/config/ssh-authorized-keys/<user>`, which is populated during provisioning.
-Admin re-apply signer keys are stored separately in `/data/config/admin-signers`.
-When Nixstasis is enabled, OpenSSH also reads `/data/nixstasis/.ssh/authorized_keys` inside a `Match User admin` block as
-a separate remote-access key source. Nixstasis-managed keys do not replace provisioned operator keys and are not copied
-into `/data/config`.
+Where you can connect from:
+
+- **LAN (`lan`) and VPN (`tun0`):** always, with a provisioned key.
+- **WAN (`wan`):** only while the flag file `/data/config/ssh-wan-enabled` exists. Nothing creates it automatically.
+
+User keys are read from `/data/config/ssh-authorized-keys/<user>`. Admin signer keys are kept separately in
+`/data/config/admin-signers`, so being able to log in does not by itself allow re-applying configuration. How signed
+re-applies work is described in [Data Flow](../data-flow.md#re-apply-flow).
+
+When the Nixstasis client is enabled, `modules/nixstasis.nix` adds a `Match User` block for its SSH user (`admin` by
+default) that points `AuthorizedKeysFile` at `/data/nixstasis/.ssh/authorized_keys`. Nixstasis-managed keys are kept
+apart from provisioned operator keys and are never copied into `/data/config`.
+
+## Physical Recovery
+
+Every hardware board keeps a separate break-glass path for someone with the board in hand. If the U-Boot variable
+`_RUT_OH_` is set to `1`, the next boot starts a serial-only root login on `ttyS2` and clears the variable. This is a
+local recovery tool, not part of network authentication.
+
+To set the variable:
+
+- **From a running system:** run `fw_setenv _RUT_OH_ 1`.
+- **With no login available:** on the serial console, interrupt autoboot, then run `setenv _RUT_OH_ 1; saveenv; reset`
+  at the U-Boot prompt.
+
+## Device Identity
+
+A device is identified by the MAC address of its onboard Ethernet (the [`wan` interface](network-topology.md#nic-naming)),
+written as 12 lowercase hex digits with no separators: `aa:bb:cc:dd:ee:ff` becomes `aabbccddeeff`. The update client
+sends it in the `X-Device-ID` header, or `unknown` when it cannot read the address, and the Nixstasis client uses it to
+enroll.
+
+A MAC address is an identifier, not a secret. Nixstasis enrollment, described in
+[Nixstasis Enrollment](nixstasis-enrollment.md), issues the device's first real credential.
+
+## Remote Management
+
+The device hosts no web management interface. Remote management runs in Nixstasis, which reaches the device through a
+tunnel opened by the Nixstasis client. The device itself is responsible for SSH, its LAN gateway services, updates, and
+the client.

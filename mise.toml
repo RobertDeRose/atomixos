@@ -10,8 +10,6 @@ lockfile_platforms = ["macos-arm64", "linux-arm64", "linux-x64"]
 "aqua:Mic92/nixfmt-rs" = "latest"
 "cargo:deadnix" = "latest"
 "github:KevinGimbel/mktoc" = "latest"
-"github:RobertDeRose/mdbook-mermaid" = "latest"
-"github:joshrotenberg/mdbook-lint" = "latest"
 "npm:@commitlint/cli" = "latest"
 "npm:@contextlint/cli" = { version = "latest", aube_args = "--allow-low-downloads" }
 "npm:markdown-table-formatter" = "latest"
@@ -28,7 +26,6 @@ shfmt = "latest"
 tombi = "latest"
 typos = "latest"
 uv = "latest"
-"github:rust-lang/mdbook" = "latest"
 
 [env]
 GIT_CONFIG_PARAMETERS = "'merge.ff=only'"
@@ -48,6 +45,54 @@ run = "hk check -a"
 [tasks.fix]
 description = "Apply deterministic repository fixes"
 run = "hk fix -a"
+
+[tasks."docs:install"]
+description = "Install the documentation site dependencies from the npm lockfile"
+dir = "docs"
+sources = ["package-lock.json", "package.json"]
+outputs = ["node_modules/.package-lock.json"]
+run = "npm ci --no-fund --no-audit"
+
+[tasks."docs:build"]
+description = "Build the documentation site (Docusaurus) into docs/build"
+depends = ["docs:install"]
+dir = "docs"
+run = "npm run build"
+
+[tasks."docs:serve"]
+description = "Serve the documentation site locally with hot-reload"
+depends = ["docs:install"]
+dir = "docs"
+usage = 'arg "[port]" help="Port to serve on" default="3000"'
+run = 'npm run start -- --port "${usage_port:-3000}"'
+
+[tasks."site:build"]
+description = "Assemble the Pages site: the product page at the root and the docs under docs/"
+depends = ["docs:build"]
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Pages serves the site from /atomixos/, so the output keeps that path for local previews.
+out=_site/atomixos
+fonts=docs/node_modules/@fontsource-variable
+rm -rf _site
+mkdir -p "$out/fonts"
+cp -R product/. "$out/"
+cp -R docs/build "$out/docs"
+# GitHub Pages serves 404.html from the site root for every missing path.
+cp docs/build/404.html "$out/404.html"
+cp "$fonts/exo-2/files/exo-2-latin-wght-normal.woff2" \
+  "$fonts/atkinson-hyperlegible-next/files/atkinson-hyperlegible-next-latin-wght-normal.woff2" \
+  "$fonts/atkinson-hyperlegible-mono/files/atkinson-hyperlegible-mono-latin-wght-normal.woff2" \
+  "$out/fonts/"
+'''
+
+[tasks."site:serve"]
+description = "Build the Pages site and serve it at http://localhost:<port>/atomixos/"
+depends = ["site:build"]
+usage = 'arg "[port]" help="Port to serve on" default="8000"'
+run = 'python3 scripts/serve-pages.py "${usage_port:-8000}" _site'
 
 [tasks."docs:deployment:enable"]
 description = "Enable GitHub Pages deployment"

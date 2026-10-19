@@ -171,7 +171,6 @@ Likely affected docs:
 - `docs/src/runtime-boundaries.md`
 - `docs/src/data-flow.md`
 - `docs/src/provisioning.md`
-- `docs/src/planned-features.md` after implementation close-out
 - API schema tests under `scripts/atomixos_provision/tests/`
 
 ## Success Criteria

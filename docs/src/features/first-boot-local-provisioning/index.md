@@ -1,80 +1,51 @@
 # First-Boot Local Provisioning
 
-## References
+AtomixOS provisions a freshly flashed or reset device from one validated `config.toml`. The device looks for that file
+on the boot partition (only on a fresh flash), then on removable USB media, and finally offers a local bootstrap
+console. The accepted configuration is stored under `/data/config`, rendered into runtime configuration, and applied
+before the first slot is confirmed. The original plan is in the [design record](design.md); Beads tracks the work under
+`atomixos-ehv`.
 
-- Beads feature root: `atomixos-ehv`
-- Design record: [design.md](design.md)
+## What changed for users
 
-## Delivered Capability
+- A freshly flashed image prefers `/boot/config.toml`, then USB media, then the bootstrap console.
+- A reprovisioned device skips the stale boot-partition file and prefers USB before the console.
+- **Operators** can upload or paste a configuration in the console and download the accepted file.
+- Provisioning must set up admin SSH access, required services, and health requirements before the slot is confirmed.
+- After provisioning, the console listens only on the configured LAN address.
 
-AtomixOS provisions a freshly flashed or reset appliance from one validated `config.toml` contract. The device searches
-the initial boot partition only on a fresh flash, then removable USB media, and finally a constrained local bootstrap
-console. Accepted desired state is persisted under `/data/config`, rendered into runtime configuration, and applied
-before the first slot is confirmed.
+## How it fits in
 
-## User-Facing Behavior
+Immutable OS content stays in the squashfs root, and `/data/config` holds the operator's durable intent. The initrd
+records a fresh flash before repartitioning, and services in the switched root read that marker. Rendered Quadlet
+units stay under `/data/config/quadlet` and are synchronized to the standard rootful and rootless Quadlet search paths.
 
-- Fresh images prefer `/boot/config.toml`, then USB media, then the bootstrap console.
-- Reprovisioned devices skip the stale boot-partition seed and prefer USB before the console.
-- Operators can upload or paste config through the first-boot console and download the accepted artifact.
-- Provisioning must establish admin SSH access, required services, and health requirements before slot confirmation.
-- The console narrows to the configured LAN endpoint after initial provisioning.
+## Running it
 
-## Design Integration
+- Wiping `/data` returns a device to provisioning mode without replaying `/boot/config.toml`.
+- A failed import, runtime apply, or required health check leaves the current slot unconfirmed.
+- The bootstrap console is for provisioning and recovery, not general device management.
 
-The implementation keeps immutable OS content in the squashfs root and treats `/data/config` as the durable operator
-intent boundary. Initrd records fresh-flash state before repartitioning; switched-root services consume that marker.
-Rendered Quadlet state remains durable under `/data/config/quadlet` and is synchronized to standard rootful or rootless
-Quadlet discovery paths.
+## Differences from the design
 
-## Operational Impact
+The original one-shot importer became the long-lived provisioning API service. It keeps this feature's source order
+and desired-state contract and adds asynchronous jobs and a privilege-separated apply step.
 
-Wiping `/data` returns a device to provisioning mode without replaying `/boot/config.toml`. A failed import, runtime
-apply, or required health check leaves the current slot unconfirmed. The bootstrap console is a recovery and
-provisioning surface, not a general device-management UI.
+## Not included
 
-## Reference and Contracts
+- Remote fleet delivery; see [Fleet Bootstrap via Nixstasis](../fleet-bootstrap-via-nixstasis/index.md).
+- cloud-init, Compose as the device contract, arbitrary file writes, and a long-lived management UI.
+
+## Tests
+
+- `nix/tests/initrd-fresh-flash-marker.nix`: fresh-flash detection in the initrd.
+- `nix/tests/first-boot-source-discovery.nix`: source order and reprovisioning.
+- `nix/tests/first-boot-provision.nix`: schema validation, import, rendering, the bootstrap UI, and runtime apply.
+
+## Related pages
 
 - [Provisioning](../../provisioning.md)
-- [Firmware Data Flow](../../data-flow.md)
+- [Data Flow](../../data-flow.md)
 - [Runtime Boundaries](../../runtime-boundaries.md)
 - [Partition Layout](../../architecture/partition-layout.md)
 - [Authentication](../../architecture/authentication.md)
-
-## Test Coverage
-
-- `nix/tests/initrd-fresh-flash-marker.nix` covers initrd fresh-flash detection.
-- `nix/tests/first-boot-source-discovery.nix` covers source order and reprovisioning.
-- `nix/tests/first-boot-provision.nix` covers schema validation, import, rendering, the bootstrap UI, and runtime
-  application.
-
-## Design Reconciliation
-
-### Delivered as Designed
-
-The single config contract, fresh-flash marker, ordered local sources, `/data/config` persistence boundary, structured
-Quadlet rendering, same-boot activation, and provisioning-aware slot confirmation were delivered.
-
-### Intentional Changes
-
-The original one-shot importer later evolved into the long-lived provisioning API service. That service preserves this
-feature's source discovery and desired-state contract while adding asynchronous jobs and a privilege-separated apply
-boundary.
-
-### Deferred Work
-
-Remote fleet delivery remains outside this local provisioning feature. Nixstasis enrollment is tracked separately.
-
-### Rejected or Removed Scope
-
-Cloud-init, compose as the canonical appliance contract, arbitrary file writes, and a long-lived general management UI
-remain rejected.
-
-## Documentation Updated
-
-- `docs/src/provisioning.md`
-- `docs/src/data-flow.md`
-- `docs/src/runtime-boundaries.md`
-- `docs/src/architecture/partition-layout.md`
-- `docs/src/architecture/authentication.md`
-- `docs/src/hardware-testing.md`

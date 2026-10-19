@@ -1,22 +1,20 @@
 # Hardware Testing
 
-> Source: `HARDWARE-TEST-PLAN.md`
-
-This chapter provides the physical verification plan for Rock64 hardware testing. These tests cannot be run in QEMU and
-require a physical Rock64 board with eMMC, serial console, and network connectivity.
+Some behavior can only be checked on a real board: the bootloader, eMMC, network hardware, and the hardware watchdog.
+This page is the physical test plan for Rock64. It needs a Rock64 with eMMC, a serial console, and network access.
+Everything else is covered by the VM tests in [Testing](testing.md).
 
 ## Prerequisites
 
 - Rock64 v2 board with 16 GB eMMC module
 - USB-to-serial adapter connected to UART2 (1.5 Mbaud)
-- USB Ethernet adapter (for lan/LAN interface)
-- Supported USB Ethernet adapter for lan/LAN (`r8152`, `ax88179_178a`, or `cdc_ether`)
-- Built disk image (`atomixos-rock64-26.05.img`)
+- Supported USB Ethernet adapter for the `lan` interface (`r8152`, `ax88179_178a`, or `cdc_ether`)
+- Built disk image (`atomixos-rock64-<series>.img`, see [Building](building.md))
 - Built RAUC bundle (`rock64.raucb`)
-- Network with DHCP and internet access (for WAN/wan)
+- Network with DHCP and internet access (for the `wan` interface)
 - A second device on the LAN subnet for client testing
 
-## Phase 1: Provisioning & First Boot
+## Phase 1: Provisioning and first boot
 
 ### Test 1.1: Flash image and verify U-Boot output
 
@@ -24,10 +22,10 @@ require a physical Rock64 board with eMMC, serial console, and network connectiv
 # Flash the image
 mise run flash /dev/disk4    # macOS
 # or
-sudo dd if=atomixos-rock64-26.05.img of=/dev/mmcblk0 bs=4M status=progress
+sudo dd if=atomixos-rock64-<series>.img of=/dev/mmcblk0 bs=4M status=progress
 
 # Connect serial console
-screen /dev/tty.usbserial-DM02496T 1500000
+screen /dev/tty.usbserial-<id> 1500000
 ```
 
 **Pass criteria**:
@@ -55,7 +53,7 @@ systemctl status first-boot
 - After provisioning succeeds, the sentinel exists at `/data/.completed_first_boot`
 - On RAUC-enabled images, `rauc status` shows the booted slot as "good" after provisioning succeeds
 
-## Phase 2: Kernel & Hardware Detection
+## Phase 2: Kernel and hardware detection
 
 ### Test 2.1: eMMC and core hardware
 
@@ -85,9 +83,9 @@ ip link show
 
 - Supported USB Ethernet module loads without errors
 - A second Ethernet interface appears in `ip link`
-- USB WiFi and Bluetooth are not part of the current image contract
+- USB Wi-Fi and Bluetooth stay disabled; the Rock64 kernel is built without them
 
-## Phase 3: Network Configuration
+## Phase 3: Network configuration
 
 ### Test 3.1: wan is onboard Ethernet
 
@@ -99,11 +97,11 @@ ip addr show wan
 **Pass criteria**:
 
 - `wan` matches the onboard GMAC (platform path `platform-ff540000.ethernet`)
-- wan has a DHCP-assigned IP address
+- `wan` has a DHCP-assigned IP address
 
 ### Test 3.2: DHCP server on LAN
 
-Connect a client device to lan (USB Ethernet adapter).
+Connect a client device to `lan` (the USB Ethernet adapter).
 
 ```sh
 # On the gateway
@@ -151,7 +149,7 @@ ping -c 3 172.20.30.1       # should succeed
 - LAN client cannot reach any internet address
 - LAN client can reach the gateway
 
-## Phase 4: Firewall Verification
+## Phase 4: Firewall verification
 
 ### Test 4.1: WAN baseline port access
 
@@ -264,7 +262,7 @@ fw_printenv -n _RUT_OH_    # expect: empty / unset
 - SSH behavior on the network is unchanged after the recovery boot
 - `_RUT_OH_` is cleared after use
 
-## Phase 7: RAUC Update Lifecycle
+## Phase 7: RAUC update lifecycle
 
 ### Test 7.1: RAUC status
 
@@ -373,8 +371,8 @@ unarmed `/dev/watchdog-internal`, so verify that PID 1 does not hold the device 
 
 ### Test 8.2: Watchdog-triggered reboot
 
-> This is destructive. Use a sacrificial test device with serial capture, recovery access, and a known-good slot. Active
-> enforcement remains disabled by default; do not enable it in release or deployment profiles for this test.
+> This is destructive. Use a sacrificial test device with serial capture, recovery access, and a known-good slot.
+> Enforcement is disabled by default; do not enable it in release or deployment profiles for this test.
 
 Start serial capture from the host before inducing the hang:
 
@@ -390,7 +388,7 @@ systemctl show --property WatchdogDevice --property RuntimeWatchdogUSec --proper
 fw_printenv BOOT_ORDER BOOT_A_LEFT BOOT_B_LEFT
 ```
 
-On the validated Rock64 test image, the bounded hang fixture is:
+On a Rock64 test image, the bounded hang fixture is:
 
 ```sh
 run0 kill -STOP 1
@@ -408,17 +406,17 @@ serial and recovery prerequisites; it is a destructive, board-specific test fixt
 - SSH recovers after the reboot and systemd again reports the selected watchdog device
 - U-Boot boot-count evidence is recorded for the current slot
 
-### Test 8.3: Watchdog-triggered rollback (deferred to RAUC OTA testing)
+### Test 8.3: Watchdog-triggered rollback
 
-> Deferred until the RAUC OTA testing work exercises installation, boot confirmation, and rollback together. Keep
-> serial console attached and have recovery media available when executing it.
+> Run this together with RAUC OTA testing, so installation, boot confirmation, and rollback are exercised together.
+> Keep the serial console attached and recovery media at hand.
 
 ```sh
 # Install an update bundle to the inactive slot and reboot into it
 rauc install /data/rock64.raucb
 reboot
 
-# On each boot into the updated slot, induce the lab-validated systemd hang before os-verification can mark it good
+# On each boot into the updated slot, induce the systemd hang from Test 8.2 before os-verification marks it good
 fw_printenv BOOT_ORDER BOOT_A_LEFT BOOT_B_LEFT
 
 # Repeat until the updated slot's BOOT_*_LEFT counter reaches 0 and U-Boot selects the previous slot.
@@ -431,9 +429,9 @@ fw_printenv BOOT_ORDER BOOT_A_LEFT BOOT_B_LEFT
 - After the counter reaches 0, U-Boot boots the previous slot
 - The previous slot reaches `multi-user.target` and remains marked good
 
-### Test 8.4: Watchdog soak (deferred to RAUC OTA testing)
+### Test 8.4: Watchdog soak
 
-> Deferred until the RAUC OTA validation campaign. Run the soak on the same image and workload used for OTA testing.
+> Run the soak on the same image and workload used for RAUC OTA testing.
 
 ```sh
 # Leave the opt-in watchdog image running under normal workload for 72 hours.
@@ -449,27 +447,29 @@ last -x reboot | head
 - Normal update confirmation and local recovery services continue to operate
 - Reboot history covers the soak window and contains only operator-initiated reboots
 
-## Task Checklist
+## Checklist
 
-| #   | Test                  | Status                                                               |
-|-----|-----------------------|----------------------------------------------------------------------|
-| 1.1 | Flash + U-Boot output |                                                                      |
-| 1.2 | First-boot service    |                                                                      |
-| 2.1 | eMMC + core hardware  |                                                                      |
-| 2.2 | USB Ethernet module   |                                                                      |
-| 3.1 | wan is onboard        |                                                                      |
-| 3.2 | DHCP server on LAN    |                                                                      |
-| 3.3 | NTP server on LAN     |                                                                      |
-| 3.4 | LAN isolation         |                                                                      |
-| 4.1 | WAN port access       |                                                                      |
-| 4.2 | SSH-on-WAN toggle     |                                                                      |
-| 5.1 | Update confirmation   |                                                                      |
-| 6.1 | SSH key auth          |                                                                      |
-| 6.2 | Serial root recovery  |                                                                      |
-| 7.1 | RAUC status           |                                                                      |
-| 7.2 | Bundle install        |                                                                      |
-| 7.3 | Boot-count rollback   |                                                                      |
-| 8.1 | Watchdog presence     | Passed: internal and external paths                                  |
-| 8.2 | Watchdog reboot       | Passed: internal; external reset timing deferred to RAUC OTA testing |
-| 8.3 | Watchdog rollback     | Deferred to RAUC OTA testing                                         |
-| 8.4 | Watchdog soak         | Deferred to RAUC OTA testing                                         |
+Record results for each run in Beads, not on this page.
+
+| #   | Test                  |
+|-----|-----------------------|
+| 1.1 | Flash + U-Boot output |
+| 1.2 | First-boot service    |
+| 2.1 | eMMC + core hardware  |
+| 2.2 | USB Ethernet module   |
+| 3.1 | wan is onboard        |
+| 3.2 | DHCP server on LAN    |
+| 3.3 | NTP server on LAN     |
+| 3.4 | LAN isolation         |
+| 4.1 | WAN port access       |
+| 4.2 | SSH-on-WAN toggle     |
+| 5.1 | Update confirmation   |
+| 6.1 | SSH key auth          |
+| 6.2 | Serial root recovery  |
+| 7.1 | RAUC status           |
+| 7.2 | Bundle install        |
+| 7.3 | Boot-count rollback   |
+| 8.1 | Watchdog presence     |
+| 8.2 | Watchdog reboot       |
+| 8.3 | Watchdog rollback     |
+| 8.4 | Watchdog soak         |

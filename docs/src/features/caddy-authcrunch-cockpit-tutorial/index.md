@@ -1,68 +1,50 @@
 # Caddy AuthCrunch Cockpit Tutorial
 
-## References
+AtomixOS ships an example bundle and tutorial for an OIDC-authenticated management stack. Caddy with AuthCrunch is the
+public sign-in boundary: it maps identity-provider groups to roles and lets only administrators reach Cockpit, which
+runs behind the proxy. The example exercises config-managed containers, networks, volumes, builds, and bundle files.
+The original plan is in the [design record](design.md); Beads tracks the work under `atomixos-b45`.
 
-- Beads feature root: `atomixos-b45`
-- Design record: [design.md](design.md)
+## What changed for users
 
-## Delivered Capability
+- **Operators** copy `example/caddy-oidc`, replace the marked identity-provider, domain, key, and secret values, then
+  validate and apply it as a normal configuration bundle.
+- Users with the admin role reach Cockpit through Caddy; other users do not.
+- The tutorial covers Microsoft Entra setup and how to substitute another OIDC provider.
 
-AtomixOS documents and ships an example bundle for an OIDC-authenticated local management stack. Caddy with AuthCrunch
-is the public authentication boundary, maps identity-provider groups to roles, and gates Cockpit running behind the
-proxy. The example exercises config-managed containers, networks, volumes, builds, and bundle files.
+## How it fits in
 
-## User-Facing Behavior
+The stack is an operator-provisioned application, not part of the immutable OS. Caddy is the only public sign-in
+boundary: it forwards the AuthCrunch JWT to Cockpit as a bearer token, `cockpit-auth-atomixos` accepts only tokens with
+the `authp/admin` role and maps them to the `admin` user, and `start-cockpit` reaches the host over SSH to `127.0.0.1`.
+Powerful host socket mounts are explicit and limited to the admin management container. Quadlet units come from the
+normal provisioning contract.
 
-Operators copy the example, replace clearly marked identity-provider, domain, key, and secret values, then validate and
-apply it as a normal config bundle. Admin-role users can reach Cockpit through Caddy; lower-privilege users do not gain
-that route. The tutorial explains Entra setup and how to substitute another OIDC provider.
-
-## Design Integration
-
-The stack remains an operator-provisioned application, not immutable OS content. Caddy is the sole public login boundary
-for Cockpit's local-session mode. Powerful host socket mounts are explicit and restricted to the admin management
-container. Quadlet state is produced through the normal provisioning contract.
-
-## Operational Impact
+## Running it
 
 Operators own identity-provider setup, DNS, certificates, secrets, role mappings, and version compatibility. The example
-uses local TLS for the documented local deployment and requires production hardening before Internet exposure.
+uses local TLS for a local deployment and needs production hardening before it faces the Internet.
 
-## Reference and Contracts
+## Differences from the design
+
+The example moved from an embedded feature bundle to `example/caddy-oidc`, adopted the final Cockpit container layout,
+centralized its variables, and follows the canonical configuration schema. The design ran `cockpit-ws` with
+`--local-session`; the delivered example instead authenticates the forwarded JWT and opens Cockpit sessions over SSH,
+so the configuration must declare a user named `admin`.
+
+## Not included
+
+- Identity-provider validation against a real tenant, image builds on target hardware, secret rotation, and production
+  hardening are left to the operator.
+- Cockpit in the base image, double authentication, SAML guidance, and a dedicated VM test.
+
+## Tests
+
+The provisioning tests for containers, networks, volumes, builds, bundle files, and Quadlet synchronization cover the
+paths the example uses.
+
+## Related pages
 
 - [OIDC-Authenticated Device Management](../../tutorials/oidc-device-management.md)
-- `example/caddy-oidc/config.toml`
-- `example/caddy-oidc/files/Caddyfile`
-- `example/caddy-oidc/files/cockpit/Containerfile`
-
-## Test Coverage
-
-- Existing provisioning tests cover container, network, volume, build, bundle-file, and Quadlet synchronization paths.
-
-## Design Reconciliation
-
-### Delivered as Designed
-
-OIDC setup guidance, group-to-role mapping, Caddy authorization, admin-only Cockpit access, structured config, bundle
-layout, provider substitution, and security guidance were delivered.
-
-### Intentional Changes
-
-The example evolved from an embedded feature bundle to `example/caddy-oidc`, moved Cockpit toward the final container
-layout, centralized variables, and tracked later canonical config schema changes.
-
-### Deferred Work
-
-Real-tenant identity-provider validation, image-build validation on target hardware, secret rotation, and broader
-production hardening remain operator or deployment concerns.
-
-### Rejected or Removed Scope
-
-Cockpit in the base image, double authentication, SAML guidance, and a dedicated duplicate VM test remain out of scope.
-
-## Documentation Updated
-
-- `docs/src/tutorials/oidc-device-management.md`
-- `docs/src/SUMMARY.md`
-- `docs/src/planned-features.md`
-- `example/caddy-oidc/`
+- `example/caddy-oidc/config.toml`, `example/caddy-oidc/files/Caddyfile`, and
+  `example/caddy-oidc/files/cockpit/Containerfile`

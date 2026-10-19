@@ -15,6 +15,18 @@ Start here when working in this repository.
   Make breaking changes directly: add no migrations, legacy aliases, compatibility shims, or deprecation
   periods. Reviewers must not flag missing backward compatibility or upgrade paths as defects.
 
+## Documentation Site
+
+- GitHub Pages serves the product page from `product/` at the root and the docs under `/docs/`;
+  `mise run site:build` assembles both into `_site/atomixos`.
+- The docs are a Docusaurus site in `docs/`. Content lives in `docs/src`; site code (theme, client module, logo,
+  delivered-feature filter) lives in `docs/site`.
+- Register every new page in `docs/sidebars.ts`, grouped by reader intent. Use relative `.md` links.
+- `mise run docs:build` fails on any broken link, anchor, or image; run it after docs changes.
+- Only delivered behavior is published: a feature directory stays off the site until it has `index.md`, and
+  `docs/src/planned-features.md` is kept in the repository but excluded from the site.
+- See the Documentation Conventions page (`docs/src/development/documentation-conventions.md`) for placement and style.
+
 ## Commit Guidance
 
 - Use Conventional Commits.

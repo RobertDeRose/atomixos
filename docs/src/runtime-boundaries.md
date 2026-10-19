@@ -1,120 +1,137 @@
 # Runtime Boundaries
 
-AtomixOS separates immutable platform code from operator-provisioned runtime behavior.
+AtomixOS draws hard lines between what the image owns, what the operator provisions, and which process may change what.
+This page states those lines and the rules that enforce them. [Data Flow](data-flow.md) shows the same pieces in motion.
 
 ## Immutable Platform
 
-The image owns boot, kernel, initrd, RAUC, firewall defaults, SSH policy, local provisioning, LAN gateway services,
-OpenVPN recovery plumbing, optional Nixstasis client integration, and update confirmation logic. These live in the active
-squashfs slot and are replaced only by RAUC updates.
+The image owns boot, the kernel and initrd, RAUC, firewall defaults, SSH policy, local provisioning, the LAN gateway
+services, the OpenVPN recovery plumbing, the optional Nixstasis client, and update confirmation. All of it lives in the
+active squashfs slot and changes only through a RAUC update.
 
 ## Persistent Operator State
 
-`/data/config/` owns runtime configuration imported during provisioning. RAUC slot writes do not modify `/data`.
+`/data/config/` holds the runtime configuration imported by provisioning. RAUC never writes to `/data`.
 
-When enabled, the Nixstasis client is platform code from the squashfs closure, not an operator-provisioned container.
-Its mutable identity, remote-access keys, and launch scratch state live under `/data/nixstasis/` so remote access can
-survive RAUC slot switches without mixing Nixstasis state into `/data/config`. The Nixstasis runtime command allowlist is
-rendered from image-time NixOS options and defaults to empty.
+The Nixstasis client, when enabled, is image code, not a provisioned container. Its identity, remote-access keys, and
+scratch state live in `/data/nixstasis/`, so remote access survives slot switches without mixing into `/data/config`.
+The commands Nixstasis may run on the device come from an allowlist fixed in the image, and that list is empty by
+default.
 
-The immutable build policy selects the bootstrap transport. The committed `network` transport preserves the existing
-network-facing behavior: before initial provisioning, the bootstrap API is reachable on WAN and LAN and exposes
-`POST /api/config` for complete `config.toml` files or supported config bundles. The opt-in `nixstasis` transport binds
-that same API only to `127.0.0.1:8080`; it does not install the pending WAN 8080 firewall service or rebind the socket to
-the provisioned LAN gateway. The approved Nixstasis route is the only fleet bootstrap transport, and no network
-fallback is added. Device approval and the separate `remote_access_token` lease are both required before FRPC starts.
-The server-side delivery action selects the named `atomixos-bootstrap` profile and sends the initial complete artifact
-through the existing asynchronous `POST /api/config` job pipeline. It records a terminal result before withdrawing the
-lease; an indeterminate result is retained for explicit reconciliation rather than retried.
+## Bootstrap Transport
 
-The production service is socket-activated: `atomixos-bootstrap.socket` owns the build-selected listen address, while
-`atomixos-bootstrap.service` only consumes the inherited systemd socket file descriptor. First-boot Boot UI submissions
-use a CSRF bootstrap token, not operator authentication; first-boot programmatic `/api/config` submissions do not
-require that UI token. After network-mode provisioning, the bootstrap API narrows to the LAN gateway endpoint. In fleet
-mode it remains loopback-only after provisioning. The network-facing API process runs as the dedicated
-`atomixos-provision` service user. It validates requests, authenticates re-apply operations, renders candidates in tmpfs,
-and reads approved provisioning state. Host mutation is delegated to root-owned systemd path and oneshot units watching
-`/run/atomixos-provision/queue/*.ready`. Production staged full-config submissions enter a bounded FIFO queue; each device
-applies one staged job at a time and returns `409 Conflict` when that queue is full. Programmatic clients receive
-`202 Accepted` with `job_id`, initial `state`, `job_url`, and a `Location: /api/jobs/{job_id}` header, then poll the job
-resource for final success, failure, rollback status, and service deployment events.
+`build.toml` chooses how the provisioning API is reached before and after provisioning:
 
-The staging boundary uses `/run/atomixos-provision`. The API writes a complete candidate tree, validated bundle files,
-and a manifest with relative paths, modes, sizes, and SHA-256 hashes, then publishes a ready marker using the same
-live capacity reservation that assigned its FIFO sequence. Expired reservations remove incomplete unpublished staging.
-The root `atomixos-provision-apply.service` claims queued jobs, verifies manifest paths, owners, modes, symlinks,
-hashes, expected entries, and the source-size limit before reading staged request evidence, then re-renders the verified
-staged `config.toml` into `/data/config-candidate`. It runs
-the existing promotion, activation, rollback, and recovery protocol. Root-written `/data/config` state is
-group-readable by `atomixos-provision` so the unprivileged API can authenticate and stage approved state, except for
-the owner-only apply receipt that binds a job and source digest to its transaction phase and result. Only its
-`committed` phase proves success. Bundle `files/` payloads follow the managed-file access policy below and are
-preserved through a no-symlink snapshot path; privileged access reconciliation changes verified file descriptors
-rather than following mutable paths. Export bounds snapshot writes as files are read, including files that grow during copying.
-Export is allowlisted to
-`config.toml` and `files/`, returns a deterministic `config-bundle.tar.gz` under the provisioning lock, and excludes
-generated runtime state and Podman volume contents. Production exports run in the separate root
-`atomixos-provision-export.service`, triggered by `atomixos-provision-export.path`. The API submits empty UUID-named
-markers, never source paths or commands. The root worker claims them into a root-controlled directory and atomically
-publishes UUID-correlated archives or errors readable by the API group. This preserves export access even after a
-workload changes file ownership or permissions, without granting the API root privileges or modifying payload access.
-The worker cannot write `/data`, has no network access, and rejects symlinks, hard-linked files, and special files.
-Results and acknowledgements are bounded and expired; see [Privileged bundle export](provisioning.md#privileged-bundle-export).
-The provisioning lock serializes exports against applies, not concurrent workload writes.
+| Transport           | Before provisioning                            | After provisioning                       |
+|---------------------|------------------------------------------------|------------------------------------------|
+| `network` (default) | WAN and LAN, port `8080`                       | The provisioned LAN gateway address only |
+| `nixstasis`         | `127.0.0.1:8080`, through the Nixstasis tunnel | `127.0.0.1:8080`                         |
 
-Initial promotion also writes `/data/config/.first-config`; the
-shared provisioning predicate treats a regular, non-symlink marker or `config.toml` as the compatibility signal across
-provisioning, authentication, and Boot UI guards, while missing signer state fails closed.
+Fleet mode adds no network fallback and never opens the WAN bootstrap port. The tunnel starts only after the device is
+approved and Nixstasis grants a separate `remote_access_token` lease; see
+[Nixstasis Enrollment](architecture/nixstasis-enrollment.md).
 
-The WAN firewall uses the same non-symlink marker-or-config state, except that pending promotion preserves bootstrap
-access. Signer-only state does not mark a device provisioned.
-Boot recovery leaves runtime and WAN reconciliation to its ordered successor services; it never synchronously waits for
-those units. Same-boot worker recovery reconciles the configured transport after discarding an initial promotion,
-restoring rollback, or recovering a committed initial apply. It retries the initial apply's WAN firewall reconciliation
-before publishing recovered success. Fleet recovery does not enable network bootstrap.
+The API is socket-activated. `atomixos-bootstrap.socket` owns the listen address, and `atomixos-bootstrap.service` only
+uses the socket it inherits from systemd.
 
-Runtime result files under `/run/atomixos-provision/results` are root-writable and group-readable only. Claim and queued-job
-abandonment share `/run/atomixos-provision/queue.lock`. The worker retains active jobs until terminal result publication.
-Its finalizer discards an interrupted initial promotion, rolls back an interrupted re-apply, or finishes cleanup for a
-committed apply. Same-boot recovery retries a committed re-apply's delayed LAN bootstrap rebind when its durable
-result records a forwarding URL, before publishing recovered success. Committed-receipt transport follow-ups run only
-while a claimed job with the same job ID and source digest has no published result. Later finalization does not replay
-them after success, including after result acknowledgement or expiry. Retries while a result remains unpublished share
-the named transient unit; completed or failed units are collected so later applies can schedule it again. Boot recovery
-leaves rebinding to its ordered successor services, and Nixstasis transport does not schedule network rebinding.
-Rollback merges failed and restored managed-user tracking before removing the failed tree, and
-same-boot finalization reactivates the restored configuration before publishing results. Rollback activation failures
-are included in the failed result. It then matches the owner-only receipt against the claimed manifest before recording
-authoritative success or failure. Result polling may abandon only an
-unclaimed queued job; a claimed job remains nonterminal until the worker or its
-finalizer publishes the authoritative result. The monitor retries result I/O errors and fails the wait only after they
-persist for a full reconciliation interval; direct result readers still receive those errors.
+The first-boot Boot UI is a browser wrapper around the same API. Uploads go through `/apply`, protected by a bootstrap
+CSRF token and browser origin checks rather than operator authentication; programmatic `POST /api/config` calls on first
+boot do not need that token. The Boot UI is not a management interface. After the first successful provisioning, only a
+one-time result page for the submitted job stays readable, and nothing else in the UI accepts changes.
 
-The apply service allows 3900 seconds for stop/finalization, covering the supported 3600-second activation budget
-plus recovery overhead. Privileged staged-file hashing opens nonblocking and rejects non-regular descriptors, so a
-raced-in FIFO cannot block the worker before validation.
+## Provisioning Privilege Boundary
 
-The first-boot Boot UI is a browser-only wrapper around that same boundary. It
-submits uploaded or dropped `config.toml` or supported bundle sources through `/apply`, uses the bootstrap CSRF
-token plus browser origin checks, and renders first-boot-only HTML job fragments
-from the in-memory job state. It is not a post-provision management UI and does
-not add a durable polling token or unauthenticated mutation path after
-provisioning. After successful initial provisioning, only a one-time terminal
-fragment for the submitted Boot UI job remains readable so the browser can show
-success, warnings, or failure state.
+The network-facing API runs as the unprivileged `atomixos-provision` user. It validates requests, authenticates
+re-applies, renders candidates in tmpfs, and reads approved provisioning state. It never changes the host. Root-written
+`/data/config` state is group-readable by `atomixos-provision` for this reason, except the owner-only apply receipt.
 
-Authenticated partial config endpoints are only another input to that same boundary. The unprivileged side loads the
-current desired `config.toml`, renders a complete candidate config, preserves existing bundle `files/` payloads, and queues
-the staged job for the same root worker only when the staged queue is otherwise empty. They never edit derived
-`/data/config/*.json`, Quadlet units, systemd drop-ins, firewall state, or users directly. Successful partial updates
-rewrite `/data/config/config.toml` in generated canonical TOML form.
+Host changes belong to a root worker, `atomixos-provision-apply.service`, started by a systemd path unit watching
+`/run/atomixos-provision/queue/*.ready`:
 
-The API routes retain operation IDs and domain tags in code, and the production
-bootstrap service exposes live OpenAPI schema routes for online clients. Response
-bodies are typed in the provisioning package schemas while preserving the current
-JSON shapes.
+- **Staging.** The API writes a complete candidate tree, the validated bundle files, and a manifest of relative paths,
+  owners, modes, sizes, and SHA-256 hashes under `/run/atomixos-provision`. It then publishes a ready marker using the
+  same queue reservation that fixed its position. Reservations are refreshed while staging, so slow imports keep their
+  place; expired ones remove unpublished staging.
+- **Queue.** Jobs run one at a time in first-in, first-out order. A full queue answers `409 Conflict`.
+- **Verification.** The worker checks every manifest path, owner, mode, hash, and expected entry, rejects symlinks and
+  anything that is not a regular file, and enforces the source size limit before it reads the staged request. It reads
+  without blocking, so a FIFO planted in the staging tree cannot stall it.
+- **Re-rendering.** The worker re-renders `/data/config-candidate` from the verified, signed request bytes instead of
+  trusting the API's candidate.
 
-The accepted `config.toml` schema is:
+Only the worker, and maintenance commands run with `ATOMIXOS_PROVISION_WORKER_ACTIVE=1`, write `/data/config`
+directly. Partial-update endpoints are just another input to this boundary; they never edit derived JSON, Quadlet units,
+systemd drop-ins, firewall state, or users themselves. A successful partial update rewrites `config.toml` in canonical
+generated form.
+
+The API keeps operation IDs and tags on every route, and the running service publishes its live OpenAPI schema.
+
+## Apply Transactions and Finalization
+
+Before promotion, the worker writes a root-only apply receipt into the candidate. The receipt ties the job ID and the
+source digest to the transaction's phase and result:
+
+- `promoted` means the candidate is in place but not yet proven.
+- `committed` means activation and health checks passed. Only this phase proves success.
+
+The worker removes a claimed job only after its result file is written. If it stops part-way, its finalizer looks at
+the receipt and:
+
+- discards an interrupted first apply,
+- rolls back an interrupted re-apply, or
+- finishes cleanup for a committed apply,
+
+then compares the receipt with the claimed manifest before publishing the authoritative result.
+
+Recovery follows these rules:
+
+- A rollback merges the failed and restored managed-user lists before removing the failed tree, and reactivates the
+  restored configuration before publishing the result. Rollback activation failures are included in that result.
+- A durable marker spans a rollback from restore through reactivation, so an interrupted rollback activation is rerun.
+- Recovery at boot leaves activation and WAN reconciliation to the services that run after it, and never waits on them.
+- Recovery in the same boot finishes transport work first: it retries the WAN firewall reconciliation for a first apply
+  and the delayed move to the LAN gateway address for a re-apply, then publishes the result. These follow-ups run only
+  while the matching job is still unpublished, and never again afterwards. Fleet mode never schedules a move to the LAN
+  address.
+- A client polling for results may abandon only a job that has not been claimed. A claimed job stays open until the
+  worker or its finalizer publishes the result. Result read errors are retried and fail the wait only if they persist
+  for a full reconciliation interval.
+
+The apply service has 3900 seconds to stop, which covers the 3600-second activation budget plus recovery.
+`atomixos-provision-apply-retry.timer` restarts the service 30 seconds after each run, because claiming a job removes
+its `.ready` trigger; the service starts only while a ready job or an active claim exists.
+
+Result files in `/run/atomixos-provision/results` are writable by root and readable by the API group only. Claiming
+and abandoning queued jobs share `/run/atomixos-provision/queue.lock`.
+
+## Bundle Export
+
+Exports run in a separate root service, `atomixos-provision-export.service`, triggered by
+`atomixos-provision-export.path`. The API sends only empty, UUID-named request files, never paths or commands. The
+worker has no network access and cannot write `/data`; it can still read files a workload has re-owned, without the API
+needing root.
+
+The archive:
+
+- contains only `config.toml` and `files/`, snapshotted under the provisioning lock;
+- omits `files/` when it does not exist, and stores an existing empty `files/` as an empty directory entry;
+- contains only relative, single-link regular files and empty directories, and rejects symlinks, hard links, and
+  special files;
+- stays within the importer's size, member, and count limits while it is being written, even if a file grows during the
+  copy.
+
+The worker's run is limited to 120 seconds (`TimeoutStartSec`), and its finalizer, which records interrupted requests
+as failures, has a separate 60-second limit (`TimeoutStopSec`). A request stays claimed until its archive or error is
+published, so a failed result write is retried by the finalizer or the next worker run. While the worker is idle,
+`atomixos-provision-export.timer` runs cleanup every minute and expires abandoned requests, acknowledgements, and
+results after five minutes (`RETENTION_SECONDS` in `export_worker.py`). All export state is boot-local, under
+`/run/atomixos-provision/export`. The API-side limits are listed under
+[Export a configuration](provisioning.md#export-a-configuration).
+
+## The config.toml Contract
+
+The machine-readable schema is `schemas/config.schema.json`. The importer validates against it with the Draft 2020-12
+`jsonschema` validator, then normalizes the values and checks rules that span fields. A complete example:
 
 ```toml
 version = 1
@@ -166,28 +183,23 @@ Image = "ghcr.io/example/myapp:latest"
 PublishPort = ["10080:8080"]
 ```
 
-WAN ports stay deny-by-default unless listed. LAN stays open by default; if `[network.firewall.inbound.lan]` is
-present with any ports, LAN switches to an explicit allowlist for only those ports. `[network.dnsmasq]` is optional;
-omitted fields use the fallback LAN gateway contract. `[network.ntp]` is optional and defaults to Cloudflare NTP.
-Top-level `network.dns_servers`, `network.dns_search_domains`, `network.default_gateway`, and
-`network.interfaces.<ethN>` are optional host network controls. Interface-specific DNS/search values override top-level
-DNS/search values for that interface. Absence means no static gateway is rendered; empty gateway strings are invalid.
-The top-level IPv4 default gateway applies to `wan`; use an interface-specific IPv4 gateway for other Ethernet
-interfaces. `lan` must remain static because it is the LAN gateway.
-The machine-readable schema is committed at
-`schemas/config.schema.json` and the import path validates against it with the maintained Draft 2020-12 `jsonschema`
-validator before applying semantic normalization and cross-field policy checks.
-
-`[activation]` controls candidate activation and health-check behavior. `required` lists provisioned Quadlet services that
-must become active. Optional `timeout_seconds`, `settle_seconds`, `restart`, and `allow_degraded` values render into
-`/data/config/activation-policy.json`. Unit references are limited to declared container services; activation policy does
-not allow arbitrary systemd unit manipulation. `strategy` currently supports only `rollback`, preserving fail-closed
-candidate rollback on activation failure.
+- **Firewall.** WAN ports stay closed unless listed. LAN stays open unless `[network.firewall.inbound.lan]` lists ports,
+  which turns it into an allowlist.
+- **LAN gateway.** `[network.dnsmasq]` is optional; missing fields use the default LAN gateway. `[network.ntp]` is
+  optional and defaults to Cloudflare NTP.
+- **Host network.** `network.dns_servers`, `network.dns_search_domains`, `network.default_gateway`, and
+  `network.interfaces.<name>` are optional. Interface DNS and search values override the top-level ones for that
+  interface. The top-level IPv4 default gateway applies to `wan`; set a per-interface gateway for other interfaces.
+  With no gateway set, none is rendered, and an empty gateway string is invalid. `lan` must stay static because it is
+  the LAN gateway.
+- **Activation.** `required` names provisioned container services that must become active. `timeout_seconds`,
+  `settle_seconds`, `restart`, and `allow_degraded` are optional. Units may only be declared container services, never
+  arbitrary systemd units. `strategy` accepts only `rollback`, so a failed activation always rolls back.
 
 ## Firewall JSON
 
-`/data/config/firewall-inbound.json` is a JSON object with optional `wan` and `lan` objects. Each scope may contain
-optional `tcp` and `udp` arrays of integer ports in `1..65535`.
+`/data/config/firewall-inbound.json` has optional `wan` and `lan` objects, each with optional `tcp` and `udp` arrays of
+ports from `1` to `65535`:
 
 ```json
 {
@@ -201,14 +213,11 @@ optional `tcp` and `udp` arrays of integer ports in `1..65535`.
 }
 ```
 
-Provisioned rules are added to WAN `wan` or LAN `lan` only when the matching scope is present. WAN remains
-deny-by-default for new inbound traffic. LAN is open by default, but an explicit `lan` scope replaces that default-open
-rule with the configured allowlist. Forwarding remains dropped.
+Rules are added to the `wan` or `lan` interface only for scopes that are present. Forwarding stays dropped.
 
 ## LAN JSON
 
-`/data/config/lan-settings.json` is generated from `config.toml` and includes the validated runtime fields consumed by
-`lan-gateway-apply.py`.
+`/data/config/lan-settings.json` is generated from `config.toml` and read by `lan-gateway-apply.py`:
 
 ```json
 {
@@ -224,19 +233,15 @@ rule with the configured allowlist. Forwarding remains dropped.
 }
 ```
 
-The DHCP range must stay inside the gateway subnet, must be ordered, and must not include the gateway IP. Supported LAN
-gateway prefixes are `/16` through `/30`.
-
-`network.interfaces.lan.address` and `network.dnsmasq.gateway_cidr` both describe the LAN gateway CIDR. If either is set,
-the import path renders one effective LAN gateway CIDR into `lan-settings.json`; if both are set and differ, validation
-fails before candidate promotion.
+The DHCP range must sit inside the gateway subnet, run from low to high, and leave out the gateway address. Gateway
+prefixes from `/16` to `/30` are supported. Both `network.interfaces.lan.address` and `network.dnsmasq.gateway_cidr`
+describe the LAN gateway; if both are set and differ, validation fails before anything is promoted.
 
 ## Host Network JSON
 
-`/data/config/host-network.json` is generated from `config.toml` and includes the validated host resolver, route, and
-interface fields consumed by `lan-gateway-apply.py`. Top-level DNS/search/default-gateway values render into the generated
-`10-wan.network` drop-in for `wan` unless an explicit `wan` value overrides them. Additional Ethernet interfaces render
-as `30-atomixos-ethN.network` units when explicitly configured.
+`/data/config/host-network.json` is generated from `config.toml` and also read by `lan-gateway-apply.py`. Top-level
+DNS, search, and gateway values go into the generated `10-wan.network` drop-in for `wan` unless a `wan` value
+overrides them. Other configured Ethernet interfaces get `30-atomixos-ethN.network` units.
 
 ```json
 {
@@ -255,13 +260,13 @@ as `30-atomixos-ethN.network` units when explicitly configured.
 }
 ```
 
-Interface keys are `wan` and `lan` for the built-in roles and `ethN` for additional Ethernet interfaces. A key naming the
-physical WAN or LAN interface, such as `eth0` on QEMU, is rejected; use `wan` or `lan`. WiFi remains unsupported.
-Rendering these files does not add firewall rules, NAT, IP forwarding, or FORWARD-chain exceptions.
+Interface keys are `wan` and `lan` for the built-in roles, and `ethN` for additional Ethernet interfaces. A key that
+names the physical WAN or LAN interface, such as `eth0` on QEMU, is rejected; use `wan` or `lan`. Wi-Fi is not
+supported. These files never add firewall rules, NAT, IP forwarding, or forward-chain exceptions.
 
 ## Activation Policy JSON
 
-`/data/config/activation-policy.json` is generated from `[activation]` and consumed by the re-apply activation path.
+`/data/config/activation-policy.json` is generated from `[activation]`:
 
 ```json
 {
@@ -275,95 +280,64 @@ Rendering these files does not add firewall rules, NAT, IP forwarding, or FORWAR
 }
 ```
 
-The activation path runs the existing activation hook first, then applies configured provisioned-service restarts, waits
-for `settle_seconds`, and checks required service health within `timeout_seconds`. Invalid rendered activation policy fails
-closed through the normal rollback path. Legacy `health-required.json` remains as a compatibility input when no activation
-policy file exists. `allow_degraded_configured` records whether the operator explicitly set `allow_degraded`; omitted
-`allow_degraded` preserves the previous behavior of reporting but tolerating failed non-required services, while an
-explicit list makes other failed non-required services fail activation.
+Activation runs the standard activation hook, restarts the listed services, waits `settle_seconds`, and then checks the
+required services within `timeout_seconds`. An invalid policy fails closed and rolls back. When no policy file exists,
+the older `health-required.json` is used instead.
+
+`allow_degraded_configured` records whether `allow_degraded` was set. If it was left out, failed services that are not
+required are reported but tolerated. If it was set, any failed service that is neither required nor listed fails the
+activation.
 
 ## Quadlet Safety Boundary
 
-Provisioned containers are rendered into canonical Quadlet files under `/data/config/quadlet/` before being synced into
-Podman systemd search paths.
+Containers are rendered into canonical Quadlet files under `/data/config/quadlet/` and then synced into Podman's
+systemd search paths:
 
-Rootful containers require `privileged = true` and are forced onto `Network=host`. Rootless containers use the `appsvc`
-user, are forced onto `Network=pasta`, and non-loopback `PublishPort` binds are rewritten to `127.0.0.1`.
+- **Rootful containers** need `privileged = true` and always use `Network=host`.
+- **Rootless containers** run as `appsvc`, always use `Network=pasta`, and have every non-loopback `PublishPort`
+  rewritten to `127.0.0.1`.
 
-Bundle imports may include `files/`; Quadlet values may reference `${CONFIG_DIR}` and `${FILES_DIR}` to bind files from
-`/data/config/` without embedding host-specific absolute paths in the seed. Managed inputs are installed read-only by
-default. A trusted integrator may request writable `Volume`, `Mount`, or `PodmanArgs` behavior; AtomixOS preserves that
-Quadlet configuration and warns when a mount overlapping managed files is not clearly read-only. `PodmanArgs` analysis supports
-combined argument strings and quoted paths as well as separate entries, retaining directive indices in warnings.
-This includes attached short-option volume arguments such as `-v${FILES_DIR}/state:/state:rw`.
-Writable application state should
-normally use Podman named volumes. Operators who need to back up, restore, or transfer that runtime data should use
-Podman tooling; that lifecycle is outside this feature and AtomixOS provisioning ownership.
+Bundles may include `files/`, and Quadlet values may use `${CONFIG_DIR}` and `${FILES_DIR}` to mount files from
+`/data/config/` without hard-coding host paths.
 
-An authorized post-provisioning signer is a device administrator. A signed configuration may intentionally define
-rootful or rootless workloads and use arbitrary supported Quadlet and Podman options, including privileged container
-behavior. Authentication controls who may exercise that authority; renderer validation enforces structural correctness
-and platform invariants rather than imposing workload policy on a trusted integrator.
+An admin who can sign configuration is a device administrator. A signed configuration may define rootful or rootless
+workloads with any supported Quadlet or Podman option, including privileged ones. Authentication decides who holds that
+power; the renderer checks structure and platform rules, not workload policy.
 
-## Managed-file access
+## Managed-file Access
 
-Bundle `files/` are deployment inputs, installed read-only by default. A
-read-only tree is owned by `root` with group `atomixos-provision` (directories
-`0550`, files `0440`) and a POSIX access ACL granting the `appsvc` user the same
-read access. The workload therefore cannot change modes or ownership, and the
-named-user ACL entry still matches `appsvc`'s host uid inside rootless
-containers, which drop host supplementary groups. When a container mount needs
-write access, the tree is instead owned by `appsvc` (directories `0750`, files
-`0640`) with the ACL removed. `/data` must support POSIX ACLs; reconciliation
-fails closed when an ACL cannot be applied. Permission
-reconciliation validates file descriptors and rejects symlinks and special
-files. It streams directory entries within the bundle's global member limit
-(4096 by default), counting every file and subdirectory beneath `files/` across
-the whole tree. An oversized tree fails reconciliation before excess entries
-have their ownership or permissions changed. Snapshots and reconciliation also
-reject directories nested more than 64 levels below `files/` with a provisioning
-error, so deep trees cannot exhaust the stack or descriptor table. Trusted integrators may request
-writable mounts; the renderer warns
-when a mount overlaps managed files and is not clearly read-only. This includes
-mounts of `${CONFIG_DIR}` or other ancestors, as well as `${FILES_DIR}` and its
-descendants. Warning and write-access decisions normalize paths lexically,
-including Linux's equivalent single- and double-leading slashes, without
-following symlinks. A `type=glob` mount is classified by the literal directory
-before its first wildcard component, so `${CONFIG_DIR}/*` counts as covering
-`files/`. Mutable application state belongs in Podman volumes and
-uses Podman backup and restore tooling.
-Named-volume identifiers, single-field anonymous volumes such as
-`Volume=/data/config/files` or `--volume=/data/config/files` (a container path,
-not a host source), and explicit `type=volume` mounts do not reference
-managed host files and never enable managed-file write access based on the
-provisioning process's working directory. Host bind paths must be absolute or
-start with `${CONFIG_DIR}` or `${FILES_DIR}`, and they retain managed-file overlap
-detection. Rendering rejects relative host sources in `Volume=`, bind `Mount=`,
-and `PodmanArgs` mounts: Quadlet resolves them from the installed unit directory
-and Podman from the service working directory, so provisioning cannot classify them.
-A `Volume=` source containing `/` is path-like rather than a named volume (volume
-names cannot contain `/`), so `data/state:/state` is rejected under the same rule.
+Bundle `files/` are deployment inputs and are installed read-only unless a mount asks for write access:
 
-## Worker request trust
+| Mode                | Owner and group              | Directories | Files  | ACL                      |
+|---------------------|------------------------------|-------------|--------|--------------------------|
+| Read-only (default) | `root`, `atomixos-provision` | `0550`      | `0440` | Read access for `appsvc` |
+| Writable            | `appsvc`                     | `0750`      | `0640` | None                     |
 
-The root worker verifies signed request evidence and re-renders from those
-verified bytes rather than trusting the API-rendered candidate. Staged reads
-are bounded, nonblocking, and reject symlinks and non-regular descriptors.
-Ready publication requires a live capacity reservation and preserves FIFO order.
-API jobs and local CLI staging both refresh their reservation while staging, so slow
-imports keep their slot past the reservation TTL.
+The named-user ACL lets rootless containers read the files even though they drop host supplementary groups, and it
+keeps workloads from changing modes or ownership. `/data` must support POSIX ACLs; if an ACL cannot be applied,
+reconciliation fails.
 
-## Apply transactions and finalization
+Reconciliation works on verified file descriptors and never follows symlinks:
 
-The receipt binds the staged job ID and source digest to its durable phase and
-result. Activation precedes commit; finalization preserves published results
-and retries unfinished work. Boot recovery leaves WAN and runtime activation
-to ordered successor services. Same-boot recovery completes transport and
-rollback activation before publishing results. A durable rollback-activation
-marker spans rollback restore through reactivation, so recovery reruns an
-interrupted rollback activation; boot recovery clears it because ordered boot
-units activate the restored config. The apply service stop timeout
-covers the supported activation budget plus recovery overhead. Claiming removes
-the job's `.ready` trigger, so `atomixos-provision-apply-retry.timer` restarts
-the apply service 30 seconds after each run; the service starts only while a
-`.ready` job or an active claim exists.
+- it rejects symlinks and special files;
+- it counts every file and directory under `files/` against the bundle's member limit (4096 by default) and fails
+  before changing anything in an oversized tree;
+- it rejects directories nested more than 64 levels below `files/`.
+
+A trusted integrator may request writable `Volume`, `Mount`, or `PodmanArgs` access. The renderer keeps that
+configuration and warns when a mount overlaps managed files without being clearly read-only:
+
+- Overlap includes mounts of `${CONFIG_DIR}` or any other ancestor, as well as `${FILES_DIR}` and anything under it.
+- Paths are normalized lexically, without following symlinks; `/` and `//` prefixes are treated alike.
+- A `type=glob` mount is judged by the directory before its first wildcard, so `${CONFIG_DIR}/*` covers `files/`.
+- `PodmanArgs` are parsed as combined or separate arguments, with quoting, including attached forms such as
+  `-v${FILES_DIR}/state:/state:rw`. Warnings name the directive they came from.
+
+Named volumes, single-field anonymous volumes such as `Volume=/data/config/files` (a container path, not a host
+source), and `type=volume` mounts never touch managed host files. Host bind sources must be absolute or start with
+`${CONFIG_DIR}` or `${FILES_DIR}`. Relative sources are rejected in `Volume=`, bind `Mount=`, and `PodmanArgs`, because
+Quadlet and Podman would resolve them from different directories. A `Volume=` source containing `/` counts as a path,
+since volume names cannot contain `/`, so `data/state:/state` is rejected too.
+
+Writable application state belongs in Podman named volumes. Back it up and restore it with Podman tools; it is not part
+of AtomixOS provisioning.

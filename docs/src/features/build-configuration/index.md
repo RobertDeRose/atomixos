@@ -1,102 +1,63 @@
 # Build Configuration
 
-## References
+AtomixOS has a strict, versioned build-stage policy. The committed `build.toml` sets immutable policy, such as watchdog
+enforcement and backend, so the same inputs always produce the same images. An ignored, partial `build.dev.toml` lets
+maintainers try local changes through the supported `mise` tasks without touching reviewed defaults. The effective
+policy is validated before anything builds, embedded with provenance in each system, and copied byte-for-byte beside
+disk images and RAUC bundles. The original plan is in the [design record](design.md); Beads tracks the work under
+`atomixos-mol-0ws`.
 
-- Beads feature root: `atomixos-mol-0ws`
-- Design record: [design.md](design.md)
+## What changed for users
 
-## Delivered Capability
+- **Maintainers** get early, clear failures: invalid syntax, unknown fields, wrong types, unsupported versions, invalid
+  or overflowing durations, and out-of-range values all fail during evaluation.
+- **Maintainers** can override policy locally. Supported `mise` tasks detect `build.dev.toml` at the repository root,
+  print a warning before evaluation, and add `-dev` to image and bundle filenames.
+- Direct Git-backed Nix commands, and test or utility tasks, always use the committed policy.
 
-AtomixOS now has a strict, versioned build-stage policy contract. Committed `build.toml` supplies reproducible immutable
-watchdog policy, including selection of the internal or external backend, while an ignored partial `build.dev.toml` lets
-maintainers test local changes through supported `mise` commands without changing reviewed defaults.
+## How it fits in
 
-The effective policy is validated before artifacts build, mapped to existing watchdog options, embedded with provenance
-in configured systems, and copied byte-for-byte beside disk-image and RAUC bundle artifacts.
+Build policy is separate from the mutable runtime configuration under `/data`. One evaluator parses, validates, merges,
+and renders the canonical policy. A narrow NixOS module maps the effective values to `atomixos.watchdog.enableHardware`,
+`backend`, `runtimeWatchdogSec`, and `rebootWatchdogSec`; it adds no way to change policy at runtime.
 
-## User-Facing Behavior
+Canonical TOML, compact JSON provenance, and the policy hash come from shared, immutable Nix store files, so the system,
+image, and bundle carry identical audit bytes. Source revision, `flake.lock`, certificates, signing credentials, and
+release trust remain separate inputs.
 
-Version 1 accepts only complete committed watchdog policy and known partial local overrides. Invalid syntax, unknown
-fields, wrong types, unsupported versions, invalid durations, overflow, and policy values outside documented ranges
-fail closed during evaluation.
+## Running it
 
-Supported configuration-bearing `mise` commands automatically detect repository-root `build.dev.toml`, print the exact
-override warning before affected evaluations, and mark image and bundle filenames with `-dev`. Direct Git-backed Nix
-commands and excluded test or utility tasks continue to use committed policy only.
+1. Create `build.dev.toml` with the values to test.
+2. Run a supported `mise` check or build task and confirm the warning and the `-dev` artifact.
+3. Inspect the policy sidecars next to the artifact.
+4. To promote the values, copy them into `build.toml`, delete `build.dev.toml`, rerun the checks, and rebuild.
 
-## Design Integration
+`scripts/build.sh` validates policy before touching `.gcroots`, builds replacements under temporary links, and swaps
+the retained links only after every build succeeds. A syntax, schema, evaluation, or build failure keeps the previous
+retained outputs. Removing a malformed local overlay restores committed-policy behavior.
 
-Build policy remains separate from mutable runtime provisioning under `/data`. The evaluator is the single parser,
-validator, merger, and canonical renderer. A narrow NixOS module maps effective values to
-`atomixos.watchdog.enableHardware`, `backend`, `runtimeWatchdogSec`, and `rebootWatchdogSec`; it does not create a
-runtime mutation surface.
+## Differences from the design
 
-Canonical TOML, compact JSON provenance, and the policy hash come from shared immutable Nix store files. The system,
-image, and bundle therefore use identical audit bytes. Source revision, `flake.lock`, certificates, signing credentials,
-and release trust remain separately owned inputs.
+Build retention moved from inline `mise.toml` shell into `scripts/build.sh`, so host and Lima builds share one tested
+implementation.
 
-## Operational Impact
+## Not included
 
-Maintainers can create `build.dev.toml`, run an included `mise` check or build command, inspect the warning and `-dev`
-artifact, and verify its sidecars. Promotion consists of copying accepted values to committed `build.toml`, removing the
-local overlay, rerunning checks, and rebuilding.
+- Build-policy sections other than those listed in the reference, and schema-version migration.
+- Runtime provisioning fields, secrets, arbitrary Nix expressions, caller-chosen configuration paths, multiple profile
+  layers, unmarked local artifacts, and local overrides for direct Nix commands.
 
-The retained-artifact build validates policy before touching `.gcroots`, builds replacements under temporary links, and
-replaces retained links only after every required build succeeds. Syntax, schema, evaluation, or later build failures
-preserve the prior retained outputs; removing a malformed local overlay restores committed-policy behavior.
+## Tests
 
-## Reference and Contracts
+- `checks.<system>.build-configuration`: strict schema, normalization, provenance, module mapping, and artifact inputs.
+- `checks.<system>.build-config-workflow`: override detection, the warning, purity, the supported task list, Lima
+  execution, validation ordering, and retained-link replacement.
 
-- [Build Configuration](../../reference/build-configuration.md)
+## Related pages
+
+- [Build Configuration reference](../../reference/build-configuration.md)
 - [Building](../../building.md)
 - [Testing](../../testing.md)
-- [Architecture — Immutable Build Policy](../../architecture.md#immutable-build-policy)
-- [Watchdog Specification](../../specs/watchdog.md)
+- [Architecture: Immutable Build Policy](../../architecture.md#immutable-build-policy)
+- [Watchdog specification](../../specs/watchdog.md)
 - [Flake Outputs](../../reference/flake-outputs.md)
-- [Project Structure](../../reference/project-structure.md)
-
-## Test Coverage
-
-- `checks.aarch64-darwin.build-configuration` and `checks.aarch64-linux.build-configuration` cover strict schema,
-  normalization, provenance, module mapping, and artifact inputs.
-- `checks.aarch64-darwin.build-config-workflow` and `checks.aarch64-linux.build-config-workflow` cover fixed-path
-  override handling, warning and purity behavior, the task matrix, Lima execution, validation ordering, and retained-link
-  replacement.
-
-## Design Reconciliation
-
-### Delivered as Designed
-
-The complete committed schema, recursive strict overlay, bounded duration grammar, watchdog mapping, canonical immutable
-policy, compact provenance, byte-identical sidecars, `-dev` identity, exact supported-task matrix, fixed-path wrapper,
-narrow impurity, Lima behavior, direct-Nix boundary, and atomic retained-link workflow were delivered.
-
-### Intentional Changes
-
-No product-policy changes were required during implementation. Build retention logic moved from inline `mise.toml` shell
-to `scripts/build.sh` so host and Lima execution share one testable implementation.
-
-### Deferred Work
-
-Future build-policy sections and schema-version migration remain deferred until an owning feature needs them. Physical
-Watchdog Enforcement must still verify systemd's actual programmed timeout and complete Rock64 reboot, rollback, and
-soak evidence before committed policy enables hardware enforcement.
-
-### Rejected or Removed Scope
-
-Runtime provisioning fields, secrets, arbitrary Nix expressions, caller-selected configuration paths, multiple profile
-layers, unmarked local artifacts, and automatic local overrides for direct Nix commands remain intentionally excluded.
-
-## Documentation Updated
-
-- `docs/src/architecture.md`
-- `docs/src/building.md`
-- `docs/src/testing.md`
-- `docs/src/reference/build-configuration.md`
-- `docs/src/specs/watchdog.md`
-- `docs/src/reference/flake-outputs.md`
-- `docs/src/reference/project-structure.md`
-- `docs/src/planned-features.md`
-- `docs/src/features/watchdog-enforcement/design.md`
-- `docs/src/SUMMARY.md`
-- `docs/src/features/index.md`

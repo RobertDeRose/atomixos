@@ -94,7 +94,9 @@ local linters = new Mapping<String, Step> {
   ["check_case_conflict"] = Builtins.check_case_conflict
   ["check_executables_have_shebangs"] = Builtins.check_executables_have_shebangs
   ["check_symlinks"] = Builtins.check_symlinks
-  ["check-added-large-files"] = Builtins.check_added_large_files
+  ["check-added-large-files"] = (Builtins.check_added_large_files) {
+    exclude = List("docs/package-lock.json")
+  }
   ["check-exec-shebangs"] = Builtins.check_executables_have_shebangs
   ["check-merge-conflict"] = Builtins.check_merge_conflict
   ["detect-private-key"] = (Builtins.detect_private_key) {
@@ -106,11 +108,13 @@ local linters = new Mapping<String, Step> {
     check = "contextlint"
   }
   ["docs"] = new Step {
-    glob = List("docs/src/**/*.md", "docs/book.toml")
-    check = "mdbook build docs"
+    glob = List("docs/src/**", "docs/*.ts", "docs/package*.json", "docs/site/**", "product/**")
+    check = "mise run site:build"
   }
   ["mise"] = Builtins.mise
-  ["mixed-line-ending"] = Builtins.mixed_line_ending
+  ["mixed-line-ending"] = (Builtins.mixed_line_ending) {
+    exclude = List("docs/package-lock.json")
+  }
   ["markdown-table-formatter"] = new Step {
     glob = List("**/*.md", "**/*.markdown")
     check_diff = "markdown-table-formatter --check {{ files }}"
@@ -121,7 +125,9 @@ local linters = new Mapping<String, Step> {
     fix = "rumdl check --config .config/rumdl.toml --fix {{ files }}"
   }
   ["ruff"] = Builtins.ruff
-  ["newlines"] = Builtins.newlines
+  ["newlines"] = (Builtins.newlines) {
+    exclude = List("docs/package-lock.json")
+  }
   ["nixfmt"] = Builtins.nix_fmt
   ["pkl_format"] = Builtins.pkl_format
   ["mktoc"] = new Step {
@@ -135,17 +141,16 @@ local linters = new Mapping<String, Step> {
   ["tombi"] = (Builtins.tombi) {
     exclude = List("**/mise.toml")
   }
-  ["mdbook-lint"] = new Step {
-    glob = List("docs/src/**/*.md")
-    check_diff = "mdbook-lint lint --config .mdbook-lint.toml {{ files }}"
-    fix = "mdbook-lint fix --config .mdbook-lint.toml {{ files }}"
+  ["typos"] = (Builtins.typos) {
+    exclude = List("docs/package-lock.json")
   }
-  ["typos"] = Builtins.typos
-  ["trailing-whitespace"] = Builtins.trailing_whitespace
+  ["trailing-whitespace"] = (Builtins.trailing_whitespace) {
+    exclude = List("docs/package-lock.json")
+  }
 }
 
 default_branch = "dev"
-exclude = List("**/mermaid.min.js", "**/.opencode/*")
+exclude = List("**/.opencode/*")
 fail_fast = false
 
 hooks {

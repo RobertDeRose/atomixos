@@ -1,80 +1,82 @@
 # RAUC Integration
 
-> Source: `docs/src/features/rock64-ab-image/design.md#rauc-integration`
+Acceptance contract for RAUC slots, bundles, and update delivery. The update cycle is explained in
+[Update and Rollback](../architecture/update-rollback.md).
 
 ## Requirements
 
-### ADDED: A/B multi-slot configuration
+### A/B multi-slot configuration
 
-RAUC `system.conf` defines two slot pairs (A and B), each containing a boot partition and a rootfs partition. The boot
-partition is the parent; the rootfs partition inherits its slot assignment.
+RAUC `system.conf` defines two slot pairs, A and B. Each pair has a boot partition (the parent) and a rootfs partition
+that inherits its slot assignment.
 
 #### Scenario: RAUC sees all slots
 
 - Given the device has booted
-- When `rauc status` is run
-- Then 4 slots are listed: boot.0 (A), rootfs.0 (A), boot.1 (B), rootfs.1 (B)
-- And one pair is marked as "booted"
+- When `rauc status` runs
+- Then four slots are listed: `boot.0` (A), `rootfs.0` (A), `boot.1` (B), and `rootfs.1` (B)
+- And one pair is marked as booted
 
-### ADDED: U-Boot bootloader backend
+### U-Boot bootloader backend
 
-RAUC uses the `uboot` backend to communicate slot priority and boot-count via U-Boot environment variables. On the QEMU
-target, a `custom` backend simulates the same behavior using files.
+RAUC uses the `uboot` backend to set slot priority and boot counts through U-Boot environment variables. The QEMU RAUC
+tests use the `custom` backend, which keeps the same state in files under `/var/lib/rauc/`.
 
 #### Scenario: RAUC can switch slots
 
 - Given slot A is active
 - When `rauc install` writes a bundle to slot B
 - Then RAUC sets `BOOT_ORDER=B A` and `BOOT_B_LEFT=3`
-- And the next boot loads from slot B
+- And the next boot loads slot B
 
-### ADDED: Bundle signature verification
+### Bundle signature verification
 
-RAUC verifies bundle signatures against the CA keyring (`dev.ca.cert.pem`). Unsigned or invalidly signed bundles are
-rejected.
+RAUC verifies bundles against its keyring: the development CA (`certs/dev.ca.cert.pem`) unless
+`atomixos.rauc.keyringCert` sets a production CA. Unsigned bundles and bundles signed by another CA are rejected. The
+bundle formats are `-plain +verity`, so `plain` bundles are refused.
 
 #### Scenario: Invalid bundle is rejected
 
 - Given a `.raucb` bundle signed with a different key
-- When `rauc install` is attempted
+- When `rauc install` runs
 - Then the install fails with a signature verification error
 - And no slot data is modified
 
-### ADDED: Writes to inactive slot only
+### Writes to the inactive slot only
 
-RAUC only writes to the slot pair that is not currently booted. The active slot is never modified during an update.
+RAUC writes only to the slot pair that is not booted. The active slot is never modified during an update.
 
 #### Scenario: Active slot is protected
 
 - Given slot A is booted
 - When `rauc install` runs
-- Then data is written to boot-b and rootfs-b only
-- And boot-a and rootfs-a remain unchanged
+- Then data is written to `boot-b` and `rootfs-b` only
+- And `boot-a` and `rootfs-a` are unchanged
 
-### ADDED: Bundle contains boot and rootfs
+### Bundle contains boot and rootfs
 
-Each RAUC bundle contains two images: a vfat boot image (kernel + initrd + DTB + boot.scr)
-and the squashfs rootfs. Both are installed
-atomically to the target slot pair.
+Each bundle holds two raw images, `boot.vfat` (kernel, initrd, DTB, and `boot.scr`) and `rootfs.squashfs`. Both are
+installed to the target slot pair as one update.
 
 #### Scenario: Bundle structure
 
 - Given a bundle is built with `nix build .#rock64.rauc-bundle`
-- When `rauc info` is run on the bundle
-- Then it shows an image for `boot` (type: raw) and an image for `rootfs` (type: raw)
-- And the `compatible` field is `rock64`
+- When `rauc info` runs on it
+- Then it lists a `boot` image and a `rootfs` image, both of type `raw`
+- And its `compatible` value is `rock64`
+- And a `.#cm3.rauc-bundle` bundle's `compatible` value is `radxa-cm3-io`
 
-### ADDED: Update polling service
+### Update polling service
 
-The `os-upgrade.service` polls an update server on a timer, downloads new bundles, and installs them via RAUC. The
-hawkBit path is reserved for future server-push updates.
+`os-upgrade.service` polls the provisioned update server on a timer, downloads a newer bundle, and installs it with
+RAUC. It does nothing until `/data/config/os-upgrade.json` names an update server.
 
-#### Scenario: Polling finds new version
+#### Scenario: Polling finds a new version
 
-- Given the update server has a newer bundle
+- Given the update server offers a newer bundle
 - When the timer fires
-- Then the bundle is downloaded to `/data`
-- And `rauc install` is run
+- Then the bundle is downloaded to `/data/rauc/bundles`
+- And `rauc install` runs
 - And the device reboots into the new slot
 
 #### Scenario: Polling identifies the board
@@ -84,26 +86,26 @@ hawkBit path is reserved for future server-push updates.
 - Then the update query includes `X-Compatible: radxa-cm3-io`
 - And a response whose `compatible` is `rock64` is skipped without downloading the bundle
 
-### ADDED: Swappable with hawkBit
+### hawkBit mode installs the package only
 
-The `os-upgrade` module has a `useHawkbit` option that disables the polling service and installs the
-`rauc-hawkbit-updater` package. AtomixOS does not configure an operational hawkBit service in the current image.
+`os-upgrade.useHawkbit = true` disables the polling service and installs the `rauc-hawkbit-updater` package; see
+[Update Polling](../architecture/update-rollback.md#update-polling) for what that means for updates.
 
 #### Scenario: hawkBit mode
 
 - Given `os-upgrade.useHawkbit = true`
 - Then the `os-upgrade` polling timer is not created
-- And `rauc-hawkbit-updater` package is included in the system
-- And no configured `rauc-hawkbit-updater` systemd service is created by AtomixOS
+- And the `rauc-hawkbit-updater` package is installed
+- And no `rauc-hawkbit-updater` systemd service is created
 
-### ADDED: NixOS RAUC module
+### NixOS RAUC module
 
-RAUC is enabled via the upstream NixOS `services.rauc` module and wired from `atomixos.rauc.*` options. The `rauc`
-client is available in the system environment.
+RAUC is enabled through the upstream NixOS `services.rauc` module, configured from `atomixos.rauc.*`. The `rauc`
+client is on the system path.
 
 #### Scenario: RAUC is available
 
 - Given the device has booted
-- When `rauc --version` is run
-- Then a valid version string is returned
+- When `rauc --version` runs
+- Then it prints a version string
 - And `rauc.service` is active
