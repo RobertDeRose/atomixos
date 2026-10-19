@@ -57,6 +57,8 @@ The named route profile, fixed Host rewrite, and server delivery action are owne
 - A separate remote-access lease authorizes the temporary FRP route.
 - FRP credentials are runtime state only and do not enter `build.toml`, derivation metadata, or rendered route files.
 - The client derives the FRP proxy name from the registered device UUID; images cannot configure it.
+- Runtime scripts may run only commands in `atomixos.nixstasis.runtime.execCommands`, and may pass arguments only as
+  exact vectors listed in `runtime.execCommandArgs` under the command's absolute path.
 - The client requires HTTPS for the API. `atomixos.nixstasis.allowLoopbackHttp` permits plain HTTP to a loopback API
   for tests only.
 - Short-lived SSH credentials are issued dynamically by Nixstasis and expire automatically.

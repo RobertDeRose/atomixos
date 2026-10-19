@@ -19,7 +19,10 @@ let
             enable = true;
             apiUrl = "https://nixstasis.example.test";
             frp.serverAddr = "frp.example.test";
-            runtime.execCommands.uname = "/run/current-system/sw/bin/uname";
+            runtime = {
+              execCommands.uname = "/run/current-system/sw/bin/uname";
+              execCommandArgs."/run/current-system/sw/bin/uname" = [ [ "-s" ] ];
+            };
           };
           atomixos.rauc.enable = lib.mkForce false;
         }
@@ -74,6 +77,9 @@ pkgs.runCommand "nixstasis-module-check" { } ''
   grep -q 'authorized_keys_path: /data/nixstasis/.ssh/authorized_keys' ${
     cfg.environment.etc."nixstasis/config.yaml".source
   }
+  grep -A2 'exec_command_args:' ${
+    cfg.environment.etc."nixstasis/config.yaml".source
+  } | grep -q -- '- -s'
   grep -q 'uname: /run/current-system/sw/bin/uname' ${
     cfg.environment.etc."nixstasis/config.yaml".source
   }

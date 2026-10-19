@@ -55,6 +55,27 @@ let
 
     HTTPServer(("127.0.0.1", 4000), Handler).serve_forever()
   '';
+  # Runtime scripts: one passes an allowlisted argument vector, one does not.
+  unameScript =
+    name: arg:
+    pkgs.writeText "${name}.stary" ''
+      ---
+      name: ${name}
+      version: "1"
+      schema:
+        type: object
+        required:
+          - out
+        properties:
+          out:
+            type: string
+      ---
+
+      def main():
+          return {"out": exec_cmd("uname", ["${arg}"])}
+    '';
+  allowedScript = unameScript "uname-allowed" "-s";
+  deniedScript = unameScript "uname-denied" "-r";
   mockFrpc = pkgs.writeShellScriptBin "nixstasis-test-frpc" ''
     set -eu
     test -n "''${FRPS_AUTH_TOKEN:-}"
@@ -106,10 +127,18 @@ nixos-lib.runTest {
         frp = {
           serverAddr = "127.0.0.1";
         };
-        runtime.execCommands.uname = "/run/current-system/sw/bin/uname";
+        runtime = {
+          execCommands.uname = "/run/current-system/sw/bin/uname";
+          execCommandArgs."/run/current-system/sw/bin/uname" = [ [ "-s" ] ];
+        };
       };
 
       environment.systemPackages = [ mockFrpc ];
+      systemd.tmpfiles.rules = [
+        "d /var/lib/nixstasis/scripts 0755 root root - -"
+        "C /var/lib/nixstasis/scripts/uname-allowed.stary 0644 root root - ${allowedScript}"
+        "C /var/lib/nixstasis/scripts/uname-denied.stary 0644 root root - ${deniedScript}"
+      ];
       systemd.services.nixstasis-poll.environment.NIXSTASIS_FRPC_BINARY_PATH =
         lib.mkForce "${mockFrpc}/bin/nixstasis-test-frpc";
 
@@ -141,6 +170,9 @@ nixos-lib.runTest {
 
     gateway.wait_until_succeeds("test -s /tmp/nixstasis-mock/heartbeat.json", timeout=120)
     gateway.succeed("python3 - <<'PY'\nimport json\nfrom pathlib import Path\nheartbeat = json.loads(Path('/tmp/nixstasis-mock/heartbeat.json').read_text())\nassert 'telemetry' in heartbeat, heartbeat\nassert 'connection_status' in heartbeat, heartbeat\nPY")
+    # Only the exact allowlisted argument vector may run.
+    gateway.wait_until_succeeds("grep -q '\"Linux\"' /tmp/nixstasis-mock/heartbeat.json", timeout=60)
+    gateway.succeed("grep -q 'uname-denied: arguments are not allowlisted' /tmp/nixstasis-mock/heartbeat.json")
 
     gateway.wait_until_succeeds("journalctl -u nixstasis-poll -b --no-pager | grep 'Server requested remote access'", timeout=120)
     gateway.wait_until_succeeds("systemctl is-active --quiet nixstasis-frpc.service", timeout=120)

@@ -32,6 +32,7 @@ let
       exec_work_dir = cfg.runtime.execWorkDir;
       exec_env = cfg.runtime.execEnv;
       exec_commands = cfg.runtime.execCommands;
+      exec_command_args = cfg.runtime.execCommandArgs;
       mqtt_publish_topics = cfg.runtime.mqttPublishTopics;
       mqtt_subscribe_topics = cfg.runtime.mqttSubscribeTopics;
     };
@@ -190,6 +191,18 @@ in
         description = "Deny-by-default command allowlist for Nixstasis runtime scripts.";
       };
 
+      execCommandArgs = lib.mkOption {
+        type = lib.types.attrsOf (lib.types.listOf (lib.types.listOf lib.types.str));
+        default = { };
+        example = {
+          "/run/current-system/sw/bin/uname" = [ [ "-a" ] ];
+        };
+        description = ''
+          Exact argument vectors runtime scripts may pass, keyed by the absolute path of an
+          allowlisted command. The client rejects any non-empty argument list that is not listed.
+        '';
+      };
+
       sshUser = lib.mkOption {
         type = lib.types.str;
         default = "admin";
@@ -253,6 +266,10 @@ in
           lib.hasPrefix "${toString cfg.stateDir}/" authorizedKeysPath
           && !(builtins.elem ".." pathComponents);
         message = "Nixstasis authorized-keys path must live under atomixos.nixstasis.stateDir";
+      }
+      {
+        assertion = lib.all (lib.hasPrefix "/") (lib.attrNames cfg.runtime.execCommandArgs);
+        message = "atomixos.nixstasis.runtime.execCommandArgs keys must be absolute command paths";
       }
     ];
 
