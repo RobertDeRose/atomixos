@@ -18,8 +18,9 @@ The workflow accepts dispatches from the development branch only and serializes 
 1. **Plan** verifies that the official release branch is an ancestor of the selected commit, if that branch exists,
    and refuses a commit that already carries a version tag. Cocogitto computes the next version from Conventional
    Commits since the latest version tag, using `cog bump --auto --dry-run`, and generates notes with
-   `cog changelog`. The run summary shows the version, source commit, and notes before approval. No version file is
-   changed.
+   `cog changelog`. Before `v1.0.0`, any breaking change (a `!` after the type or a `BREAKING CHANGE:` footer)
+   bumps the minor version instead, because Cocogitto alone treats only `feat!` that way. The run summary shows
+   the version, source commit, and notes before approval. No version file is changed.
 2. **Validate** calls the existing repository-check, Nix, and Python-test workflows with the selected commit's full
    SHA. They run the same checks as pull requests, including the U-Boot sandbox and release-promotion regression
    tests. These are not the full NixOS VM or physical-hardware suites; see [Testing](../testing.md).
