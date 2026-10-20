@@ -4,12 +4,10 @@ hide_title: true
 slug: /
 ---
 
+import useBaseUrl from '@docusaurus/useBaseUrl';
+
 <header className="intro-header">
-  <div className="element-tile" aria-hidden="true">
-    <span className="element-tile__number">A/B</span>
-    <span className="element-tile__symbol">Ax</span>
-    <span className="element-tile__name">AtomixOS</span>
-  </div>
+  <img className="intro-header__logo" src={useBaseUrl('/img/atomixos-mark.png')} alt="" width="256" height="256" />
   <div>
     <h1>AtomixOS</h1>
     <p>The element of reproducibility: an appliance OS that boots the same way every time.</p>

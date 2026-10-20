@@ -16,7 +16,11 @@ const productPageHref = `pathname://${baseUrl}../`;
 const config: Config = {
   title: 'AtomixOS',
   tagline: 'The element of reproducibility',
-  favicon: 'img/atomixos-mark.png',
+  // The SVG stays crisp at tab size; the PNG is the fallback for browsers without SVG favicons.
+  favicon: 'img/atomixos-favicon.svg',
+  headTags: [
+    {tagName: 'link', attributes: {rel: 'icon', type: 'image/png', sizes: '64x64', href: `${baseUrl}img/atomixos-favicon.png`}},
+  ],
   url: 'https://robertderose.github.io',
   baseUrl,
   trailingSlash: false,
@@ -96,7 +100,7 @@ const config: Config = {
     },
     navbar: {
       title: 'AtomixOS',
-      logo: {alt: 'AtomixOS logo', src: 'img/atomixos-mark.png', href: productPageHref, target: '_self'},
+      logo: {alt: 'AtomixOS logo', src: 'img/atomixos-icon.png', href: productPageHref, target: '_self'},
       items: [
         {to: '/', label: 'Docs', position: 'left', activeBaseRegex: '.*'},
         {href: repoUrl, label: 'GitHub', position: 'right'},

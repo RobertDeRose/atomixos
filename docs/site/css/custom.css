@@ -288,12 +288,18 @@ html[data-theme='dark'] {
   fill: var(--ifm-background-color) !important;
 }
 
-/* Introduction header (src/README.mdx): the "Ax" element tile from the product page, beside the title. */
+/* Introduction header (src/README.mdx): the atom emblem beside the title. */
 .intro-header {
   display: flex;
   align-items: center;
   gap: 1.25rem;
   margin-bottom: 2rem;
+}
+
+.intro-header__logo {
+  flex: 0 0 auto;
+  width: clamp(5rem, 12vw, 7.5rem);
+  height: auto;
 }
 
 /* `.markdown` matches the specificity of Docusaurus's first-heading margin rule. */
@@ -305,35 +311,4 @@ html[data-theme='dark'] {
 .intro-header p {
   margin: 0.25rem 0 0;
   color: var(--ifm-color-content-secondary);
-}
-
-.element-tile {
-  display: grid;
-  flex: 0 0 auto;
-  grid-template-rows: auto 1fr auto;
-  width: 5.5rem;
-  aspect-ratio: 1;
-  padding: 0.4rem 0.55rem;
-  border: 2px solid var(--brand-accent);
-  border-radius: 6px;
-  background: var(--brand-surface);
-  color: var(--brand-ink);
-  font-family: var(--brand-font-heading);
-  line-height: 1;
-}
-
-.element-tile__number {
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.element-tile__symbol {
-  align-self: center;
-  color: var(--ifm-link-color);
-  font-size: 2.4rem;
-  font-weight: 750;
-}
-
-.element-tile__name {
-  font-size: 0.68rem;
 }

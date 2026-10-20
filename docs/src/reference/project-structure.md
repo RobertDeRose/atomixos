@@ -106,8 +106,11 @@ docs/
     css/custom.css                 Brand theme (colors, fonts, intro header, tables, Mermaid)
     client/index.ts                Fonts and Mermaid diagram zoom/fullscreen
     features.ts                    Publishes only delivered features
-    static/img/atomixos-logo.png   Full logo with wordmark: README and the product page hero
-    static/img/atomixos-mark.png   Logo emblem: favicon and navbar image
+    static/img/                    Images, also served to the product page
+      atomixos-logo.png            Full logo with wordmark: README and the product page hero
+      atomixos-mark.png            Atom emblem: the docs introduction header
+      atomixos-icon.png            "Ax" element tile: the docs navbar and product page header
+      atomixos-favicon.svg         Atom outline: the favicon, with a 64px PNG fallback
     pages/                         Optional standalone React pages
   src/                             Documentation content; README.mdx is the docs introduction
 

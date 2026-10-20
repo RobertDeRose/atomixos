@@ -185,6 +185,9 @@ h3 {
 }
 
 .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
   color: var(--ink);
   font: 700 1.35rem var(--font-display);
   text-decoration: none;
