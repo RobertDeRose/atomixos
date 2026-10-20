@@ -63,7 +63,7 @@ Git rejects merges that require a merge commit.
 | `scripts/enable-docs-deployment.py` | Configures workflow-built Pages through external `gh`.                    |
 | `.github/workflows/hk.yml`          | Runs hk checks on PRs, manual dispatches, and release calls.              |
 | `.github/workflows/nix.yml`         | Evaluates the flake per platform; runs U-Boot scripts in a sandbox.       |
-| `.github/workflows/docs.yml`        | Builds gated docs from the default branch or manual dispatch.             |
+| `.github/workflows/docs.yml`        | Builds the site from `main` or manual dispatch; deployment is gated.      |
 | `.github/workflows/pytest.yml`      | Runs provisioning and repository Python tests on aarch64 Linux.           |
 | `.github/workflows/release.yml`     | Plans, validates, builds, and publishes approved official releases.       |
 

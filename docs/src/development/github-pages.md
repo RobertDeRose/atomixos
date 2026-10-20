@@ -24,13 +24,17 @@ the other.
 
 ## How the site is published
 
-`.github/workflows/docs.yml` runs on every push to `dev` and on manual dispatch. Both of its jobs run only when the
-repository variable `DOCS_DEPLOYMENT_ENABLED` is exactly `true`:
+`.github/workflows/docs.yml` runs on every push to `main` and on manual dispatch. The
+[Release workflow](releasing.md) advances that branch using its deploy key, so promotion triggers a site build from
+the same source commit. Site deployment runs separately from release-asset publication.
 
 1. **build** checks out the repository, installs the locked tools with mise, runs `mise run site:build`, and uploads
    `_site/atomixos` as the Pages artifact. It has `contents: read` only.
-2. **deploy** publishes that artifact to the `github-pages` environment. Only this job has `pages: write` and
-   `id-token: write`.
+2. **deploy** publishes that artifact only when the repository variable `DOCS_DEPLOYMENT_ENABLED` is exactly `true`.
+   Only this job has `pages: write` and `id-token: write`.
+
+The build runs even when deployment is disabled. Configure the `github-pages` environment to allow deployments
+from `main` only. Manual dispatches from other branches cannot deploy.
 
 Pull requests never deploy. They still build the site through the `docs` step of `mise run check`, which fails on any
 broken link, anchor, or image.
@@ -53,6 +57,12 @@ The task (`scripts/enable-docs-deployment.py`):
 4. prints the Pages URL.
 
 Running it again is safe; it converges on the same configuration.
+
+To publish the current official release after enabling deployment, dispatch from `main`:
+
+```bash
+gh workflow run docs.yml --ref main
+```
 
 ## Recovery
 

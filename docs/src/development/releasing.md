@@ -73,8 +73,9 @@ Configure these GitHub settings before the first release:
 
 The deploy key only updates Git references. The workflow's `GITHUB_TOKEN` creates the GitHub release and uploads
 assets. Build and validation jobs have read-only repository access and receive no release key. The workflow calls
-validation directly, so it does not depend on tag-triggered workflows. Existing documentation deployment remains
-independent; see [GitHub Pages Deployment](github-pages.md).
+validation directly, so it does not depend on tag-triggered workflows. The deploy-key push to the official branch
+also triggers the separate site workflow, which publishes the product page and docs when its deployment gate is
+enabled; see [GitHub Pages Deployment](github-pages.md).
 
 Do not push to the official branch or create version tags by hand. To rotate the release key, remove its old public
 half from the repository, register a new write-enabled deploy key, and replace the environment secret. Remove any
