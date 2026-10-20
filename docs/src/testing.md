@@ -47,6 +47,8 @@ The Pages setup tests replace `gh` with an in-memory GitHub. They check that `mi
 converges the `github-pages` environment on a single `main` branch policy, creates the environment when it is
 missing, keeps its required reviewers and wait timer, leaves a converged environment untouched on rerun, and never
 enables deployment when the environment query or update, or a policy query, creation, or removal fails.
+They also check restoration of the previous branch mode when setup fails before `main` is allowed, preservation of
+`main` after a removal failure, and recovery output for failed rollback or malformed API responses.
 
 ### All tests
 

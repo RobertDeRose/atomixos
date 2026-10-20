@@ -59,7 +59,10 @@ The task (`scripts/enable-docs-deployment.py`):
 4. sets `DOCS_DEPLOYMENT_ENABLED=true` as its last change;
 5. prints the Pages URL.
 
-Running it again is safe; it converges on the same configuration.
+Running it again converges on the same configuration. GitHub requires selected-branch mode before the task can
+create a branch policy. If changing that mode succeeds but querying policies or allowing `main` fails, the task
+attempts to restore the previous deployment branch settings. Once `main` is allowed, a failure removing another
+policy leaves `main` allowed for the next run.
 
 To publish the current official release after enabling deployment, dispatch from `main`:
 
@@ -69,8 +72,11 @@ gh workflow run docs.yml --ref main
 
 ## Recovery
 
-If the task fails, it names the GitHub operation that failed and prints the manual commands. Install `gh` from
-<https://cli.github.com/> if needed, then complete the same state by hand:
+If the task fails, it names the GitHub operation that failed and prints the manual commands. Invalid API JSON or
+unexpected response data uses the same recovery output. If restoring the previous branch settings also fails, the
+error reports both failures and the previous branch policy; repair the environment before dispatching a deployment.
+These API changes are separate requests, so interruption or a failed rollback can still require manual recovery.
+Install `gh` from <https://cli.github.com/> if needed, then complete the same state by hand:
 
 ```bash
 gh api --method PUT repos/OWNER/REPO/pages -f build_type=workflow

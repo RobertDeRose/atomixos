@@ -28,6 +28,9 @@ def pages(monkeypatch):
         environment_exists=True,
         branch_policy=None,
         puts=0,
+        rollback_fails=False,
+        raw_environment=None,
+        policy_output=None,
     )
     endpoint = "repos/example/project/pages"
     policies = "repos/example/project/environments/github-pages/deployment-branch-policies"
@@ -57,10 +60,12 @@ def pages(monkeypatch):
                 return result(error="environment query refused")
             if not state.environment_exists:
                 return result(error="gh: Not Found (HTTP 404)")
+            if state.raw_environment is not None:
+                return result(state.raw_environment)
             environment = {"protection_rules": state.rules, "deployment_branch_policy": state.branch_policy}
             return result(json.dumps(environment))
         if target.endswith("/environments/github-pages") and method == "PUT":
-            if state.fail == "environment":
+            if state.fail == "environment" or (state.rollback_fails and state.puts):
                 return result(error="environment update refused")
             state.environment = json.loads(stdin)
             state.environment_exists = True
@@ -70,6 +75,8 @@ def pages(monkeypatch):
         if target == policies and method == "GET":
             if state.fail == "query":
                 return result(error="policy query refused")
+            if state.policy_output is not None:
+                return result(state.policy_output)
             return result("\n".join(f"{p['id']}\t{p['type']}\t{p['name']}" for p in state.policies))
         if target.startswith(policies + "/") and method == "DELETE":
             if state.fail == "remove":
@@ -163,3 +170,113 @@ def test_rerun_leaves_a_converged_environment_untouched(pages):
     module.enable()
     module.enable()
     assert state.puts == 1
+
+
+@pytest.mark.parametrize("failure", ["query", "create"])
+@pytest.mark.parametrize("previous", [None, {"protected_branches": True, "custom_branch_policies": False}])
+def test_setup_failure_restores_the_previous_branch_mode(pages, failure, previous):
+    module, state = pages
+    state.branch_policy = previous
+    state.rules = [{"type": "wait_timer", "wait_timer": 30}]
+    state.enabled = True
+    state.fail = failure
+    with pytest.raises(module.EnablementError, match="restored"):
+        module.enable()
+    assert state.branch_policy == previous
+    assert state.policies == []
+    assert state.enabled
+    assert state.puts == 2
+    assert state.environment["wait_timer"] == 30
+
+
+def test_creation_failure_does_not_rewrite_an_already_selected_environment(pages):
+    module, state = pages
+    state.branch_policy = dict(module.CUSTOM_BRANCH_POLICY)
+    state.fail = "create"
+    with pytest.raises(module.EnablementError, match="creation"):
+        module.enable()
+    assert state.branch_policy == module.CUSTOM_BRANCH_POLICY
+    assert state.puts == 0
+
+
+def test_creation_failure_leaves_a_new_environment_unrestricted(pages):
+    module, state = pages
+    state.environment_exists = False
+    state.fail = "create"
+    with pytest.raises(module.EnablementError, match="restored"):
+        module.enable()
+    assert state.environment_exists
+    assert state.branch_policy is None
+    assert state.policies == []
+    assert not state.enabled
+
+
+def test_failed_removal_keeps_main_allowed_without_rollback(pages):
+    module, state = pages
+    state.policies = [{"id": 1, "type": "branch", "name": "dev"}]
+    state.fail = "remove"
+    with pytest.raises(module.EnablementError, match="removal"):
+        module.enable()
+    assert state.branch_policy == module.CUSTOM_BRANCH_POLICY
+    assert any(p["name"] == "main" and p["type"] == "branch" for p in state.policies)
+    assert state.puts == 1
+
+
+def test_failed_rollback_reports_both_errors_and_recovery(pages, capsys):
+    module, state = pages
+    state.fail = "create"
+    state.rollback_fails = True
+    assert module.main() == 1
+    error = capsys.readouterr().err
+    assert "Pages policy creation failed" in error
+    assert "Pages environment rollback failed" in error
+    assert "previous deployment branch policy" in error
+    assert "Manual recovery:" in error
+    assert "Traceback" not in error
+    assert not state.enabled
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        "",
+        "{",
+        "null",
+        "[]",
+        "{}",
+        '{"deployment_branch_policy": [], "protection_rules": []}',
+        '{"deployment_branch_policy": null, "protection_rules": null}',
+        '{"deployment_branch_policy": null, "protection_rules": [null]}',
+        '{"deployment_branch_policy": null, "protection_rules": [{}]}',
+        '{"deployment_branch_policy": null, "protection_rules": [{"type": []}]}',
+        '{"deployment_branch_policy": null, "protection_rules": [{"type": ""}]}',
+        '{"deployment_branch_policy": null, "protection_rules": [{"type": "required_reviewers"}]}',
+        '{"deployment_branch_policy": null, "protection_rules": [{"type": "wait_timer", "wait_timer": "bad"}]}',
+        '{"deployment_branch_policy": null, "protection_rules": [{"type": "required_reviewers", "reviewers": [{}]}]}',
+    ],
+)
+def test_invalid_environment_response_shows_recovery_before_updating(pages, capsys, payload):
+    module, state = pages
+    state.raw_environment = payload
+    assert module.main() == 1
+    error = capsys.readouterr().err
+    assert "Pages environment query" in error
+    assert "Manual recovery:" in error
+    assert "Traceback" not in error
+    assert state.puts == 0
+    assert not state.enabled
+
+
+@pytest.mark.parametrize("response", ["bad", "1\tbranch", "\tbranch\tmain", "1\tunknown\tmain", "1\tbranch\t"])
+def test_invalid_policy_response_restores_mode_and_shows_recovery(pages, capsys, response):
+    module, state = pages
+    state.policy_output = response
+    assert module.main() == 1
+    error = capsys.readouterr().err
+    assert "Pages environment policy query" in error
+    assert "restored" in error
+    assert "Manual recovery:" in error
+    assert "Traceback" not in error
+    assert state.branch_policy is None
+    assert state.policies == []
+    assert not state.enabled
