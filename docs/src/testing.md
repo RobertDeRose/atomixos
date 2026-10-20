@@ -43,6 +43,10 @@ The release-promotion tests create temporary local Git remotes. They check initi
 validated commit while development advances, reruns, conflicting tags, divergent history, and atomic rejection.
 They do not publish to GitHub or require release credentials.
 
+The Pages setup tests replace `gh` with an in-memory GitHub. They check that `mise run docs:deployment:enable`
+converges the `github-pages` environment on a single `main` branch policy, stays stable on rerun, and never enables
+deployment when a policy query, creation, or removal fails.
+
 ### All tests
 
 ```sh

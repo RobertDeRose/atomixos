@@ -78,12 +78,15 @@ gh api --method PUT repos/OWNER/REPO/environments/github-pages \
   -F 'deployment_branch_policy[custom_branch_policies]=true'
 gh api --method POST repos/OWNER/REPO/environments/github-pages/deployment-branch-policies \
   -f name=main -f type=branch
+gh api repos/OWNER/REPO/environments/github-pages/deployment-branch-policies
+gh api --method DELETE repos/OWNER/REPO/environments/github-pages/deployment-branch-policies/POLICY_ID
 gh variable set DOCS_DEPLOYMENT_ENABLED --body true --repo OWNER/REPO
 gh api repos/OWNER/REPO/pages --jq .html_url
 ```
 
-Use `POST` instead of `PUT` when the repository has no Pages site yet. Delete any other branch policy on the
-`github-pages` environment, such as the default-branch rule, so that only `main` can deploy.
+Use `POST` instead of `PUT` when the repository has no Pages site yet. Allow `main` first, then list the
+`github-pages` environment's policies and delete every other one, such as the default-branch rule, by its `id`, so
+that only `main` can deploy.
 
 If only the final URL lookup failed, deployment may already be enabled. Check the Pages build type, the environment
 branch policy, and the variable before rerunning the task or dispatching the Documentation workflow.

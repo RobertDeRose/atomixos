@@ -84,21 +84,20 @@ def enable() -> str:
     policies = f"{environment}/deployment-branch-policies"
     existing = gh(
         executable,
-        ["api", "--paginate", policies, "--jq", ".branch_policies[] | [.id, .type, .name] | @tsv"],
+        ["api", "--paginate", policies, "--jq", '.branch_policies[] | [.id, .type // "branch", .name] | @tsv'],
         "Pages environment policy query",
     ).stdout.splitlines()
-    allowed = False
-    for policy_id, policy_type, name in (line.split("\t") for line in existing if line):
-        if policy_type == "branch" and name == PUBLISH_BRANCH:
-            allowed = True
-        else:
-            gh(executable, ["api", "--method", "DELETE", f"{policies}/{policy_id}"], "Pages policy removal")
-    if not allowed:
+    rows = [line.split("\t") for line in existing if line]
+    # Allow main before removing anything, so a failure never leaves the environment with no deployable branch.
+    if not any(policy_type == "branch" and name == PUBLISH_BRANCH for _, policy_type, name in rows):
         gh(
             executable,
             ["api", "--method", "POST", policies, "-f", f"name={PUBLISH_BRANCH}", "-f", "type=branch"],
             "Pages policy creation",
         )
+    for policy_id, policy_type, name in rows:
+        if policy_type != "branch" or name != PUBLISH_BRANCH:
+            gh(executable, ["api", "--method", "DELETE", f"{policies}/{policy_id}"], "Pages policy removal")
 
     gh(
         executable,
@@ -122,19 +121,23 @@ def main() -> int:
         print("Manual recovery:", file=sys.stderr)
         print("  gh api --method PUT repos/OWNER/REPO/pages -f build_type=workflow", file=sys.stderr)
         print("  # Use POST instead of PUT when Pages does not exist.", file=sys.stderr)
+        environment = f"repos/OWNER/REPO/environments/{PAGES_ENVIRONMENT}"
         print(
-            "  gh api --method PUT repos/OWNER/REPO/environments/github-pages"
+            f"  gh api --method PUT {environment}"
             " -F 'deployment_branch_policy[protected_branches]=false'"
             " -F 'deployment_branch_policy[custom_branch_policies]=true'",
             file=sys.stderr,
         )
         print(
-            "  # Delete every other branch policy, then allow main:",
+            f"  gh api --method POST {environment}/deployment-branch-policies -f name={PUBLISH_BRANCH} -f type=branch",
             file=sys.stderr,
         )
         print(
-            "  gh api --method POST repos/OWNER/REPO/environments/github-pages/deployment-branch-policies"
-            " -f name=main -f type=branch",
+            f"  # Then delete every other policy listed by: gh api {environment}/deployment-branch-policies",
+            file=sys.stderr,
+        )
+        print(
+            f"  gh api --method DELETE {environment}/deployment-branch-policies/POLICY_ID",
             file=sys.stderr,
         )
         print(
