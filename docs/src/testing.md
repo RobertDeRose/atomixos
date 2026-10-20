@@ -30,6 +30,18 @@ The `dev` extra holds only test dependencies. Ruff comes from the mise toolchain
 These tests cover the Litestar API, SSH-signature authentication, config parsing, bundle import, Quadlet rendering and
 sync, activation, job tracking, and the service foundation modules.
 
+### Repository Python tests
+
+From the repository root, run the provisioning and repository tests together:
+
+```sh
+uv run --project scripts/atomixos_provision --extra dev pytest scripts/atomixos_provision/tests tests
+```
+
+The release-promotion tests create temporary local Git remotes. They check initial publication, fast-forwarding the
+validated commit while development advances, reruns, conflicting tags, divergent history, and atomic rejection.
+They do not publish to GitHub or require release credentials.
+
 ### All tests
 
 ```sh

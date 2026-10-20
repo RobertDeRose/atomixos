@@ -2,6 +2,12 @@ name: Provisioning tests
 
 on:
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        description: Exact commit to validate for a release
+        required: true
+        type: string
   pull_request:
     types: [opened, synchronize, reopened]
 
@@ -23,6 +29,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
+          ref: ${{ inputs.ref }}
           persist-credentials: false
       - name: Set up mise
         uses: jdx/mise-action@4444d8fd7a1b92f1821c12f435db40f58b743d26 # v4.0.1
@@ -36,4 +43,4 @@ jobs:
           # `mise x` would otherwise install every tool in mise.toml before running.
           MISE_EXEC_AUTO_INSTALL: "false"
         # Pin the interpreter to the nixpkgs python3 series the device ships, not the runner's.
-        run: mise x uv -- uv run --python 3.13 --extra dev pytest
+        run: mise x uv -- uv run --python 3.13 --extra dev pytest tests ../../tests

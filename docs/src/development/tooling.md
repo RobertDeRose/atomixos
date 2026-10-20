@@ -61,10 +61,11 @@ Git rejects merges that require a merge commit.
 | `cog.toml`                          | Configures Conventional Commits and concise changelogs.                   |
 | `.config/cog-changelog.tera`        | Renders plain Markdown changelogs without author noise.                   |
 | `scripts/enable-docs-deployment.py` | Configures workflow-built Pages through external `gh`.                    |
-| `.github/workflows/hk.yml`          | Runs the hk quality checks on pull requests and manual dispatches.        |
+| `.github/workflows/hk.yml`          | Runs hk checks on PRs, manual dispatches, and release calls.              |
 | `.github/workflows/nix.yml`         | Evaluates the flake per platform; runs U-Boot scripts in a sandbox.       |
 | `.github/workflows/docs.yml`        | Builds gated docs from the default branch or manual dispatch.             |
-| `.github/workflows/pytest.yml`      | Runs provisioning package tests on aarch64 Linux for PRs and dispatches.  |
+| `.github/workflows/pytest.yml`      | Runs provisioning and repository Python tests on aarch64 Linux.           |
+| `.github/workflows/release.yml`     | Plans, validates, builds, and publishes approved official releases.       |
 
 ## GitHub validation
 
@@ -72,16 +73,20 @@ Git rejects merges that require a merge commit.
 requests and manual dispatches. `.github/workflows/nix.yml` independently evaluates the flake with
 `flake check --no-build --system <system>` on `aarch64-linux` and `aarch64-darwin` runners. In parallel, its
 `uboot-scripts` job builds `checks.aarch64-linux.uboot-scripts`: a U-Boot sandbox binary that executes the compiled
-`boot.scr` and the `START_UMS` `PREBOOT`, because U-Boot only parses those scripts at boot time. No workflow builds
-images, runs NixOS VM tests, or regenerates the lock. Full build and VM validation stays local through
+`boot.scr` and the `START_UMS` `PREBOOT`, because U-Boot only parses those scripts at boot time. PR validation does not
+build images, run NixOS VM tests, or regenerate the lock. Full build and VM validation stays local through
 `./scripts/nix-with-build-config.sh flake check` or individual `nix build` commands, separately from `mise run check`.
 The hk and Nix jobs have a 45-minute limit.
 
 `.github/workflows/pytest.yml` runs the provisioning package test suite on the same events. It runs on
 `ubuntu-26.04-arm`, matching the device's aarch64 Linux file APIs, which macOS host runs only emulate. It executes
-`uv run --python 3.13 --extra dev pytest` through `mise x uv` in `scripts/atomixos_provision`, installing only uv.
+`uv run --python 3.13 --extra dev pytest tests ../../tests` through `mise x uv` in `scripts/atomixos_provision`,
+installing only uv. The repository tests include real-Git release-promotion regression tests.
 The interpreter pin matches the Python series that the pinned nixpkgs `python3` provides on the device. The job has a
 15-minute limit.
+
+The three validation workflows also accept an exact commit through `workflow_call`. The
+[Release workflow](releasing.md) calls them before approval and builds both boards' release artifacts separately.
 
 ## Commit messages and changelogs
 

@@ -2,6 +2,12 @@ name: Nix evaluation
 
 on:
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        description: Exact commit to validate for a release
+        required: true
+        type: string
   pull_request:
     types: [opened, synchronize, reopened]
 
@@ -26,6 +32,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
+          ref: ${{ inputs.ref }}
           persist-credentials: false
       - name: Set up Nix
         uses: cachix/install-nix-action@96951a368ba55167b55f1c916f7d416bac6505fe # v31.10.3
@@ -50,6 +57,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
+          ref: ${{ inputs.ref }}
           persist-credentials: false
       - name: Set up Nix
         uses: cachix/install-nix-action@96951a368ba55167b55f1c916f7d416bac6505fe # v31.10.3

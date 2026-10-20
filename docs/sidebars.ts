@@ -59,6 +59,7 @@ const sidebars: SidebarsConfig = {
         doc('hardware-testing', 'Hardware Testing'),
         doc('development/adding-board-support', 'Adding Board Support'),
         doc('development/tooling', 'Developer Tooling'),
+        doc('development/releasing', 'Releasing'),
         doc('development/feature-lifecycle', 'Feature Lifecycle'),
         doc('development/documentation-conventions', 'Documentation Conventions'),
         doc('development/github-pages', 'GitHub Pages Deployment'),
