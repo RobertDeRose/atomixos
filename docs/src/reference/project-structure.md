@@ -98,7 +98,8 @@ example/                           Example provisioning bundles (Caddy + OIDC re
 
 docs/
   package.json                     Pinned Docusaurus dependencies
-  package-lock.json                Locked npm dependency tree
+  pnpm-lock.yaml                   Locked pnpm dependency tree
+  pnpm-workspace.yaml              pnpm overrides and dependency build-script policy
   docusaurus.config.ts             Site configuration (URL, plugins, theme, broken-link policy)
   sidebars.ts                      Navigation, grouped by reader intent
   site/                            Site code

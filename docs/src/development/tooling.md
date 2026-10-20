@@ -16,9 +16,14 @@ hook runs the hk check/fix steps from `hk.pkl`; the commit-message hook enforces
 to preview the user-facing changelog.
 
 `mise.toml` requests every tool as `latest` (Node as `lts`, which also runs the Docusaurus docs build); `mise.lock`
-pins the exact version and download for each, so installs stay reproducible until the lock changes. To upgrade tools,
-run `mise lock`, review the version changes in the lock diff, and commit it. To add a tool,
-add it to `mise.toml` as `latest` and run `mise lock`.
+pins the exact version and download for each, so installs stay reproducible until the lock changes. To add a tool, add
+it to `mise.toml` as `latest` and run `mise lock`.
+
+[Renovate](https://docs.renovatebot.com/) keeps dependencies current through weekly pull requests: lock file
+maintenance runs `mise lock --bump` to advance the `latest` tools in `mise.lock`, and the npm manager updates the docs
+site packages in `docs/package.json` and `docs/pnpm-lock.yaml`. It waits three days after each release, since pnpm
+refuses packages published less than a day ago. To upgrade tools by hand, run `mise lock --bump`, review the version
+changes in the lock diff, and commit it.
 
 ## Tasks
 
@@ -26,7 +31,7 @@ add it to `mise.toml` as `latest` and run `mise lock`.
 |--------------------------|-------------------------------------------------------------------------|
 | `check`                  | Run all hk checks without requesting fixes.                             |
 | `fix`                    | Apply deterministic hk fixes to the working tree.                       |
-| `docs:install`           | Install the docs site's npm dependencies from `docs/package-lock.json`. |
+| `docs:install`           | Install the docs site's pnpm dependencies from `docs/pnpm-lock.yaml`.   |
 | `docs:build`             | Build the Docusaurus site into `docs/build`; fails on broken links.     |
 | `docs:deployment:enable` | Configure Pages and enable its repository gate through external `gh`.   |
 | `docs:serve [port]`      | Serve the docs with hot reload on port 3000 or the supplied port.       |
@@ -50,7 +55,9 @@ Git rejects merges that require a merge commit.
 | `.editorconfig`                     | Keeps editor output on UTF-8, LF, final newlines, and no trailing spaces. |
 | `_typos.toml`                       | Ignores hash-like identifiers while retaining typo checks elsewhere.      |
 | `contextlint.config.json`           | Checks documentation links, anchors, and image targets.                   |
-| `docs/package.json`                 | Pins the Docusaurus site dependencies; `package-lock.json` locks them.    |
+| `docs/package.json`                 | Pins the Docusaurus site dependencies; `pnpm-lock.yaml` locks them.       |
+| `docs/pnpm-workspace.yaml`          | Sets pnpm overrides and which dependency build scripts may run.           |
+| `.github/renovate.json5`            | Schedules Renovate updates for the docs site packages and the mise tools. |
 | `cog.toml`                          | Configures Conventional Commits and concise changelogs.                   |
 | `.config/cog-changelog.tera`        | Renders plain Markdown changelogs without author noise.                   |
 | `scripts/enable-docs-deployment.py` | Configures workflow-built Pages through external `gh`.                    |

@@ -18,6 +18,7 @@ cargo-binstall = "latest"
 cocogitto = "latest"
 hk = "latest"
 node = "lts"
+pnpm = "latest"
 pkl = "latest"
 ruff = "latest"
 rumdl = "latest"
@@ -47,39 +48,24 @@ description = "Apply deterministic repository fixes"
 run = "hk fix -a"
 
 [tasks."docs:install"]
-description = "Install the documentation site dependencies from the npm lockfile"
+description = "Install the documentation site dependencies from the pnpm lockfile"
 dir = "docs"
-sources = ["package-lock.json", "package.json"]
-outputs = ["node_modules/.package-lock.json"]
-run = '''
-#!/usr/bin/env bash
-set -euo pipefail
-
-# mise also reruns this task whenever mise.toml changes, so skip npm ci when node_modules already matches the lockfile.
-stamp=node_modules/.package-lock.sha256
-want=$(shasum -a 256 package-lock.json | cut -d' ' -f1)
-if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$want" ]; then
-  echo "node_modules already matches package-lock.json"
-  exit 0
-fi
-# npm ci removes node_modules first, which can fail with ENOTEMPTY on macOS while new files are still being indexed;
-# one retry clears it.
-npm ci --no-fund --no-audit || { sleep 2; npm ci --no-fund --no-audit; }
-echo "$want" >"$stamp"
-'''
+sources = ["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml"]
+outputs = ["node_modules/.modules.yaml"]
+run = "pnpm install --frozen-lockfile"
 
 [tasks."docs:build"]
 description = "Build the documentation site (Docusaurus) into docs/build"
 depends = ["docs:install"]
 dir = "docs"
-run = "npm run build"
+run = "pnpm run build"
 
 [tasks."docs:serve"]
 description = "Serve the documentation site locally with hot-reload"
 depends = ["docs:install"]
 dir = "docs"
 usage = 'arg "[port]" help="Port to serve on" default="3000"'
-run = 'npm run start -- --port "${usage_port:-3000}"'
+run = 'pnpm run start --port "${usage_port:-3000}"'
 
 [tasks."site:build"]
 description = "Assemble the Pages site: the product page at the root and the docs under docs/"

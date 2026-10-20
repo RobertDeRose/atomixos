@@ -1,0 +1,26 @@
+{
+  $schema: 'https://docs.renovatebot.com/renovate-schema.json',
+  extends: ['config:recommended'],
+  // Only the docs site packages and the mise tools; mise.toml requests most tools as `latest`, so
+  // their upgrades arrive through lock file maintenance (`mise lock --bump`) on mise.lock.
+  enabledManagers: ['npm', 'mise'],
+  schedule: ['before 6am on monday'],
+  // pnpm refuses versions younger than a day (minimumReleaseAge), so Renovate must wait at least that long.
+  minimumReleaseAge: '3 days',
+  lockFileMaintenance: {
+    enabled: true,
+    schedule: ['before 6am on monday'],
+  },
+  semanticCommits: 'enabled',
+  semanticCommitType: 'build',
+  packageRules: [
+    {
+      matchManagers: ['npm'],
+      semanticCommitScope: 'docs',
+    },
+    {
+      matchManagers: ['mise'],
+      semanticCommitScope: 'tooling',
+    },
+  ],
+}
