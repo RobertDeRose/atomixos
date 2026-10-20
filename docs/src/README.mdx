@@ -1,0 +1,69 @@
+---
+title: Introduction
+hide_title: true
+slug: /
+---
+
+import useBaseUrl from '@docusaurus/useBaseUrl';
+
+<header className="intro-header">
+  <img className="intro-header__logo" src={useBaseUrl('/img/atomixos-mark.png')} alt="" width="256" height="256" />
+  <div>
+    <h1>AtomixOS</h1>
+    <p>The element of reproducibility: an appliance OS that boots the same way every time.</p>
+  </div>
+</header>
+
+## What AtomixOS is
+
+AtomixOS is a secure, reproducible operating system for single-board computers. It turns a small board into an
+appliance that you can update remotely without fear of bricking it:
+
+- **Built from one Nix flake.** The same flake and inputs always produce the same image.
+- **Read-only at runtime.** The root filesystem is a squashfs image. Every boot starts from a known-good state, and
+  writable state lives on a separate `/data` partition.
+- **Updated atomically.** A new image is written to the inactive A/B slot while the device keeps running. If the new
+  slot does not prove itself healthy, the device boots the old one again.
+- **Extended with containers.** Applications run as Podman Quadlet containers that you describe in one `config.toml`,
+  without rebuilding the base image.
+
+## Who it is for
+
+- **Device makers and system integrators** who ship appliances built on single-board computers.
+- **Operators** who provision, update, and recover those devices in the field.
+- **Developers** who build, test, and extend the OS itself.
+
+## What it does
+
+- Writes signed RAUC update bundles to the inactive slot and switches slots only after the bundle verifies.
+- Counts boot attempts in U-Boot and rolls back after three failed boots.
+- Commits a new slot only after its services and containers stay healthy for 60 seconds.
+- Ships with no default credentials. Each device is provisioned on first boot, from a local web console, a USB stick,
+  or optionally the Nixstasis fleet service.
+- Acts as an isolated gateway: the WAN side denies inbound traffic by default, the LAN side gets DHCP, DNS, and NTP, and
+  nothing is forwarded between them.
+- Keeps forensic logs on `/data` so they survive reboots and rollbacks.
+
+## What is supported
+
+| Area              | Supported today                                                                                     |
+|-------------------|-----------------------------------------------------------------------------------------------------|
+| Hardware          | Rock64 (RK3328) and [Radxa CM3 IO](cm3.md) (RK3566), both aarch64 and booting from eMMC             |
+| Testing           | NixOS VM tests for updates, rollback, provisioning, networking, and logging; QEMU development VM    |
+| Hardware watchdog | Opt-in through `build.toml`: the SoC watchdog on both boards, or an external SOM watchdog on Rock64 |
+| Remote management | Optional Nixstasis enrollment, plus key-only SSH that is off on the WAN side unless provisioned     |
+| Updates           | Full-image RAUC bundles, polled from an update server; hawkBit is not supported                     |
+| Applications      | Podman Quadlets from `config.toml`; image provenance, registry auth, and rollout approval are yours |
+
+AtomixOS configures no wireless interface; the Rock64 kernel is built without Wi-Fi and Bluetooth. New boards are
+added one at a time.
+
+## Where to start
+
+| If you want to                             | Start with                                              |
+|--------------------------------------------|---------------------------------------------------------|
+| Understand how the system fits together    | [Architecture](architecture.md)                         |
+| Flash, provision, and run a device         | [Provisioning](provisioning.md)                         |
+| Build images and run the tests             | [Building](building.md)                                 |
+| Look up a setting, flake output, or module | [Build Configuration](reference/build-configuration.md) |
+| See what a delivered feature provides      | [Implemented Features](features/index.mdx)              |

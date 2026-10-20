@@ -1,4 +1,4 @@
-# Developer tooling
+# Developer Tooling
 
 [mise](https://mise.jdx.dev/) manages every developer tool, its version, the repository hooks, and the named tasks.
 `mise.toml` declares the tools and tasks; `mise.lock` pins the resolved downloads. Install mise, then run:
@@ -15,19 +15,23 @@ such as the pytest job's uv-only install, skips Git hook setup instead of loggin
 hook runs the hk check/fix steps from `hk.pkl`; the commit-message hook enforces the rules below. Run `cog changelog`
 to preview the user-facing changelog.
 
-`mise.toml` requests every tool as `latest` (Node as `lts`); `mise.lock` pins the exact version and download for each, so
-installs stay reproducible until the lock changes. To upgrade tools, run `mise lock`, review the version changes in the
-lock diff, and commit it. To add a tool, add it to `mise.toml` as `latest` and run `mise lock`.
+`mise.toml` requests every tool as `latest` (Node as `lts`, which also runs the Docusaurus docs build); `mise.lock`
+pins the exact version and download for each, so installs stay reproducible until the lock changes. To upgrade tools,
+run `mise lock`, review the version changes in the lock diff, and commit it. To add a tool,
+add it to `mise.toml` as `latest` and run `mise lock`.
 
 ## Tasks
 
-| Task                     | Behavior                                                              |
-|--------------------------|-----------------------------------------------------------------------|
-| `check`                  | Run all hk checks without requesting fixes.                           |
-| `fix`                    | Apply deterministic hk fixes to the working tree.                     |
-| `docs:build`             | Build the mdBook site.                                                |
-| `docs:deployment:enable` | Configure Pages and enable its repository gate through external `gh`. |
-| `docs:serve`             | Serve mdBook on port 3000 by default or a supplied port.              |
+| Task                     | Behavior                                                                |
+|--------------------------|-------------------------------------------------------------------------|
+| `check`                  | Run all hk checks without requesting fixes.                             |
+| `fix`                    | Apply deterministic hk fixes to the working tree.                       |
+| `docs:install`           | Install the docs site's npm dependencies from `docs/package-lock.json`. |
+| `docs:build`             | Build the Docusaurus site into `docs/build`; fails on broken links.     |
+| `docs:deployment:enable` | Configure Pages and enable its repository gate through external `gh`.   |
+| `docs:serve [port]`      | Serve the docs with hot reload on port 3000 or the supplied port.       |
+| `site:build`             | Assemble the product page and the docs build into `_site/atomixos`.     |
+| `site:serve [port]`      | Build and serve the site on port 8000; the product page is served live. |
 
 The committed lock targets the `lockfile_platforms` in `mise.toml`: `linux-x64`, `linux-arm64`, and `macos-arm64`.
 Intel Macs (`macos-x64`) are not targeted, since hk and nixfmt-rs publish no release for them. Windows is not supported.
@@ -46,6 +50,7 @@ Git rejects merges that require a merge commit.
 | `.editorconfig`                     | Keeps editor output on UTF-8, LF, final newlines, and no trailing spaces. |
 | `_typos.toml`                       | Ignores hash-like identifiers while retaining typo checks elsewhere.      |
 | `contextlint.config.json`           | Checks documentation links, anchors, and image targets.                   |
+| `docs/package.json`                 | Pins the Docusaurus site dependencies; `package-lock.json` locks them.    |
 | `cog.toml`                          | Configures Conventional Commits and concise changelogs.                   |
 | `.config/cog-changelog.tera`        | Renders plain Markdown changelogs without author noise.                   |
 | `scripts/enable-docs-deployment.py` | Configures workflow-built Pages through external `gh`.                    |

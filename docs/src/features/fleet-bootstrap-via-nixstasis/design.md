@@ -311,17 +311,14 @@ image/operator uses an explicit supported seed path; it does not silently widen 
 
 ## Documentation Impact
 
-| Documentation concern      | Exact page                                                                        | Create or update        | Planned change                                                                                        | Owning Beads task    |
-|----------------------------|-----------------------------------------------------------------------------------|-------------------------|-------------------------------------------------------------------------------------------------------|----------------------|
-| Architecture               | `docs/src/architecture/overwatch-enrollment.md`                                   | Update                  | Document approval, remote-access lease, FRP route profile, and existing provisioning API flow         | `atomixos-mol-bzo.4` |
-| Architecture               | `docs/src/runtime-boundaries.md`                                                  | Update                  | Document build-selected network versus loopback fleet exposure and state ownership                    | `atomixos-mol-bzo.4` |
-| Usage / Operations         | `docs/src/provisioning/fleet-bootstrap.md`                                        | Create                  | Explain fleet image policy, enrollment prerequisites, initial bundle upload, recovery, and withdrawal | `atomixos-mol-bzo.4` |
-| Reference                  | `docs/src/reference/build-configuration.md`                                       | Update                  | Add provisioning and Nixstasis fields, assertions, canonical rendering, and non-secret boundary       | `atomixos-mol-bzo.1` |
-| Development                | `docs/src/testing.md`                                                             | Update                  | Add focused fleet policy, socket, firewall, and mock enrollment validation                            | `atomixos-mol-bzo.3` |
-| Navigation                 | `docs/src/SUMMARY.md`                                                             | Update                  | Register the new fleet-bootstrap operations page and feature design                                   | `atomixos-mol-bzo.4` |
-| Roadmap                    | `docs/src/planned-features.md`                                                    | Update                  | Add the planned fleet bootstrap feature and Nixstasis dependency                                      | `atomixos-mol-bzo.4` |
-| Implemented Feature Record | `docs/src/features/fleet-bootstrap-via-nixstasis/index.md`                        | Create during close-out | Record delivered capability, test coverage, and external Nixstasis dependencies                       | lifecycle close-out  |
-| Implemented Feature Index  | `docs/src/features/index.md` and the implemented section in `docs/src/SUMMARY.md` | Update during close-out | Index the delivered feature record with the repository's implemented-feature navigation               | lifecycle close-out  |
+| Documentation concern      | Exact page                                                 | Create or update | Planned change                                                                                        | Owning Beads task    |
+|----------------------------|------------------------------------------------------------|------------------|-------------------------------------------------------------------------------------------------------|----------------------|
+| Architecture               | `docs/src/architecture/nixstasis-enrollment.md`            | Update           | Document approval, remote-access lease, FRP route profile, and existing provisioning API flow         | `atomixos-mol-bzo.4` |
+| Architecture               | `docs/src/runtime-boundaries.md`                           | Update           | Document build-selected network versus loopback fleet exposure and state ownership                    | `atomixos-mol-bzo.4` |
+| Usage / Operations         | `docs/src/provisioning/fleet-bootstrap.md`                 | Create           | Explain fleet image policy, enrollment prerequisites, initial bundle upload, recovery, and withdrawal | `atomixos-mol-bzo.4` |
+| Reference                  | `docs/src/reference/build-configuration.md`                | Update           | Add provisioning and Nixstasis fields, assertions, canonical rendering, and non-secret boundary       | `atomixos-mol-bzo.1` |
+| Development                | `docs/src/testing.md`                                      | Update           | Add focused fleet policy, socket, firewall, and mock enrollment validation                            | `atomixos-mol-bzo.3` |
+| Implemented Feature Record | `docs/src/features/fleet-bootstrap-via-nixstasis/index.md` | Create           | Record delivered capability, test coverage, and external Nixstasis dependencies                       | lifecycle close-out  |
 
 ## Validation Strategy
 
@@ -340,7 +337,7 @@ image/operator uses an explicit supported seed path; it does not silently widen 
 - Run `nix build .#checks.aarch64-darwin.build-configuration --no-link`,
   `nix build .#checks.aarch64-darwin.firewall --no-link`,
   `nix build .#checks.aarch64-darwin.fleet-bootstrap --no-link`, and the matching `aarch64-linux` checks when the
-  builder is available. Run `mdbook build docs` for documentation changes.
+  builder is available. Run `mise run docs:build` for documentation changes.
 - Run the existing provisioning Python suite and repository-standard validation after review fixes stabilize.
 - Record the external Nixstasis revisions/tasks `nixstasis-255`, `nixstasis-fss`, and `nixstasis-4gg` used by the
   integration test and release build.

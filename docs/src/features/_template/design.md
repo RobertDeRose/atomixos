@@ -56,7 +56,7 @@ applicable.
 ## Documentation Impact
 
 Name exact pages, not only sections. Mark whether each page exists or must be created. Every new durable page must be
-registered in `docs/src/SUMMARY.md`.
+registered in `docs/sidebars.ts`.
 
 | Documentation concern      | Exact page                                      | Create or update                   | Planned change                             | Owning Beads task |
 |----------------------------|-------------------------------------------------|------------------------------------|--------------------------------------------|-------------------|
@@ -65,7 +65,7 @@ registered in `docs/src/SUMMARY.md`.
 | Usage / Operations         |                                                 |                                    |                                            |                   |
 | Development                |                                                 |                                    |                                            |                   |
 | Reference                  |                                                 |                                    |                                            |                   |
-| Navigation                 | `docs/src/SUMMARY.md`                           | Update if pages are added or moved |                                            |                   |
+| Navigation                 | `docs/sidebars.ts`                              | Update if pages are added or moved |                                            |                   |
 | Implemented Feature Record | `docs/src/features/{{ feature_slug }}/index.md` | Create during close-out            | Record delivered capability and deviations |                   |
 
 Remove non-applicable rows or mark them `Not applicable` with a brief reason.

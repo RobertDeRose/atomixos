@@ -1,70 +1,52 @@
 # Activation Options
 
-## References
+Operators can tune how a provisioned configuration is activated: how long activation may take, the order in which
+container services restart, which services may stay degraded, and what happens on failure. The policy lives in
+`config.toml`, is validated before anything changes, and is rendered to `/data/config/activation-policy.json` for the
+shared activation path. The original plan is in the [design record](design.md); Beads tracks the work under
+`atomixos-ivy`.
 
-- Beads feature root: `atomixos-ivy`
-- Design record: [design.md](design.md)
+## What changed for users
 
-## Delivered Capability
+- **Operators** set activation timeout and settle periods in `config.toml`.
+- **Operators** restart declared container services in an explicit order.
+- **Operators** allow named declared services to remain degraded without failing activation.
+- Rollback is the only accepted failure strategy.
 
-AtomixOS accepts bounded activation timing, restart ordering, degraded-service allowances, and rollback strategy in
-`config.toml`. Validated policy is rendered to `/data/config/activation-policy.json` and consumed by the shared
-provisioning activation path.
+Unknown units, a service listed as both required and degraded, unsafe values, and unsupported strategies are rejected
+before the new configuration is promoted.
 
-## User-Facing Behavior
+## How it fits in
 
-Operators can tune activation timeout and settle periods, restart declared container services in an explicit order, and
-allow selected declared services to remain degraded. Rollback remains the only accepted failure strategy. Unknown units,
-conflicting required/degraded sets, unsafe values, and unsupported strategies are rejected before promotion.
+Activation policy is desired state, not script input. Unit names are limited to declared services, rendering is
+deterministic, and the existing candidate promotion, health checking, job reporting, and rollback steps stay in charge.
 
-## Design Integration
+## Running it
 
-Activation policy is desired state, not executable script input. Unit names are limited to declared services, rendering
-is deterministic, and the existing candidate promotion, health checking, job reporting, and rollback boundaries remain
-authoritative.
+- Longer timing values delay the terminal job result.
+- Restart ordering can briefly interrupt services.
+- Degraded units are reported, but unrelated activation failures still fail the job.
+- A failed activation restores the previous configuration and policy.
 
-## Operational Impact
+## Differences from the design
 
-Longer timing values delay terminal job results. Restart ordering can temporarily interrupt services. Degraded units are
-reported without converting unrelated activation failures into success. Failed activation restores the previous config
-and policy.
+The implementation kept explicit route and service wiring and the existing job manager instead of adding a workflow
+engine.
 
-## Reference and Contracts
+## Not included
+
+- There is no dedicated persistent-state VM test for activation policy; parsing, rendering, runtime, rollback, and
+  compatibility have focused automated tests.
+- `keep-failed`, `manual-confirm`, arbitrary commands, and unrestricted systemd unit control are not supported.
+
+## Tests
+
+- `scripts/atomixos_provision/tests/test_config.py`: schema and policy validation.
+- `scripts/atomixos_provision/tests/test_activation.py`: timing, restart order, degraded services, and rollback.
+- `scripts/atomixos_provision/tests/test_provision.py`: integration with the shared apply pipeline.
+
+## Related pages
 
 - [Provisioning](../../provisioning.md)
 - [Runtime Boundaries](../../runtime-boundaries.md)
-- [Firmware Data Flow](../../data-flow.md)
-
-## Test Coverage
-
-- `scripts/atomixos_provision/tests/test_config.py` covers schema and policy validation.
-- `scripts/atomixos_provision/tests/test_activation.py` covers timing, restart, degraded, and rollback behavior.
-- `scripts/atomixos_provision/tests/test_provision.py` covers integration with the shared apply pipeline.
-
-## Design Reconciliation
-
-### Delivered as Designed
-
-Bounded timeout, settle, restart, degraded-service, and `rollback` strategy support were delivered through rendered
-policy and the common activation path.
-
-### Intentional Changes
-
-The implementation retained explicit route/service wiring and the existing job manager rather than introducing a new
-workflow engine.
-
-### Deferred Work
-
-A dedicated persistent-state VM activation-policy case remains deferred; parser, renderer, runtime, rollback, and
-compatibility behavior have focused automated coverage.
-
-### Rejected or Removed Scope
-
-`keep-failed`, `manual-confirm`, arbitrary commands, and unrestricted systemd unit control remain rejected.
-
-## Documentation Updated
-
-- `docs/src/provisioning.md`
-- `docs/src/runtime-boundaries.md`
-- `docs/src/data-flow.md`
-- `docs/src/planned-features.md`
+- [Data Flow](../../data-flow.md)

@@ -1,41 +1,51 @@
 # Building
 
-All build outputs target `aarch64-linux`. Builds require an `aarch64-linux` builder -- either the nix-darwin
-`linux-builder` (recommended on macOS), a Lima VM, or a native Linux system.
+Every AtomixOS artifact targets `aarch64-linux`, so you need an `aarch64-linux` builder: the nix-darwin
+`linux-builder` (recommended on macOS), a Lima VM, or a native Linux machine.
 
 ## Prerequisites
 
 - [Nix](https://nixos.org/download.html) with flakes enabled
-- [mise](https://mise.jdx.dev/) for task running (recommended)
-- An `aarch64-linux` builder (nix-darwin `linux-builder`, Lima VM, or native)
+- [mise](https://mise.jdx.dev/) for tools and tasks
+- An `aarch64-linux` builder
 
-## Building with mise
+Install the pinned tools and Git hooks once per clone:
 
 ```sh
-# Install tools and hooks
-mise install
+mise install --locked
+```
 
+[Developer Tooling](development/tooling.md) covers the quality gate and hooks.
+
+## Build with mise
+
+```sh
 # Run formatting, linting, and documentation checks
 mise run check
 
-# Evaluate the flake without building checks
+# Evaluate the flake without building anything
 ./scripts/nix-with-build-config.sh flake check --no-build
 
-# Build individual artifacts (--board rock64|cm3, default rock64)
+# Build one artifact (--board rock64|cm3, default rock64)
 mise run build:squashfs        # result-rock64-squashfs/
 mise run build:rauc-bundle     # result-rock64-rauc-bundle/
 mise run build:boot-script     # result-rock64-boot-script/
 
-# Build for the default board (ROCK64)
+# Build every artifact for the default board (Rock64)
 mise run build
 
-# Build for the CM3 with the Radxa IO board
+# Build every artifact for the Radxa CM3 on the CM3 IO board
 mise run build --board cm3
 ```
 
-`mise run build` accepts `--board rock64|cm3` (default: `rock64`). It validates effective build policy before touching
-retained links, prepares replacements under `.new` links, and publishes them only after all builds succeed. Each board
-keeps its retained links in its own folder:
+`mise run build` accepts `--board rock64|cm3` and defaults to `rock64`. It is safe to interrupt or fail:
+
+1. It validates the effective build policy before touching any retained link.
+2. It builds every replacement under a `.new` link.
+3. It publishes the replacements only after all builds succeed.
+
+A failed validation or build leaves the previous retained roots unchanged. Each board keeps its retained links in its own
+folder:
 
 | Link                        | Contents                                                                                               |
 |-----------------------------|--------------------------------------------------------------------------------------------------------|
@@ -43,34 +53,59 @@ keeps its retained links in its own folder:
 | `.gcroots/<board>/previous` | The last distinct earlier build, in the same layout                                                    |
 | `.gcroots/<board>/toplevel` | The system closure, so rebuilds reuse the kernel and packages                                          |
 
-The image is `.gcroots/<board>/current/image/atomixos-<board>-<release>.img`. Every link is a registered Nix GC root, so
-`mise run gc` keeps it. Use `-o <path>` to copy the selected image.
-When a local override is active, the destination filename must include `-dev`; an unmarked destination is rejected
-before evaluation or retained-link mutation. A validation or later build failure leaves prior retained roots unchanged.
+The image is `.gcroots/<board>/current/image/atomixos-<board>-<release>.img`. Every link is a registered Nix GC root,
+so `mise run gc` keeps it. Pass `-o <path>` to also copy the image to a path of your choice.
 
-## Local Build Overrides
+## Artifacts
 
-Create an ignored repository-root `build.dev.toml` to test build-policy changes before committing them. Included `mise`
-tasks detect it automatically and print this warning before each affected Nix evaluation:
+Every Nix output is an attribute of the board package `.#<board>` (`rock64` or `cm3`), and every mise task takes
+`--board` (default `rock64`).
+
+| Artifact        | mise task           | Nix output              | Description                                      |
+|-----------------|---------------------|-------------------------|--------------------------------------------------|
+| Shipped set     | `build`             | `.#<board>`             | One subdirectory per artifact                    |
+| Squashfs rootfs | `build:squashfs`    | `.#<board>.squashfs`    | Compressed read-only root filesystem             |
+| RAUC bundle     | `build:rauc-bundle` | `.#<board>.rauc-bundle` | Signed `<board>.raucb` for OTA updates           |
+| Boot script     | `build:boot-script` | `.#<board>.boot-script` | Compiled U-Boot `boot.scr`                       |
+| Disk image      | `build`             | `.#<board>.image`       | Retained under `.gcroots/<board>/current/image/` |
+
+[Flake Outputs](reference/flake-outputs.md) lists every output.
+
+## Image naming
+
+The image filename carries the board and the NixOS release series pinned in `flake.nix`:
+`atomixos-<board>-<series>.img`, for example `atomixos-rock64-26.05.img` or `atomixos-cm3-26.05.img` when the flake
+follows `nixos-26.05`. Moving to a new series means updating `flake.nix` and
+`flake.lock`; the name follows automatically. Images and bundles built with a local override add `-dev` to the name.
+
+## Local build overrides
+
+To try a build-policy change before committing it, create an ignored `build.dev.toml` at the repository root. It holds
+only the fields you are testing. The `mise` tasks detect it and print this warning before each Nix evaluation it
+affects:
 
 ```text
 WARNING: applying local build.dev.toml overrides; outputs will be marked -dev.
 ```
 
-The overlay may contain only fields being tested. See [Build Configuration](./reference/build-configuration.md) for the
-schema, watchdog backend examples, disablement behavior, and task matrix. Local-override image and bundle filenames
-include `-dev`, and their metadata records `local_override` as `true`.
+Outputs built with an override have `-dev` in their filenames and `"local_override": true` in their metadata. When an
+override is active, `mise run build -o <path>` rejects a destination name without `-dev` before it evaluates anything.
 
-To promote a tested change, copy the intended values into committed `build.toml`, remove `build.dev.toml`, run
-`./scripts/nix-with-build-config.sh flake check`, and rebuild. To abandon or recover from a malformed override, remove
-or rename `build.dev.toml` and
-rerun the command. Nix reports TOML syntax errors with source locations and schema errors with field paths; no prior
-retained root is removed by validation failure.
+Direct Nix commands use the committed `build.toml` only; they never read `build.dev.toml`. Use the `mise` tasks, or
+`./scripts/nix-with-build-config.sh`, to build with an override.
 
-### Verify Build Policy Evidence
+- **Promote a change:** copy the values into `build.toml`, delete `build.dev.toml`, run
+  `./scripts/nix-with-build-config.sh flake check`, and rebuild.
+- **Abandon or recover:** delete or rename `build.dev.toml` and rerun the command. Nix reports TOML syntax errors with
+  the source location and schema errors with the field path. A validation failure never removes a retained root.
 
-Image and RAUC bundle output directories contain `build.toml` and `build-metadata.json`. Verify the lowercase SHA-256 in
-metadata against the exact policy bytes:
+[Build Configuration](reference/build-configuration.md) defines the schema, the watchdog backends, and the full task
+matrix.
+
+## Verify build policy evidence
+
+Image and RAUC bundle output directories carry `build.toml` and `build-metadata.json`. Check that the metadata's SHA-256
+matches the policy bytes:
 
 ```sh
 artifact_dir=.gcroots/rock64/current/image   # or rauc-bundle, or a result-<board>-image link
@@ -80,7 +115,7 @@ nix shell nixpkgs#coreutils nixpkgs#jq -c sh -c '
 ' _ "$artifact_dir"
 ```
 
-To compare a sidecar with a running image, copy both sidecars to the device without changing them and compare bytes:
+To confirm that a running device was built from the same policy, copy both files to it unchanged and compare bytes:
 
 ```sh
 scp "$artifact_dir"/build.toml "$artifact_dir"/build-metadata.json atomixos:/tmp/
@@ -89,75 +124,49 @@ ssh atomixos \
    cmp /tmp/build-metadata.json /etc/atomixos/build-metadata.json'
 ```
 
-The `-dev` suffix and `local_override` field describe local build-policy overrides only. They do not establish signing
+The `-dev` suffix and `local_override` field only say that a local override was used. They say nothing about signing
 trust or release readiness.
 
-### Building via Lima VM
+## Build in a Lima VM
 
-All build tasks accept `--lima` to run inside a Lima VM. This is useful when the Lima VM has a warm Nix store cache or
-when the nix-darwin `linux-builder` is not configured.
+Every build task accepts `--lima`. Use it when the nix-darwin `linux-builder` is not set up, or when a Lima VM already
+has a warm Nix store.
 
 ```sh
-# Build the retained artifacts inside the default Lima VM
+# Build inside the default Lima VM
 mise run build -- --lima
 
-# Use a specific Lima VM
+# Build inside a specific Lima VM
 mise run build -- --lima --vm my-builder
 
-# Build CM3 via Lima
+# Build the CM3 inside the default Lima VM
 mise run build -- --board cm3 --lima
 ```
 
-The task ensures the Lima VM is started before building. The macOS home directory is mounted at the same path inside
-Lima, so the flake path works unchanged.
+The task starts the VM if needed. Lima mounts your macOS home directory at the same path, so the flake path works
+unchanged.
 
-## Build Artifacts
-
-Every Nix output below is an attribute of the board package `.#<board>` (`rock64` or `cm3`); every mise task takes
-`--board` (default `rock64`).
-
-| Artifact        | mise Task           | Nix Output              | Description                          |
-|-----------------|---------------------|-------------------------|--------------------------------------|
-| Shipped set     |                     | `.#<board>`             | One `result/` subdirectory each      |
-| Squashfs rootfs | `build:squashfs`    | `.#<board>.squashfs`    | Compressed root filesystem (~300 MB) |
-| RAUC bundle     | `build:rauc-bundle` | `.#<board>.rauc-bundle` | Signed `.raucb` for OTA updates      |
-| Boot script     | `build:boot-script` | `.#<board>.boot-script` | Compiled U-Boot `boot.scr`           |
-| Disk image      | `build`             | `.#<board>.image`       | `.gcroots/<board>/current/image/`    |
-
-## Building with Nix Directly
-
-Direct Git-backed Nix commands use committed `build.toml` only. They intentionally do not discover ignored
-`build.dev.toml`; use the supported `mise` tasks when testing a local overlay.
+## Build with Nix directly
 
 ```sh
 # Build every CM3 artifact (result-cm3/image, result-cm3/rauc-bundle, ...)
 nix build .#cm3 -o result-cm3
 
-# Build only the flashable ROCK64 image
+# Build only the flashable Rock64 image
 nix build .#rock64.image -o result-rock64-image
 
-# Build only the ROCK64 squashfs
+# Build only the Rock64 squashfs
 nix build .#rock64.squashfs -o result-rock64-squashfs
 ```
 
-## Image Naming
+## Squashfs size limit
 
-The flashable image filename includes the pinned NixOS release series from `flake.nix`:
+The squashfs image must fit the 1 GB rootfs slot. `scripts/build-squashfs.sh` checks the size and fails the build if the
+image is too large.
 
-- Current: `atomixos-rock64-26.05.img` or `atomixos-cm3-26.05.img`
-- Pattern: `atomixos-<board>-<series>.img` (from the board target and pinned nixpkgs series)
+To keep the closure small:
 
-When you move to a new NixOS series (e.g., `nixos-26.05`), update `flake.nix`/`flake.lock` and rebuild. The image name
-updates automatically.
-
-## Squashfs Size Constraint
-
-The squashfs image must fit within the 1 GB rootfs partition slot. The build script enforces this with a size check --
-the build fails if the image exceeds the limit. The current NixOS closure compresses to approximately 300-400 MB.
-
-To keep the closure small, the flake uses an overlay to strip unnecessary dependencies:
-
-- `crun` is built without CRIU support (removes `criu` + `python3`, saving ~102 MB)
-- Documentation, man pages, fonts, and XDG utilities are all disabled
-- `security.sudo` is disabled (uses `run0` instead)
-- `environment.defaultPackages` is emptied
+- the flake overlay builds `crun` without CRIU, which drops `criu` and `python3` (about 100 MB);
+- documentation, man pages, fonts, and XDG utilities are disabled;
+- `security.sudo` is disabled, and `run0` is used instead;
+- `environment.defaultPackages` is empty.

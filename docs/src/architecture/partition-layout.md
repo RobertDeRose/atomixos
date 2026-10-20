@@ -1,15 +1,13 @@
 # Partition Layout
 
-The Rock64's 16 GB eMMC uses a fixed A/B partition layout with raw U-Boot at the beginning and a persistent data
-partition at the end. The flash image carries slot A only; initrd `systemd-repart` creates slot B and `/data` on first
-boot.
+The Rock64's 16 GB eMMC holds raw U-Boot at the start, two A/B slot pairs, and a persistent `/data` partition at the
+end. The flashable image carries only slot A. On the first boot, `systemd-repart` in the initrd creates slot B and
+`/data` in the space that follows, before the real root is mounted, so nothing has to be repartitioned while the system
+is running.
 
-`nix/partition-layout.nix` is the machine-readable authority for partition labels, type GUIDs, offsets, and sizes.
-Factory-image assembly, initrd repartitioning, and the squashfs size guard all consume that same value set.
-
-General host and application logging stays tmpfs-first during runtime and is
-forwarded through an `rsyslog` RAM queue before buffered appends land in
-`/data/logs`.
+`nix/partition-layout.nix` is the single source for partition labels, type GUIDs, offsets, and sizes. Image assembly,
+initrd repartitioning, and the squashfs size check all read it. The exact contract is in the
+[Partition Layout specification](../specs/partition-layout.md).
 
 ## Layout
 
@@ -17,65 +15,67 @@ forwarded through an `rsyslog` RAM queue before buffered appends land in
 Offset     Size       Content          Filesystem     Notes
 0          16 MB      U-Boot           raw            idbloader @ sector 64, u-boot.itb @ sector 16384
 16 MB      128 MB     boot-a           vfat           kernel Image, initrd, DTB, boot.scr
-144 MB     1024 MB    rootfs-a         squashfs       zstd compressed, 1 MB blocks; used as OverlayFS lower layer
-1168 MB    128 MB     boot-b           vfat           created on first boot by initrd systemd-repart
-1296 MB    1024 MB    rootfs-b         --             created on first boot by initrd systemd-repart
-2320 MB    remaining  data             f2fs           created on first boot by initrd systemd-repart
+144 MB     1024 MB    rootfs-a         squashfs       zstd, 1 MB blocks; the OverlayFS lower layer
+1168 MB    128 MB     boot-b           vfat           created on first boot
+1296 MB    1024 MB    rootfs-b         squashfs       created on first boot
+2320 MB    remaining  data             f2fs           created on first boot
 ```
 
 ## Slot Pairing
 
-RAUC manages two slot pairs. Each pair contains a boot partition and a rootfs partition that are always written together
-atomically:
+RAUC manages two slot pairs. Each pair is a boot partition and a root filesystem partition that are always written
+together:
 
-| Slot | Boot Partition | Rootfs Partition |
-|------|----------------|------------------|
-| A    | boot-a (p1)    | rootfs-a (p2)    |
-| B    | boot-b (p3)    | rootfs-b (p4)    |
+| Slot | Boot partition | Root filesystem partition |
+|------|----------------|---------------------------|
+| A    | boot-a (p1)    | rootfs-a (p2)             |
+| B    | boot-b (p3)    | rootfs-b (p4)             |
 
-An update writes the new kernel/DTB to the inactive boot partition and the new squashfs to the inactive rootfs
-partition. The active slot pair is never modified during an update.
+An update writes the new kernel and DTB to the inactive boot partition and the new squashfs to the inactive root
+partition. The running pair is never touched, so a failed or interrupted update leaves the device on its working image.
 
 ## U-Boot Region
 
-U-Boot occupies the first 16 MB of the eMMC as raw data (no partition). The RK3328 boot ROM loads the initial bootloader
-from fixed sector offsets:
+U-Boot fills the first 16 MB of the eMMC as raw data, outside any partition. The RK3328 boot ROM loads it from fixed
+sector offsets:
 
-| Component       | Sector Offset | Byte Offset | Description                    |
+| Component       | Sector offset | Byte offset | Description                    |
 |-----------------|---------------|-------------|--------------------------------|
 | `idbloader.img` | 64            | 32 KB       | First-stage loader (TPL + SPL) |
 | `u-boot.itb`    | 16384         | 8 MB        | U-Boot proper (FIT image)      |
 
-U-Boot environment is stored in SPI flash exposed to Linux as `/dev/mtd0` at offset `0x140000` with size `0x2000`.
-AtomixOS uses this single SPI environment for RAUC boot variables instead of raw eMMC environment writes.
+The U-Boot environment, which holds the RAUC boot variables, lives in SPI flash rather than on the eMMC. Linux sees it
+as `/dev/mtd0`, at offset `0x140000` with size `0x2000`. Keeping it off the eMMC avoids a raw-write fault on some
+budget eMMC modules that can corrupt the boot area; `nix/uboot.nix` builds U-Boot with this setting.
 
 ## Data Partition
 
-The flashable image leaves the space after `rootfs-a` unallocated. On first boot,
-initrd `systemd-repart` creates `boot-b`, `rootfs-b`, and `/data` there before the
-live system is mounted. This avoids repartitioning from the switched-root system
-while still preserving the inactive slot and `/data` across all updates and
-rollbacks.
-
-Contents created during provisioning:
+`/data` survives every update and rollback. Provisioning and the running system keep their state here:
 
 ```text
 /data/
   .completed_first_boot              First-boot sentinel
-  config/
-    admin-signers                    Admin SSH keys trusted for config re-apply signatures
+  config/                            Operator configuration imported by provisioning
+    config.toml                      The accepted source configuration
+    admin-signers                    Admin SSH keys trusted to sign configuration re-applies
     ssh-authorized-keys/<user>       Per-user SSH authorized keys
-    nixstasis/                       Planned enrollment key and agent state
-    openvpn/client.conf              OpenVPN recovery tunnel config (optional)
-  containers/                        Reserved for future application workloads
-  logs/                              Buffered general host and application logs appended from rsyslog
+    files/                           Files delivered in a configuration bundle
+    openvpn/client.conf              Optional OpenVPN recovery tunnel; the service starts only if it exists
+  nixstasis/                         Nixstasis identity and remote-access keys, when enabled
+  containers/rootless/               Podman storage for rootless containers
+  logs/                              Durable host and application logs written by rsyslog
 ```
+
+[Runtime Boundaries](../runtime-boundaries.md) lists every file that provisioning writes under `/data/config`.
 
 ## Logging Tiers
 
-AtomixOS uses two runtime logging tiers with different durability goals:
+Logging is memory-first to limit eMMC wear, with a bounded durable copy:
 
 ```text
-Tier 1  journald runtime   General host and container logs, tmpfs-first (`Storage=volatile`, runtime capped)
-Tier 2  /data/logs         Buffered rsyslog appends for bounded durable host and application diagnostics
+Tier 1  journald           Host and container logs in memory (Storage=volatile, capped at 32 MB)
+Tier 2  /data/logs         rsyslog drains the journal through an in-memory queue and appends in batches
 ```
+
+A sudden power loss can drop the newest entries still in memory. The reasoning is in
+[Design Decisions](../design-decisions.md#two-tier-runtime-logging).

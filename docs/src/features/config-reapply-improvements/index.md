@@ -1,75 +1,52 @@
 # Config Reapply Improvements
 
-## References
+AtomixOS validates a canonical, versioned `config.toml`, authenticates changes to a provisioned device with an
+administrator's SSH signature, renders a complete candidate without touching the active state, promotes it safely
+across crashes, and restores the previous configuration when activation or health checks fail. The original plan is in
+the [design record](design.md); Beads tracks the work under `atomixos-iej`.
 
-- Beads feature root: `atomixos-iej`
-- Design record: [design.md](design.md)
+## What changed for users
 
-## Delivered Capability
+- A fresh device still accepts its first configuration locally without authentication.
+- Once provisioned, every configuration change needs a single-use nonce and an SSH signature from an active admin key.
+- An invalid configuration leaves the active state untouched.
+- Accepted work reports progress asynchronously, and a failed activation reports its rollback.
 
-AtomixOS validates a canonical versioned `config.toml`, authenticates provisioned-device re-apply with admin SSH
-signatures, renders a complete candidate without touching active state, promotes it crash-safely, activates required
-runtime state, and restores the prior config when activation or health checks fail.
+## How it fits in
 
-## User-Facing Behavior
+`config.toml` is the only desired-state contract. Candidate, active, and rollback directories form one promotion state
+machine on F2FS-compatible storage. Users, networking, firewall, Quadlet units, health checks, and the partial API all
+reuse it.
 
-Fresh-device provisioning remains locally unauthenticated under its bootstrap boundary. Once provisioned, mutating config
-paths require a single-use nonce and SSH signature from an active admin key. Invalid config leaves active state intact;
-accepted work returns asynchronous progress and a failed activation reports rollback status.
+## Running it
 
-## Design Integration
+Operators must keep an active admin key and sign the exact request path and payload digest. Re-applying can restart
+services or change networking. Recovery detects an interrupted promotion, and a failed activation restores both the
+desired files and the runtime behavior.
 
-`config.toml` is the sole desired-state contract. Candidate, active, and rollback directories are managed as one
-promotion state machine on F2FS-compatible storage. Users, networking, firewall, Quadlet, health, and later partial API
-operations all reuse that state machine.
+## Differences from the design
 
-## Operational Impact
+The original single script became the Litestar provisioning package with a privilege-separated worker. The desired-state,
+authentication, and promotion rules of this feature carry over unchanged.
 
-Operators must retain an active admin key and sign the exact request path and payload digest. Re-apply can restart
-services or change networking. Recovery detects interrupted promotion state, and failed activation attempts to restore
-both desired files and runtime behavior.
+## Not included
 
-## Reference and Contracts
+- A persistent-disk VM test for managed users after a reboot.
+- In-place migration of unreleased configuration shapes older than version 2; those devices must be reprovisioned.
+- Unauthenticated changes after provisioning, reset tokens, direct overwrites of active state, and partial state that
+  diverges from `config.toml`.
+
+## Tests
+
+- `scripts/atomixos_provision/tests/`: schema defaults and rejection, admin keys, authentication, candidate rendering,
+  promotion, recovery, activation, and rollback.
+- `nix/tests/first-boot-provision.nix`: authenticated re-apply, preservation of the active state after an invalid
+  candidate, and activation rollback.
+
+## Related pages
 
 - [Provisioning](../../provisioning.md)
 - [Runtime Boundaries](../../runtime-boundaries.md)
-- [Firmware Data Flow](../../data-flow.md)
+- [Data Flow](../../data-flow.md)
 - [Authentication](../../architecture/authentication.md)
 - `schemas/config.schema.json`
-
-## Test Coverage
-
-- Provisioning package tests cover schema defaults and rejection, admin keys, authentication, candidate rendering,
-  promotion, recovery, activation, and rollback.
-- `nix/tests/first-boot-provision.nix` covers successful authenticated re-apply, invalid candidate preservation, and
-  activation rollback.
-
-## Design Reconciliation
-
-### Delivered as Designed
-
-Canonical schema, managed users, SSH challenge-response, isolated candidate rendering, crash-safe promotion, required
-health, activation, rollback, recovery, and documentation were delivered.
-
-### Intentional Changes
-
-The original monolithic script later became the Litestar provisioning package and privilege-separated worker. Those
-changes retain this feature's desired-state, authentication, and promotion invariants.
-
-### Deferred Work
-
-A persistent-disk VM case for managed-user materialization after reboot remains deferred. Unreleased pre-version-2
-config shapes require reprovisioning rather than an in-place migration.
-
-### Rejected or Removed Scope
-
-Unauthenticated post-provision re-apply, reset tokens, direct active-state overwrite, compatibility for unreleased legacy
-shapes, and divergent partial state remain rejected.
-
-## Documentation Updated
-
-- `docs/src/provisioning.md`
-- `docs/src/runtime-boundaries.md`
-- `docs/src/data-flow.md`
-- `docs/src/architecture/authentication.md`
-- examples and affected reference pages

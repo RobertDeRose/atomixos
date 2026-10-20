@@ -69,13 +69,13 @@ slot unconfirmed.
 - Update `docs/src/data-flow.md` and `docs/src/runtime-boundaries.md` for persisted and active state ownership.
 - Update `docs/src/architecture/partition-layout.md` and `docs/src/architecture/authentication.md` for lifecycle and
   credential boundaries.
-- Create `docs/src/features/first-boot-local-provisioning/index.md` during close-out.
+- Create `docs/src/features/first-boot-local-provisioning/index.md` as the implemented record.
 
 ## Validation Strategy
 
 Use `nix/tests/initrd-fresh-flash-marker.nix`, `nix/tests/first-boot-source-discovery.nix`, and
 `nix/tests/first-boot-provision.nix` to cover source precedence, reset behavior, validation, rendering, activation, and
-failure paths. Validate reader documentation and build the mdBook.
+failure paths. Validate reader documentation and build the docs site with `mise run docs:build`.
 
 ## Implementation Decomposition
 

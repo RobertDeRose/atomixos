@@ -1,70 +1,48 @@
 # Boot UI HTMX
 
-## References
+The first-boot console is a small server-rendered interface. Operators upload or paste a configuration, submit it as an
+asynchronous provisioning job, and watch progress until it succeeds, warns, fails, or rolls back, then follow the final
+forwarding URL. There is no frontend build pipeline. The original plan is in the [design record](design.md); Beads
+tracks the work under `atomixos-hns`.
 
-- Beads feature root: `atomixos-hns`
-- Design record: [design.md](design.md)
+## What changed for users
 
-## Delivered Capability
+- **Operators** on desktop or mobile submit a configuration and see progress before the job finishes.
+- A second submission while a job is running gets a conflict response.
+- The console disappears once the device is provisioned. The programmatic API keeps its own first-boot and
+  SSH-signature rules.
 
-The first-boot console is a small server-rendered HTMX-style interface for uploading or pasting config, submitting an
-asynchronous provisioning job, polling bounded status fragments, and showing success, warnings, failure, rollback, and
-the final forwarding URL without a frontend build pipeline.
+## How it fits in
 
-## User-Facing Behavior
+The UI routes live in the provisioning service but are left out of the public OpenAPI document. Browser submissions
+carry the bootstrap CSRF token and pass Host, Origin, and Referer checks. Read-only status fragments expose only the
+fields the page displays, and only during first boot.
 
-Desktop and mobile operators can submit config and see progress before the job completes. A concurrent submission gets a
-conflict response. The UI disappears after provisioning, while the programmatic API remains governed by its separate
-first-boot and SSH-signature rules.
+## Running it
 
-## Design Integration
+The page is server-rendered HTML with minimal progressive enhancement, so there is no Node or Vite asset pipeline and
+no single-page-app state. Job progress follows the provisioning service's job lifecycle. Provisioned devices do not
+serve `/`, `/apply`, or the UI fragments.
 
-UI routes remain in the provisioning service but are excluded from public OpenAPI. Browser submissions retain the
-bootstrap CSRF token plus Host, Origin, and Referer checks. Read-only status fragments expose only necessary display
-fields and are available only during first boot.
+## Differences from the design
 
-## Operational Impact
+The implementation renders fragments on the server with minimal browser behavior instead of shipping a separately
+versioned HTMX or SPA build.
 
-The interface uses server-rendered HTML and minimal progressive enhancement, so there is no Node/Vite asset pipeline or
-SPA state. Job progress follows the existing in-process and staged-worker lifecycle. Provisioned devices do not expose
-`/`, `/apply`, or UI fragments.
+## Not included
 
-## Reference and Contracts
+- A general management UI after provisioning.
+- Vite or SPA tooling, the old signing-challenge UI, UI routes in the public OpenAPI document, and unauthenticated
+  changes after provisioning.
+
+## Tests
+
+- `scripts/atomixos_provision/tests/test_app.py`: page controls, asynchronous submission, progress and terminal
+  fragments, conflicts, escaping, CSRF and origin failures, and unavailability after provisioning.
+- The live-schema tests in the same file check that UI, static, and fragment routes stay out of OpenAPI.
+
+## Related pages
 
 - [Provisioning](../../provisioning.md)
 - [Runtime Boundaries](../../runtime-boundaries.md)
-- [Firmware Data Flow](../../data-flow.md)
-
-## Test Coverage
-
-- Provisioning route tests cover page controls, asynchronous submission, progress and terminal fragments, conflicts,
-  escaping, CSRF/origin failures, and post-provision unavailability.
-- Live-schema tests prove UI, static, and fragment routes remain excluded.
-
-## Design Reconciliation
-
-### Delivered as Designed
-
-Upload and paste flows, async jobs, status fragments, first-boot-only exposure, bootstrap browser controls, escaping,
-mobile/desktop rendering, and OpenAPI exclusion were delivered.
-
-### Intentional Changes
-
-The implementation uses server-rendered fragments and minimal browser behavior rather than introducing a separately
-versioned HTMX or SPA build artifact.
-
-### Deferred Work
-
-A general post-provision management UI remains outside this feature.
-
-### Rejected or Removed Scope
-
-Vite/SPA tooling, stale signing-challenge UI, UI routes in public OpenAPI, and unauthenticated post-provision mutation
-remain rejected.
-
-## Documentation Updated
-
-- `docs/src/provisioning.md`
-- `docs/src/runtime-boundaries.md`
-- `docs/src/data-flow.md`
-- `docs/src/planned-features.md`
+- [Data Flow](../../data-flow.md)

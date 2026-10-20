@@ -71,7 +71,7 @@ labels = ["workflow:feature-lifecycle", "phase:spec-review", "review:documentati
 needs = ["design"]
 metadata = { workflow_phase = "spec-review", review_kind = "documentation" }
 description = """
-Review the exact reader-facing pages named by {{design_path}}. Confirm each page has a clear reader purpose, all applicable documentation concerns are covered, non-applicable concerns are explicit, new pages are registered in docs/src/SUMMARY.md, and the product documentation stands alone without requiring the internal feature design.
+Review the exact reader-facing pages named by {{design_path}}. Confirm each page has a clear reader purpose, all applicable documentation concerns are covered, non-applicable concerns are explicit, new pages are registered in docs/sidebars.ts, and the product documentation stands alone without requiring the internal feature design.
 """
 
 [[steps]]
@@ -119,7 +119,7 @@ labels = ["workflow:feature-lifecycle", "phase:closeout", "closeout:documentatio
 needs = ["implementation"]
 metadata = { workflow_phase = "closeout", closeout_kind = "documentation" }
 description = """
-Compare delivered behavior with {{design_path}}, every page named in its Documentation Impact section, and every reader-facing page changed by implementation. Update current docs, docs/src/planned-features.md, docs/src/features/index.md, {{implemented_path}}, and docs/src/SUMMARY.md as applicable. The implemented-feature page records the delivered capability and how it differs from the design without replacing product documentation; it does not record pull requests, commits, validation runs, or delivery status, which stay in Beads.
+Compare delivered behavior with {{design_path}}, every page named in its Documentation Impact section, and every reader-facing page changed by implementation. Update current docs, docs/src/planned-features.md, {{implemented_path}}, and docs/sidebars.ts as applicable; the implemented-features list is generated from each feature's index.md. The implemented-feature page records the delivered capability and how it differs from the design without replacing product documentation; it does not record pull requests, commits, validation runs, or delivery status, which stay in Beads.
 """
 
 [[steps]]

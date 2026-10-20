@@ -1,13 +1,14 @@
 # Nix Flake Configuration
 
-> Source: `docs/src/features/rock64-ab-image/design.md#nix-flake-config`
+Acceptance contract for the system configurations and artifacts the flake produces. The full output list is in
+[Flake Outputs](../reference/flake-outputs.md).
 
 ## Requirements
 
-### ADDED: Flake defines Rock64 NixOS configuration
+### Flake defines the Rock64 NixOS configuration
 
-The flake provides `nixosConfigurations.rock64` targeting `aarch64-linux` (RK3328). The configuration includes all
-service modules: systemd, openssh, chrony, dnsmasq, RAUC, nftables, watchdog, and the health-check/update services.
+`nixosConfigurations.rock64` targets `aarch64-linux` (RK3328) and includes every service module: systemd, OpenSSH,
+chrony, dnsmasq, RAUC, nftables, the watchdog integration, and the health-check and update services.
 
 #### Scenario: Rock64 system evaluates cleanly
 
@@ -15,52 +16,61 @@ service modules: systemd, openssh, chrony, dnsmasq, RAUC, nftables, watchdog, an
 - Then `nixosConfigurations.rock64` evaluates without errors
 - And the system target is `aarch64-linux`
 
-### ADDED: Produces squashfs rootfs image
+### Flake defines the Radxa CM3 NixOS configuration
 
-The flake builds a compressed squashfs root filesystem via `packages.aarch64-linux.<board>.squashfs`. The image must
-not exceed the partition slot size (1 GB).
+`nixosConfigurations.cm3` targets the Radxa CM3 (RK3566) on the CM3 IO Board with the same service modules, the stock
+upstream kernel, and RAUC compatible `radxa-cm3-io`.
 
-#### Scenario: Squashfs image fits within slot
+#### Scenario: CM3 board wiring agrees
+
+- Given `checks.<system>.cm3-board` is built
+- Then the CM3 storage paths, RAUC slots, and resolved U-Boot environment settings agree with `fw_env.config`
+
+### Produces the squashfs rootfs image
+
+`packages.aarch64-linux.<board>.squashfs` builds a compressed squashfs root filesystem no larger than the 1024 MiB
+rootfs slot.
+
+#### Scenario: Squashfs image fits within its slot
 
 - Given the squashfs is built with `nix build .#rock64.squashfs`
-- Then the resulting image is less than or equal to 1 GB
-- And it uses zstd compression with 1 MB block size
+- Then the image is at most 1024 MiB
+- And it uses zstd compression with a 1 MiB block size
 
-### ADDED: Produces signed RAUC bundle
+### Produces a signed RAUC bundle
 
-The flake builds a multi-slot RAUC bundle (`.raucb`) containing both boot
-(kernel + initrd + DTB + boot.scr) and rootfs (squashfs) images,
-signed with the project's CA key.
+`packages.aarch64-linux.<board>.rauc-bundle` builds a multi-slot `.raucb` bundle with a boot image (kernel, initrd, DTB,
+and `boot.scr`) and a rootfs image (squashfs), signed with the configured signing certificate. Flake builds use the
+development signing certificate in `certs/`.
 
 #### Scenario: RAUC bundle is valid
 
 - Given the bundle is built with `nix build .#rock64.rauc-bundle`
 - Then the `.raucb` file passes `rauc info --no-verify`
-- And it contains entries for both `boot` and `rootfs` slots
-- And it is signed with the development CA certificate
+- And it contains images for both the `boot` and `rootfs` slot classes
+- And it is signed with the development signing certificate
 
-### ADDED: Stripped kernel with modular USB support
+### Stripped kernel with modular USB peripherals
 
-The kernel is configured with built-in drivers for essential hardware (eMMC, Ethernet, USB host, watchdog, squashfs,
-f2fs) and loadable modules for selected USB Ethernet and USB-serial peripherals. USB WiFi is unsupported until specific
-hardware and firmware are selected.
+The Rock64 kernel builds in the drivers needed to boot (eMMC, Ethernet, USB host, watchdog, squashfs, f2fs, OverlayFS) and
+builds selected USB Ethernet and USB serial drivers as modules. It is built without Wi-Fi and Bluetooth.
 
-#### Scenario: Kernel has required drivers
+#### Scenario: Kernel has the required drivers
 
-- Given the NixOS configuration is evaluated
-- Then the kernel includes `MMC_DW_ROCKCHIP=y`, `STMMAC_ETH=y`, `DW_WATCHDOG=y`, `SQUASHFS=y`
-- And selected USB Ethernet drivers (`USB_RTL8152`, `USB_NET_AX88179_178A`, `USB_NET_CDCETHER`) are built as modules
+- Given the Rock64 NixOS configuration is evaluated
+- Then the kernel sets `MMC_DW_ROCKCHIP=y`, `STMMAC_ETH=y`, `DW_WATCHDOG=y`, and `SQUASHFS=y`
+- And `USB_RTL8152`, `USB_NET_AX88179_178A`, and `USB_NET_CDCETHER` are built as modules
 
 #### Scenario: USB serial works for debugging
 
-- Given a USB-serial adapter is plugged in
+- Given a USB serial adapter is plugged in
 - When the `ftdi_sio` or `cp210x` module is loaded
 - Then `/dev/ttyUSB0` appears
 
-### ADDED: OpenVPN as system service
+### OpenVPN recovery service
 
-OpenVPN is included in the rootfs for recovery tunnel access. It does not auto-start; it requires a config file at
-`/data/config/openvpn/client.conf`.
+OpenVPN is included in the rootfs for recovery tunnel access. `openvpn-recovery.service` does not start automatically
+and requires `/data/config/openvpn/client.conf`.
 
 #### Scenario: OpenVPN service is conditional
 
@@ -70,14 +80,15 @@ OpenVPN is included in the rootfs for recovery tunnel access. It does not auto-s
 - And the service is started manually
 - Then a `tun0` interface appears
 
-### ADDED: QEMU testing target
+### QEMU testing target
 
-The flake provides `nixosConfigurations.rock64-qemu` targeting `aarch64-virt` with virtio block devices. It shares the
-full service configuration from `base.nix` but uses a custom RAUC backend (file-based) instead of U-Boot.
+`nixosConfigurations.rock64-qemu` targets QEMU `aarch64-virt` with virtio block devices. It shares the service
+configuration in `modules/base.nix`, leaves RAUC disabled by default, and the RAUC tests enable it with the file-based
+`custom` backend instead of U-Boot.
 
-#### Scenario: QEMU target boots and runs tests
+#### Scenario: QEMU target runs the RAUC tests
 
-- Given the QEMU configuration is built
-- When a test VM is started
-- Then all services from `base.nix` are present
-- And RAUC uses the custom file-based backend
+- Given a RAUC VM test is built from `checks.<system>.rauc-*`
+- When the test VM starts
+- Then the services from `modules/base.nix` are present
+- And RAUC uses the `custom` file-based backend

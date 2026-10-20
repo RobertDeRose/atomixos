@@ -7,7 +7,7 @@ NixOS with atomic A/B OTA updates, automatic rollback, and a container-based app
 deployment model. The system uses a read-only squashfs rootfs and operator-provisioned
 Quadlet containers on a persistent `/data` partition.
 
-See the [project overview](./introduction/project-overview.md) for the current audience, scope, and ownership
+See the [project overview](./README.mdx) for the current audience, scope, and ownership
 boundaries. Beads is authoritative for live status, dependencies, claims, and ready-work selection; this page remains
 the human-readable roadmap.
 
@@ -128,7 +128,7 @@ the human-readable roadmap.
 - Detailed intent belongs in each feature's `design.md`.
 - Each feature is represented by one Beads epic with lifecycle and implementation tasks beneath it.
 - Live execution state is queried through Beads; this page retains concise direction only.
-- Completed features leave this page; their records live in [Implemented Features](./features/index.md).
+- Completed features leave this page; their records live in [Implemented Features](./features/index.mdx).
 
 ## Feature Map
 

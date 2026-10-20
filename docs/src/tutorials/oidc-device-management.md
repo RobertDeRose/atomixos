@@ -1,306 +1,196 @@
-# OIDC-Authenticated Device Management
+# OIDC Device Management
 
-This tutorial builds an OIDC-authenticated management stack on AtomixOS using
-three components:
+This tutorial gives a device a browser-based management console behind single sign-on. You provision the example
+bundle in `example/caddy-oidc`, which runs two containers:
 
-- **Caddy with AuthCrunch** -- reverse proxy with Microsoft Entra OIDC login
-  and JWT-based authorization
-- **Cockpit-ws** -- browser-based device management console
-- **Admin-only route policy** -- allows administrators to reach Cockpit while
-  leaving room for user-facing application routes
+- **Caddy with AuthCrunch**, a reverse proxy that signs users in through Microsoft Entra ID (or another OIDC provider)
+  and decides who may reach each route.
+- **Cockpit**, a web console for the device's services, logs, files, and Podman containers. Only administrators can
+  reach it.
 
-The result is a single sign-on flow: users authenticate once through Entra ID,
-and Caddy only exposes the Cockpit management console to admin users.
+Users sign in once, through your identity provider. The stack is meant for management from the local network: Caddy
+issues its own certificate, so the device needs no public domain and no inbound internet access.
 
-This tutorial is designed for local device management on a LAN. Caddy uses its
-internal certificate authority instead of Let's Encrypt, so the device does not
-need a publicly routed domain or inbound internet access.
+## How it works
 
-## Contents
+```mermaid
+graph TD
+    lan((Browser on the LAN)) -- "ports 80, 443" --> caddy
 
-<!-- toc -->
+    subgraph caddy["Caddy + AuthCrunch"]
+        ca1["/auth* → sign-in portal"]
+        ca2["/cockpit/* → admins only"]
+        ca3["/app/* → your user-facing apps"]
+    end
 
-## Prerequisites
+    caddy -- "localhost:9090 with bearer token" --> cockpit
 
-The example bundle uses Microsoft Entra by default because Entra group claims
-map cleanly to admin/user roles. You can use any AuthCrunch-supported OIDC
-provider by changing the Caddyfile identity provider block, callback URI, and
-role mapping rules.
+    subgraph cockpit["Cockpit"]
+        co1["checks the token's role"]
+        co2["SSH to 127.0.0.1 as admin"]
+        co3["bridge on the host"]
+    end
+```
 
-### Microsoft Entra App Registration
+1. You open `https://<GATEWAY_DOMAIN>/cockpit/`.
+2. Without a valid session cookie, Caddy sends you to the `/auth/` portal, which signs you in with Entra ID.
+3. AuthCrunch gives every user from your tenant the `authp/user` role. Members of the admin group you name also get
+   `authp/admin`. It stores the roles in a signed JWT cookie.
+4. Caddy lets a request into `/cockpit/*` only if the token carries `authp/admin`, and passes the token on to Cockpit
+   as a bearer token.
+5. Cockpit's bearer-token helper checks that the token is unexpired, signed with an accepted algorithm, and carries
+   `authp/admin`, then starts the session as the local `admin` user. There is no second login. Caddy remains the
+   boundary that verifies the token's signature.
+6. Cockpit reaches the host over SSH to `127.0.0.1` as `admin`, using a key the container generates and adds to that
+   user's authorized keys, and runs the Cockpit bridge on the host.
 
-1. In the Azure portal, open **Microsoft Entra ID** > **App registrations**
-2. Select **New registration**
-3. Set the redirect URI to:
+## Before you start
+
+You need:
+
+- a device you can provision, with a LAN client to browse from;
+- an SSH key for the `admin` user; Cockpit always signs in as `admin`, so your configuration must declare that user;
+- an identity provider application, set up as below.
+
+### Set up Microsoft Entra ID
+
+1. In the Azure portal, open **Microsoft Entra ID** > **App registrations** and select **New registration**.
+2. Set the redirect URI to:
 
    ```text
    https://<GATEWAY_DOMAIN>/auth/oauth2/azure/authorization-code-callback
    ```
 
-4. Note the **Application (client) ID** and **Directory (tenant) ID**
-5. Under **Certificates & secrets**, create a new client secret and copy its
-   value
-6. Under **Token configuration** > **Add groups claim**, select **Security
-   groups**
-7. Create two Entra security groups:
-   - `AtomixOS-Admins` -- full device administration
-   - `AtomixOS-Users` -- read-only monitoring access
-8. Assign users to the appropriate groups
+3. Note the **Application (client) ID** and the **Directory (tenant) ID**.
+4. Under **Certificates & secrets**, create a client secret and copy its value.
+5. Under **Token configuration** > **Add groups claim**, select **Security groups**.
+6. Create a security group for device administrators and add the people who should reach Cockpit. Everyone else in
+   the tenant can still sign in and gets only the user role.
 
-### Google OAuth Client
+### Or use Google
 
-For Google, create an OAuth client in Google Cloud Console instead of an Entra
-app registration:
-
-1. Open **APIs & Services** > **Credentials**
-2. Create an **OAuth client ID** for a web application
-3. Add this authorized redirect URI:
+1. In Google Cloud Console, open **APIs & Services** > **Credentials** and create an **OAuth client ID** for a web
+   application.
+2. Add this authorized redirect URI:
 
    ```text
    https://<GATEWAY_DOMAIN>/auth/oauth2/google/authorization-code-callback
    ```
 
-4. Note the client ID and client secret
-5. Decide how to assign admin access. Common options are a Google Workspace
-   group claim, a hosted-domain claim, or an explicit email allow-list in the
-   AuthCrunch transform rules.
+3. Note the client ID and client secret.
+4. Decide how administrators are recognized, for example a Google Workspace group claim, a hosted-domain claim, or an
+   explicit email allow-list in the AuthCrunch `transform user` rules.
+5. In the Caddyfile, replace the `azure` identity provider block with a Google one, and change the `azure` realm in the
+   portal and transform rules to `google`:
 
-Then replace the Entra identity provider block in the Caddyfile with a Google
-provider block. The exact AuthCrunch driver options may vary by AuthCrunch
-version; the important values are the provider name (`google`), realm
-(`google`), client ID, client secret, and callback URI path.
+   ```caddyfile
+   oauth identity provider google {
+       realm google
+       driver google
+       client_id {env.GOOGLE_CLIENT_ID}
+       client_secret {env.GOOGLE_CLIENT_SECRET}
+       scopes openid email profile
+   }
+   ```
 
-```caddyfile
-oauth identity provider google {
-    realm google
-    driver google
-    client_id {env.GOOGLE_CLIENT_ID}
-    client_secret {env.GOOGLE_CLIENT_SECRET}
-    scopes openid email profile
-}
-```
+6. Replace the Azure environment variables in `config.toml` with your Google client ID and secret.
 
-Also replace the Azure identity-provider and realm references with their
-Google equivalents in the Caddyfile and transform rules.
+Driver options can vary between AuthCrunch versions; the values that matter are the provider and realm name, the client
+ID and secret, and the callback path.
 
-## Architecture
+Any other AuthCrunch-supported OIDC provider works the same way: change the identity provider block, the callback URI,
+and the role rules.
 
-```mermaid
-graph TD
-    lan((Local LAN browser)) -- "ports 80, 443" --> caddy
-
-    subgraph caddy["Caddy + AuthCrunch"]
-        ca1["/auth* → OIDC portal"]
-        ca2["/cockpit/* → admin-only reverse proxy"]
-        ca3["/app/* → user application routes"]
-    end
-
-    caddy -- "localhost:9090" --> cockpit
-
-    subgraph cockpit["Cockpit-ws"]
-        co1["--local-session"]
-        co2["cockpit-bridge"]
-        co3["host D-Bus and Podman sockets"]
-    end
-```
-
-### Authentication Flow
-
-1. User navigates to `https://<GATEWAY_DOMAIN>/cockpit/`
-2. Caddy checks for a valid JWT cookie; if absent, redirects to `/auth/`
-3. AuthCrunch initiates Entra OIDC login
-4. After authentication, AuthCrunch maps Entra groups to roles:
-   - `AtomixOS-Admins` group receives the `authp/admin` role
-   - `AtomixOS-Users` group receives the `authp/user` role
-5. AuthCrunch issues a JWT cookie with the mapped roles
-6. Caddy validates the JWT and allows `/cockpit/*` only for `authp/admin`
-7. Cockpit runs behind Caddy with `--local-session`; Cockpit performs no second
-   login and relies on Caddy for authentication and authorization
-
-## Bundle Structure
+## What is in the bundle
 
 ```text
 example/caddy-oidc/
-config.toml
-files/
-  caddy/
-    Caddyfile
-  cockpit/
-    Containerfile
+  config.toml
+  files/
+    caddy/
+      Caddyfile
+      ui/                 sign-in page templates and images
+    cockpit/
+      Containerfile
+      rootfs/             Cockpit startup, auth helper, and branding
 ```
 
-Substitute the example values in `config.toml`, package this directory, and
-provision the device. The Caddyfile and generated Cockpit configuration read
-those values from container environment variables.
+- [`config.toml`](https://github.com/RobertDeRose/atomixos/blob/dev/example/caddy-oidc/config.toml) declares the
+  `admin` user, opens WAN ports 80 and 443, builds the Cockpit image, and defines both containers. It lists both
+  containers under `[activation].required`, so a change only succeeds if they come up healthy.
+- [`files/caddy/Caddyfile`](https://github.com/RobertDeRose/atomixos/blob/dev/example/caddy-oidc/files/caddy/Caddyfile)
+  defines the sign-in portal, the role rules, and the `admin-policy` and `user-policy` authorization policies.
+- [`files/cockpit/Containerfile`](https://github.com/RobertDeRose/atomixos/blob/dev/example/caddy-oidc/files/cockpit/Containerfile)
+  builds a Fedora-based Cockpit image with the bridge, Files, Podman, and System modules.
 
-## Example Values
+Points worth knowing before you change the example:
 
-Replace these values before provisioning:
+- Both containers are `privileged = true`: Caddy binds ports 80 and 443, and Cockpit mounts the host's D-Bus, systemd,
+  journal, and Podman sockets and the host root at `/host`.
+- The Cockpit container depends on its build service through `After` and `Requires`, and uses `Pull = "never"` so
+  Podman does not look for the locally built `localhost/cockpit-ws:latest` image in a registry.
+- The build uses `Network = "host"`, which avoids setting up Podman's build network on the device.
+- `${FILES_DIR}` points at the bundle's `files/` directory on the device. The example mounts its payloads read-only.
+- Caddy's certificates live in the `caddy-data` Podman volume. Configuration export does not include volumes; back them
+  up with Podman tooling if you need to.
+- `GATEWAY_DOMAIN` goes to both containers: Caddy serves that name, and Cockpit builds its allowed origins from it.
+- The `management` network is declared for later use; both containers currently use host networking.
+- `/` redirects to `/cockpit/`. To publish an application to every signed-in user, add a route that uses
+  `authorize with user-policy`; the Caddyfile has a commented-out `/app/*` example.
 
-| Example value              | Where       | Description                          |
-|----------------------------|-------------|--------------------------------------|
-| `<SSH_PUBLIC_KEY>`         | config.toml | Your SSH public key for admin access |
-| `<AZURE_TENANT_ID>`        | config.toml | Entra directory (tenant) ID          |
-| `<AZURE_CLIENT_ID>`        | config.toml | App registration client ID           |
-| `<AZURE_CLIENT_SECRET>`    | config.toml | App registration client secret       |
-| `<JWT_SHARED_KEY>`         | config.toml | Shared HMAC-SHA256 signing key       |
-| `<GATEWAY_DOMAIN>`         | config.toml | Local DNS name for the device        |
-| `<ENTRA_ADMIN_GROUP_NAME>` | config.toml | Entra group name for admin role      |
+## Provision the stack
 
-If you switch to Google or another provider, replace the Azure example values
-with that provider's client ID/secret variables and update the Caddyfile
-environment entries accordingly.
+1. Copy `example/caddy-oidc` somewhere you can edit it.
+2. Replace the placeholders in `config.toml`:
 
-Generate the JWT shared key with:
+   | Placeholder                | Value                                             |
+   |----------------------------|---------------------------------------------------|
+   | `<SSH_PUBLIC_KEY>`         | Your SSH public key for the `admin` user          |
+   | `<AZURE_TENANT_ID>`        | Entra directory (tenant) ID                       |
+   | `<AZURE_CLIENT_ID>`        | App registration client ID                        |
+   | `<AZURE_CLIENT_SECRET>`    | App registration client secret                    |
+   | `<JWT_SHARED_KEY>`         | Shared key that signs and verifies session tokens |
+   | `<GATEWAY_DOMAIN>`         | Local DNS name for the device                     |
+   | `<ENTRA_ADMIN_GROUP_NAME>` | Entra group whose members get the admin role      |
 
-```bash
-openssl rand -base64 32
-```
+   Generate the JWT key with:
 
-## Configuration Files
+   ```bash
+   openssl rand -base64 32
+   ```
 
-## Local DNS and TLS
+3. Make `<GATEWAY_DOMAIN>` resolve to the device's address from your workstation: add a record on your LAN DNS server,
+   or a hosts-file entry such as:
 
-The browser must resolve `<GATEWAY_DOMAIN>` to the device's LAN address. Use one
-of these local options:
+   ```text
+   172.20.30.1 gateway.example.com
+   ```
 
-- Add a DNS record on your LAN router or development DNS server
-- Add a hosts-file entry on the workstation you use to manage the device
-- Use another local name resolution mechanism that maps the name to the device
-  IP address
+4. Package the bundle:
 
-For example, if the gateway is reachable at `172.20.30.1`:
+   ```bash
+   tar --zstd -cvf config.tar.zst -C path/to/caddy-oidc .
+   ```
 
-```text
-172.20.30.1 gateway.example.com
-```
+5. Apply `config.tar.zst` through the bootstrap console, or as a signed change on a device that is already provisioned.
+   See [Provisioning](../provisioning.md).
+6. Open `https://<GATEWAY_DOMAIN>/` and sign in. The first start takes a while because the device builds the Cockpit
+   image.
 
-Caddy serves HTTPS for this name with `tls internal`. That avoids public ACME
-validation and works even when the domain is not reachable from the internet.
-Browsers will not trust Caddy's local CA by default; either trust the Caddy root
-CA from the `caddy-data` volume on your management workstation or accept the
-browser warning for local testing.
+Caddy serves HTTPS with `tls internal`, its own local certificate authority, so your browser will not trust the
+certificate at first. Either trust Caddy's root CA (stored in the `caddy-data` volume) on your workstation, or accept
+the browser warning while testing.
 
-### config.toml
+## Harden it for production
 
-The config defines two rootful containers, a network, a volume, and a build:
+The example favors a quick start. Before relying on it:
 
-```toml
-{{#include ../../../example/caddy-oidc/config.toml}}
-```
-
-Key points:
-
-- Caddy is `privileged = true` because it binds ports 80/443
-- Cockpit-ws is `privileged = true` because it runs a local management session
-  with host D-Bus, systemd, journal, and Podman sockets mounted into the container
-- The `cockpit-ws` container depends on its build service via `After` and
-  `Requires`
-- `Pull = "never"` prevents Podman from trying to fetch the locally built
-  `localhost/cockpit-ws:latest` tag from a registry
-- The `cockpit-ws` build uses `Network = "host"` to avoid Podman build-time
-  netavark/nftables setup on constrained device images
-- The `${FILES_DIR}` token is replaced at provision time with the path to
-  the extracted bundle files; this example uses `ro` to keep its managed
-  configuration inputs unchanged
-- Mutable application state is stored in the declared Podman volumes. Trusted
-  integrators may choose other Podman mount behavior, but should use volumes for
-  ordinary runtime state. Use
-  Podman tooling if that runtime data needs to be backed up or restored;
-  AtomixOS config export intentionally excludes it
-- `GATEWAY_DOMAIN` is passed to both containers; Caddy uses it for the site
-  address and Cockpit uses it to generate the real-device and VM-forwarded
-  origins in `/etc/cockpit/cockpit.conf`
-- Caddy uses `tls internal`, so HTTPS is local-only and does not require public
-  DNS or Let's Encrypt validation
-- The `management` network is defined for future use when containers move
-  off host networking
-
-### Caddyfile
-
-```caddyfile
-{{#include ../../../example/caddy-oidc/files/caddy/Caddyfile}}
-```
-
-Key points:
-
-- The `order` directives register the authenticate and authorize handlers
-- The identity provider block configures Entra OIDC via the `azure` driver
-- The portal issues JWTs signed with the shared key
-- The portal explicitly lists Cockpit as an application link; AuthCrunch does
-  not discover Caddy routes automatically
-- `transform user` blocks assign base roles (`authp/user`) and promote
-  admin group members to `authp/admin`
-- `admin-policy` restricts `/cockpit/*` to `authp/admin`
-- `user-policy` is provided for user-facing applications that should allow
-  both `authp/admin` and `authp/user`
-- `tls internal` tells Caddy to issue a certificate from its local CA instead of
-  using public ACME/Let's Encrypt
-- `/` redirects to `/cockpit/`, and `/cockpit` normalizes to `/cockpit/`
-- `GATEWAY_DOMAIN` and `ENTRA_ADMIN_GROUP_NAME` come from container
-  environment variables set in `config.toml`
-
-### Containerfile
-
-```dockerfile
-{{#include ../../../example/caddy-oidc/files/cockpit/Containerfile}}
-```
-
-The custom image adds Cockpit's bridge and management modules, then starts
-cockpit-ws with `--local-session`. Cockpit itself does not authenticate users;
-Caddy's admin-only OIDC policy protects the route. The startup command writes
-`/etc/cockpit/cockpit.conf` from `GATEWAY_DOMAIN`, so the example only requires
-editing `config.toml`.
-
-## Building and Applying
-
-Package the bundle as a tarball:
-
-```bash
-# Edit config.toml with your values
-tar --zstd -cvf config.tar.zst -C <repo>/example/caddy-oidc .
-```
-
-Apply to the device using the bootstrap server or USB provisioning. See
-[Provisioning](../provisioning.md) for details.
-
-## Cockpit-Podman
-
-The Cockpit Podman integration (`cockpit-podman`) lets operators manage
-containers through the Cockpit UI. In this example it is installed into the
-Cockpit container and uses the mounted host Podman socket at
-`/run/podman/podman.sock`.
-
-A future NixOS module could make Cockpit a native host service instead of a
-containerized admin application:
-
-```nix
-{ pkgs, ... }:
-{
-  environment.systemPackages = [ pkgs.cockpit-podman ];
-}
-```
-
-This is outside the scope of the tutorial config bundle and requires
-rebuilding the AtomixOS base image.
-
-## Security Considerations
-
-This tutorial uses HS256 (symmetric) JWT signing for simplicity. For
-production deployments:
-
-- **Use public DNS and public certificates** if exposing the device outside a
-  trusted local network. The tutorial intentionally uses Caddy internal TLS for
-  local management, not internet deployment.
-- **Use asymmetric keys (RS256/ES256)** instead of a shared HMAC secret.
-  AuthCrunch supports RSA and ECDSA key pairs.
-- **Rotate secrets regularly.** The `JWT_SHARED_KEY` and Azure client secret
-  should be rotated on a schedule.
-- **Use secret files** instead of environment variables for sensitive values.
-  Podman supports `--secret` mounts that avoid exposing secrets in Quadlet
-  files on disk.
-- **Pin image tags** in production. The tutorial uses `:latest` for
-  convenience; production should pin to specific versions.
-- **Restrict Cockpit access.** The `viewer` user should have minimal
-  permissions. Consider using Cockpit's `cockpit.conf` `[Ssh-Login]`
-  restrictions.
+- **Use public DNS and real certificates** if the console is reachable from outside a trusted local network. The
+  example's internal TLS is for local management only.
+- **Use asymmetric token keys** (RS256 or ES256) instead of the shared HMAC key. AuthCrunch supports RSA and ECDSA key
+  pairs.
+- **Rotate secrets** such as `JWT_SHARED_KEY` and the identity provider client secret on a schedule.
+- **Keep secrets out of environment variables.** Podman secrets keep them out of the Quadlet files on disk.
+- **Pin image versions** instead of `:latest`.
+- **Mind what admin means.** Every member of the admin group gets a Cockpit session as the device's `admin` user, with
+  that user's full privileges.

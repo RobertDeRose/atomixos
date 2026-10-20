@@ -101,27 +101,22 @@ The service is long-lived and socket-activated, so upgrades must preserve the in
 Direct development/test jobs are memory-only and single-flight. Production jobs use a bounded FIFO (four pending jobs by
 default), one root worker at a time, and result files under `/run/atomixos-provision` for restart recovery. Export is
 read-only but still uses the provisioning lock to avoid reading a partially promoted tree. The full target build and
-closure-size gates are part of the recorded delivery evidence.
+closure-size budget must hold for every change.
 
 ## Documentation Impact
 
 - `docs/src/provisioning.md`: current API routes, authentication matrix, staged/direct job semantics, and complete export
-  archive contract; updated with T086 when the endpoint changed.
+  archive contract.
 - `docs/src/data-flow.md`: raw USB seed versus API bundle sources, persisted `files/` payloads, marker fallback, and
   export/import bookend.
 - `docs/src/runtime-boundaries.md`: WAN/LAN bootstrap exposure, unprivileged/root ownership, export allowlist, and the
   shared provisioning predicate.
 - `docs/src/provisioning/flash-image.md`: USB discovery accepts raw `config.toml`; bundle import is available through
   API/UI/CLI paths.
-- `docs/src/introduction.md` and `docs/src/features/rock64-ab-image/design.md`: qualify pre- and post-provisioning
-  network exposure.
+- The documentation landing page: qualify pre- and post-provisioning network exposure.
 - `docs/src/testing.md`, `docs/src/code-reference/modules.md`, and `docs/src/code-reference/scripts.md`: first-boot-only
   UI wording, CLI commands, and direct provisioning check commands.
-- `docs/src/features/index.md`, `docs/src/features/provisioning-api-service/index.md`, and `docs/src/SUMMARY.md`: create
-  and register the delivered record only after T063, T086, and T092 close.
-
-Documentation updates for current delivered behavior are part of specification reconciliation; the final export response
-and round-trip instructions were completed by T086 and remain subject to the documentation-reconcile gate.
+- `docs/src/features/provisioning-api-service/index.md`: the implemented record of the delivered service.
 
 ## Validation Strategy
 
@@ -143,8 +138,8 @@ advance in parallel; route and Nix integration depended on the stable service an
 
 ## Open Questions
 
-No delivery-blocking design questions remain. Complete compressed-tar bundle export is implemented and covered by
-round-trip evidence. True live `pulling` status remains deferred until activation can stream a reliable event source.
+No design questions remain open. Complete compressed-tar bundle export is part of the design. True live `pulling`
+status remains deferred until activation can stream a reliable event source.
 
 ## Overview
 
@@ -543,7 +538,7 @@ state, not a second mutation surface. They use the same authenticated job and
 candidate pipeline as full imports. Future typed partial APIs must follow the same
 rule and must not directly edit rendered runtime artifacts.
 
-The export bookend is implemented by T086. The endpoint returns a deterministic
+The export bookend is `GET /api/config/export`. The endpoint returns a deterministic
 compressed tar bundle generated from the canonical desired state and managed files,
 preserving the config bundle as the portable artifact. The implementation does not
 archive unrelated `/data/config` state.
@@ -682,7 +677,6 @@ Explicitly avoid adding these until there is a concrete need:
 - `modules/first-boot.nix` — updated to reference new package, add Python deps
 - `nix/tests/first-boot-provision.nix` — must continue passing
 - `nix/tests/first-boot-source-discovery.nix` — must continue passing
-- `docs/src/planned-features.md` — mark feature complete when done
 - `docs/src/provisioning.md` — first-boot and runtime provisioning behavior
 - `docs/src/data-flow.md` — persisted state and re-apply flow
 - `docs/src/runtime-boundaries.md` — API semantics and config/runtime boundary

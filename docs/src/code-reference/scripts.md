@@ -1,16 +1,14 @@
 # Scripts
 
-Shell scripts in `scripts/` and `.mise/tasks/` implement the runtime services and build/provisioning tooling.
+Scripts in `scripts/` and `.mise/tasks/` implement the build templates, runtime services, and developer tasks.
 
-## Build Scripts (Nix Derivation Templates)
+## Build Scripts
 
-These scripts run inside Nix derivations. Variables like `@kernel@` are substituted by Nix at build time.
+These templates run inside Nix derivations. Nix substitutes `@name@` placeholders at build time.
 
 ### build-squashfs.sh
 
-**Location:** `scripts/build-squashfs.sh`
-
-Builds the squashfs rootfs image from a NixOS closure.
+Builds the squashfs rootfs from a NixOS closure. Called by `nix/squashfs.nix`.
 
 | Input             | Description                                |
 |-------------------|--------------------------------------------|
@@ -18,14 +16,12 @@ Builds the squashfs rootfs image from a NixOS closure.
 | `@closureInfo@`   | Closure info (contains `store-paths` file) |
 | `@maxSize@`       | Maximum image size in bytes                |
 
-**Steps:** Copy store paths to pseudo-root, create init symlinks and mount-point dirs, run `mksquashfs` with zstd/19,
-check size limit.
+Copies the store paths into a pseudo-root, adds init symlinks and mount-point directories, runs `mksquashfs` with zstd
+level 19, and fails if the image exceeds `@maxSize@`.
 
 ### build-rauc-bundle.sh
 
-**Location:** `scripts/build-rauc-bundle.sh`
-
-Builds a signed RAUC bundle (`.raucb`).
+Builds the signed RAUC bundle. Called by `nix/rauc-bundle.nix`.
 
 | Input                            | Description                            |
 |----------------------------------|----------------------------------------|
@@ -33,14 +29,14 @@ Builds a signed RAUC bundle (`.raucb`).
 | `@squashfs@`                     | Squashfs image directory               |
 | `@signingCert@` / `@signingKey@` | RAUC signing credentials               |
 | `@version@`                      | Bundle version string                  |
+| `@compatible@`                   | The board's RAUC compatible string     |
+| `@board@`                        | Board name used for the bundle file    |
 
-**Steps:** Copy the shared `boot.vfat`, generate the manifest, and sign with `rauc bundle`.
+Copies `boot.vfat` and `rootfs.squashfs`, writes `manifest.raucm`, and signs with `rauc bundle`.
 
 ### build-image.sh
 
-**Location:** `scripts/build-image.sh`
-
-Assembles the flashable disk image.
+Assembles the flashable disk image. Called by `nix/image.nix`.
 
 | Input             | Description                 |
 |-------------------|-----------------------------|
@@ -49,152 +45,147 @@ Assembles the flashable disk image.
 | `@uboot@`         | U-Boot package              |
 | `@imageName@`     | Output filename             |
 
-**Steps:** Create a sparse image, write U-Boot at raw offsets, create the GPT from the shared partition layout, copy the
-shared boot-slot filesystem to `boot-a`, and write squashfs to `rootfs-a`. Slot B and `/data` are created by initrd
-`systemd-repart` on first boot.
-
----
-
-## Runtime Scripts
-
-These scripts run on the device at runtime, invoked by systemd services.
-
-### watchdog-boot-count.sh
-
-**Location:** `scripts/watchdog-boot-count.sh`
-
-Records watchdog boot-count state and rollback decisions for the configured
-RAUC bootloader backend.
-
-**Responsibilities:**
-
-1. Detect the active bootloader mode from `ATOMIXOS_RAUC_BOOTLOADER`
-2. For the `custom` backend, decrement `/var/lib/rauc/boot-count.<slot>` on boot
-3. Mark the failed slot bad and switch primary when the count is exhausted
-4. For the `uboot` backend, read the post-boot `BOOT_*_LEFT` value via `fw_printenv`
-5. Emit journal-visible lifecycle lines through normal stdout
+Creates a sparse image, writes `idbloader.img` at sector 64 and `u-boot.itb` at sector 16384, creates the GPT from the
+shared partition layout, and writes `boot.vfat` to `boot-a` and the squashfs to `rootfs-a`. Slot B and `/data` are
+created by initrd `systemd-repart` on first boot.
 
 ### boot.cmd
 
-**Location:** `scripts/boot.cmd`
+U-Boot boot script source, compiled to `boot.scr` by `nix/boot-script.nix`. It runs after the RAUC bootmeth has
+selected a slot and decremented its tries. A `START_UMS=1` request is normally handled earlier, by U-Boot's `PREBOOT`
+(`nix/uboot-start-ums.nix`); the script handles it too for boards whose U-Boot or saved environment predates that
+`PREBOOT`, because RAUC bundles update `boot.scr` but never U-Boot.
 
-U-Boot boot script loaded after RAUC bootmeth selects the slot and decrements the boot-count. Compiled to `boot.scr` by
-`mkimage`. A `START_UMS=1` request is handled earlier, by U-Boot's `PREBOOT` (`nix/uboot-start-ums.nix`), so USB recovery
-works even when this script is unreadable. The script also handles `START_UMS=1` itself, for boards whose U-Boot or
-saved environment predates that `PREBOOT`: RAUC bundles update `boot.scr` but never U-Boot, and a saved environment
-keeps its `preboot` (see [Bootloader updates](../architecture/update-rollback.md#bootloader-updates)).
+1. Echo `AtomixOS build: <buildId>` on the serial console.
+2. Default `devnum` to `0` when U-Boot did not set it.
+3. If `START_UMS=1`, clear it, save the environment, and run `ums` so the OTG port exposes the full eMMC.
+4. On Rock64 only, if the reset button (Linux `gpiochip3` line 4, U-Boot GPIO `100`) is held for 5 seconds, run `ums`.
+   CM3 builds leave the recovery pin empty.
+5. On Rock64, override `ramdisk_addr_r=0x08000000` so the initrd does not overlap the relocated kernel; the CM3 keeps
+   the U-Boot default.
+6. Read the RAUC bootmeth variables for the selected boot and root partitions, then set `rauc.slot` and
+   `atomixos.lowerdev`.
+7. Load `Image`, the board's DTB, and `initrd` from the boot partition. If any load fails, print the first failing file
+   and `reset`, so the decremented try counter falls back instead of booting a stale initrd.
+8. Set the kernel command line (NixOS `boot.kernelParams`, the board's base arguments, and `root=fstab`) and `booti`.
+   If `booti` returns, `reset`.
 
-**Key logic:**
+Console: `console=ttyS2,1500000` (UART2 on both boards).
 
-1. Echo build ID (squashfs store hash) to console for identification
-2. On Rock64 only, if the reset button (Linux `gpiochip3` line 4, U-Boot GPIO `100`) is held low for 5 seconds, run
-   `ums 0 mmc ${devnum}` so the OTG port exposes the full eMMC to a host computer; CM3 builds leave the recovery pin empty
-3. Auto-detect boot device number from `devnum`
-4. On Rock64, override `ramdisk_addr_r=0x08000000` (avoids kernel overlap); CM3 keeps the U-Boot default
-5. Read RAUC bootmeth variables for selected boot/root partitions
-6. Set `rauc.slot` and `atomixos.lowerdev`
-7. Load kernel/initrd/DTB from the selected boot partition; if any load fails, print the first failing file and `reset`
-   so the decremented try counter falls back instead of booting a stale initrd size
-8. Set the kernel command line (NixOS `boot.kernelParams`, the board base, `root=fstab`) and `booti`; if `booti`
-   returns, `reset`, even on U-Boot builds whose boot command doesn't
+## Runtime Scripts
 
-**Console:** `ttyS2,1500000` (Rock64 UART2)
-
-### fw_env.config
-
-**Location:** `scripts/fw_env.config`
-
-Configuration for `fw_setenv` / `fw_printenv` (userspace U-Boot env tools). The installed Rock64 config points to the
-single SPI flash environment exposed through `/dev/mtd0`.
-
-| Entry       | Device      | Offset     | Size     | Erase size |
-|-------------|-------------|------------|----------|------------|
-| Primary env | `/dev/mtd0` | `0x140000` | `0x2000` | `0x1000`   |
-
-The old raw eMMC environment offsets are not used.
-
-### os-verification.sh
-
-**Location:** `scripts/os-verification.sh`
-
-Post-update health check. Runs after every boot (except first).
-
-**Checks performed:**
-
-1. RAUC slot status must be readable
-2. `dnsmasq.service` is active
-3. `chronyd.service` is active
-4. `wan` exists and its networkd configuration has not failed; a missing WAN address only warns
-5. `lan` has the provisioned gateway IP, falling back to `172.20.30.1`
-6. Provisioned required units from `/data/config/health-required.json` are active
-7. Sustained 60s check (every 5s): all service, network, and required-unit checks still pass
-8. On success: `rauc status mark-good`, on every healthy boot, which restores the boot tries U-Boot used
-
-**Logging:** Emits progress and failure details through normal service output,
-which is captured by `journald` and forwarded to `/data/logs` by `rsyslog`.
-
-**Dependencies:** `rauc`, `jq`, `systemctl`, `ip`
-
-### os-upgrade.sh
-
-**Location:** `scripts/os-upgrade.sh`
-
-OTA update polling script. Checks for new RAUC bundles and installs them.
-
-**Environment:** `ATOMIXOS_OS_UPGRADE_CONFIG` (provisioned JSON config path)
-
-**Steps:**
-
-1. Get current version and RAUC compatible from `rauc status` and compact lowercase 12-hex device ID from wan MAC
-2. Query `$URL/api/v1/updates/latest` with version, compatible, and device headers
-3. Skip a response whose `compatible` names another board
-4. If newer version found: download to `/data/rauc/bundles/` (`ATOMIXOS_RAUC_BUNDLE_DIR`), `rauc install`, reboot
-5. Non-fatal on network errors (timer retries later)
-
-**Forensics:** Emits Tier 0 install and managed reboot markers, but avoids noisy
-polling or "no update" chatter in the durable forensic log.
+These scripts run on the device, started by the systemd units in [NixOS Modules](modules.md).
 
 ### first-boot.sh
 
-**Location:** `scripts/first-boot.sh`
+First-boot provisioning and slot confirmation, run by `first-boot.service`.
 
-First-boot provisioning/import/bootstrap flow plus boot confirmation.
+1. Exit if `/data/.completed_first_boot` exists.
+2. Find provisioning input: a valid existing `/data/config/config.toml`, then `/boot/config.toml` on a fresh flash,
+   then `config.toml` on USB media (searched by label and partition label), and otherwise wait for the bootstrap web
+   console.
+3. Validate the config and import it into `/data/config/`.
+4. Apply managed users, then render and sync rootful and rootless Quadlet units and restart LAN apply and provisioned
+   firewall apply. A failed LAN or firewall apply, or a failed sync with required units, stops before slot
+   confirmation.
+5. When RAUC is enabled, seed a missing SPI boot environment and mark the current slot good.
+6. Write a timestamp to `/data/.completed_first_boot`.
 
-**Steps:**
+### os-verification.sh
 
-1. Check for `/data/.completed_first_boot` and exit if it already exists
-2. Discover provisioning input from fresh-flash `/boot/config.toml`, USB media, or the LAN bootstrap console
-3. Validate and import the config into `/data/config/`
-4. Render and sync rootful and rootless Quadlet units
-5. Restart Quadlet sync, LAN apply, and provisioned firewall apply services; fail before slot confirmation if LAN or
-   firewall apply fails
-6. Mark the current RAUC slot good when RAUC is enabled
-7. Write timestamp to `/data/.completed_first_boot`
+Health check before committing a slot, run by `os-verification.service` on every boot after the first. Needs `rauc`,
+`jq`, `systemctl`, and `ip` on `PATH`.
+
+1. Read the RAUC slot status; refuse to continue if it cannot be parsed.
+2. Check that `dnsmasq.service` and `chronyd.service` are active.
+3. Check that `lan-gateway-apply.service` and `provisioned-firewall-inbound.service` did not fail.
+4. Check `wan`: a missing interface or failed networkd configuration fails; a missing address only warns.
+5. Check that `lan` has the provisioned gateway IP, or `172.20.30.1` without provisioned LAN settings.
+6. Check that every unit in `/data/config/health-required.json` is active, rootful or rootless.
+7. Repeat all checks every 5 seconds for 60 seconds (`ATOMIXOS_VERIFICATION_CHECK_INTERVAL`,
+   `ATOMIXOS_VERIFICATION_SUSTAIN_DURATION`).
+8. Run `rauc status mark-good` for the booted slot. This runs on every healthy boot, which restores the tries U-Boot
+   used.
+
+Any failure exits non-zero and leaves the slot uncommitted. Output goes to the journal and on to `/data/logs`.
+
+### os-upgrade.sh
+
+Update polling, run by `os-upgrade.service`.
+
+| Variable                     | Purpose                                           |
+|------------------------------|---------------------------------------------------|
+| `ATOMIXOS_OS_UPGRADE_CONFIG` | Provisioned JSON config path                      |
+| `ATOMIXOS_RAUC_BUNDLE_DIR`   | Download directory (default `/data/rauc/bundles`) |
+
+1. Read the current version and RAUC compatible from `rauc status`, and the device ID: the `wan` MAC as 12 lowercase
+   hex digits.
+2. Query `<update URL>/api/v1/updates/latest` with the `X-Device-ID`, `X-Current-Version`, and `X-Compatible` headers.
+3. Skip a response whose `compatible` names another board.
+4. If the response names a newer `version` and a `bundle_url`, download the bundle, run `rauc install`, and reboot.
+5. Exit successfully on network errors; the timer retries later.
+
+### watchdog-boot-count.sh
+
+Logs boot-count and rollback state for the configured RAUC backend, run by `watchdog-boot-count.service`.
+
+1. Read the backend from `ATOMIXOS_RAUC_BOOTLOADER`.
+2. For the `custom` backend, decrement `/var/lib/rauc/boot-count.<slot>`, and mark the slot bad and switch the primary
+   slot when the count is exhausted.
+3. For the `uboot` backend, read the post-boot `BOOT_*_LEFT` value with `fw_printenv`.
+4. Print lifecycle lines to stdout for the journal.
+
+### quadlet-sync.sh
+
+Syncs rendered rootful and rootless Quadlet units and starts them, run by `quadlet-sync.service`.
+
+### apply-users.py
+
+Creates managed local users from `/data/config/users.json` with the right groups, and locks users that were removed from
+the config. Runs on every boot and after a config re-apply.
+
+### lan-gateway-apply.py
+
+Renders the provisioned LAN settings from `/data/config/lan-settings.json`: the `lan` address drop-in, dnsmasq and
+chrony LAN configuration, and host entries. Fallback values come from `defaults/lan.json`.
+
+### provisioned-firewall-inbound.py
+
+Applies `/data/config/firewall-inbound.json` as nftables rules tagged `ATOMIXOS_PROVISIONED_INBOUND`. Ports must be
+integers from 1 to 65535. Provisioned `lan` ports replace the default-open LAN rule and always include the
+platform-required LAN ports.
+
+### ssh-wan-toggle.sh and ssh-wan-reload.sh
+
+If `/data/config/ssh-wan-enabled` exists, add `iifname "wan" tcp dport 22 accept` with comment `SSH-WAN-dynamic`.
+The reload script first deletes any existing `SSH-WAN-dynamic` rule by handle, so it can run repeatedly.
+
+### boot-storage-debug.sh
+
+Prints boot storage state, including `/etc/fw_env.config`, to the journal.
 
 ### atomixos_provision
 
-**Location:** `scripts/atomixos_provision/`
+Litestar provisioning service package in `scripts/atomixos_provision/`, used by first boot and by later re-apply.
 
-Litestar provisioning service package used by first boot and re-apply flows.
+| Module                                                     | Responsibility                                                     |
+|------------------------------------------------------------|--------------------------------------------------------------------|
+| `app.py`                                                   | Wires the Litestar application                                     |
+| `settings.py`                                              | Loads environment-backed settings                                  |
+| `deps.py`                                                  | Litestar dependency providers                                      |
+| `domain/*/controller.py`                                   | Route handlers for the `auth`, `config`, `jobs`, and `system` APIs |
+| `domain/config/coordinator.py`                             | Direct-versus-staged submission and admission policy               |
+| `domain/config/service.py`                                 | Config apply and validate facade                                   |
+| `schemas.py`                                               | Typed API response shapes                                          |
+| `exceptions.py`                                            | Maps domain errors to API response bodies                          |
+| `provision.py`, `bundle.py`, `quadlet.py`, `activation.py` | Safe apply pipeline                                                |
+| `export_worker.py`                                         | UUID export requests, privileged snapshots, atomic results, expiry |
+| `ui.py`                                                    | First-boot browser Boot UI and its static images                   |
 
-**Key modules:**
+`POST /api/config` is asynchronous and returns a job URL. The job reports provisioning steps, service deployment and
+status events, the final result, and rollback status.
 
-1. `app.py` wires the Litestar application explicitly
-2. `settings.py` loads environment-backed service settings
-3. `deps.py` provides Litestar dependency providers
-4. `domain/*/controller.py` contains API route handlers grouped by domain
-5. `domain/config/coordinator.py` owns direct-versus-staged submission and admission policy
-6. `domain/config/service.py` exposes the config apply/validate facade
-7. `schemas.py` defines typed API response shapes
-8. `exceptions.py` maps domain errors to API response bodies
-9. `provision.py`, `bundle.py`, `quadlet.py`, and `activation.py` implement the safe apply pipeline
-10. `export_worker.py` handles UUID export requests, privileged snapshots, atomic results, and expiry
-
-`POST /api/config` is asynchronous and returns a job URL. The job endpoint
-reports provisioning steps, service deployment/status events, final result, and
-rollback status.
-
-The `atomixos-provision` CLI also exposes these maintenance commands:
+The `atomixos-provision` CLI also provides these maintenance commands:
 
 | Command                                               | Purpose                                                                  |
 |-------------------------------------------------------|--------------------------------------------------------------------------|
@@ -209,92 +200,66 @@ The `atomixos-provision` CLI also exposes these maintenance commands:
 | `check-health CONFIG_ROOT`                            | Check required provisioned services                                      |
 | `complete-initial CONFIG_ROOT`                        | Finish initial promotion after first-boot checks                         |
 
-Operator-facing bundle export is the authenticated `GET /api/config/export` operation. The internal root-only
-`export-worker` command is invoked by systemd and accepts no config, request-directory, or output-path arguments.
-It delegates to the existing locked exporter and publishes UUID-correlated results; `--finalize` records interrupted
-exports without starting new work. The exported bundle
-contains desired configuration and bundle-managed files. Those files are installed read-only by default, but a trusted
-integrator may deliberately grant a workload write access; later exports then contain the changed bytes. Mutable
-application data should normally live in Podman volumes; use Podman tooling for its backup, restore, or transfer outside
-AtomixOS provisioning ownership.
-
-### ssh-wan-toggle.sh
-
-**Location:** `scripts/ssh-wan-toggle.sh`
-
-Boot-time SSH-on-WAN rule application.
-
-**Logic:** If `/data/config/ssh-wan-enabled` exists, add nftables rule `iifname "wan" tcp dport 22 accept` with
-comment `SSH-WAN-dynamic`.
-
-### ssh-wan-reload.sh
-
-**Location:** `scripts/ssh-wan-reload.sh`
-
-Runtime SSH-on-WAN toggle (remove and re-add rule).
-
-**Logic:** Find and delete existing `SSH-WAN-dynamic` rule by handle, then re-add if flag file exists. Idempotent.
-
----
+Operators export bundles with the authenticated `GET /api/config/export` operation. The root-only `export-worker`
+command is started by systemd and takes no config, request-directory, or output-path arguments; `--finalize` records
+interrupted exports without starting new work. The behavior of exported bundles is described in
+[Privileged bundle export](../provisioning.md#export-a-configuration).
 
 ### run-e2e-check.sh
 
-**Location:** `scripts/run-e2e-check.sh`
-
 Shared launcher for the named E2E tasks. It validates its check and description arguments, selects the host check
-namespace, optionally enters Lima, runs the check or interactive driver, filters known SQLite lock noise, and reports a
-consistent result. Files under `.mise/tasks/e2e/` retain the public task metadata and delegate execution here.
+namespace, optionally enters Lima, runs the check or the interactive driver, filters known SQLite lock noise, and
+reports a consistent result. The files under `.mise/tasks/e2e/` hold the task metadata and delegate here.
 
----
+### Developer scripts
+
+| Script                      | Purpose                                                                                     |
+|-----------------------------|---------------------------------------------------------------------------------------------|
+| `build.sh`                  | `mise run build [--board <board>]`: atomic build that retains the last two builds per board |
+| `nix-with-build-config.sh`  | Adds the local `build.dev.toml` overlay to Nix commands                                     |
+| `enable-docs-deployment.py` | `mise run docs:deployment:enable`: configures GitHub Pages through `gh`                     |
 
 ## mise Task Scripts
 
-These are the `.mise/tasks/` scripts invoked via `mise run`.
+File tasks in `.mise/tasks/`, run with `mise run <task>`. Tasks defined inline in `mise.toml`, including the docs
+tasks, are listed in the [Developer Tooling](../development/tooling.md#tasks).
 
 ### flash
 
-**Location:** `.mise/tasks/flash`
+Flashes an image to a disk (macOS and Linux).
 
-Cross-platform disk flasher (macOS + Linux).
+| Argument             | Description                                                                     |
+|----------------------|---------------------------------------------------------------------------------|
+| `[disk]`             | Target device (for example `/dev/disk4` on macOS, `/dev/sdb` on Linux)          |
+| `-i, --image <path>` | Image file (default `.gcroots/<board>/current/image`)                           |
+| `--board <board>`    | `rock64` or `cm3`; required when several boards are built and no image is given |
+| `-y, --yes`          | Skip the confirmation prompt                                                    |
 
-| Flag        | Description                                |
-|-------------|--------------------------------------------|
-| `<disk>`    | Target device (e.g., `/dev/disk4`)         |
-| `-i <path>` | Image file (auto-detects if not specified) |
-| `-y`        | Skip confirmation                          |
-
-**macOS features:** Converts `/dev/diskN` to `/dev/rdiskN` for unbuffered I/O; refuses to write to boot disk; ejects
-after flash.
+Without `--image` or `--board` it flashes the only board that has a build, and never guesses between boards, because the
+wrong image writes the wrong bootloader. On macOS it writes to `/dev/rdiskN` for unbuffered I/O, refuses to write to
+the boot disk, and ejects the disk when done. On Linux it only writes unused removable or USB whole disks, and checks
+the target again just before `dd`.
 
 ### serial:capture
 
-**Location:** `.mise/tasks/serial/capture`
+Captures the board's serial console (UART2, 1.5 Mbaud) with minicom, resolved through `nix build nixpkgs#minicom`.
 
-Serial console capture wrapper with auto-reconnect.
-
-| Flag   | Default                      | Description       |
-|--------|------------------------------|-------------------|
-| `-p`   | `/dev/cu.usbserial-DM02496T` | Serial device     |
-| `-l`   | `/tmp/rock64-serial.log`     | Log file          |
-| `-t`   | `0` (infinite)               | Capture timeout   |
-| `--bg` | (flag)                       | Run in background |
-
-Launches `scripts/serial-capture.py` in a `nix-shell` with pyserial.
+| Flag                | Default                             | Description                                                          |
+|---------------------|-------------------------------------|----------------------------------------------------------------------|
+| `-p, --port <path>` | Auto-detected `/dev/cu.usbserial-*` | Serial device                                                        |
+| `-l, --log <path>`  | `/tmp/rock64-serial.log`            | Log file                                                             |
+| `--bg`              | Off                                 | Run in the background, replacing any running capture; prints the PID |
 
 ### serial:shell
 
-**Location:** `.mise/tasks/serial/shell`
+Interactive serial console with minicom at 1.5 Mbaud. Takes the same `-p` flag; its `-l` log
+defaults to `/tmp/rock64-serial-<buildid>-<timestamp>.log`.
 
-Interactive serial console via minicom (1.5 Mbaud, no hardware flow control). Uses `nix build nixpkgs#minicom` to
-resolve the minicom binary.
+### config:lan-range
 
-### config/lan-range
-
-**Location:** `.mise/tasks/config/lan-range`
-
-Updates the built-in fallback LAN gateway/DHCP fields in `defaults/lan.json`. Nix, Python, and boot-time shell consumers
-load that contract; runtime LAN changes should use `[network.dnsmasq]` or `[network.interfaces.lan]` in `config.toml`
-instead.
+Updates the built-in fallback LAN gateway and DHCP fields in `defaults/lan.json`, which the Nix modules, Python
+services, and boot-time scripts all read. To change the LAN on a running device, set `[network.dnsmasq]` or
+`[network.interfaces.lan]` in `config.toml` instead.
 
 | Flag             | Default          | Description           |
 |------------------|------------------|-----------------------|
@@ -302,4 +267,7 @@ instead.
 | `--dhcp-start`   | `172.20.30.10`   | DHCP pool start       |
 | `--dhcp-end`     | `172.20.30.254`  | DHCP pool end         |
 
-Modifies: `defaults/lan.json`.
+### e2e:*
+
+One task per E2E check (`e2e:rauc-slots` through `e2e:ssh-wan-toggle`) plus `e2e:debug` for interactive QEMU
+debugging. Each delegates to `scripts/run-e2e-check.sh`.

@@ -1,56 +1,55 @@
 # NTP Settings
 
-AtomixOS uses `chrony` as both an upstream NTP client on WAN and an NTP server for LAN clients. LAN clients receive the
-gateway address through DHCP option 42 and should query the gateway instead of reaching public NTP servers directly.
+The device keeps its own clock in sync with upstream NTP servers over the WAN and serves time to LAN clients. Both roles
+run in `chrony`. LAN clients learn the gateway address as their NTP server from DHCP option 42, so they never need to
+reach a public NTP server themselves.
 
-## Default Upstream
+## Default upstream
 
-The default upstream is Cloudflare public NTP:
+By default the device syncs with Cloudflare's public NTP service:
 
 ```chrony
 server time.cloudflare.com iburst
 ```
 
 Cloudflare is the default because its [NTP usage documentation](https://developers.cloudflare.com/time-services/ntp/usage/)
-explicitly describes using `time.cloudflare.com`, the service is global anycast, and Cloudflare does not leap-smear time.
-That non-smearing behavior matches standard NTP and keeps AtomixOS compatible with typical site-local NTP servers and
-the NTP Pool.
+invites this use, it is served by global anycast, and it does not smear leap seconds. Standard, non-smeared time keeps
+the device compatible with typical site NTP servers and the NTP Pool.
 
-If WAN is unavailable or upstream sync fails, chrony still serves LAN clients from `local stratum 10`. This keeps isolated
-LAN devices moving forward, but the time is only as accurate as the gateway clock until upstream sync returns.
+If the WAN is down or upstream sync fails, chrony keeps serving LAN clients as a `local stratum 10` source. LAN devices
+keep moving forward together, but only as accurately as the gateway's clock until upstream sync returns.
 
-## Leap Smearing Warning
+## Choose your own servers
 
-Some public NTP providers, including Google Public NTP, use leap smearing. A leap smear spreads a leap-second adjustment
-over a window of time instead of exposing the leap second at one instant. That can be useful for large application fleets,
-but during the smear window the smeared clock intentionally differs from standard UTC.
+1. Pick upstream servers that all handle leap seconds the same way (see below). On a network with a reliable,
+   managed site time service, prefer that.
+2. Set them in `config.toml`:
 
-Do not mix leap-smearing and non-leap-smearing NTP sources in the same chrony configuration. Mixing them can make valid
-time sources disagree, especially around leap-second events, and chrony may treat that as jitter or source instability.
+   ```toml
+   [network.ntp]
+   servers = ["ntp1.example.internal", "ntp2.example.internal"]
+   ```
 
-If an operator chooses Google Public NTP, follow Google's
-[configuration guidance](https://developers.google.com/time/guides) and use only Google time sources such as
-`time1.google.com` through `time4.google.com`. Do not combine those sources with Cloudflare, NTP Pool, DHCP-provided NTP,
-or other standard non-smearing servers.
+3. Apply the configuration. The device rewrites its chrony settings during first provisioning, every change, and every
+   rollback.
+4. Check that the device is synchronized:
 
-## Operator Overrides
+   ```sh
+   chronyc sources -v
+   chronyc tracking
+   timedatectl
+   ```
 
-For production networks with an enterprise or site-local time service, prefer the local NTP service when it is reliable
-and managed. Keep all configured upstreams in the same leap-second behavior family: either all standard non-smearing
-sources or all sources from the same smearing provider.
+Upstream DNS settings are separate from NTP. Use `network.dns_servers`, `network.dns_search_domains`, or the
+per-interface DNS settings when the device itself needs specific resolvers. LAN clients still get the gateway address as
+their DNS and NTP server through DHCP options 6 and 42.
 
-Set upstream NTP servers with `[network.ntp].servers` in `config.toml`. The provisioning pipeline renders the values into
-`/data/config/lan-settings.json`, and `lan-gateway-apply.service` updates the chrony runtime snippet during first
-provisioning, re-apply, and rollback.
+## Do not mix leap-smearing sources
 
-Host DNS resolver settings are separate from NTP. Use `network.dns_servers`, `network.dns_search_domains`, or
-interface-specific DNS settings when the host resolver needs explicit DNS configuration; LAN clients still receive the
-gateway address for DNS and NTP via DHCP options 6 and 42.
+Some public NTP providers, including Google Public NTP, smear leap seconds: they spread the one-second adjustment over
+a whole day instead of applying it at once. During that window their clocks deliberately differ from standard UTC.
 
-After applying NTP changes, verify synchronization with:
-
-```sh
-chronyc sources -v
-chronyc tracking
-timedatectl
-```
+If you mix smearing and non-smearing servers, valid sources disagree around a leap second, and chrony may treat them as
+unstable. Keep every configured server in one family: either all standard, non-smearing sources, or all from the same
+smearing provider. To use Google Public NTP, follow Google's [configuration guidance](https://developers.google.com/time/guides)
+and list only `time1.google.com` through `time4.google.com`, with no Cloudflare, NTP Pool, or other standard servers.

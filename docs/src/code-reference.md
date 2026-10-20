@@ -1,8 +1,9 @@
 # Code Reference
 
-This section documents the internal interfaces of AtomixOS: the NixOS modules, Nix derivations, and shell scripts that
-make up the system.
+The internal interfaces of AtomixOS: what each NixOS module, Nix derivation, and script owns, and the options,
+inputs, and units it exposes.
 
-- [NixOS Modules](./code-reference/modules.md) -- the NixOS configuration modules in `modules/`
-- [Nix Derivations](./code-reference/derivations.md) -- the build derivations in `nix/`
-- [Scripts](./code-reference/scripts.md) -- the shell scripts in `scripts/` and `.mise/tasks/`
+- [NixOS Modules](code-reference/modules.md): the configuration modules in `modules/`.
+- [Nix Derivations](code-reference/derivations.md): the artifact derivations in `nix/`.
+- [Scripts](code-reference/scripts.md): the build templates, runtime scripts, and task scripts in `scripts/` and
+  `.mise/tasks/`.

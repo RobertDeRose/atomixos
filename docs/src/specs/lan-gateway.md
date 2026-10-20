@@ -1,156 +1,162 @@
 # LAN Gateway
 
-> Source: `docs/src/features/rock64-ab-image/design.md#lan-gateway`
+Acceptance contract for interface naming, LAN services, isolation, and the firewall. The design is explained in
+[Network Topology](../architecture/network-topology.md).
 
 ## Requirements
 
-### ADDED: Deterministic NIC naming
+### Deterministic NIC naming
 
-The onboard RK3328 GMAC is always named `wan` via a systemd `.link` file matching the platform path
-(`platform-ff540000.ethernet`). USB Ethernet adapters receive kernel-assigned names. USB WiFi dongles are unsupported
-until specific hardware and firmware are selected.
+On hardware, the onboard Ethernet is always named `wan` and the USB Ethernet adapter `lan`, regardless of probe order.
+Wi-Fi is not supported. The per-board `.link` matches are listed in
+[NIC Naming](../architecture/network-topology.md#nic-naming). The QEMU target keeps `wan` and `lan`.
 
 #### Scenario: Onboard Ethernet is wan
 
-- Given the Rock64 boots with the onboard Ethernet connected
+- Given a Rock64 or CM3 boots with onboard Ethernet connected
 - Then `ip link` shows `wan` as the onboard GMAC
 - Regardless of USB device enumeration order
 
-### ADDED: wan as WAN (DHCP client)
+### wan is the WAN DHCP client
 
-The WAN interface acquires its address via DHCP v4. IPv6 RA is disabled. The DHCP-provided DNS servers are used.
+The WAN interface gets its address over DHCPv4 and uses the DHCP-provided DNS servers. IPv6 router advertisements are
+ignored.
 
-#### Scenario: WAN gets DHCP address
+#### Scenario: WAN gets a DHCP address
 
-- Given wan is connected to a network with a DHCP server
+- Given `wan` is connected to a network with a DHCP server
 - When the device boots
-- Then wan acquires an IPv4 address
+- Then `wan` has an IPv4 address
 - And DNS resolution works
 
-### ADDED: lan as LAN (static IP)
+### lan is the LAN with a static address
 
-The LAN interface has a static IP from the provisioned LAN config. `network.dnsmasq.gateway_cidr` and
-`network.interfaces.lan.address` describe the same effective LAN gateway CIDR; if both are present they must match before
-candidate promotion. When no provisioned LAN config exists or it is malformed, the fallback static IP is
-`172.20.30.1/24`. It does not run a DHCP client.
+The LAN interface uses the static address from the provisioned LAN settings and runs no DHCP client.
+`network.dnsmasq.gateway_cidr` and `network.interfaces.lan.address` describe the same LAN gateway CIDR; when both are
+set they must match before the config is promoted. Without valid provisioned LAN settings, the address is
+`172.20.30.1/24`.
 
-#### Scenario: LAN has static IP
+#### Scenario: LAN has its static address
 
 - Given the device has booted
 - And `/data/config/lan-settings.json` contains `gateway_ip`
-- Then `ip addr show lan` shows the configured `gateway_ip` with its provisioned prefix
+- Then `ip addr show lan` shows that `gateway_ip` with its provisioned prefix
 
 #### Scenario: LAN gateway sources must agree
 
 - Given `config.toml` sets `network.dnsmasq.gateway_cidr`
 - And `config.toml` sets `network.interfaces.lan.address`
 - When the values differ
-- Then provisioning validation fails before candidate promotion
+- Then provisioning validation fails before the config is promoted
 
-#### Scenario: LAN uses fallback static IP
+#### Scenario: LAN uses the fallback address
 
 - Given the device has booted
-- And no valid provisioned LAN config is available
+- And no valid provisioned LAN settings exist
 - Then `ip addr show lan` shows `172.20.30.1/24`
 
-### ADDED: IP forwarding disabled
+### IP forwarding is disabled
 
-IP forwarding is disabled at the kernel level for both IPv4 and IPv6. The nftables `FORWARD` chain has a `drop` policy
-with no exceptions. This creates a hard network boundary compliant with EN18031.
+IPv4 and IPv6 forwarding are off in the kernel, and the nftables `forward` chain drops everything. This is the hard
+network boundary that EN18031 requires.
 
 #### Scenario: No packet forwarding
 
-- Given a LAN client sends a packet destined for the internet
-- Then the packet is dropped at the gateway
-- And it never reaches wan
+- Given a LAN client sends a packet addressed to the internet
+- Then the gateway drops it
+- And it never leaves through `wan`
 
-### ADDED: DHCP server on LAN
+### DHCP server on the LAN
 
-dnsmasq runs on lan only. It assigns addresses from the provisioned DHCP range with a 24-hour lease and serves
-gateway-local DNS names without forwarding queries upstream.
+dnsmasq runs on `lan` only. It leases addresses from the provisioned DHCP range for 24 hours and answers DNS only for
+gateway-local names, without forwarding queries upstream.
 
-#### Scenario: LAN client gets DHCP lease
+#### Scenario: LAN client gets a DHCP lease
 
-- Given a client is connected to lan
+- Given a client is connected to `lan`
 - When it sends a DHCP discover
 - Then it receives an address in the provisioned DHCP range
-- And the gateway is the provisioned `gateway_ip`
-- And the DNS server is the provisioned `gateway_ip`
+- And its gateway, DNS server, and NTP server are the provisioned `gateway_ip`
 
-#### Scenario: LAN DNS stays local-only
+#### Scenario: LAN DNS stays local
 
-- Given a client on the LAN queries the gateway DNS server
+- Given a LAN client queries the gateway's DNS server
 - When the query is for a configured gateway-local name
 - Then dnsmasq returns the local gateway address
 - And dnsmasq does not forward unknown names to upstream resolvers
 
-### ADDED: NTP server on LAN
+### NTP server on the LAN
 
-chrony acts as both an NTP client (syncing from Cloudflare public NTP via WAN) and an NTP server for LAN clients. The
-provisioned LAN subnet is allowed to query. When no valid provisioned LAN config exists, the fallback subnet is
-`172.20.30.0/24`.
+chrony syncs from the provisioned `ntp_servers` over WAN (`time.cloudflare.com` by default) and serves time to the
+provisioned LAN subnet only. Without valid provisioned LAN settings, it serves `172.20.30.0/24`.
 
 #### Scenario: LAN client syncs time
 
-- Given a client on the LAN queries NTP at the provisioned `gateway_ip`
+- Given a LAN client queries NTP at the provisioned `gateway_ip`
 - Then it receives a valid time response
-- And chrony is synced to an upstream NTP pool
+- And chrony is synced to an upstream server
 
 #### Scenario: Offline fallback
 
 - Given the device has no WAN connectivity
-- Then chrony uses `local stratum 10` as a fallback
-- And LAN clients still receive time (lower accuracy)
+- Then chrony falls back to `local stratum 10`
+- And LAN clients still receive time, at lower accuracy
 
-### ADDED: nftables firewall
+### nftables firewall
 
-The firewall uses nftables with per-interface rules:
+The `input` chain drops by default and accepts loopback and established or related traffic on every interface.
 
-| Interface  | Allowed Inbound                                                           |
-|------------|---------------------------------------------------------------------------|
-| wan (WAN)  | established/related; provisioned inbound only                             |
-| lan (LAN)  | UDP 53, UDP 67-68, UDP 123, TCP 22, TCP 53, TCP 8080, established/related |
-| tun0 (VPN) | TCP 22, established/related                                               |
-| FORWARD    | DROP all                                                                  |
+| Interface  | Allowed inbound                                                                                                |
+|------------|----------------------------------------------------------------------------------------------------------------|
+| wan (WAN)  | Provisioned `wan` ports; TCP 22 when SSH on WAN is enabled; TCP 8080 before provisioning (`network` transport) |
+| lan (LAN)  | Everything by default; with provisioned `lan` ports, only those plus TCP 22, 53, 8080 and UDP 53, 67, 68, 123  |
+| tun0 (VPN) | TCP 22                                                                                                         |
+| forward    | Nothing                                                                                                        |
 
-WAN application and VPN ports are opened only from `/data/config/firewall-inbound.json` by
-`provisioned-firewall-inbound.service`. SSH on WAN is controlled by a dynamic nftables rule toggled via
-`/data/config/ssh-wan-enabled`. Provisioned `lan` ports are appended to the platform-required LAN ports instead of
-replacing them.
+`provisioned-firewall-inbound.service` applies `/data/config/firewall-inbound.json`. The dynamic SSH-on-WAN rule follows
+`/data/config/ssh-wan-enabled`. With the `nixstasis` bootstrap transport, WAN TCP 8080 is never opened.
 
 #### Scenario: WAN ports are closed before provisioning
 
 - Given no provisioned firewall state exists
-- When a connection is attempted to wan on TCP 443 or UDP 1194
+- When a connection is attempted to `wan` on TCP 443 or UDP 1194
 - Then the packet is dropped
 
 #### Scenario: Provisioned WAN ports are allowed
 
-- Given `/data/config/firewall-inbound.json` includes TCP 443 and UDP 1194
+- Given `/data/config/firewall-inbound.json` lists TCP 443 and UDP 1194 under `wan`
 - And `provisioned-firewall-inbound.service` has applied it
-- Then inbound traffic on wan TCP 443 and UDP 1194 is accepted
+- Then inbound traffic on `wan` TCP 443 and UDP 1194 is accepted
+
+#### Scenario: Provisioned LAN ports restrict the LAN
+
+- Given `/data/config/firewall-inbound.json` lists TCP 443 under `lan`
+- And `provisioned-firewall-inbound.service` has applied it
+- Then `lan` accepts TCP 443 and the platform-required LAN ports
+- And other inbound LAN traffic is dropped
 
 #### Scenario: WAN SSH blocked by default
 
-- Given no flag file exists at `/data/config/ssh-wan-enabled`
+- Given `/data/config/ssh-wan-enabled` does not exist
 - When an SSH connection is attempted from the WAN
-- Then the connection is rejected
+- Then the packet is dropped
 
-#### Scenario: WAN SSH enabled with flag
+#### Scenario: WAN SSH enabled with the flag
 
 - Given `/data/config/ssh-wan-enabled` is created
-- And `ssh-wan-reload.service` is triggered
+- And `ssh-wan-reload.service` runs
 - Then SSH connections from the WAN are accepted
 
-### ADDED: WAN SSH toggle is manual only
+### WAN SSH toggle is manual only
 
-Enabling SSH on WAN requires creating a flag file on the device (via LAN SSH or physical console). There is no automated
-mechanism to enable it remotely -- this is a deliberate security constraint.
+Enabling SSH on WAN requires creating the flag file on the device, from the LAN or the physical console. Nothing enables
+it remotely; this is a deliberate security constraint.
 
-### ADDED: Device identity via MAC address
+### Device identity comes from the wan MAC
 
-The device is identified by the MAC address of wan (the onboard Ethernet). This MAC is stable across reboots and
-updates, and is used as the `X-Device-ID` header when polling for updates.
+The device is identified by the MAC address of `wan`, the onboard Ethernet. It is stable across reboots and updates
+and is sent as the `X-Device-ID` header when polling for updates; when the `wan` address cannot be read, the header is
+`unknown`.
 
 #### Scenario: MAC-based identity
 

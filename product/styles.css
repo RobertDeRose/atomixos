@@ -1,0 +1,875 @@
+/*
+ * AtomixOS product page: a field of free electrons that drift as you scroll (field.js), the original logo in the hero,
+ * and a periodic table of AtomixOS features grouped into color-coded families. Colors come from the atom logo.
+ * site:build copies the font files into fonts/ from the docs' npm packages.
+ */
+
+@font-face {
+  font-family: 'Exo 2';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('fonts/exo-2-latin-wght-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Atkinson Hyperlegible Next';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 800;
+  src: url('fonts/atkinson-hyperlegible-next-latin-wght-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Atkinson Hyperlegible Mono';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 800;
+  src: url('fonts/atkinson-hyperlegible-mono-latin-wght-normal.woff2') format('woff2');
+}
+
+:root {
+  --font-display: 'Exo 2', system-ui, sans-serif;
+  --font-body: 'Atkinson Hyperlegible Next', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Atkinson Hyperlegible Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --paper: #f3f6fb;
+  --surface: #e6eefa;
+  --ink: #13233f;
+  --ink-muted: #3f5373;
+  --electron: #1c64d1;
+  /* Text-sized blue is one shade darker than the fill blue, for 6:1 contrast on the paper. */
+  --electron-text: #195abc;
+  --on-electron: #ffffff;
+  --silver: #c3cfdf;
+  --hatch: rgba(28, 100, 209, 0.07);
+  /* Electron field colors (r, g, b) and strength, read by field.js. */
+  --electron-rgb: 28, 100, 209;
+  --electron-core-rgb: 255, 255, 255;
+  --electron-glow: 0.7;
+  --glow: rgba(58, 157, 240, 0.14);
+  --line: rgba(19, 35, 63, 0.16);
+
+  /* Element families. Filled tiles put --on-family text on the family color at 4.9:1 or better. */
+  --family-build: #4f46e5;
+  --family-provision: #0e7c86;
+  --family-run: #7c3aed;
+  --family-update: #1c64d1;
+  --family-network: #b45309;
+  --family-fleet: #be185d;
+  --on-family: #ffffff;
+
+  color-scheme: light;
+}
+
+[data-theme='dark'] {
+  --paper: #07122a;
+  --surface: #0f2042;
+  --ink: #dde8f7;
+  --ink-muted: #b4c5dd;
+  --electron: #6cb4ff;
+  --electron-text: #6cb4ff;
+  --on-electron: #07122a;
+  --silver: #3b4d6b;
+  --hatch: rgba(108, 180, 255, 0.07);
+  --electron-rgb: 108, 180, 255;
+  --electron-core-rgb: 235, 247, 255;
+  --electron-glow: 0.85;
+  --glow: rgba(58, 157, 240, 0.16);
+  --line: rgba(221, 232, 247, 0.16);
+
+  --family-build: #a5b4fc;
+  --family-provision: #5eead4;
+  --family-run: #c4b5fd;
+  --family-update: #6cb4ff;
+  --family-network: #fbbf24;
+  --family-fleet: #f9a8d4;
+  --on-family: #07122a;
+
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: var(--paper);
+  background-image: radial-gradient(70rem 45rem at 15% -10%, var(--glow), transparent 70%);
+  background-repeat: no-repeat;
+  color: var(--ink);
+  font: 400 1.125rem/1.6 var(--font-body);
+}
+
+/* The electron field sits behind everything and never takes input. */
+.field {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+a {
+  color: var(--electron-text);
+  text-underline-offset: 0.18em;
+}
+
+:focus-visible {
+  outline: 3px solid var(--electron);
+  outline-offset: 3px;
+}
+
+code,
+pre {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+:not(pre) > code {
+  padding: 0.05em 0.3em;
+  border-radius: 4px;
+  background: var(--surface);
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  line-height: 1.15;
+  text-wrap: balance;
+}
+
+h2 {
+  margin: 0 0 0.75rem;
+  font-size: clamp(1.6rem, 3.6vw, 2.25rem);
+  font-weight: 700;
+}
+
+h3 {
+  margin: 0 0 0.35rem;
+  font-size: 1.3rem;
+  font-weight: 650;
+}
+
+.skip-link {
+  position: absolute;
+  top: -100px;
+  left: 1rem;
+  padding: 0.5rem 1rem;
+  background: var(--electron);
+  color: var(--on-electron);
+}
+
+.skip-link:focus {
+  top: 1rem;
+}
+
+/* Header */
+.site-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 1.25rem 1.5rem;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--ink);
+  font: 700 1.35rem var(--font-display);
+  text-decoration: none;
+}
+
+.site-nav {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.site-nav a {
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.site-nav a:hover {
+  color: var(--electron-text);
+}
+
+.theme-toggle {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.theme-icon--sun,
+[data-theme='dark'] .theme-icon--moon {
+  display: none;
+}
+
+[data-theme='dark'] .theme-icon--sun {
+  display: block;
+}
+
+/* Sections share one column width; long text stays under about 70 characters. */
+main > section {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: clamp(2.5rem, 6vw, 4.5rem) 1.5rem;
+}
+
+.section-lede {
+  max-width: 40rem;
+  margin: 0 0 1.5rem;
+  color: var(--ink-muted);
+}
+
+/* Hero: the original logo beside the headline. */
+.hero {
+  display: grid;
+  grid-template-columns: minmax(16rem, 26rem) 1fr;
+  align-items: center;
+  gap: clamp(2rem, 6vw, 5rem);
+}
+
+/* One sentence per line. */
+.hero h1 span {
+  display: block;
+  text-wrap: balance;
+}
+
+.hero__logo {
+  width: 100%;
+  height: auto;
+}
+
+.hero h1 {
+  max-width: 40rem;
+  margin: 0 0 1.25rem;
+  font-size: clamp(1.75rem, 3.3vw, 2.5rem);
+  font-weight: 700;
+}
+
+.lede {
+  max-width: 36rem;
+  margin: 0 0 2rem;
+  color: var(--ink-muted);
+  font-size: 1.25rem;
+}
+
+/* The element tile introduces the slot layout. */
+.disk__intro {
+  display: grid;
+  grid-template-columns: 13rem 1fr;
+  align-items: center;
+  gap: clamp(1.5rem, 4vw, 3rem);
+  margin-bottom: 2rem;
+}
+
+.disk__intro .section-lede {
+  margin-bottom: 0;
+}
+
+.element {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto 1fr auto auto;
+  aspect-ratio: 1;
+  margin: 0;
+  padding: 1rem 1.15rem 1.1rem;
+  border: 3px solid var(--electron);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 10px 10px 0 var(--silver);
+  font-family: var(--font-display);
+}
+
+.element__corner {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+}
+
+.element__corner b {
+  font-size: 1.75rem;
+  font-weight: 700;
+}
+
+.element__corner span {
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+}
+
+.element__corner--end {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.element__symbol {
+  grid-column: 1 / -1;
+  align-self: center;
+  margin: 0;
+  color: var(--electron-text);
+  font-size: clamp(4rem, 8vw, 5.25rem);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.element__name {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 600;
+}
+
+.element__mass {
+  grid-column: 1 / -1;
+  color: var(--ink-muted);
+  font-size: 0.95rem;
+}
+
+.element__mass b {
+  color: var(--ink);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.button {
+  display: inline-block;
+  padding: 0.7rem 1.3rem;
+  border: 2px solid var(--electron);
+  border-radius: 6px;
+  color: var(--electron-text);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.button--primary {
+  background: var(--electron);
+  color: var(--on-electron);
+}
+
+.button:hover {
+  background: var(--surface);
+}
+
+.button--primary:hover {
+  background: var(--electron-text);
+  color: var(--on-electron);
+}
+
+/* Partition strip: segment widths are schematic, not proportional. */
+.strip {
+  margin: 0;
+}
+
+.strip__parts {
+  display: flex;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.part {
+  display: flex;
+  flex: 1.1 1 0;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-width: 0;
+  min-height: 7rem;
+  padding: 0.7rem 0.75rem;
+  border: 2px solid var(--electron);
+  border-radius: 6px;
+  background: var(--paper);
+}
+
+.part b {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+}
+
+.part span {
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+  line-height: 1.3;
+}
+
+.part--raw {
+  flex-grow: 0.8;
+  border-style: dashed;
+  border-color: var(--ink-muted);
+}
+
+.part--root {
+  flex-grow: 2;
+}
+
+.part--active {
+  background: var(--electron);
+  color: var(--on-electron);
+}
+
+.part--active span {
+  color: var(--on-electron);
+}
+
+.part--data {
+  flex-grow: 3;
+  background-image: repeating-linear-gradient(-45deg, var(--hatch) 0 6px, transparent 6px 12px);
+}
+
+.strip figcaption {
+  margin-top: 0.75rem;
+  color: var(--ink-muted);
+  font-size: 0.95rem;
+}
+
+/* Update sequence: three steps forward, then the fallback branch. */
+.steps {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.5rem;
+  margin: 1.5rem 0 0;
+  padding: 0;
+  counter-reset: step;
+  list-style: none;
+}
+
+.steps li {
+  padding-top: 1rem;
+  border-top: 4px solid var(--electron);
+  counter-increment: step;
+}
+
+.steps li::before {
+  content: counter(step);
+  display: block;
+  margin-bottom: 0.5rem;
+  color: var(--electron-text);
+  font: 800 1.5rem var(--font-display);
+}
+
+.steps li:last-child {
+  border-top-style: dashed;
+  border-top-color: var(--ink-muted);
+}
+
+.steps p {
+  margin: 0;
+  color: var(--ink-muted);
+}
+
+/* Boards */
+.boards table {
+  width: 100%;
+  max-width: 44rem;
+  margin-bottom: 1rem;
+  border-collapse: collapse;
+}
+
+.boards th,
+.boards td {
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+
+/* The open row reads as an empty slot waiting for the next board. */
+.boards__add td {
+  border-bottom-style: dashed;
+  white-space: nowrap;
+  color: var(--ink-muted);
+  font-weight: 600;
+}
+
+.boards th {
+  font-family: var(--font-display);
+  font-weight: 650;
+}
+
+.site-footer p {
+  margin: 0;
+}
+
+.site-footer__copyright {
+  color: var(--ink-muted);
+  font-size: 0.95rem;
+}
+
+/* Copyright on the left, credit on the right; they stack on narrow screens. */
+.site-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 2rem;
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 3rem;
+  border-top: 1px solid var(--line);
+}
+
+/* Periodic table: one column per family, like the groups of a real table. */
+.family--build { --family: var(--family-build); }
+.family--provision { --family: var(--family-provision); }
+.family--run { --family: var(--family-run); }
+.family--update { --family: var(--family-update); }
+.family--network { --family: var(--family-network); }
+.family--fleet { --family: var(--family-fleet); }
+
+.elements__layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(17rem, 21rem);
+  align-items: start;
+  gap: clamp(1.5rem, 4vw, 3rem);
+}
+
+.ptable {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  align-items: start;
+  gap: 0.5rem;
+}
+
+.family__name {
+  margin: 0 0 0.5rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 3px solid var(--family);
+  font-size: 0.95rem;
+  font-weight: 650;
+}
+
+.family__elements {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.el {
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+  width: 100%;
+  min-height: 6.25rem;
+  aspect-ratio: 1;
+  padding: 0.4rem 0.55rem 0.5rem;
+  border: 2px solid var(--family);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--family) 12%, var(--paper));
+  color: var(--ink);
+  font-family: var(--font-display);
+  text-align: left;
+  cursor: pointer;
+}
+
+.el:hover {
+  background: color-mix(in srgb, var(--family) 24%, var(--paper));
+}
+
+.el[aria-pressed='true'] {
+  background: var(--family);
+  color: var(--on-family);
+}
+
+.el__num {
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.el__sym {
+  align-self: center;
+  font-size: clamp(1.7rem, 2.6vw, 2.3rem);
+  font-weight: 750;
+  line-height: 1;
+}
+
+.el__name {
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.el__mass {
+  margin-top: 0.15rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  opacity: 0.85;
+}
+
+/* Element card: the picked element, enlarged, with its note. */
+.element-card {
+  position: sticky;
+  top: 1.5rem;
+}
+
+.element-card--build { --family: var(--family-build); }
+.element-card--provision { --family: var(--family-provision); }
+.element-card--run { --family: var(--family-run); }
+.element-card--update { --family: var(--family-update); }
+.element-card--network { --family: var(--family-network); }
+.element-card--fleet { --family: var(--family-fleet); }
+
+.element-card__tile {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  width: 12rem;
+  aspect-ratio: 1;
+  margin-bottom: 1.25rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  background: var(--family);
+  box-shadow: 8px 8px 0 var(--silver);
+  color: var(--on-family);
+  font-family: var(--font-display);
+}
+
+.element-card__num {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.element-card__sym {
+  align-self: center;
+  font-size: 5rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.element-card__mass {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+
+.element-card__family {
+  margin: 0;
+  color: var(--ink-muted);
+  font-weight: 600;
+}
+
+.element-card__name {
+  margin: 0.1rem 0 0.5rem;
+  font-size: 1.9rem;
+}
+
+.element-card__text {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+/* Without JavaScript, every note is listed instead of the card. */
+.notes[hidden] {
+  display: none;
+}
+
+.notes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+  gap: 1rem 2rem;
+  margin: 2rem 0 0;
+}
+
+.note {
+  padding-left: 0.75rem;
+  border-left: 4px solid var(--family);
+}
+
+.note--build { --family: var(--family-build); }
+.note--provision { --family: var(--family-provision); }
+.note--run { --family: var(--family-run); }
+.note--update { --family: var(--family-update); }
+.note--network { --family: var(--family-network); }
+.note--fleet { --family: var(--family-fleet); }
+
+.note dt {
+  font: 650 1.05rem var(--font-display);
+}
+
+.note dd {
+  margin: 0;
+  color: var(--ink-muted);
+}
+
+/* Bare board to fleet: the journey beside a real config.toml. */
+.fleet__layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  align-items: start;
+  gap: clamp(1.5rem, 4vw, 3rem);
+  margin: 1.5rem 0;
+}
+
+.journey {
+  margin: 0;
+  padding: 0;
+  counter-reset: journey;
+  list-style: none;
+}
+
+.journey li {
+  position: relative;
+  padding: 0 0 1.25rem 3rem;
+  counter-increment: journey;
+}
+
+.journey li::before {
+  content: counter(journey);
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  place-items: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  border: 2px solid var(--electron);
+  border-radius: 6px;
+  color: var(--electron-text);
+  font: 750 1rem var(--font-display);
+}
+
+.journey h3 {
+  margin: 0 0 0.2rem;
+  font-size: 1.15rem;
+}
+
+.journey p {
+  margin: 0;
+  color: var(--ink-muted);
+}
+
+.config {
+  margin: 0;
+  overflow: hidden;
+  border: 2px solid var(--electron);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.config figcaption {
+  padding: 0.45rem 1rem;
+  background: var(--electron);
+  color: var(--on-electron);
+  font: 600 0.9rem var(--font-mono);
+}
+
+.config pre {
+  margin: 0;
+  padding: 1rem;
+  overflow-x: auto;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 860px) {
+  .hero,
+  .disk__intro {
+    grid-template-columns: 1fr;
+  }
+
+  .hero__logo {
+    width: min(100%, 20rem);
+  }
+
+
+  .element {
+    width: min(100%, 14rem);
+  }
+
+  .steps {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .elements__layout,
+  .fleet__layout {
+    grid-template-columns: 1fr;
+  }
+
+  /* The card sits above the table so a pick is visible without scrolling. */
+  .element-card {
+    position: static;
+    order: -1;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    column-gap: 1.25rem;
+  }
+
+  .element-card[hidden] {
+    display: none;
+  }
+
+  .element-card__tile {
+    grid-row: span 4;
+    width: 7rem;
+  }
+
+  .element-card__sym {
+    font-size: 2.8rem;
+  }
+
+  .ptable {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .family__elements {
+    grid-template-columns: repeat(auto-fill, minmax(5rem, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .site-nav {
+    gap: 0.9rem;
+  }
+
+  .strip__parts {
+    flex-direction: column;
+  }
+
+  .part {
+    flex: none;
+    min-height: 0;
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .steps {
+    grid-template-columns: 1fr;
+  }
+
+  .element-card {
+    grid-template-columns: 1fr;
+  }
+
+  .element-card__tile {
+    grid-row: auto;
+  }
+}

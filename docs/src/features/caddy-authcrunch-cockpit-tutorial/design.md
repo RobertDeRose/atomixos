@@ -60,8 +60,8 @@ are high privilege and must stay limited to the admin container. AuthCrunch synt
 
 ## Documentation Impact
 
-Update `docs/src/tutorials/oidc-device-management.md`, `docs/src/SUMMARY.md`, and the example bundle. Create
-`docs/src/features/caddy-authcrunch-cockpit-tutorial/index.md` during close-out.
+Update `docs/src/tutorials/oidc-device-management.md`, the docs navigation in `docs/sidebars.ts`, and the example
+bundle. Create `docs/src/features/caddy-authcrunch-cockpit-tutorial/index.md` as the implemented record.
 
 ## Validation Strategy
 
@@ -438,8 +438,7 @@ Existing capabilities used by the tutorial:
 
 ## Affected Documentation
 
-- `docs/src/SUMMARY.md` -- add tutorial entry under new Tutorials section
-- `docs/src/planned-features.md` -- update status to `in-progress`
+- `docs/sidebars.ts` -- add the tutorial page to the docs navigation
 - New: `docs/src/features/caddy-authcrunch-cockpit-tutorial/design.md` (this file)
 - Beads root `atomixos-b45` for executable task and validation history
 - New: tutorial page under `docs/src/tutorials/`

@@ -1,15 +1,20 @@
 # Testing
 
-The core `mise run e2e` task runs 9 NixOS VM integration tests that validate the RAUC update lifecycle, network
-security, and rollback behavior. Additional provisioning, management-client, and forensics checks are also available
-directly under the flake `checks.*` outputs. Tests run on both Linux (TCG software emulation) and macOS (Apple
-Virtualization Framework).
+AtomixOS is tested at three levels:
 
-Every individual task is a thin wrapper over `scripts/run-e2e-check.sh`. The helper validates the check name and
-description, selects the host architecture, enters Lima when requested, invokes Nix, filters the known SQLite
-contention noise, and reports the result consistently. The interactive debug task uses the same launcher.
+- **Provisioning package tests** run the Python provisioning service with pytest on the host.
+- **NixOS VM tests** boot the full OS in QEMU and check updates, rollback, provisioning, networking, and logging. The
+  `mise run e2e` task runs the nine core tests; the rest are flake `checks.*` outputs you build directly.
+- **Hardware tests** run on a physical Rock64; see [Hardware Testing](hardware-testing.md).
 
-## Running Tests
+VM tests run on Linux (TCG software emulation) and on macOS (Apple Virtualization Framework, through the nix-darwin
+`linux-builder`).
+
+Each `e2e:*` task is a thin wrapper over `scripts/run-e2e-check.sh`. The helper validates the check name, selects the
+host architecture, enters Lima when asked, runs Nix, filters known SQLite contention noise, and reports the result the
+same way for every test. The interactive debug task uses the same launcher.
+
+## Run the tests
 
 ### Provisioning package
 
@@ -22,9 +27,8 @@ ruff check .
 The `dev` extra holds only test dependencies. Ruff comes from the mise toolchain, which pins its version, and
 `mise run check` runs it through hk together with the rest of the repository lint steps.
 
-These tests cover the Litestar API, SSH-signature auth helpers, config parsing,
-bundle import, Quadlet rendering/sync, activation, job tracking, and service
-foundation modules.
+These tests cover the Litestar API, SSH-signature authentication, config parsing, bundle import, Quadlet rendering and
+sync, activation, job tracking, and the service foundation modules.
 
 ### All tests
 
@@ -55,22 +59,10 @@ mise run e2e:rauc-slots --lima
 
 ### Additional flake checks
 
+Build any other check by name for your host's system, `aarch64-linux` or `aarch64-darwin`:
+
 ```sh
 nix build .#checks.aarch64-darwin.nixstasis-client --no-link
-nix build .#checks.aarch64-linux.nixstasis-client --no-link
-nix build .#checks.aarch64-darwin.fleet-bootstrap --no-link
-nix build .#checks.aarch64-linux.fleet-bootstrap --no-link
-nix build .#checks.aarch64-darwin.watchdog-module --no-link
-nix build .#checks.aarch64-linux.watchdog-module --no-link
-nix build .#checks.aarch64-darwin.build-configuration --no-link
-nix build .#checks.aarch64-linux.build-configuration --no-link
-nix build .#checks.aarch64-darwin.build-config-workflow --no-link
-nix build .#checks.aarch64-linux.build-config-workflow --no-link
-nix build .#checks.aarch64-darwin.e2e-launcher --no-link
-nix build .#checks.aarch64-linux.e2e-launcher --no-link
-nix build .#checks.aarch64-darwin.watchdog-missing-device --no-link
-nix build .#checks.aarch64-linux.watchdog-missing-device --no-link
-nix build .#checks.aarch64-darwin.kernel-security --no-link
 nix build .#checks.aarch64-linux.kernel-security --no-link
 
 # Provisioning checks on the Linux target
@@ -79,24 +71,20 @@ NIX_CONFIG='max-jobs = 1' ./scripts/nix-with-build-config.sh build --no-link --p
   .#checks.aarch64-linux.first-boot-source-discovery
 ```
 
-The `nixstasis-client` VM check boots AtomixOS with a mock Nixstasis API. It
-validates registration, `/data/nixstasis` identity reuse across a registration
-service restart, heartbeat polling, a successful mock FRP transient unit, and
-that stopping the mock API does not stop local recovery targets.
+The `nixstasis-client` VM check boots AtomixOS against a mock Nixstasis API. It checks registration, reuse of the
+`/data/nixstasis` identity across a restart of the registration service, heartbeat polling, a successful mock FRP
+transient unit, and that stopping the mock API does not stop local recovery targets.
 
-The `fleet-bootstrap` VM check uses the released Nixstasis client route-profile
-capability with a mock approval/heartbeat API. It verifies the fleet image's
-loopback-only `127.0.0.1:8080` socket, server selection of the named
-`atomixos-bootstrap` profile, the plain-HTTP route and `Host: localhost` rewrite,
-FRP token withdrawal, and the absence of the token from rendered configuration,
-systemd environment output, and journal logs. The test covers the local
-transport/launch boundary; the Nixstasis server-side bundle delivery action and
-public FRPS/Caddy path remain external integration responsibilities.
+The `fleet-bootstrap` VM check uses the Nixstasis client's route-profile support with a mock approval and heartbeat API.
+It checks the fleet image's loopback-only `127.0.0.1:8080` socket, server selection of the named `atomixos-bootstrap`
+profile, the plain-HTTP route and `Host: localhost` rewrite, FRP token withdrawal, and that the token never appears in
+rendered configuration, systemd environment output, or the journal. It covers the device side only; the Nixstasis
+server's bundle delivery and the public FRPS and Caddy path are outside this check.
 
-The `watchdog-module` check verifies hardware watchdog enforcement remains off
-by default and renders the configured systemd manager watchdog settings only when
-explicitly enabled. The `watchdog-missing-device` VM check enables that policy without exposing a watchdog device,
-then verifies boot continues, RAUC state is unchanged, and an actionable warning reports unavailable enforcement.
+The `watchdog-module` check verifies that hardware watchdog enforcement is off by default and that the systemd manager
+watchdog settings are rendered only when enforcement is enabled. The `watchdog-missing-device` VM check enables
+enforcement without exposing a watchdog device, then verifies that boot continues, RAUC state is unchanged, and an
+actionable warning reports that enforcement is unavailable.
 
 The `kernel-security` VM check verifies the stripped kernel exposes the BPF LSM and BTF required by systemd filesystem
 sandboxing. It also rejects unsupported-BPF, MTD-probe, boot-storage, and hung-task-sysctl startup diagnostics, and
@@ -118,7 +106,7 @@ results, acknowledgement cleanup, and rejection of symlinks and hard links. Pack
 correlation, bounded admission, timeouts, cancellation, interrupted-worker finalization, expiry, atomic output,
 malformed requests, bounded snapshot reads, and JSON error responses.
 
-## Test Descriptions
+## Test descriptions
 
 | Test                | Nodes | What it validates                                                                                         |
 |---------------------|-------|-----------------------------------------------------------------------------------------------------------|
@@ -132,7 +120,7 @@ malformed requests, bounded snapshot reads, and JSON error responses.
 | `network-isolation` | 2     | LAN node gets DHCP lease and NTP, cannot reach WAN addresses                                              |
 | `ssh-wan-toggle`    | 1     | SSH on WAN blocked by default; enabled when flag file created; disabled when removed                      |
 
-Additional flake-only checks:
+Flake-only checks:
 
 | Test                          | Nodes | What it validates                                                                                                  |
 |-------------------------------|-------|--------------------------------------------------------------------------------------------------------------------|
@@ -158,44 +146,34 @@ Additional flake-only checks:
 | `forensics-rsyslog-path`      | 1     | Buffered rsyslog output is written to persistent `/data/logs`                                                      |
 | `forensics-rsyslog-buffering` | 1     | Rsyslog batches writes instead of synchronously writing every message                                              |
 | `forensics-shutdown-flush`    | 1     | The logging shutdown-flush service persists buffered log output                                                    |
+| `chrony-wan-recovery`         | 1     | Chrony and its wait-sync probe behave correctly while WAN time sources are offline                                 |
+| `nixstasis-module`            | 0     | Nixstasis client module renders its configuration and registration service                                         |
+| `boot-script`                 | 0     | The U-Boot script derives the rootfs partition from the selected boot slot (Linux only)                            |
+| `lan-defaults`                | 0     | Shipped LAN defaults reach the networkd, dnsmasq, and chrony configuration                                         |
+| `partition-layout`            | 0     | Repart partition sizes and labels match the shared partition layout                                                |
+| `e2e-launcher`                | 0     | The `scripts/run-e2e-check.sh` launcher used by the `e2e:*` tasks                                                  |
 
-## Platform Performance
+## Platform performance
 
-The mise task wrappers auto-detect the platform and select the correct flake output.
+The `e2e:*` tasks detect the host platform and pick the matching flake output. VM tests run several times faster on
+macOS with Apple virtualization than under TCG emulation on Linux or in Lima. `rauc-confirm` gains the least, because
+most of its runtime is the fixed 60-second sustained health check.
 
-| Test                | macOS (apple-virt) | Linux (TCG, Lima) | Speedup   |
-|---------------------|--------------------|-------------------|-----------|
-| `rauc-slots`        | 34s                | 132s              | 3.9x      |
-| `rauc-update`       | 25s                | 137s              | 5.5x      |
-| `rauc-rollback`     | 22s                | 120s              | 5.5x      |
-| `rauc-confirm`      | 95s                | 171s              | 1.8x      |
-| `rauc-power-loss`   | 46s                | 184s              | 4.0x      |
-| `rauc-watchdog`     | 57s                | 315s              | 5.5x      |
-| `firewall`          | 65s                | 205s              | 3.2x      |
-| `network-isolation` | 68s                | --                | --        |
-| `ssh-wan-toggle`    | 35s                | --                | --        |
-| **Total**           | **~7.5 min**       | **~21 min**       | **~3.7x** |
+## Interactive debugging
 
-The `rauc-confirm` test has the smallest speedup because most of its runtime is a fixed 60-second sustained health check
-timer.
+### Bundle test VM
 
-## Interactive Debugging
-
-### Bundle Test VM
-
-Use `vm:bundle-test` to boot an interactive AtomixOS VM for exercising real
-`config.toml` bundles without physical hardware:
+Use `vm:bundle-test` to boot an interactive AtomixOS VM and try real `config.toml` bundles without hardware:
 
 ```sh
 mise run vm:bundle-test
 ```
 
-Each launch uses a fresh temporary VM disk image. The VM runner is still built
-through Nix and reused from the store when inputs have not changed, but runtime
-state from previous bundle tests is discarded when the VM exits.
+Each launch uses a fresh temporary disk image, so state from earlier runs is discarded when the VM exits. The VM runner
+itself is built through Nix and reused from the store while its inputs are unchanged.
 
-The VM uses the QEMU hardware profile with `eth0` as WAN and a second virtio NIC
-as LAN. Host ports are forwarded for common operator workflows:
+The VM uses the QEMU hardware profile, where the first virtio NIC (`eth0`) is WAN and the second (`eth1`) is LAN.
+These host ports are forwarded:
 
 | Host URL/Port                  | Guest service                  |
 |--------------------------------|--------------------------------|
@@ -219,16 +197,14 @@ curl -H 'x-config-filename: config.tar.zst' \
   http://127.0.0.1:8080/api/config
 ```
 
-For domain-based Caddy examples, map the example domain to localhost while
-testing from the host:
+For domain-based Caddy examples, map the example domain to localhost when testing from the host:
 
 ```sh
 curl -k --resolve gateway.example.com:8443:127.0.0.1 \
   https://gateway.example.com:8443/cockpit/
 ```
 
-For browser testing, add a local hosts entry and include the forwarded HTTPS
-port in the URL:
+For browser testing, add a local hosts entry and include the forwarded HTTPS port in the URL:
 
 ```text
 127.0.0.1 gateway.example.com
@@ -236,15 +212,15 @@ port in the URL:
 
 Then browse to `https://gateway.example.com:8443/`.
 
-The Cockpit container generates both the real device origin and the VM forwarded
-HTTPS origin from `GATEWAY_DOMAIN` because Cockpit accepts space-separated
-origins.
+The Cockpit container derives both the real device origin and the VM's forwarded HTTPS origin from `GATEWAY_DOMAIN`,
+because Cockpit accepts space-separated origins.
 
-SSH is key-only and uses the provisioned `/data/config/ssh-authorized-keys`
-state. On a fresh VM, use the serial console or apply a bundle containing an
-admin key before expecting `ssh -p 10022 admin@127.0.0.1` to succeed.
+SSH is key-only and uses the provisioned `/data/config/ssh-authorized-keys`. On a fresh VM, use the serial console, or
+apply a bundle that contains an admin key, before expecting `ssh -p 10022 admin@127.0.0.1` to work.
 
-Launch an interactive QEMU VM with a Python REPL:
+### Test REPL
+
+`e2e:debug` launches an interactive QEMU VM for one of the core tests, with a Python REPL:
 
 ```sh
 # Debug the default test (rauc-slots)
@@ -273,7 +249,7 @@ gateway.screenshot("name")              # save a screenshot
 # Ctrl+D to exit
 ```
 
-## Running Tests with Nix Directly
+## Run tests with Nix directly
 
 ```sh
 # Linux (TCG, no KVM required)
@@ -287,15 +263,14 @@ nix build .#checks.aarch64-darwin.rauc-slots --no-link -L
 nix build "path:$PWD#checks.aarch64-darwin.rauc-slots" --no-link -L
 ```
 
-When iterating on a single Darwin check locally, evaluate and build the exact
-derivation with the same `path:` flake ref:
+When iterating on a single Darwin check, evaluate and build the exact derivation with the same `path:` flake ref:
 
 ```sh
 drv=$(nix eval --raw "path:$PWD#checks.aarch64-darwin.rauc-slots.drvPath")
 nix-store -r "$drv"
 ```
 
-## Test Architecture
+## Test architecture
 
 Tests use the NixOS test framework (`nixos-lib.runTest`). Each test:
 
@@ -308,22 +283,21 @@ The QEMU target uses a custom RAUC backend that simulates U-Boot's slot selectio
 variables, allowing the full A/B update lifecycle to be tested without real hardware. The shared slot mapping for the
 RAUC tests lives in `nix/tests/rauc-qemu-config.nix`.
 
-## Native ARM CI validation
+## Continuous integration
 
-CI runs only on pull requests (opened, synchronized, or reopened) and manual `workflow_dispatch` runs; pushes do not
-trigger validation. The independent `hk.yml` workflow runs quality checks on `ubuntu-latest` with
-`mise x -- hk check -a`. The `nix.yml` workflow evaluates Nix on `ubuntu-26.04-arm` (`aarch64-linux`) and
-`macos-latest` (`aarch64-darwin`). Each runner evaluates its own Nix platform with
-`flake check --no-build --system <system>`. PR validation does not build packages
-or execute VM tests. Run full build and VM checks locally with `./scripts/nix-with-build-config.sh flake check`
-or the individual `nix build` commands above; `mise run check` runs quality checks only.
+Pull requests evaluate the flake, run the `uboot-scripts` sandbox check, and run the provisioning package tests. They
+do not build images or run VM tests.
+[Developer Tooling](development/tooling.md#github-validation) describes each workflow. Run full builds and VM tests
+locally with `./scripts/nix-with-build-config.sh flake check` or the `nix build` commands above; `mise run check` runs
+quality checks only.
 
-The host Python suite skips two Linux setgid directory-mode assertions on macOS.
-Those assertions remain enabled in the Linux package tests.
-Managed-file access requires Linux `O_PATH` and `/proc/self/fd` in production.
-Ordinary macOS tests use a test-only file-open stand-in to exercise higher-level
-behavior. Native inode-pinning and special-file race tests run on Linux; macOS
-still tests that the production boundary fails closed when `O_PATH` is absent.
-macOS lacks Linux xattrs, so tests record read-only ACL grants there; the Linux
-suite applies and reads back the real `system.posix_acl_access` ACL, skipping
-that check only when the test filesystem lacks ACL support.
+## Host differences
+
+The provisioning package tests run on macOS and Linux, but some checks need Linux:
+
+- Two setgid directory-mode assertions are skipped on macOS and run on Linux.
+- Managed-file access needs Linux `O_PATH` and `/proc/self/fd`. On macOS, a test-only file-open stand-in exercises the
+  higher-level behavior, and a test confirms the production boundary fails closed without `O_PATH`. Inode-pinning and
+  special-file race tests run on Linux only.
+- macOS has no Linux xattrs, so tests there record read-only ACL grants. On Linux the suite applies and reads back the
+  real `system.posix_acl_access` ACL, skipping that check only when the filesystem lacks ACL support.

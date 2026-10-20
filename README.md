@@ -1,9 +1,12 @@
 <!-- rumdl-disable-file MD041 -->
 
-<p align="center"> <img src="docs/src/atomixos.png" alt="AtomixOS logo" width="300" height="300" /> </p>
+<p align="center"> <img src="docs/site/static/img/atomixos-logo.png" alt="AtomixOS logo" width="300" height="300" /> </p>
 
 AtomixOS is a secure, reproducible operating system for single-board computers, built on NixOS with atomic A/B OTA
 updates, automatic rollback, and a container-based application deployment model.
+
+The full documentation is published at <https://robertderose.github.io/atomixos/docs/>. Its source lives in
+`docs/src`, and `mise run docs:serve` previews it locally.
 
 <!-- BEGIN mktoc {"min_depth": 2, "max_depth": 4, "wrap_in_details": false} -->
 
@@ -29,7 +32,6 @@ updates, automatic rollback, and a container-based application deployment model.
 - [mise Task Reference](#mise-task-reference)
 - [Flake outputs](#flake-outputs)
 - [Versioned Image Naming](#versioned-image-naming)
-- [Status](#status)
 <!-- END mktoc -->
 
 ## Supported Boards
@@ -332,8 +334,11 @@ All tasks are run with `mise run <task>`. Run `mise tasks` to list them.
 | **Configuration**       |                                                               |
 | `config:lan-range`      | Update built-in fallback LAN gateway/DHCP defaults            |
 | **Documentation**       |                                                               |
-| `docs:build`            | Build the documentation site (mdBook) → `book/`               |
-| `docs:serve`            | Serve the documentation site locally with hot-reload          |
+| `docs:install`          | Install the docs site dependencies from the npm lockfile      |
+| `docs:build`            | Build the documentation site (Docusaurus) → `docs/build/`     |
+| `docs:serve [port]`     | Serve the documentation site locally with hot-reload          |
+| `site:build`            | Assemble the product page and docs into `_site/atomixos/`     |
+| `site:serve [port]`     | Serve the Pages site on port 8000, product page live          |
 
 ## Flake outputs
 
@@ -359,16 +364,3 @@ The flashable image filename includes the pinned NixOS release series from your 
 
 When you move to a new series (for example `nixos-26.05`), update `flake.nix`/`flake.lock` and rebuild. The image name
 updates automatically everywhere it is produced.
-
-## Status
-
-Implementation is in progress. **99 of 116 tasks complete (85%)**. All core implementation, E2E integration tests, and
-software-verifiable tasks are done. Hardware bring-up is underway — NixOS boots to login prompt on Rock64 via serial
-console. The remaining 17 tasks require physical hardware testing or network access for container image pulls:
-
-- **Hardware verification (15 tasks)** — require a physical Rock64 board (NIC naming, DHCP/NTP on real
-  network, RAUC on-device, provisioning boot, Cockpit SSH bridge, credential verification)
-- **Integration tests needing containers (2 tasks)** — remaining hardware/runtime validation tied to real
-  provisioned workloads and on-device confirmation behavior
-
-See `docs/src/features/rock64-ab-image/tasks.md` for the full task breakdown.

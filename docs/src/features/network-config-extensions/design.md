@@ -100,8 +100,6 @@ additional network properties into a concrete implementation scope.
   already owns device networking, DNS, dnsmasq, and firewall configuration, but
   DNS servers, search domains, arbitrary interface configuration, and default
   gateway configuration were deferred until runtime support exists.
-- Config Reapply Improvements task T010 deferred the DNS, search, interface,
-  and default-gateway schema until runtime support was implemented.
 
 ## Goals
 
@@ -272,7 +270,6 @@ Likely affected docs:
 - `docs/src/reference/flake-outputs.md` if tests or outputs change
 - `docs/src/code-reference/modules.md`
 - `docs/src/code-reference/scripts.md`
-- `docs/src/planned-features.md`
 
 ## Success Criteria
 
