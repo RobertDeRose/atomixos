@@ -2,7 +2,8 @@
 
 AtomixOS is tested at three levels:
 
-- **Provisioning package tests** run the Python provisioning service with pytest on the host.
+- **Python tests** run the provisioning service and repository scripts, including release promotion, with pytest on
+  the host.
 - **NixOS VM tests** boot the full OS in QEMU and check updates, rollback, provisioning, networking, and logging. The
   `mise run e2e` task runs the nine core tests; the rest are flake `checks.*` outputs you build directly.
 - **Hardware tests** run on a physical Rock64; see [Hardware Testing](hardware-testing.md).

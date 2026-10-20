@@ -38,7 +38,7 @@ jobs:
       - name: Install uv
         # Only uv is needed; do not install the rest of the project toolchain.
         run: mise install uv
-      - name: Run provisioning package tests
+      - name: Run provisioning and repository tests
         env:
           # `mise x` would otherwise install every tool in mise.toml before running.
           MISE_EXEC_AUTO_INSTALL: "false"
