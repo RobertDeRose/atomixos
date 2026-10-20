@@ -83,8 +83,9 @@ if either reference update is rejected, neither changes.
 
 An upload or GitHub API failure after promotion can leave the branch and tag in place with a draft or absent GitHub
 release. Rerun the failed jobs from the **same run** to retain the planned version and validated source. The workflow
-accepts an existing tag only when it points to that exact commit, preserves its original tag object, and reuses a
-draft release. Uploads replace incomplete draft assets. A published release's assets are left unchanged on a rerun.
+accepts an existing tag only when it is annotated and points to that exact commit, preserves its original tag object,
+and reuses a draft release. Lightweight tags are rejected without changing the remote references. Uploads replace
+incomplete draft assets. A published release's assets are left unchanged on a rerun.
 
 Do not rerun all jobs to repair an upload failure: recomputing the plan after the tag exists may select another
 version. If another release has already advanced the official branch, an older run cannot move it backwards.

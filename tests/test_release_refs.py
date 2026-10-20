@@ -86,6 +86,23 @@ def test_conflicting_tag_does_not_advance_main(repository):
     assert git("rev-parse", "v0.1.0^{commit}", bare=True) == first
 
 
+def test_lightweight_tag_at_selected_commit_does_not_advance_main(repository):
+    git, promote, first, _ = repository
+    assert promote(first).returncode == 0
+    git("commit", "--allow-empty", "-m", "fix(repo): next release")
+    selected = git("rev-parse", "HEAD")
+    git("push", "origin", "dev")
+    git("tag", "v0.1.1", selected)
+    git("push", "origin", "refs/tags/v0.1.1")
+    result = promote(selected, "v0.1.1")
+    assert result.returncode != 0
+    assert "v0.1.1 must be an annotated tag" in result.stderr
+    assert git("rev-parse", "refs/heads/main", bare=True) == first
+    assert git("rev-parse", "refs/heads/dev", bare=True) == selected
+    assert git("rev-parse", "refs/tags/v0.1.1", bare=True) == selected
+    assert git("cat-file", "-t", "refs/tags/v0.1.1", bare=True) == "commit"
+
+
 def test_diverged_main_is_not_rewritten(repository):
     git, promote, first, _ = repository
     assert promote(first).returncode == 0

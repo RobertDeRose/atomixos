@@ -24,6 +24,10 @@ while read -r object ref; do
 		;;
 	"refs/tags/$tag")
 		git fetch --no-tags origin "$object"
+		if [[ $(git cat-file -t "$object") != tag ]]; then
+			echo "ERROR: $tag must be an annotated tag" >&2
+			exit 1
+		fi
 		if [[ $(git rev-parse "$object^{commit}") != "$sha" ]]; then
 			echo "ERROR: $tag already identifies a different commit" >&2
 			exit 1
