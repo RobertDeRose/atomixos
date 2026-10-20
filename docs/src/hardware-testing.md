@@ -327,8 +327,9 @@ backend = "internal"
 # enable_hardware = false
 ```
 
-Run `mise run build`; supported `mise` tasks apply `build.dev.toml` automatically and mark outputs `-dev`. Direct Nix
-commands use committed `build.toml` only. The backend is required even when `enable_hardware = false`.
+Run `mise run build --board rock64`; supported `mise` tasks apply `build.dev.toml` automatically and mark outputs
+`-dev`. Direct Nix commands use committed `build.toml` only. The backend is required even when
+`enable_hardware = false`.
 
 For every enabled image, verify the policy and systemd owner:
 

@@ -226,7 +226,7 @@ parse policy itself. Lima tasks invoke the same wrapper inside the repository mo
 | `mise` task                 | Applies local overlay | Contract                                                     |
 |-----------------------------|-----------------------|--------------------------------------------------------------|
 | `check`                     | No                    | Formatting, linting, and documentation only                  |
-| `build [--board <board>]`   | Yes                   | Build and retain configured artifacts for one board          |
+| `build --board <board>`     | Yes                   | Build and retain configured artifacts for one board          |
 | `build:squashfs`            | Yes                   | Build immutable configured system policy (`--board`)         |
 | `build:rauc-bundle`         | Yes                   | Build configured update and audit sidecars (`--board`)       |
 | `build:boot-script`         | Yes                   | Reference the configured closure and squashfs ID (`--board`) |
@@ -238,8 +238,9 @@ Use `./scripts/nix-with-build-config.sh flake check` to evaluate and test effect
 `mise run check` does not invoke Nix or apply build policy.
 
 Direct `nix build .#...` and `nix flake check` remain pure and committed-policy-only. External `nixpkgs` helper builds
-also remain outside this contract. When `mise run build` exports a local-override image with `-o <path>`, the destination
-filename must include `-dev`; an unmarked destination is rejected before evaluation or retained-link mutation.
+also remain outside this contract. When `mise run build --board <board>` exports a local-override image with
+`-o <path>`, the destination filename must include `-dev`; an unmarked destination is rejected before evaluation or
+retained-link mutation.
 
 ## Failure and Retention Contract
 

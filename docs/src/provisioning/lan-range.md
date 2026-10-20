@@ -43,7 +43,7 @@ mise run config:lan-range \
   --dhcp-start 10.50.0.10 \
   --dhcp-end 10.50.0.254
 mise run check
-mise run build
+mise run build --board <board>
 ```
 
 The task rewrites only the gateway, subnet, and DHCP fields in `defaults/lan.json`. A `config.toml` setting still

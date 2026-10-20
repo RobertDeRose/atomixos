@@ -139,7 +139,7 @@ After changing the range, run quality checks, validate the flake, and rebuild:
 ```sh
 mise run check
 ./scripts/nix-with-build-config.sh flake check --no-build
-mise run build
+mise run build --board rock64
 ```
 
 ## Project structure
@@ -166,19 +166,16 @@ mise run check
 # Evaluate the flake without building checks
 ./scripts/nix-with-build-config.sh flake check --no-build
 
-# Build individual artifacts (--board rock64|cm3, default rock64)
-mise run build:squashfs        # result-rock64-squashfs/
-mise run build:rauc-bundle     # result-rock64-rauc-bundle/
-mise run build:boot-script     # result-rock64-boot-script/
-mise run build                 # .gcroots/rock64/current/ (default)
-mise run build --board cm3     # .gcroots/cm3/current/
-
-# Build everything for a specific board
-mise run build --board rock64
+# Every build task requires --board rock64|cm3
+mise run build:squashfs --board rock64      # result-rock64-squashfs/
+mise run build:rauc-bundle --board rock64   # result-rock64-rauc-bundle/
+mise run build:boot-script --board rock64   # result-rock64-boot-script/
+mise run build --board rock64               # .gcroots/rock64/current/
+mise run build --board cm3                  # .gcroots/cm3/current/
 
 # Build via Lima VM (when nix-darwin linux-builder is not available)
-mise run build -- --lima
-mise run build -- --lima --vm my-builder
+mise run build -- --board rock64 --lima
+mise run build -- --board rock64 --lima --vm my-builder
 ```
 
 ## Running E2E Tests
@@ -288,7 +285,7 @@ nix build "path:$PWD#checks.aarch64-darwin.rauc-slots" --no-link -L
 Build an `.img` file that can be written to eMMC (or SD card):
 
 ```sh
-mise run build
+mise run build --board rock64
 
 # Flash to a disk device (eMMC module via USB/SD adapter)
 mise run flash /dev/disk4          # macOS — auto-detects image, uses raw device for speed

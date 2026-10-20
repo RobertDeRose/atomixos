@@ -26,19 +26,20 @@ mise run check
 # Evaluate the flake without building anything
 ./scripts/nix-with-build-config.sh flake check --no-build
 
-# Build one artifact (--board rock64|cm3, default rock64)
-mise run build:squashfs        # result-rock64-squashfs/
-mise run build:rauc-bundle     # result-rock64-rauc-bundle/
-mise run build:boot-script     # result-rock64-boot-script/
+# Build one artifact
+mise run build:squashfs --board rock64      # result-rock64-squashfs/
+mise run build:rauc-bundle --board rock64   # result-rock64-rauc-bundle/
+mise run build:boot-script --board rock64   # result-rock64-boot-script/
 
-# Build every artifact for the default board (Rock64)
-mise run build
+# Build every artifact for the Rock64
+mise run build --board rock64
 
 # Build every artifact for the Radxa CM3 on the CM3 IO board
 mise run build --board cm3
 ```
 
-`mise run build` accepts `--board rock64|cm3` and defaults to `rock64`. It is safe to interrupt or fail:
+`mise run build` requires `--board rock64|cm3`; it never assumes a board, because an image built for one board writes
+the wrong bootloader onto the other. It is safe to interrupt or fail:
 
 1. It validates the effective build policy before touching any retained link.
 2. It builds every replacement under a `.new` link.
@@ -58,8 +59,8 @@ so `mise run gc` keeps it. Pass `-o <path>` to also copy the image to a path of 
 
 ## Artifacts
 
-Every Nix output is an attribute of the board package `.#<board>` (`rock64` or `cm3`), and every mise task takes
-`--board` (default `rock64`).
+Every Nix output is an attribute of the board package `.#<board>` (`rock64` or `cm3`), and every build task requires
+`--board`.
 
 | Artifact        | mise task           | Nix output              | Description                                      |
 |-----------------|---------------------|-------------------------|--------------------------------------------------|
@@ -89,7 +90,8 @@ WARNING: applying local build.dev.toml overrides; outputs will be marked -dev.
 ```
 
 Outputs built with an override have `-dev` in their filenames and `"local_override": true` in their metadata. When an
-override is active, `mise run build -o <path>` rejects a destination name without `-dev` before it evaluates anything.
+override is active, `mise run build --board <board> -o <path>` rejects a destination name without `-dev` before it
+evaluates anything.
 
 Direct Nix commands use the committed `build.toml` only; they never read `build.dev.toml`. Use the `mise` tasks, or
 `./scripts/nix-with-build-config.sh`, to build with an override.
@@ -134,10 +136,10 @@ has a warm Nix store.
 
 ```sh
 # Build inside the default Lima VM
-mise run build -- --lima
+mise run build -- --board rock64 --lima
 
 # Build inside a specific Lima VM
-mise run build -- --lima --vm my-builder
+mise run build -- --board rock64 --lima --vm my-builder
 
 # Build the CM3 inside the default Lima VM
 mise run build -- --board cm3 --lima
