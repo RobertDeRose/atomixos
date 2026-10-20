@@ -1,10 +1,10 @@
-# NixOS test: verify nftables firewall rules on WAN, LAN, and VPN interfaces.
+# NixOS test: verify nftables firewall rules on the WAN and LAN interfaces.
 #
 # This test:
 # 1. Boots a gateway node with production firewall.nix imported
 # 2. Boots a single probe node on BOTH VLANs (1 and 2)
-# 3. Verifies WAN HTTPS (443) and OpenVPN (1194) are closed before provisioning
-# 4. Verifies imported WAN rules allow HTTPS (443) and OpenVPN (1194)
+# 3. Verifies WAN HTTPS (443) and a UDP service (1194) are closed before provisioning
+# 4. Verifies imported WAN rules allow HTTPS (443) and the UDP service (1194)
 # 5. Verifies LAN allows DNS (53), DHCP (67-68), NTP (123), SSH (22), and bootstrap UI (8080)
 # 5. Verifies SSH is blocked on WAN by default
 # 6. Verifies no forwarding between interfaces
@@ -165,7 +165,7 @@ nixos-lib.runTest {
     gateway.succeed("ncat -lk 443 >/dev/null 2>&1 &")       # HTTPS (TCP)
     gateway.succeed("ncat -lk 22 >/dev/null 2>&1 &")        # SSH (TCP)
     gateway.succeed("ncat -lk 53 >/dev/null 2>&1 &")        # DNS (TCP)
-    gateway.succeed("ncat -lu 1194 >/dev/null 2>&1 &")      # OpenVPN (UDP)
+    gateway.succeed("ncat -lu 1194 >/dev/null 2>&1 &")      # UDP service
     gateway.succeed("ncat -lu 53 >/dev/null 2>&1 &")        # DNS (UDP)
     gateway.succeed("ncat -lu 123 >/dev/null 2>&1 &")       # NTP (UDP)
     gateway.succeed("ncat -lu 67 >/dev/null 2>&1 &")        # DHCP (UDP)
@@ -207,7 +207,7 @@ nixos-lib.runTest {
     # HTTPS (443/tcp) — ALLOWED on WAN
     probe.succeed("nc -z -w 3 192.168.1.1 443")
 
-    # OpenVPN (1194/udp) — ALLOWED on WAN
+    # UDP service (1194/udp) — ALLOWED on WAN
     probe.succeed("echo test | ncat -u -w 3 192.168.1.1 1194")
 
     # SSH (22/tcp) — BLOCKED on WAN by default (no flag file)
@@ -219,7 +219,7 @@ nixos-lib.runTest {
     # LAN remains open while no restrictive LAN scope is provisioned
     probe.succeed("nc -z -w 3 172.20.30.1 9090")
 
-    gateway.log("Phase 1 PASSED: WAN allows HTTPS+OpenVPN, blocks SSH+other")
+    gateway.log("Phase 1 PASSED: WAN allows HTTPS+UDP service, blocks SSH+other")
 
     # ── Phase 2: LAN rules (probe eth2 → gateway eth2) ──
     gateway.log("Phase 2: Testing restrictive LAN firewall rules")

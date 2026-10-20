@@ -106,12 +106,11 @@ provisioned LAN subnet only. Without valid provisioned LAN settings, it serves `
 
 The `input` chain drops by default and accepts loopback and established or related traffic on every interface.
 
-| Interface  | Allowed inbound                                                                                                |
-|------------|----------------------------------------------------------------------------------------------------------------|
-| wan (WAN)  | Provisioned `wan` ports; TCP 22 when SSH on WAN is enabled; TCP 8080 before provisioning (`network` transport) |
-| lan (LAN)  | Everything by default; with provisioned `lan` ports, only those plus TCP 22, 53, 8080 and UDP 53, 67, 68, 123  |
-| tun0 (VPN) | TCP 22                                                                                                         |
-| forward    | Nothing                                                                                                        |
+| Interface | Allowed inbound                                                                                                |
+|-----------|----------------------------------------------------------------------------------------------------------------|
+| wan (WAN) | Provisioned `wan` ports; TCP 22 when SSH on WAN is enabled; TCP 8080 before provisioning (`network` transport) |
+| lan (LAN) | Everything by default; with provisioned `lan` ports, only those plus TCP 22, 53, 8080 and UDP 53, 67, 68, 123  |
+| forward   | Nothing                                                                                                        |
 
 `provisioned-firewall-inbound.service` applies `/data/config/firewall-inbound.json`. The dynamic SSH-on-WAN rule follows
 `/data/config/ssh-wan-enabled`. With the `nixstasis` bootstrap transport, WAN TCP 8080 is never opened.

@@ -159,8 +159,8 @@ From a device on the **WAN** side (or the gateway's WAN IP):
 
 ```sh
 # From WAN
-nmap -p 22,443,1194 <gateway-wan-ip>
-# expect: 443 open (HTTPS/Traefik), 1194 open (OpenVPN), 22 filtered/closed
+nmap -p 22,443 <gateway-wan-ip>
+# expect: 443 open once provisioned, 22 filtered/closed
 
 # Verify SSH blocked on WAN by default
 ssh admin@<gateway-wan-ip>           # expect: connection refused/timeout
@@ -199,28 +199,11 @@ Test no forwarding:
 traceroute 8.8.8.8                   # expect: no hops beyond gateway, timeout
 ```
 
-**Pass criteria**: WAN allows only 443+1194 (and 22 when toggled). LAN allows 22+67+123. No forwarding.
+**Pass criteria**: WAN allows only provisioned ports (and 22 when toggled). LAN allows 22+67+123. No forwarding.
 
 ---
 
 ## Phase 5: Services
-
-### Task 3.4 -- OpenVPN creates tun0
-
-This requires a VPN server and a provisioned client config at `/data/config/openvpn/client.conf`.
-
-```sh
-# Provision the VPN config
-cat > /data/config/openvpn/client.conf << 'EOF'
-# Your OpenVPN client config here
-EOF
-
-systemctl start openvpn-recovery
-ip link show tun0                    # expect: tun0 interface exists
-ip addr show tun0                    # expect: VPN IP assigned
-```
-
-**Pass criteria**: `tun0` interface created with assigned VPN IP.
 
 ### Task 16.4 -- Confirmation with local service health checks
 
@@ -389,7 +372,6 @@ Mark each task as you complete it. Update `docs/src/features/rock64-ab-image/tas
 | 6.5  | NTP serves LAN clients                       |        |
 | 6.6  | LAN isolation (no WAN access)                |        |
 | 7.7  | Firewall ports correct on all interfaces     |        |
-| 3.4  | OpenVPN creates tun0                         |        |
 | 16.4 | Confirmation with local service health       |        |
 | 18.4 | Provisioned credentials work                 |        |
 | 10.4 | `rauc status` shows all 4 slots              |        |

@@ -6,7 +6,7 @@ This page states those lines and the rules that enforce them. [Data Flow](data-f
 ## Immutable Platform
 
 The image owns boot, the kernel and initrd, RAUC, firewall defaults, SSH policy, local provisioning, the LAN gateway
-services, the OpenVPN recovery plumbing, the optional Nixstasis client, and update confirmation. All of it lives in the
+services, the optional Nixstasis client, and update confirmation. All of it lives in the
 active squashfs slot and changes only through a RAUC update.
 
 ## Persistent Operator State

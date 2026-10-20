@@ -89,20 +89,25 @@ the device focused on gateway and update work.
 **Cost:** Remote management depends on enrollment and a working tunnel. Without them, local recovery is over SSH, not an
 on-device web UI.
 
-## OpenVPN in the root filesystem
+## No VPN in the base image
 
-**Choice:** OpenVPN ships in the root filesystem, not in a container.
+**Choice:** The image ships no VPN client. Remote access goes through the optional Nixstasis client, which opens outbound
+tunnels, so the device needs no inbound port for it.
 
-**Why:** OpenVPN is a recovery tunnel. If it ran in a container and the container runtime broke, remote access would be
-lost too. In the root filesystem, it survives container failures. It starts only when
-`/data/config/openvpn/client.conf` exists.
+**Why:** A VPN client in the image needs per-device credentials and a server, and a recovery tunnel that has to be
+configured separately is rarely configured at all. Nixstasis already provides enrolled, outbound-only remote access.
+
+**Cost:** A device built without Nixstasis has no remote tunnel. Recovery is over key-only SSH, the serial console, or USB
+mass storage. A deployment can still run a VPN client as a privileged container from `config.toml` for outbound
+traffic, but the firewall drops new connections that arrive over the tunnel: the provisioned firewall opens ports only on
+the `wan` and `lan` interfaces, so a container VPN cannot be used to reach the device itself.
 
 ## No IP forwarding
 
 **Choice:** IP forwarding is off in the kernel, and the nftables `forward` chain drops everything.
 
 **Why:** EN 18031 asks for a hard network boundary: LAN devices must not reach the internet. WAN ports for applications
-or a VPN open only when provisioned, and forwarding stays off regardless.
+open only when provisioned, and forwarding stays off regardless.
 
 ## NIC naming with .link files
 
@@ -174,6 +179,6 @@ diagnostics written in larger batches.
 | U-Boot environment corruption   | The environment is on SPI flash, away from the eMMC; corruption is handled by normal recovery     |
 | Root slot too small             | The closure is kept small, and the build checks the squashfs against the slot size                |
 | No application health list      | `os-verification` checks the gateway alone unless `/data/config/health-required.json` names units |
-| A provisioned application fails | OpenVPN in the root filesystem and key-only SSH provide other ways in                             |
+| A provisioned application fails | Key-only SSH, the Nixstasis client, and serial recovery live in the image, not in containers      |
 | No delta updates                | Full-image updates cost more bandwidth but cannot leave a partial state                           |
 | No automatic WAN SSH            | Deliberate: an operator must create the flag file                                                 |

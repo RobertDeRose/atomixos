@@ -53,7 +53,7 @@ boot.kernel.sysctl = {
 
 The nftables `forward` chain also has a `drop` policy with no exceptions. LAN devices can reach the gateway's own
 services (DHCP, DNS, NTP, SSH, and the first-boot console) but get no route to the internet. WAN ports for
-applications or a VPN open only when provisioned.
+applications open only when provisioned.
 
 ## NIC Naming
 
@@ -75,14 +75,13 @@ Bluetooth support.
 
 ## Firewall Summary
 
-| Interface  | Direction | Allowed                                                                                                 |
-|------------|-----------|---------------------------------------------------------------------------------------------------------|
-| wan        | Inbound   | Provisioned ports only                                                                                  |
-| wan        | Inbound   | TCP 22 (SSH), only while `/data/config/ssh-wan-enabled` exists                                          |
-| wan        | Inbound   | TCP 8080 (first-boot console), only before provisioning and only with the `network` bootstrap transport |
-| lan        | Inbound   | Everything by default; a provisioned `lan` scope switches to an allowlist                               |
-| tun0 (VPN) | Inbound   | TCP 22 (SSH)                                                                                            |
-| any        | Forward   | Nothing                                                                                                 |
+| Interface | Direction | Allowed                                                                                                 |
+|-----------|-----------|---------------------------------------------------------------------------------------------------------|
+| wan       | Inbound   | Provisioned ports only                                                                                  |
+| wan       | Inbound   | TCP 22 (SSH), only while `/data/config/ssh-wan-enabled` exists                                          |
+| wan       | Inbound   | TCP 8080 (first-boot console), only before provisioning and only with the `network` bootstrap transport |
+| lan       | Inbound   | Everything by default; a provisioned `lan` scope switches to an allowlist                               |
+| any       | Forward   | Nothing                                                                                                 |
 
 Provisioned WAN ports, and the optional LAN allowlist, come from `/data/config/firewall-inbound.json`, described in
 [Runtime Boundaries](../runtime-boundaries.md#firewall-json). The rules are defined in `modules/firewall.nix`; see the

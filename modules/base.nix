@@ -40,7 +40,6 @@ in
     ./networking.nix
     ./firewall.nix
     ./lan-gateway.nix
-    ./openvpn.nix
     ./rauc.nix
     ./first-boot.nix
     ./os-verification.nix

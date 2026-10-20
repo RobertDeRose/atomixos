@@ -68,7 +68,7 @@ Offset     Size       Content          Filesystem
 
 ```mermaid
 flowchart LR
-    WAN["WAN (internet)"] --> ETH0["wan\nDHCP client\nHTTPS (443)\nOpenVPN (1194)"]
+    WAN["WAN (internet)"] --> ETH0["wan\nDHCP client\nprovisioned ports only"]
     LAN["LAN (isolated)"] --> ETH1["lan\nLAN gateway IP (/24)\nDHCP server (dnsmasq)\nNTP server (chrony)"]
 
     subgraph GATEWAY["Gateway device"]
@@ -106,7 +106,7 @@ during development on Rock64 until boot stability is fully validated.
 The read-only root filesystem contains the full NixOS system closure:
 
 - Stripped Linux 6.19 kernel (RK3328 drivers built-in, WiFi/BT as modules)
-- systemd, podman, OpenVPN, openssh, chrony, dnsmasq, nftables, RAUC
+- systemd, podman, openssh, chrony, dnsmasq, nftables, RAUC
 
 ### Authentication (EN18031)
 
@@ -205,7 +205,7 @@ mise run e2e:rauc-rollback       # Install to B, mark bad, verify rollback to A
 mise run e2e:rauc-confirm        # os-verification health checks pass, slot marked good (~3 min)
 mise run e2e:rauc-power-loss     # Crash VM mid-install, verify slot A intact after reboot
 mise run e2e:rauc-watchdog       # Freeze systemd to trigger watchdog, verify boot-count rollback
-mise run e2e:firewall            # 2-node test: WAN allows HTTPS/VPN, LAN allows SSH/DHCP/NTP
+mise run e2e:firewall            # 2-node test: WAN allows provisioned ports, LAN allows SSH/DHCP/NTP
 mise run e2e:network-isolation   # 2-node test: LAN gets DHCP/NTP, cannot reach WAN
 mise run e2e:ssh-wan-toggle      # Flag file enables/disables SSH on WAN via nftables reload
 
@@ -322,7 +322,7 @@ All tasks are run with `mise run <task>`. Run `mise tasks` to list them.
 | `e2e:rauc-confirm`      | os-verification health check → mark-good (~3 min)             |
 | `e2e:rauc-power-loss`   | Crash mid-install, verify recovery                            |
 | `e2e:rauc-watchdog`     | Watchdog + boot-count rollback                                |
-| `e2e:firewall`          | WAN/LAN/VPN port allow/deny (2-node VLAN)                     |
+| `e2e:firewall`          | WAN/LAN port allow/deny (2-node VLAN)                         |
 | `e2e:network-isolation` | DHCP/NTP/WAN isolation (2-node VLAN)                          |
 | `e2e:ssh-wan-toggle`    | SSH-on-WAN flag enable/disable                                |
 | `e2e:debug`             | Interactive QEMU VM for debugging (`-t <test>`, `--keep`)     |

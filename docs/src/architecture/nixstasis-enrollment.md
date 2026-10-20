@@ -67,7 +67,7 @@ The image gets the client from the pinned `nixstasis` flake input.
 The device is responsible for:
 
 - LAN gateway services (`dnsmasq`, `chrony`, the firewall)
-- SSH access for LAN and VPN recovery
+- SSH access for LAN recovery
 - RAUC updates and rollback
 - the loopback provisioning API and its full configuration pipeline
 - keeping enrollment state under `/data/nixstasis`

@@ -5,4 +5,4 @@
 #USAGE flag "--vm <name>" help="Lima VM instance name" default="default"
 set -euo pipefail
 exec ./scripts/run-e2e-check.sh firewall \
-	"Verifies WAN/LAN/VPN firewall rules with multi-node VLAN setup"
+	"Verifies WAN/LAN firewall rules with multi-node VLAN setup"
