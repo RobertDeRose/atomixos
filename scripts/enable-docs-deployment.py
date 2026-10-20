@@ -10,6 +10,10 @@ import sys
 from collections.abc import Sequence
 
 
+PAGES_ENVIRONMENT = "github-pages"
+PUBLISH_BRANCH = "main"
+
+
 class EnablementError(RuntimeError):
     """An expected GitHub CLI operation failed."""
 
@@ -34,7 +38,7 @@ def gh(executable: str, args: Sequence[str], operation: str) -> subprocess.Compl
 
 
 def enable() -> str:
-    """Configure workflow-built Pages, enable the workflow gate, and return its URL."""
+    """Configure workflow-built Pages from main, enable the workflow gate, and return its URL."""
     executable = shutil.which("gh")
     if executable is None:
         message = "GitHub CLI (gh) is not installed or is not on PATH"
@@ -61,6 +65,41 @@ def enable() -> str:
         message = f"Pages query failed: {detail}"
         raise EnablementError(message)
 
+    # GitHub creates github-pages allowing only the default branch (dev); the site publishes from main.
+    environment = f"repos/{repository}/environments/{PAGES_ENVIRONMENT}"
+    gh(
+        executable,
+        [
+            "api",
+            "--method",
+            "PUT",
+            environment,
+            "-F",
+            "deployment_branch_policy[protected_branches]=false",
+            "-F",
+            "deployment_branch_policy[custom_branch_policies]=true",
+        ],
+        "Pages environment update",
+    )
+    policies = f"{environment}/deployment-branch-policies"
+    existing = gh(
+        executable,
+        ["api", "--paginate", policies, "--jq", ".branch_policies[] | [.id, .type, .name] | @tsv"],
+        "Pages environment policy query",
+    ).stdout.splitlines()
+    allowed = False
+    for policy_id, policy_type, name in (line.split("\t") for line in existing if line):
+        if policy_type == "branch" and name == PUBLISH_BRANCH:
+            allowed = True
+        else:
+            gh(executable, ["api", "--method", "DELETE", f"{policies}/{policy_id}"], "Pages policy removal")
+    if not allowed:
+        gh(
+            executable,
+            ["api", "--method", "POST", policies, "-f", f"name={PUBLISH_BRANCH}", "-f", "type=branch"],
+            "Pages policy creation",
+        )
+
     gh(
         executable,
         ["variable", "set", "DOCS_DEPLOYMENT_ENABLED", "--body", "true", "--repo", repository],
@@ -83,6 +122,21 @@ def main() -> int:
         print("Manual recovery:", file=sys.stderr)
         print("  gh api --method PUT repos/OWNER/REPO/pages -f build_type=workflow", file=sys.stderr)
         print("  # Use POST instead of PUT when Pages does not exist.", file=sys.stderr)
+        print(
+            "  gh api --method PUT repos/OWNER/REPO/environments/github-pages"
+            " -F 'deployment_branch_policy[protected_branches]=false'"
+            " -F 'deployment_branch_policy[custom_branch_policies]=true'",
+            file=sys.stderr,
+        )
+        print(
+            "  # Delete every other branch policy, then allow main:",
+            file=sys.stderr,
+        )
+        print(
+            "  gh api --method POST repos/OWNER/REPO/environments/github-pages/deployment-branch-policies"
+            " -f name=main -f type=branch",
+            file=sys.stderr,
+        )
         print(
             "  gh variable set DOCS_DEPLOYMENT_ENABLED --body true --repo OWNER/REPO",
             file=sys.stderr,

@@ -39,7 +39,7 @@ jobs:
         with:
           path: _site/atomixos
   deploy:
-    if: vars.DOCS_DEPLOYMENT_ENABLED == 'true'
+    if: github.ref == 'refs/heads/main' && vars.DOCS_DEPLOYMENT_ENABLED == 'true'
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 10

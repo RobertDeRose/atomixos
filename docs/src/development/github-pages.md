@@ -30,11 +30,11 @@ the same source commit. Site deployment runs separately from release-asset publi
 
 1. **build** checks out the repository, installs the locked tools with mise, runs `mise run site:build`, and uploads
    `_site/atomixos` as the Pages artifact. It has `contents: read` only.
-2. **deploy** publishes that artifact only when the repository variable `DOCS_DEPLOYMENT_ENABLED` is exactly `true`.
-   Only this job has `pages: write` and `id-token: write`.
+2. **deploy** publishes that artifact only from `main`, and only when the repository variable
+   `DOCS_DEPLOYMENT_ENABLED` is exactly `true`. Only this job has `pages: write` and `id-token: write`.
 
-The build runs even when deployment is disabled. Configure the `github-pages` environment to allow deployments
-from `main` only. Manual dispatches from other branches cannot deploy.
+The build runs even when deployment is disabled. The `github-pages` environment also allows deployments from `main`
+only, so manual dispatches from other branches build but never deploy.
 
 Pull requests never deploy. They still build the site through the `docs` step of `mise run check`, which fails on any
 broken link, anchor, or image.
@@ -53,8 +53,10 @@ The task (`scripts/enable-docs-deployment.py`):
 
 1. checks that `gh` is installed, signed in, and can resolve the repository;
 2. creates the Pages site, or updates the existing one, with the GitHub Actions (`workflow`) build type;
-3. sets `DOCS_DEPLOYMENT_ENABLED=true` as its last change;
-4. prints the Pages URL.
+3. restricts the `github-pages` environment to deployments from `main`, replacing the default-branch rule GitHub
+   creates with the site;
+4. sets `DOCS_DEPLOYMENT_ENABLED=true` as its last change;
+5. prints the Pages URL.
 
 Running it again is safe; it converges on the same configuration.
 
@@ -71,11 +73,17 @@ If the task fails, it names the GitHub operation that failed and prints the manu
 
 ```bash
 gh api --method PUT repos/OWNER/REPO/pages -f build_type=workflow
+gh api --method PUT repos/OWNER/REPO/environments/github-pages \
+  -F 'deployment_branch_policy[protected_branches]=false' \
+  -F 'deployment_branch_policy[custom_branch_policies]=true'
+gh api --method POST repos/OWNER/REPO/environments/github-pages/deployment-branch-policies \
+  -f name=main -f type=branch
 gh variable set DOCS_DEPLOYMENT_ENABLED --body true --repo OWNER/REPO
 gh api repos/OWNER/REPO/pages --jq .html_url
 ```
 
-Use `POST` instead of `PUT` when the repository has no Pages site yet.
+Use `POST` instead of `PUT` when the repository has no Pages site yet. Delete any other branch policy on the
+`github-pages` environment, such as the default-branch rule, so that only `main` can deploy.
 
-If only the final URL lookup failed, deployment may already be enabled. Check both the Pages build type and the
-variable before rerunning the task or dispatching the Documentation workflow.
+If only the final URL lookup failed, deployment may already be enabled. Check the Pages build type, the environment
+branch policy, and the variable before rerunning the task or dispatching the Documentation workflow.
