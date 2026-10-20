@@ -5,8 +5,9 @@ on:
       - "main"
   workflow_dispatch:
 permissions: {}
+# Per ref, so a build-only dispatch from another branch cannot cancel a pending main deployment.
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   build:
