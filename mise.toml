@@ -51,7 +51,22 @@ description = "Install the documentation site dependencies from the npm lockfile
 dir = "docs"
 sources = ["package-lock.json", "package.json"]
 outputs = ["node_modules/.package-lock.json"]
-run = "npm ci --no-fund --no-audit"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+
+# mise also reruns this task whenever mise.toml changes, so skip npm ci when node_modules already matches the lockfile.
+stamp=node_modules/.package-lock.sha256
+want=$(shasum -a 256 package-lock.json | cut -d' ' -f1)
+if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$want" ]; then
+  echo "node_modules already matches package-lock.json"
+  exit 0
+fi
+# npm ci removes node_modules first, which can fail with ENOTEMPTY on macOS while new files are still being indexed;
+# one retry clears it.
+npm ci --no-fund --no-audit || { sleep 2; npm ci --no-fund --no-audit; }
+echo "$want" >"$stamp"
+'''
 
 [tasks."docs:build"]
 description = "Build the documentation site (Docusaurus) into docs/build"
