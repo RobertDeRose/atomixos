@@ -81,7 +81,8 @@ const config: Config = {
           editUrl: `${repoUrl}/edit/dev/docs/`,
         },
         blog: false,
-        pages: {path: 'site/pages'},
+        // The product page in product/ is the site's landing page; the docs need no standalone pages.
+        pages: false,
         theme: {customCss: './site/css/custom.css'},
       } satisfies Preset.Options,
     ],

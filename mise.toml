@@ -86,6 +86,22 @@ cp "$fonts/exo-2/files/exo-2-latin-wght-normal.woff2" \
   "$fonts/atkinson-hyperlegible-next/files/atkinson-hyperlegible-next-latin-wght-normal.woff2" \
   "$fonts/atkinson-hyperlegible-mono/files/atkinson-hyperlegible-mono-latin-wght-normal.woff2" \
   "$out/fonts/"
+
+# The docs build checks the docs' own links; check the product page's relative links against the assembled site,
+# resolving them the way Pages does (the file, <path>.html, or <path>/index.html).
+broken=0
+for ref in $(grep -oE '(href|src)="[^"]*"' product/index.html | sed -E 's/^(href|src)="//; s/"$//' | sort -u); do
+  # Skip absolute URLs and in-page anchors; check the path part of everything else.
+  case "$ref" in *:* | '#'* | '') continue ;; esac
+  ref=${ref%%#*}
+  target="$out/${ref%/}"
+  if [ -f "$target" ] || [ -f "$target.html" ] || [ -f "$target/index.html" ]; then
+    continue
+  fi
+  echo "product/index.html: broken link: $ref" >&2
+  broken=1
+done
+exit "$broken"
 '''
 
 [tasks."site:serve"]

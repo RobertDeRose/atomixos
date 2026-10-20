@@ -91,10 +91,11 @@
       e.y -= Math.cos(e.angle) * travel;
       var out = e.y < -margin || e.y > height + margin || e.x < -margin || e.x > width + margin;
       if (!out) return;
-      var fromBelow = e.y < -margin;
+      // Re-enter against the direction of travel, whichever edge it left by: electrons rise while the page scrolls
+      // down and fall while it scrolls up.
       spawn(e, Math.random);
       e.x = Math.random() * width;
-      e.y = fromBelow ? height + margin * Math.random() : -margin * Math.random();
+      e.y = velocity > 0 ? height + margin * Math.random() : -margin * Math.random();
     });
   }
 

@@ -111,7 +111,6 @@ docs/
       atomixos-mark.png            Atom emblem: the docs introduction header
       atomixos-icon.png            "Ax" element tile: the docs navbar and product page header
       atomixos-favicon.svg         Atom outline: the favicon, with a 64px PNG fallback
-    pages/                         Optional standalone React pages
   src/                             Documentation content; README.mdx is the docs introduction
 
 product/                           Product page at the Pages root (index.html, styles.css, and its scripts)
