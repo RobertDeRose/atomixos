@@ -226,7 +226,7 @@ parse policy itself. Lima tasks invoke the same wrapper inside the repository mo
 | `mise` task                 | Applies local overlay | Contract                                                     |
 |-----------------------------|-----------------------|--------------------------------------------------------------|
 | `check`                     | No                    | Formatting, linting, and documentation only                  |
-| `build [--board <board>]`   | Yes                   | Build and retain configured artifacts for one board          |
+| `build --board <board>`     | Yes                   | Build and retain configured artifacts for one board          |
 | `build:squashfs`            | Yes                   | Build immutable configured system policy (`--board`)         |
 | `build:rauc-bundle`         | Yes                   | Build configured update and audit sidecars (`--board`)       |
 | `build:boot-script`         | Yes                   | Reference the configured closure and squashfs ID (`--board`) |
