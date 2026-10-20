@@ -16,7 +16,7 @@ def pages(monkeypatch):
     assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    state = SimpleNamespace(exists=True, policies=[], enabled=False, fail=None, next_id=100)
+    state = SimpleNamespace(exists=True, policies=[], enabled=False, fail=None, next_id=100, environment=None)
     endpoint = "repos/example/project/pages"
     policies = "repos/example/project/environments/github-pages/deployment-branch-policies"
 
@@ -40,7 +40,10 @@ def pages(monkeypatch):
                 state.policies = [{"id": 1, "type": "branch", "name": "dev"}]
             state.exists = True
             return result()
-        if target.endswith("/environments/github-pages"):
+        if target.endswith("/environments/github-pages") and method == "PUT":
+            if state.fail == "environment":
+                return result(error="environment update refused")
+            state.environment = [arg for arg in args if arg.startswith("deployment_branch_policy")]
             return result()
         if target == policies and method == "GET":
             if state.fail == "query":
@@ -82,6 +85,10 @@ def test_setup_allows_only_main_and_rerun_preserves_policy(pages, exists, initia
     assert module.enable() == "https://example.github.io/project/"
     assert state.enabled
     assert [(p["type"], p["name"]) for p in state.policies] == [("branch", "main")]
+    assert state.environment == [
+        "deployment_branch_policy[protected_branches]=false",
+        "deployment_branch_policy[custom_branch_policies]=true",
+    ]
     if any(p[2] == "main" and p[1] == "branch" for p in initial):
         assert state.policies[0]["id"] == 7
     first_policy = state.policies[0].copy()
@@ -89,7 +96,7 @@ def test_setup_allows_only_main_and_rerun_preserves_policy(pages, exists, initia
     assert state.policies == [first_policy]
 
 
-@pytest.mark.parametrize("failure", ["query", "remove", "create"])
+@pytest.mark.parametrize("failure", ["environment", "query", "remove", "create"])
 def test_policy_failure_does_not_enable_publication(pages, failure):
     module, state = pages
     state.policies = [{"id": 1, "type": "branch", "name": "dev"}]
