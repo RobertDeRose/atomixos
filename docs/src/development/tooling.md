@@ -26,7 +26,7 @@ add it to `mise.toml` as `latest` and run `mise lock`.
 |--------------------------|-------------------------------------------------------------------------|
 | `check`                  | Run all hk checks without requesting fixes.                             |
 | `fix`                    | Apply deterministic hk fixes to the working tree.                       |
-| `docs:install`           | Install the docs site's npm dependencies from `docs/package-lock.json`. |
+| `docs:install`           | Install the docs site's pnpm dependencies from `docs/pnpm-lock.yaml`.   |
 | `docs:build`             | Build the Docusaurus site into `docs/build`; fails on broken links.     |
 | `docs:deployment:enable` | Configure Pages and enable its repository gate through external `gh`.   |
 | `docs:serve [port]`      | Serve the docs with hot reload on port 3000 or the supplied port.       |
@@ -50,7 +50,8 @@ Git rejects merges that require a merge commit.
 | `.editorconfig`                     | Keeps editor output on UTF-8, LF, final newlines, and no trailing spaces. |
 | `_typos.toml`                       | Ignores hash-like identifiers while retaining typo checks elsewhere.      |
 | `contextlint.config.json`           | Checks documentation links, anchors, and image targets.                   |
-| `docs/package.json`                 | Pins the Docusaurus site dependencies; `package-lock.json` locks them.    |
+| `docs/package.json`                 | Pins the Docusaurus site dependencies; `pnpm-lock.yaml` locks them.       |
+| `docs/pnpm-workspace.yaml`          | Sets pnpm overrides and which dependency build scripts may run.           |
 | `cog.toml`                          | Configures Conventional Commits and concise changelogs.                   |
 | `.config/cog-changelog.tera`        | Renders plain Markdown changelogs without author noise.                   |
 | `scripts/enable-docs-deployment.py` | Configures workflow-built Pages through external `gh`.                    |

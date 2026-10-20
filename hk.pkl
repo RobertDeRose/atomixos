@@ -95,7 +95,7 @@ local linters = new Mapping<String, Step> {
   ["check_executables_have_shebangs"] = Builtins.check_executables_have_shebangs
   ["check_symlinks"] = Builtins.check_symlinks
   ["check-added-large-files"] = (Builtins.check_added_large_files) {
-    exclude = List("docs/package-lock.json")
+    exclude = List("docs/pnpm-lock.yaml")
   }
   ["check-exec-shebangs"] = Builtins.check_executables_have_shebangs
   ["check-merge-conflict"] = Builtins.check_merge_conflict
@@ -108,12 +108,20 @@ local linters = new Mapping<String, Step> {
     check = "contextlint"
   }
   ["docs"] = new Step {
-    glob = List("docs/src/**", "docs/*.ts", "docs/package*.json", "docs/site/**", "product/**")
+    glob =
+      List(
+        "docs/src/**",
+        "docs/*.ts",
+        "docs/package.json",
+        "docs/pnpm-*.yaml",
+        "docs/site/**",
+        "product/**",
+      )
     check = "mise run site:build"
   }
   ["mise"] = Builtins.mise
   ["mixed-line-ending"] = (Builtins.mixed_line_ending) {
-    exclude = List("docs/package-lock.json")
+    exclude = List("docs/pnpm-lock.yaml")
   }
   ["markdown-table-formatter"] = new Step {
     glob = List("**/*.md", "**/*.markdown")
@@ -126,7 +134,7 @@ local linters = new Mapping<String, Step> {
   }
   ["ruff"] = Builtins.ruff
   ["newlines"] = (Builtins.newlines) {
-    exclude = List("docs/package-lock.json")
+    exclude = List("docs/pnpm-lock.yaml")
   }
   ["nixfmt"] = Builtins.nix_fmt
   ["pkl_format"] = Builtins.pkl_format
@@ -142,10 +150,10 @@ local linters = new Mapping<String, Step> {
     exclude = List("**/mise.toml")
   }
   ["typos"] = (Builtins.typos) {
-    exclude = List("docs/package-lock.json")
+    exclude = List("docs/pnpm-lock.yaml")
   }
   ["trailing-whitespace"] = (Builtins.trailing_whitespace) {
-    exclude = List("docs/package-lock.json")
+    exclude = List("docs/pnpm-lock.yaml")
   }
 }
 
