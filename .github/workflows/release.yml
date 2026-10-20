@@ -43,10 +43,22 @@ jobs:
           git ls-remote --refs origin refs/heads/main > "$RUNNER_TEMP/main-ref"
           if [ -s "$RUNNER_TEMP/main-ref" ]; then
             git fetch --no-tags origin main
-            git merge-base --is-ancestor FETCH_HEAD "$sha"
+            if ! git merge-base --is-ancestor FETCH_HEAD "$sha"; then
+              echo "ERROR: main is not an ancestor of $sha" >&2
+              exit 1
+            fi
+          fi
+          # Cocogitto proposes a further patch for an already tagged commit; never re-release it.
+          released=$(git tag --points-at "$sha" --list 'v*')
+          if [ -n "$released" ]; then
+            echo "ERROR: $sha is already released as: $released" >&2
+            exit 1
           fi
           tag=$(mise x cocogitto -- cog bump --auto --dry-run)
-          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: no releasable version: $tag" >&2
+            exit 1
+          fi
           # This local-only tag lets the changelog template render the planned version.
           git tag "$tag" "$sha"
           mise x cocogitto -- cog changelog --at "$tag" > release-notes.md
@@ -191,4 +203,9 @@ jobs:
               --notes-file release-notes/release-notes.md
           fi
           gh release upload "$TAG" release-assets/*.tar.xz release-assets/*.sha256 --clobber
-          gh release edit "$TAG" --draft=false --latest
+          # A rerun completed after a later release must not take over the Latest badge.
+          latest=true
+          if [ "$(git ls-remote --refs origin refs/heads/main | cut -f1)" != "$SHA" ]; then
+            latest=false
+          fi
+          gh release edit "$TAG" --draft=false --latest="$latest"

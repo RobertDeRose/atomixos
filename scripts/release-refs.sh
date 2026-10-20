@@ -12,15 +12,13 @@ test "$(git rev-parse "$sha^{commit}")" = "$sha"
 
 # Query once so a network failure cannot be mistaken for an absent branch or tag.
 refs=$(git ls-remote --refs origin refs/heads/main "refs/tags/$tag")
+main_object=
 tag_object=
 while read -r object ref; do
 	case "$ref" in
 	refs/heads/main)
 		git fetch --no-tags origin "$object"
-		if ! git merge-base --is-ancestor "$object" "$sha"; then
-			echo "ERROR: main is not an ancestor of the validated release commit" >&2
-			exit 1
-		fi
+		main_object=$object
 		;;
 	"refs/tags/$tag")
 		git fetch --no-tags origin "$object"
@@ -36,6 +34,16 @@ while read -r object ref; do
 		;;
 	esac
 done <<<"$refs"
+
+if [[ -n $main_object ]] && ! git merge-base --is-ancestor "$main_object" "$sha"; then
+	# A rerun after a later release already advanced main leaves both refs as they are.
+	if [[ -n $tag_object ]] && git merge-base --is-ancestor "$sha" "$main_object"; then
+		echo "$tag is already promoted; main has advanced past it" >&2
+		exit 0
+	fi
+	echo "ERROR: main is not an ancestor of the validated release commit" >&2
+	exit 1
+fi
 
 if [[ -z $tag_object ]]; then
 	git tag -a "$tag" -m "release: $tag" "$sha"

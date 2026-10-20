@@ -119,6 +119,18 @@ def test_diverged_main_is_not_rewritten(repository):
     assert git("tag", "--list", "v0.1.1", bare=True) == ""
 
 
+def test_rerun_after_later_release_leaves_refs_unchanged(repository):
+    git, promote, first, _ = repository
+    assert promote(first).returncode == 0
+    git("commit", "--allow-empty", "-m", "fix(repo): next release")
+    later = git("rev-parse", "HEAD")
+    assert promote(later, "v0.1.1").returncode == 0
+    tag_object = git("rev-parse", "v0.1.0", bare=True)
+    assert promote(first).returncode == 0
+    assert git("rev-parse", "refs/heads/main", bare=True) == later
+    assert git("rev-parse", "v0.1.0", bare=True) == tag_object
+
+
 def test_rejected_tag_push_leaves_main_unchanged(repository):
     git, promote, first, remote = repository
     assert promote(first).returncode == 0

@@ -15,10 +15,11 @@ continue while a release runs; newer work stays off the release branch until ano
 
 The workflow accepts dispatches from the development branch only and serializes release runs.
 
-1. **Plan** verifies that the official release branch is an ancestor of the selected commit, if that branch exists.
-   Cocogitto computes the next version from Conventional Commits since the latest version tag, using
-   `cog bump --auto --dry-run`, and generates notes with `cog changelog`. The run summary shows the version, source
-   commit, and notes before approval. No version file is changed.
+1. **Plan** verifies that the official release branch is an ancestor of the selected commit, if that branch exists,
+   and refuses a commit that already carries a version tag. Cocogitto computes the next version from Conventional
+   Commits since the latest version tag, using `cog bump --auto --dry-run`, and generates notes with
+   `cog changelog`. The run summary shows the version, source commit, and notes before approval. No version file is
+   changed.
 2. **Validate** calls the existing repository-check, Nix, and Python-test workflows with the selected commit's full
    SHA. They run the same checks as pull requests, including the U-Boot sandbox and release-promotion regression
    tests. These are not the full NixOS VM or physical-hardware suites; see [Testing](../testing.md).
@@ -37,7 +38,8 @@ branch remains an ancestor of development, so the next release can fast-forward 
 Each release contains `atomixos-<board>-vX.Y.Z.tar.xz` and its `.sha256` checksum for each supported board. Extract
 the archive to get the flashable image, signed RAUC bundle, U-Boot, U-Boot environment tools, and boot script. These
 are the same artifacts exposed by the [board package](../reference/flake-outputs.md). Archive creation follows the
-Nix output links so extraction does not require the original builder's Nix store. Image and update outputs include
+Nix output links so extraction does not require the original builder's Nix store. The U-Boot environment tools stay
+dynamically linked against Nix store libraries, so run them on the device or a Nix host. Image and update outputs include
 `build.toml` and `build-metadata.json` audit sidecars.
 
 The release version identifies the source tag and archive. Inside the archive, image filenames retain their NixOS
@@ -87,7 +89,8 @@ accepts an existing tag only when it is annotated and points to that exact commi
 and reuses a draft release. Lightweight tags are rejected without changing the remote references. Uploads replace
 incomplete draft assets. A published release's assets are left unchanged on a rerun.
 
-Do not rerun all jobs to repair an upload failure: recomputing the plan after the tag exists may select another
-version. If another release has already advanced the official branch, an older run cannot move it backwards.
+Do not rerun all jobs to repair an upload failure: Plan refuses a commit that already carries a version tag. If
+another release has already advanced the official branch, a rerun of an older run leaves the branch and its tag in
+place, completes its GitHub release, and does not mark it as the latest release.
 Resolve divergent history or conflicting tags explicitly; never delete a published tag or force the branch as a
 recovery shortcut.
