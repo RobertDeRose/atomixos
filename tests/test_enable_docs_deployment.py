@@ -1,6 +1,7 @@
 """Check Pages setup convergence and failures without changing GitHub settings."""
 
 import importlib.util
+import json
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
@@ -16,11 +17,11 @@ def pages(monkeypatch):
     assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    state = SimpleNamespace(exists=True, policies=[], enabled=False, fail=None, next_id=100, environment=None)
+    state = SimpleNamespace(exists=True, policies=[], enabled=False, fail=None, next_id=100, environment=None, rules=[])
     endpoint = "repos/example/project/pages"
     policies = "repos/example/project/environments/github-pages/deployment-branch-policies"
 
-    def run_gh(executable, args):
+    def run_gh(executable, args, stdin=None):
         def result(stdout="", error=""):
             return subprocess.CompletedProcess(args, bool(error), stdout=stdout, stderr=error)
 
@@ -40,10 +41,14 @@ def pages(monkeypatch):
                 state.policies = [{"id": 1, "type": "branch", "name": "dev"}]
             state.exists = True
             return result()
+        if target.endswith("/environments/github-pages") and method == "GET":
+            if state.fail == "environment query":
+                return result(error="environment query refused")
+            return result(json.dumps({"protection_rules": state.rules}))
         if target.endswith("/environments/github-pages") and method == "PUT":
             if state.fail == "environment":
                 return result(error="environment update refused")
-            state.environment = [arg for arg in args if arg.startswith("deployment_branch_policy")]
+            state.environment = json.loads(stdin)
             return result()
         if target == policies and method == "GET":
             if state.fail == "query":
@@ -85,10 +90,9 @@ def test_setup_allows_only_main_and_rerun_preserves_policy(pages, exists, initia
     assert module.enable() == "https://example.github.io/project/"
     assert state.enabled
     assert [(p["type"], p["name"]) for p in state.policies] == [("branch", "main")]
-    assert state.environment == [
-        "deployment_branch_policy[protected_branches]=false",
-        "deployment_branch_policy[custom_branch_policies]=true",
-    ]
+    assert state.environment == {
+        "deployment_branch_policy": {"protected_branches": False, "custom_branch_policies": True}
+    }
     if any(p[2] == "main" and p[1] == "branch" for p in initial):
         assert state.policies[0]["id"] == 7
     first_policy = state.policies[0].copy()
@@ -96,7 +100,7 @@ def test_setup_allows_only_main_and_rerun_preserves_policy(pages, exists, initia
     assert state.policies == [first_policy]
 
 
-@pytest.mark.parametrize("failure", ["environment", "query", "remove", "create"])
+@pytest.mark.parametrize("failure", ["environment query", "environment", "query", "remove", "create"])
 def test_policy_failure_does_not_enable_publication(pages, failure):
     module, state = pages
     state.policies = [{"id": 1, "type": "branch", "name": "dev"}]
@@ -104,3 +108,24 @@ def test_policy_failure_does_not_enable_publication(pages, failure):
     with pytest.raises(module.EnablementError, match="Pages"):
         module.enable()
     assert not state.enabled
+
+
+def test_environment_update_keeps_other_protection_rules(pages):
+    module, state = pages
+    state.rules = [
+        {"id": 1, "type": "wait_timer", "wait_timer": 30},
+        {
+            "id": 2,
+            "type": "required_reviewers",
+            "prevent_self_review": True,
+            "reviewers": [{"type": "User", "reviewer": {"id": 42, "login": "octocat"}}],
+        },
+        {"id": 3, "type": "branch_policy"},
+    ]
+    module.enable()
+    assert state.environment == {
+        "deployment_branch_policy": {"protected_branches": False, "custom_branch_policies": True},
+        "wait_timer": 30,
+        "prevent_self_review": True,
+        "reviewers": [{"type": "User", "id": 42}],
+    }

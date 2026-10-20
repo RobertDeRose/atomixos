@@ -54,7 +54,7 @@ The task (`scripts/enable-docs-deployment.py`):
 1. checks that `gh` is installed, signed in, and can resolve the repository;
 2. creates the Pages site, or updates the existing one, with the GitHub Actions (`workflow`) build type;
 3. restricts the `github-pages` environment to deployments from `main`, replacing the default-branch rule GitHub
-   creates with the site;
+   creates with the site, and keeps the environment's required reviewers and wait timer;
 4. sets `DOCS_DEPLOYMENT_ENABLED=true` as its last change;
 5. prints the Pages URL.
 
@@ -73,9 +73,6 @@ If the task fails, it names the GitHub operation that failed and prints the manu
 
 ```bash
 gh api --method PUT repos/OWNER/REPO/pages -f build_type=workflow
-gh api --method PUT repos/OWNER/REPO/environments/github-pages \
-  -F 'deployment_branch_policy[protected_branches]=false' \
-  -F 'deployment_branch_policy[custom_branch_policies]=true'
 gh api --method POST repos/OWNER/REPO/environments/github-pages/deployment-branch-policies \
   -f name=main -f type=branch
 gh api repos/OWNER/REPO/environments/github-pages/deployment-branch-policies
@@ -84,7 +81,10 @@ gh variable set DOCS_DEPLOYMENT_ENABLED --body true --repo OWNER/REPO
 gh api repos/OWNER/REPO/pages --jq .html_url
 ```
 
-Use `POST` instead of `PUT` when the repository has no Pages site yet. Allow `main` first, then list the
+Use `POST` instead of `PUT` when the repository has no Pages site yet. Before adding the `main` policy, open
+**Settings > Environments > github-pages** and set **Deployment branches and tags** to **Selected branches and
+tags**. Changing this setting by hand, rather than through the environment API, keeps any required reviewers and
+wait timer. Allow `main` first, then list the
 `github-pages` environment's policies and delete every other one, such as the default-branch rule, by its `id`, so
 that only `main` can deploy.
 

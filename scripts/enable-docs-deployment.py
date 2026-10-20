@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import shutil
 import subprocess
@@ -22,19 +23,36 @@ class MissingGhError(EnablementError):
     """GitHub CLI is unavailable."""
 
 
-def run_gh(executable: str, args: Sequence[str]) -> subprocess.CompletedProcess[str]:
+def run_gh(executable: str, args: Sequence[str], stdin: str | None = None) -> subprocess.CompletedProcess[str]:
     """Run the resolved gh executable without a shell."""
-    return subprocess.run([executable, *args], check=False, capture_output=True, text=True)
+    return subprocess.run([executable, *args], check=False, capture_output=True, input=stdin, text=True)
 
 
-def gh(executable: str, args: Sequence[str], operation: str) -> subprocess.CompletedProcess[str]:
+def gh(
+    executable: str, args: Sequence[str], operation: str, stdin: str | None = None
+) -> subprocess.CompletedProcess[str]:
     """Run gh and retain output for explicit error handling."""
-    result = run_gh(executable, args)
+    result = run_gh(executable, args, stdin)
     if result.returncode:
         detail = result.stderr.strip() or result.stdout.strip() or f"gh exited {result.returncode}"
         message = f"{operation} failed: {detail}"
         raise EnablementError(message)
     return result
+
+
+def environment_update(current: dict) -> dict:
+    """Restrict deployments to custom branch policies while keeping the other protection rules.
+
+    The environment PUT may reset protection rules it omits, so it resends the current ones.
+    """
+    body: dict = {"deployment_branch_policy": {"protected_branches": False, "custom_branch_policies": True}}
+    for rule in current.get("protection_rules", []):
+        if rule.get("type") == "wait_timer":
+            body["wait_timer"] = rule["wait_timer"]
+        elif rule.get("type") == "required_reviewers":
+            body["prevent_self_review"] = rule.get("prevent_self_review", False)
+            body["reviewers"] = [{"type": r["type"], "id": r["reviewer"]["id"]} for r in rule.get("reviewers", [])]
+    return body
 
 
 def enable() -> str:
@@ -67,19 +85,12 @@ def enable() -> str:
 
     # GitHub creates github-pages allowing only the default branch (dev); the site publishes from main.
     environment = f"repos/{repository}/environments/{PAGES_ENVIRONMENT}"
+    current_environment = gh(executable, ["api", environment], "Pages environment query").stdout
     gh(
         executable,
-        [
-            "api",
-            "--method",
-            "PUT",
-            environment,
-            "-F",
-            "deployment_branch_policy[protected_branches]=false",
-            "-F",
-            "deployment_branch_policy[custom_branch_policies]=true",
-        ],
+        ["api", "--method", "PUT", environment, "--input", "-"],
         "Pages environment update",
+        json.dumps(environment_update(json.loads(current_environment))),
     )
     policies = f"{environment}/deployment-branch-policies"
     existing = gh(
@@ -123,9 +134,8 @@ def main() -> int:
             "Manual recovery:",
             "  gh api --method PUT repos/OWNER/REPO/pages -f build_type=workflow",
             "  # Use POST instead of PUT when Pages does not exist.",
-            f"  gh api --method PUT repos/OWNER/REPO/environments/{PAGES_ENVIRONMENT}"
-            " -F 'deployment_branch_policy[protected_branches]=false'"
-            " -F 'deployment_branch_policy[custom_branch_policies]=true'",
+            f"  # In Settings > Environments > {PAGES_ENVIRONMENT}, choose Selected branches and tags,",
+            "  # keeping any required reviewers and wait timer. Then add main by API:",
             f"  gh api --method POST {policies} -f name={PUBLISH_BRANCH} -f type=branch",
             f"  # Then delete every other policy listed by: gh api {policies}",
             f"  gh api --method DELETE {policies}/POLICY_ID",
