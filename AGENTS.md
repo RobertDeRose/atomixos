@@ -268,6 +268,10 @@ Merges into `dev` must keep history linear: fast-forward locally with `git merge
 request. Never create a merge commit, and never fall back to one when fast-forwarding fails. A squash commit follows
 the commit message rules above and summarizes the whole pull request.
 
+`main` represents official releases and moves only through the Release workflow. It fast-forwards to the exact
+validated `dev` commit and receives an annotated `vX.Y.Z` tag, without a merge or version-bump commit. Never push to
+`main` or create `v*` tags directly. See `docs/src/development/releasing.md` for approval, artifacts, setup, and recovery.
+
 A no-mode `/close-feature` completes close-out and then asks for one explicit action:
 
 ```text

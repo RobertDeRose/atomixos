@@ -2,7 +2,8 @@
 
 AtomixOS is tested at three levels:
 
-- **Provisioning package tests** run the Python provisioning service with pytest on the host.
+- **Python tests** run the provisioning service and repository scripts, including release promotion, with pytest on
+  the host.
 - **NixOS VM tests** boot the full OS in QEMU and check updates, rollback, provisioning, networking, and logging. The
   `mise run e2e` task runs the nine core tests; the rest are flake `checks.*` outputs you build directly.
 - **Hardware tests** run on a physical Rock64; see [Hardware Testing](hardware-testing.md).
@@ -29,6 +30,18 @@ The `dev` extra holds only test dependencies. Ruff comes from the mise toolchain
 
 These tests cover the Litestar API, SSH-signature authentication, config parsing, bundle import, Quadlet rendering and
 sync, activation, job tracking, and the service foundation modules.
+
+### Repository Python tests
+
+From the repository root, run the provisioning and repository tests together:
+
+```sh
+uv run --project scripts/atomixos_provision --extra dev pytest scripts/atomixos_provision/tests tests
+```
+
+The release-promotion tests create temporary local Git remotes. They check initial publication, fast-forwarding the
+validated commit while development advances, reruns, conflicting tags, divergent history, and atomic rejection.
+They do not publish to GitHub or require release credentials.
 
 ### All tests
 
