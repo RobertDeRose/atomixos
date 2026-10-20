@@ -44,9 +44,9 @@ validated commit while development advances, reruns, conflicting tags, divergent
 They do not publish to GitHub or require release credentials.
 
 The Pages setup tests replace `gh` with an in-memory GitHub. They check that `mise run docs:deployment:enable`
-converges the `github-pages` environment on a single `main` branch policy, keeps its required reviewers and wait
-timer, stays stable on rerun, and never enables
-deployment when the environment query or update, or a policy query, creation, or removal fails.
+converges the `github-pages` environment on a single `main` branch policy, creates the environment when it is
+missing, keeps its required reviewers and wait timer, leaves a converged environment untouched on rerun, and never
+enables deployment when the environment query or update, or a policy query, creation, or removal fails.
 
 ### All tests
 

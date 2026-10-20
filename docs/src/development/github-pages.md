@@ -53,8 +53,9 @@ The task (`scripts/enable-docs-deployment.py`):
 
 1. checks that `gh` is installed, signed in, and can resolve the repository;
 2. creates the Pages site, or updates the existing one, with the GitHub Actions (`workflow`) build type;
-3. restricts the `github-pages` environment to deployments from `main`, replacing the default-branch rule GitHub
-   creates with the site, and keeps the environment's required reviewers and wait timer;
+3. restricts the `github-pages` environment to deployments from `main`, creating the environment if it is missing,
+   replacing the default-branch rule GitHub creates with the site, and keeping the environment's required reviewers
+   and wait timer; an environment that already allows only selected branches is not rewritten;
 4. sets `DOCS_DEPLOYMENT_ENABLED=true` as its last change;
 5. prints the Pages URL.
 

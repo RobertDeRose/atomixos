@@ -17,7 +17,18 @@ def pages(monkeypatch):
     assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    state = SimpleNamespace(exists=True, policies=[], enabled=False, fail=None, next_id=100, environment=None, rules=[])
+    state = SimpleNamespace(
+        exists=True,
+        policies=[],
+        enabled=False,
+        fail=None,
+        next_id=100,
+        environment=None,
+        rules=[],
+        environment_exists=True,
+        branch_policy=None,
+        puts=0,
+    )
     endpoint = "repos/example/project/pages"
     policies = "repos/example/project/environments/github-pages/deployment-branch-policies"
 
@@ -44,11 +55,17 @@ def pages(monkeypatch):
         if target.endswith("/environments/github-pages") and method == "GET":
             if state.fail == "environment query":
                 return result(error="environment query refused")
-            return result(json.dumps({"protection_rules": state.rules}))
+            if not state.environment_exists:
+                return result(error="gh: Not Found (HTTP 404)")
+            environment = {"protection_rules": state.rules, "deployment_branch_policy": state.branch_policy}
+            return result(json.dumps(environment))
         if target.endswith("/environments/github-pages") and method == "PUT":
             if state.fail == "environment":
                 return result(error="environment update refused")
             state.environment = json.loads(stdin)
+            state.environment_exists = True
+            state.branch_policy = state.environment["deployment_branch_policy"]
+            state.puts += 1
             return result()
         if target == policies and method == "GET":
             if state.fail == "query":
@@ -129,3 +146,20 @@ def test_environment_update_keeps_other_protection_rules(pages):
         "prevent_self_review": True,
         "reviewers": [{"type": "User", "id": 42}],
     }
+
+
+def test_setup_creates_a_missing_environment(pages):
+    module, state = pages
+    state.environment_exists = False
+    assert module.enable() == "https://example.github.io/project/"
+    assert state.environment == {
+        "deployment_branch_policy": {"protected_branches": False, "custom_branch_policies": True}
+    }
+    assert [(p["type"], p["name"]) for p in state.policies] == [("branch", "main")]
+
+
+def test_rerun_leaves_a_converged_environment_untouched(pages):
+    module, state = pages
+    module.enable()
+    module.enable()
+    assert state.puts == 1

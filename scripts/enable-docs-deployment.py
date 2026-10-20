@@ -13,6 +13,7 @@ from collections.abc import Sequence
 
 PAGES_ENVIRONMENT = "github-pages"
 PUBLISH_BRANCH = "main"
+CUSTOM_BRANCH_POLICY = {"protected_branches": False, "custom_branch_policies": True}
 
 
 class EnablementError(RuntimeError):
@@ -34,10 +35,20 @@ def gh(
     """Run gh and retain output for explicit error handling."""
     result = run_gh(executable, args, stdin)
     if result.returncode:
-        detail = result.stderr.strip() or result.stdout.strip() or f"gh exited {result.returncode}"
-        message = f"{operation} failed: {detail}"
+        message = f"{operation} failed: {failure_detail(result)}"
         raise EnablementError(message)
     return result
+
+
+def http_status(result: subprocess.CompletedProcess[str]) -> str | None:
+    """Return the HTTP status gh api reports at the end of stderr, if any."""
+    status = re.search(r"\(HTTP (\d{3})\)\s*$", result.stderr)
+    return status.group(1) if status else None
+
+
+def failure_detail(result: subprocess.CompletedProcess[str]) -> str:
+    """Describe a failed gh invocation from its output."""
+    return result.stderr.strip() or result.stdout.strip() or f"gh exited {result.returncode}"
 
 
 def environment_update(current: dict) -> dict:
@@ -45,7 +56,7 @@ def environment_update(current: dict) -> dict:
 
     The environment PUT may reset protection rules it omits, so it resends the current ones.
     """
-    body: dict = {"deployment_branch_policy": {"protected_branches": False, "custom_branch_policies": True}}
+    body: dict = {"deployment_branch_policy": dict(CUSTOM_BRANCH_POLICY)}
     for rule in current.get("protection_rules", []):
         if rule.get("type") == "wait_timer":
             body["wait_timer"] = rule["wait_timer"]
@@ -76,22 +87,31 @@ def enable() -> str:
     current = run_gh(executable, ["api", endpoint])
     if current.returncode == 0:
         gh(executable, ["api", "--method", "PUT", endpoint, "-f", "build_type=workflow"], "Pages update")
-    elif (status := re.search(r"\(HTTP (\d{3})\)\s*$", current.stderr)) and status.group(1) == "404":
+    elif http_status(current) == "404":
         gh(executable, ["api", "--method", "POST", endpoint, "-f", "build_type=workflow"], "Pages creation")
     else:
-        detail = current.stderr.strip() or current.stdout.strip() or f"gh exited {current.returncode}"
-        message = f"Pages query failed: {detail}"
+        message = f"Pages query failed: {failure_detail(current)}"
         raise EnablementError(message)
 
     # GitHub creates github-pages allowing only the default branch (dev); the site publishes from main.
     environment = f"repos/{repository}/environments/{PAGES_ENVIRONMENT}"
-    current_environment = gh(executable, ["api", environment], "Pages environment query").stdout
-    gh(
-        executable,
-        ["api", "--method", "PUT", environment, "--input", "-"],
-        "Pages environment update",
-        json.dumps(environment_update(json.loads(current_environment))),
-    )
+    queried = run_gh(executable, ["api", environment])
+    if queried.returncode == 0:
+        current_environment = json.loads(queried.stdout)
+    elif http_status(queried) == "404":
+        # The PUT below creates a missing environment.
+        current_environment = {}
+    else:
+        message = f"Pages environment query failed: {failure_detail(queried)}"
+        raise EnablementError(message)
+    # Skip the PUT when it would change nothing, so reruns never rewrite the environment's other settings.
+    if current_environment.get("deployment_branch_policy") != CUSTOM_BRANCH_POLICY:
+        gh(
+            executable,
+            ["api", "--method", "PUT", environment, "--input", "-"],
+            "Pages environment update",
+            json.dumps(environment_update(current_environment)),
+        )
     policies = f"{environment}/deployment-branch-policies"
     existing = gh(
         executable,
