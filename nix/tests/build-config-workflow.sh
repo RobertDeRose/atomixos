@@ -95,7 +95,7 @@ rm "$TEST_REPO/build.dev.toml"
 # Full-build validation happens before retained links change; a failure at either build step publishes nothing.
 for failing in toplevel '.#rock64 -o'; do
 	: >"$log"
-	if (cd "$TEST_REPO" && NIX_FAIL_MATCH=$failing ./scripts/build.sh); then
+	if (cd "$TEST_REPO" && usage_board=rock64 NIX_FAIL_MATCH=$failing ./scripts/build.sh); then
 		echo "full build unexpectedly succeeded" >&2
 		exit 1
 	fi
@@ -106,10 +106,10 @@ for failing in toplevel '.#rock64 -o'; do
 	done
 done
 
-# A successful default ROCK64 build publishes its board folder.
+# A successful ROCK64 build publishes its board folder.
 : >"$log"
 : >"$TEST_REPO/retained.log"
-(cd "$TEST_REPO" && ./scripts/build.sh) >"$TEST_REPO/rock64.out"
+(cd "$TEST_REPO" && usage_board=rock64 ./scripts/build.sh) >"$TEST_REPO/rock64.out"
 grep -F 'args=build .#nixosConfigurations.rock64.config.system.build.toplevel -o .gcroots/rock64/toplevel.new' "$log"
 grep -F 'args=build .#rock64 -o .gcroots/rock64/current.new' "$log"
 test -f "$TEST_REPO/.gcroots/rock64/current/image/atomixos-rock64-26.05.img"
@@ -133,6 +133,16 @@ if (cd "$TEST_REPO" && usage_board=unknown ./scripts/build.sh) \
 fi
 grep -F "ERROR: unsupported board 'unknown'" "$TEST_REPO/invalid-board.err"
 test ! -s "$log"
+
+# A missing board is rejected rather than defaulting to ROCK64.
+if (cd "$TEST_REPO" && ./scripts/build.sh) \
+	>"$TEST_REPO/missing-board.out" 2>"$TEST_REPO/missing-board.err"; then
+	echo "build without a board unexpectedly succeeded" >&2
+	exit 1
+fi
+grep -F 'ERROR: choose a board with --board rock64|cm3' "$TEST_REPO/missing-board.err"
+test ! -s "$log"
+test "$(readlink "$TEST_REPO/.gcroots/rock64/current")" = "$rock64_target"
 
 # A failed CM3 build leaves ROCK64 roots intact and does not install CM3 roots.
 : >"$log"
@@ -190,14 +200,14 @@ test ! -e "$TEST_REPO/.gcroots/cm3/current.new"
 rm "$TEST_REPO/.gcroots/rock64/current"
 ln -s "$TEST_REPO/collected-store-path" "$TEST_REPO/.gcroots/rock64/current"
 rm -f "$TEST_REPO/.gcroots/rock64/previous"
-(cd "$TEST_REPO" && ./scripts/build.sh)
+(cd "$TEST_REPO" && usage_board=rock64 ./scripts/build.sh)
 test "$(readlink "$TEST_REPO/.gcroots/rock64/current")" = "$rock64_target"
 test ! -L "$TEST_REPO/.gcroots/rock64/previous"
 
 # Local-override exports cannot discard durable -dev filename identity.
 printf '%s\n' '[watchdog]' 'enable_hardware = true' >"$TEST_REPO/build.dev.toml"
 : >"$log"
-if (cd "$TEST_REPO" && usage_output="$TEST_REPO/atomixos.img" ./scripts/build.sh) \
+if (cd "$TEST_REPO" && usage_board=rock64 usage_output="$TEST_REPO/atomixos.img" ./scripts/build.sh) \
 	>"$TEST_REPO/export.out" 2>"$TEST_REPO/export.err"; then
 	echo "local override export without -dev unexpectedly succeeded" >&2
 	exit 1
@@ -206,7 +216,7 @@ grep -F 'ERROR: local override output filename must include -dev: atomixos.img' 
 	"$TEST_REPO/export.err"
 test ! -e "$TEST_REPO/atomixos.img"
 test ! -s "$log"
-(cd "$TEST_REPO" && usage_output="$TEST_REPO/atomixos-dev.img" ./scripts/build.sh) \
+(cd "$TEST_REPO" && usage_board=rock64 usage_output="$TEST_REPO/atomixos-dev.img" ./scripts/build.sh) \
 	>"$TEST_REPO/export-dev.out" 2>"$TEST_REPO/export-dev.err"
 test -f "$TEST_REPO/atomixos-dev.img"
 
@@ -237,7 +247,7 @@ grep -F './scripts/nix-with-build-config.sh build ".#$board.boot-script"' "$TEST
 grep -F './scripts/nix-with-build-config.sh build .#nixosConfigurations.bundle-test-vm' \
 	"$TEST_REPO/mise.toml"
 grep -F 'run = "./scripts/build.sh"' "$TEST_REPO/mise.toml"
-grep -F 'flag "--board <board>" help="Target board" default="rock64"' "$TEST_REPO/mise.toml"
+grep -F 'flag "--board <board>" help="Target board" required=#true' "$TEST_REPO/mise.toml"
 grep -F 'choices "rock64" "cm3"' "$TEST_REPO/mise.toml"
 if grep -R -F 'nix-with-build-config.sh' "$TEST_REPO/.mise/tasks/e2e" "$TEST_REPO/.mise/tasks/serial"; then
 	echo "excluded e2e or serial task unexpectedly uses local build policy" >&2
