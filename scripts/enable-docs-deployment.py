@@ -88,7 +88,7 @@ def enable() -> str:
         "Pages environment policy query",
     ).stdout.splitlines()
     rows = [line.split("\t") for line in existing if line]
-    # Allow main before removing anything, so a failure never leaves the environment with no deployable branch.
+    # Allow main before removing any existing policy, so a failed removal never leaves main unable to deploy.
     if not any(policy_type == "branch" and name == PUBLISH_BRANCH for _, policy_type, name in rows):
         gh(
             executable,
@@ -118,32 +118,20 @@ def main() -> int:
         print(f"error: {error}", file=sys.stderr)
         if isinstance(error, MissingGhError):
             print("Install GitHub CLI: https://cli.github.com/", file=sys.stderr)
-        print("Manual recovery:", file=sys.stderr)
-        print("  gh api --method PUT repos/OWNER/REPO/pages -f build_type=workflow", file=sys.stderr)
-        print("  # Use POST instead of PUT when Pages does not exist.", file=sys.stderr)
-        environment = f"repos/OWNER/REPO/environments/{PAGES_ENVIRONMENT}"
-        print(
-            f"  gh api --method PUT {environment}"
+        policies = f"repos/OWNER/REPO/environments/{PAGES_ENVIRONMENT}/deployment-branch-policies"
+        recovery = (
+            "Manual recovery:",
+            "  gh api --method PUT repos/OWNER/REPO/pages -f build_type=workflow",
+            "  # Use POST instead of PUT when Pages does not exist.",
+            f"  gh api --method PUT repos/OWNER/REPO/environments/{PAGES_ENVIRONMENT}"
             " -F 'deployment_branch_policy[protected_branches]=false'"
             " -F 'deployment_branch_policy[custom_branch_policies]=true'",
-            file=sys.stderr,
-        )
-        print(
-            f"  gh api --method POST {environment}/deployment-branch-policies -f name={PUBLISH_BRANCH} -f type=branch",
-            file=sys.stderr,
-        )
-        print(
-            f"  # Then delete every other policy listed by: gh api {environment}/deployment-branch-policies",
-            file=sys.stderr,
-        )
-        print(
-            f"  gh api --method DELETE {environment}/deployment-branch-policies/POLICY_ID",
-            file=sys.stderr,
-        )
-        print(
+            f"  gh api --method POST {policies} -f name={PUBLISH_BRANCH} -f type=branch",
+            f"  # Then delete every other policy listed by: gh api {policies}",
+            f"  gh api --method DELETE {policies}/POLICY_ID",
             "  gh variable set DOCS_DEPLOYMENT_ENABLED --body true --repo OWNER/REPO",
-            file=sys.stderr,
         )
+        print("\n".join(recovery), file=sys.stderr)
         return 1
 
     print(f"GitHub Pages deployment enabled: {url}")
