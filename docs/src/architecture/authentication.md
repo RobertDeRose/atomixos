@@ -34,7 +34,7 @@ services.openssh = {
 
 Where you can connect from:
 
-- **LAN (`lan`) and VPN (`tun0`):** always, with a provisioned key.
+- **LAN (`lan`):** always, with a provisioned key.
 - **WAN (`wan`):** only while the flag file `/data/config/ssh-wan-enabled` exists. Nothing creates it automatically.
 
 User keys are read from `/data/config/ssh-authorized-keys/<user>`. Admin signer keys are kept separately in

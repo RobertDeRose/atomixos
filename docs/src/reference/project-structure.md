@@ -40,7 +40,6 @@ modules/
   nixstasis.nix                    Optional Nixstasis client registration and polling
   logging.nix                      Volatile journald plus buffered rsyslog to /data/logs
   boot-storage-debug.nix           Boot storage diagnostics service
-  openvpn.nix                      OpenVPN recovery tunnel
 
 nix/
   build-policy.nix                 Typed policy, merge, assertions, and canonical renderer

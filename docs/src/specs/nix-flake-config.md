@@ -67,19 +67,6 @@ builds selected USB Ethernet and USB serial drivers as modules. It is built with
 - When the `ftdi_sio` or `cp210x` module is loaded
 - Then `/dev/ttyUSB0` appears
 
-### OpenVPN recovery service
-
-OpenVPN is included in the rootfs for recovery tunnel access. `openvpn-recovery.service` does not start automatically
-and requires `/data/config/openvpn/client.conf`.
-
-#### Scenario: OpenVPN service is conditional
-
-- Given no OpenVPN config file exists on `/data`
-- Then `openvpn-recovery.service` does not start
-- When a config file is placed at `/data/config/openvpn/client.conf`
-- And the service is started manually
-- Then a `tun0` interface appears
-
 ### QEMU testing target
 
 `nixosConfigurations.rock64-qemu` targets QEMU `aarch64-virt` with virtio block devices. It shares the service

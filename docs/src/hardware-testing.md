@@ -167,7 +167,6 @@ ssh <wan-ip>
 **Pass criteria**:
 
 - HTTPS (443) is blocked until provisioned
-- OpenVPN (1194) is blocked until provisioned
 - SSH (22) is blocked
 
 ### Test 4.2: SSH-on-WAN toggle

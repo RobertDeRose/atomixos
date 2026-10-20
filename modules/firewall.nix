@@ -97,9 +97,6 @@ in
           # -- LAN rules --
           iifname "${cfg.lanInterface}" accept comment "ATOMIXOS_LAN_DEFAULT_OPEN"
 
-          # -- tun0 (VPN) rules --
-          iifname "tun0" tcp dport 22 accept   comment "SSH over VPN"
-
           # Everything else is dropped by default policy
         }
 

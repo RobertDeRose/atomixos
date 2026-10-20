@@ -32,7 +32,6 @@ flowchart TD
         NETWORKING["networking.nix"]
         FIREWALL["firewall.nix"]
         LAN["lan-gateway.nix"]
-        OPENVPN["openvpn.nix"]
         RAUC["rauc.nix"]
         FIRSTBOOT["first-boot.nix"]
         VERIFY["os-verification.nix"]
@@ -264,11 +263,11 @@ The LAN address comes from `/etc/systemd/network/20-lan.network.d/50-atomixos.co
 
 nftables `inet filter` table with per-interface rules.
 
-| Chain     | Policy | Rules                                                                                              |
-|-----------|--------|----------------------------------------------------------------------------------------------------|
-| `input`   | drop   | `lo` accept; established/related accept; `lan` accept (`ATOMIXOS_LAN_DEFAULT_OPEN`); `tun0` TCP 22 |
-| `forward` | drop   | No exceptions                                                                                      |
-| `output`  | accept |                                                                                                    |
+| Chain     | Policy | Rules                                                                               |
+|-----------|--------|-------------------------------------------------------------------------------------|
+| `input`   | drop   | `lo` accept; established/related accept; `lan` accept (`ATOMIXOS_LAN_DEFAULT_OPEN`) |
+| `forward` | drop   | No exceptions                                                                       |
+| `output`  | accept |                                                                                     |
 
 | Service                                | When                                             | What                                                                          |
 |----------------------------------------|--------------------------------------------------|-------------------------------------------------------------------------------|
@@ -428,14 +427,3 @@ Optional Nixstasis client. Enabled from build policy (`nixstasis.enable`).
 
 Installs U-Boot environment tools, RAUC, and core utilities, and runs `boot-storage-debug.service` after `rauc.service`
 to log boot storage diagnostics from `scripts/boot-storage-debug.sh`.
-
-## openvpn.nix
-
-OpenVPN recovery tunnel.
-
-| Setting     | Value                                                  |
-|-------------|--------------------------------------------------------|
-| Service     | `openvpn-recovery.service`                             |
-| Config path | `/data/config/openvpn/client.conf`                     |
-| Auto-start  | `false`                                                |
-| Condition   | `ConditionPathExists=/data/config/openvpn/client.conf` |

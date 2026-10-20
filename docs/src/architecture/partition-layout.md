@@ -60,7 +60,6 @@ budget eMMC modules that can corrupt the boot area; `nix/uboot.nix` builds U-Boo
     admin-signers                    Admin SSH keys trusted to sign configuration re-applies
     ssh-authorized-keys/<user>       Per-user SSH authorized keys
     files/                           Files delivered in a configuration bundle
-    openvpn/client.conf              Optional OpenVPN recovery tunnel; the service starts only if it exists
   nixstasis/                         Nixstasis identity and remote-access keys, when enabled
   containers/rootless/               Podman storage for rootless containers
   logs/                              Durable host and application logs written by rsyslog

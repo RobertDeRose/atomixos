@@ -93,9 +93,9 @@ nixos-lib.runTest {
             # Allow the NixOS test driver backdoor on eth0
             iifname "eth0" accept
 
-            # WAN (eth1 in test VM) — only HTTPS + OpenVPN
+            # WAN (eth1 in test VM) — only HTTPS and a UDP service
             iifname "eth1" tcp dport 443 accept   comment "HTTPS"
-            iifname "eth1" udp dport 1194 accept  comment "OpenVPN"
+            iifname "eth1" udp dport 1194 accept  comment "UDP service"
 
             # SSH on WAN is NOT allowed by default — toggle adds it here
           }
