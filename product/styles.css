@@ -497,6 +497,14 @@ main > section {
   text-align: left;
 }
 
+/* The open row reads as an empty slot waiting for the next board. */
+.boards__add td {
+  border-bottom-style: dashed;
+  white-space: nowrap;
+  color: var(--ink-muted);
+  font-weight: 600;
+}
+
 .boards th {
   font-family: var(--font-display);
   font-weight: 650;
