@@ -2,10 +2,14 @@
 (function () {
   var root = document.documentElement;
   var button = document.querySelector('.theme-toggle');
+  var meta = document.querySelector('meta[name="theme-color"]');
 
+  // Runs after every theme change: relabel the toggle, and keep Safari's toolbar tint (theme-color) on the page color,
+  // since Safari does not resample the page when the theme changes.
   function label() {
     var next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
     button.setAttribute('aria-label', 'Switch to ' + next + ' mode');
+    meta.setAttribute('content', getComputedStyle(root).getPropertyValue('--paper').trim());
   }
 
   button.addEventListener('click', function () {

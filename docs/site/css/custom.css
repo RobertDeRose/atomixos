@@ -312,3 +312,25 @@ html[data-theme='dark'] {
   margin: 0.25rem 0 0;
   color: var(--ifm-color-content-secondary);
 }
+
+/* Heading anchors show a small atom instead of "#"; the mask takes the link color. `a.` outranks the theme rule. */
+a.hash-link::before {
+  content: '';
+  display: inline-block;
+  width: 0.75em;
+  height: 0.75em;
+  vertical-align: -0.04em;
+  background-color: currentColor;
+  mask: url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="1.6"%3E%3Cellipse cx="12" cy="12" rx="10.5" ry="4"/%3E%3Cellipse cx="12" cy="12" rx="10.5" ry="4" transform="rotate%2860 12 12%29"/%3E%3Cellipse cx="12" cy="12" rx="10.5" ry="4" transform="rotate%28120 12 12%29"/%3E%3Ccircle cx="12" cy="12" r="2.2" fill="black" stroke="none"/%3E%3C/svg%3E') center / contain no-repeat;
+}
+
+/* A slightly narrower table of contents gives the article column a little more width on desktop. */
+@media (min-width: 997px) {
+  .col[class*='docItemCol'] {
+    max-width: 79% !important;
+  }
+
+  .col.col--3:has(> .theme-doc-toc-desktop) {
+    --ifm-col-width: 21%;
+  }
+}

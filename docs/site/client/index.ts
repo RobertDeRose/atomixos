@@ -92,7 +92,23 @@ function enhance(): void {
   });
 }
 
+// Safari tints its toolbar from <meta name="theme-color"> and does not resample the page when the theme changes, so
+// keep one theme-color tag in step with the navbar color.
+function syncThemeColor(): void {
+  const color = getComputedStyle(document.documentElement).getPropertyValue('--ifm-navbar-background-color').trim();
+  if (!color) return;
+  let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+  if (!meta) {
+    meta = document.createElement('meta');
+    meta.name = 'theme-color';
+    document.head.append(meta);
+  }
+  meta.content = color;
+}
+
 // Mermaid renders after navigation, so watch for diagrams as they appear.
 if (ExecutionEnvironment.canUseDOM) {
   new MutationObserver(enhance).observe(document.body, {childList: true, subtree: true});
+  syncThemeColor();
+  new MutationObserver(syncThemeColor).observe(document.documentElement, {attributes: true, attributeFilter: ['data-theme']});
 }
