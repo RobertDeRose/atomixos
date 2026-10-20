@@ -42,11 +42,11 @@
       <img class="hero__logo" src="docs/img/atomixos-logo.png" width="512" height="512"
         alt="AtomixOS logo: an atom around a hexagon, with the tagline The element of reproducibility">
       <div class="hero__copy">
-        <h1><span>Flash once.</span> <span>Update forever.</span> <span>Roll back on its own.</span></h1>
+        <h1><span>Every update is atomic.</span> <span>Every boot is identical.</span> <span>Any failure finds ground state.</span></h1>
         <p class="lede">
-          AtomixOS is a NixOS-based operating system for single-board computers. Describe a device in one
-          <code>config.toml</code>, and every update lands in a spare slot that takes over only after it proves itself
-          healthy.
+          Atomic, from the Greek <i>atomos</i>: indivisible. AtomixOS is a NixOS-based operating system for
+          single-board computers. Describe a device in one <code>config.toml</code>, and every update lands whole in a
+          spare slot, or not at all, taking over only after it proves itself healthy.
         </p>
         <div class="actions">
           <a class="button button--primary" href="docs/provisioning/flash-image">Flash your first board</a>
@@ -56,10 +56,10 @@
     </section>
 
     <section class="elements" id="elements" aria-labelledby="elements-title">
-      <h2 id="elements-title">The periodic table of AtomixOS</h2>
+      <h2 id="elements-title">Twenty-five elements. One stable compound.</h2>
       <p class="section-lede">
-        Twenty-five elements in six families, from the flake that builds the image to the fleet that runs it. Pick
-        one to see what it does.
+        Six families bond into one device, from the flake that builds the image to the fleet that runs it. Pick an
+        element to see what it contributes.
       </p>
       <div class="elements__layout">
         <div class="ptable" role="group" aria-label="AtomixOS elements by family">
@@ -244,11 +244,11 @@
           <figcaption class="element__mass"><b>60 s</b> health check</figcaption>
         </figure>
         <div>
-          <h2 id="disk-title">Two copies of the system, one place for your data</h2>
+          <h2 id="disk-title">Two isotopes. Zero decay.</h2>
           <p class="section-lede">
-            The eMMC holds two boot and root slots. The device runs from one while an update is written to the other, so
-            a power cut mid-update never leaves it without a working system. Your configuration and logs live on
-            <code>/data</code>, which no update touches.
+            Slot A and slot B are the same element at different versions: the device runs from one while the next is
+            written beside it, so a power cut mid-update never leaves it without a working system. Your configuration
+            and logs never decay: they live on <code>/data</code>, and no update touches them.
           </p>
         </div>
       </div>

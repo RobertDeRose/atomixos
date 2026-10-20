@@ -255,6 +255,7 @@ main > section {
 /* One sentence per line. */
 .hero h1 span {
   display: block;
+  text-wrap: balance;
 }
 
 .hero__logo {
@@ -263,9 +264,9 @@ main > section {
 }
 
 .hero h1 {
-  max-width: 34rem;
+  max-width: 40rem;
   margin: 0 0 1.25rem;
-  font-size: clamp(2rem, 4.6vw, 3.25rem);
+  font-size: clamp(1.75rem, 3.3vw, 2.5rem);
   font-weight: 700;
 }
 
