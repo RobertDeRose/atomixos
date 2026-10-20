@@ -14,8 +14,10 @@ root, the docs build under `docs/`, the docs' `404.html` at the root, and the th
 copied from the docs' npm packages into `fonts/`. The product page loads its logo from the docs build
 (`docs/img/atomixos-logo.png`), so the two always share one logo.
 
-`mise run site:serve [port]` builds the same tree and serves it at `http://localhost:8000/atomixos/` by default. Use
-`mise run docs:serve` instead while writing docs; it reloads on every change but serves only the docs.
+`mise run site:serve [port]` builds the same tree and serves it at `http://localhost:8000/atomixos/` by default. It
+serves the product page straight from `product/` and sends no-cache headers, so an edit to the product page shows on
+the next browser refresh without a rebuild. The docs are served from the build, so use `mise run docs:serve` while
+writing docs; it reloads on every change but serves only the docs.
 
 The product page and the docs share the `theme` key in `localStorage`, so a light or dark choice on one carries to
 the other.

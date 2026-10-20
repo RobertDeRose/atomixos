@@ -120,10 +120,10 @@ exit "$broken"
 '''
 
 [tasks."site:serve"]
-description = "Build the Pages site and serve it at http://localhost:<port>/atomixos/"
+description = "Build the Pages site and serve it at http://localhost:<port>/atomixos/, with the product page live"
 depends = ["site:build"]
 usage = 'arg "[port]" help="Port to serve on" default="8000"'
-run = 'python3 scripts/serve-pages.py "${usage_port:-8000}" _site'
+run = 'python3 scripts/serve-pages.py "${usage_port:-8000}" _site product'
 
 [tasks."docs:deployment:enable"]
 description = "Enable GitHub Pages deployment"

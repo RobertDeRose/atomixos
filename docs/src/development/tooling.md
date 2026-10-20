@@ -31,7 +31,7 @@ add it to `mise.toml` as `latest` and run `mise lock`.
 | `docs:deployment:enable` | Configure Pages and enable its repository gate through external `gh`.   |
 | `docs:serve [port]`      | Serve the docs with hot reload on port 3000 or the supplied port.       |
 | `site:build`             | Assemble the product page and the docs build into `_site/atomixos`.     |
-| `site:serve [port]`      | Build and serve the assembled site on port 8000 or the supplied port.   |
+| `site:serve [port]`      | Build and serve the site on port 8000; the product page is served live. |
 
 The committed lock targets the `lockfile_platforms` in `mise.toml`: `linux-x64`, `linux-arm64`, and `macos-arm64`.
 Intel Macs (`macos-x64`) are not targeted, since hk and nixfmt-rs publish no release for them. Windows is not supported.

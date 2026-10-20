@@ -338,7 +338,7 @@ All tasks are run with `mise run <task>`. Run `mise tasks` to list them.
 | `docs:build`            | Build the documentation site (Docusaurus) → `docs/build/`     |
 | `docs:serve [port]`     | Serve the documentation site locally with hot-reload          |
 | `site:build`            | Assemble the product page and docs into `_site/atomixos/`     |
-| `site:serve [port]`     | Build and serve the assembled Pages site on port 8000         |
+| `site:serve [port]`     | Serve the Pages site on port 8000, product page live          |
 
 ## Flake outputs
 
