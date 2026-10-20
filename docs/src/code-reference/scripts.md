@@ -213,11 +213,11 @@ reports a consistent result. The files under `.mise/tasks/e2e/` hold the task me
 
 ### Developer scripts
 
-| Script                      | Purpose                                                                                     |
-|-----------------------------|---------------------------------------------------------------------------------------------|
-| `build.sh`                  | `mise run build [--board <board>]`: atomic build that retains the last two builds per board |
-| `nix-with-build-config.sh`  | Adds the local `build.dev.toml` overlay to Nix commands                                     |
-| `enable-docs-deployment.py` | `mise run docs:deployment:enable`: configures GitHub Pages through `gh`                     |
+| Script                      | Purpose                                                                                   |
+|-----------------------------|-------------------------------------------------------------------------------------------|
+| `build.sh`                  | `mise run build --board <board>`: atomic build that retains the last two builds per board |
+| `nix-with-build-config.sh`  | Adds the local `build.dev.toml` overlay to Nix commands                                   |
+| `enable-docs-deployment.py` | `mise run docs:deployment:enable`: configures GitHub Pages through `gh`                   |
 
 ## mise Task Scripts
 

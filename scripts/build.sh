@@ -4,9 +4,14 @@
 set -euo pipefail
 
 REPO_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
-BOARD=${usage_board:-rock64}
+# Never guess the board: a ROCK64 image on a CM3 (or the reverse) writes the wrong bootloader.
+BOARD=${usage_board:-}
 case "$BOARD" in
 rock64 | cm3) ;;
+"")
+	echo "ERROR: choose a board with --board rock64|cm3" >&2
+	exit 1
+	;;
 *)
 	echo "ERROR: unsupported board '$BOARD' (expected rock64 or cm3)" >&2
 	exit 1

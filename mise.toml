@@ -146,7 +146,7 @@ limactl start "${usage_vm}" 2>/dev/null || true
 [tasks."build:squashfs"]
 description = "Build squashfs rootfs"
 usage = """
-flag "--board <board>" help="Target board" default="rock64" {
+flag "--board <board>" help="Target board" required=#true {
   choices "rock64" "cm3"
 }
 flag "--lima" help="Build inside a Lima VM"
@@ -155,7 +155,7 @@ flag "--vm <name>" help="Lima VM instance name" default="default"
 run = """
 #!/usr/bin/env bash
 set -euo pipefail
-board="${usage_board:-rock64}"
+board="$usage_board"
 cmd=()
 if [ "${usage_lima:-false}" = "true" ]; then
   mise run _lima "${usage_vm}"
@@ -167,7 +167,7 @@ fi
 [tasks."build:rauc-bundle"]
 description = "Build signed RAUC bundle"
 usage = """
-flag "--board <board>" help="Target board" default="rock64" {
+flag "--board <board>" help="Target board" required=#true {
   choices "rock64" "cm3"
 }
 flag "--lima" help="Build inside a Lima VM"
@@ -176,7 +176,7 @@ flag "--vm <name>" help="Lima VM instance name" default="default"
 run = """
 #!/usr/bin/env bash
 set -euo pipefail
-board="${usage_board:-rock64}"
+board="$usage_board"
 cmd=()
 if [ "${usage_lima:-false}" = "true" ]; then
   mise run _lima "${usage_vm}"
@@ -188,7 +188,7 @@ fi
 [tasks."build:boot-script"]
 description = "Build U-Boot boot script"
 usage = """
-flag "--board <board>" help="Target board" default="rock64" {
+flag "--board <board>" help="Target board" required=#true {
   choices "rock64" "cm3"
 }
 flag "--lima" help="Build inside a Lima VM"
@@ -197,7 +197,7 @@ flag "--vm <name>" help="Lima VM instance name" default="default"
 run = """
 #!/usr/bin/env bash
 set -euo pipefail
-board="${usage_board:-rock64}"
+board="$usage_board"
 cmd=()
 if [ "${usage_lima:-false}" = "true" ]; then
   mise run _lima "${usage_vm}"
@@ -293,7 +293,7 @@ exec "$host_runner"
 [tasks.build]
 description = "Build every artifact for a board into .gcroots/<board>/current, keeping the previous build"
 usage = """
-flag "--board <board>" help="Target board" default="rock64" {
+flag "--board <board>" help="Target board" required=#true {
   choices "rock64" "cm3"
 }
 flag "--lima" help="Build inside a Lima VM"

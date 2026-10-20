@@ -238,8 +238,9 @@ Use `./scripts/nix-with-build-config.sh flake check` to evaluate and test effect
 `mise run check` does not invoke Nix or apply build policy.
 
 Direct `nix build .#...` and `nix flake check` remain pure and committed-policy-only. External `nixpkgs` helper builds
-also remain outside this contract. When `mise run build` exports a local-override image with `-o <path>`, the destination
-filename must include `-dev`; an unmarked destination is rejected before evaluation or retained-link mutation.
+also remain outside this contract. When `mise run build --board <board>` exports a local-override image with
+`-o <path>`, the destination filename must include `-dev`; an unmarked destination is rejected before evaluation or
+retained-link mutation.
 
 ## Failure and Retention Contract
 

@@ -11,7 +11,7 @@ Physical verification of AtomixOS on Rock64 (RK3328). Covers the checks that can
 - USB Bluetooth dongle
 - Laptop or second device on the LAN switch for client-side verification
 - Serial console cable (USB-to-TTY, 1500000 baud, ttyS2) -- highly recommended for U-Boot and early boot debugging
-- Built image: `.gcroots/rock64/current/image/atomixos-rock64-<release>.img` (from `mise run build`)
+- Built image: `.gcroots/rock64/current/image/atomixos-rock64-<release>.img` (from `mise run build --board rock64`)
 - Built RAUC bundle: `.gcroots/rock64/current/rauc-bundle/rock64.raucb`
 
 ## Phase 1: Provisioning and First Boot

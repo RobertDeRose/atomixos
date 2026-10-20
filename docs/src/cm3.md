@@ -1,7 +1,7 @@
 # Radxa CM3 IO Board
 
 Run AtomixOS on a Radxa ROCK 3 Compute Module (CM3, RK3566) mounted on the **Radxa CM3 IO Board**. This target is not
-the Rock64 (RK3328) or the Raspberry Pi CM4 IO carrier board. Rock64 stays the default board; select the CM3 explicitly.
+the Rock64 (RK3328) or the Raspberry Pi CM4 IO carrier board. Every build names its board, so pass `--board cm3`.
 
 ## Build and flash
 

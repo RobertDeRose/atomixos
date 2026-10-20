@@ -6,8 +6,8 @@ disk writer.
 ## Build the image
 
 ```sh
-# Build the Rock64 image (the default board), kept under .gcroots/rock64/current/image/
-mise run build
+# Build the Rock64 image, kept under .gcroots/rock64/current/image/
+mise run build --board rock64
 
 # Build the Radxa CM3 IO Board image, kept under .gcroots/cm3/current/image/
 mise run build --board cm3
