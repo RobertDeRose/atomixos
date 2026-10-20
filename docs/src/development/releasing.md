@@ -13,7 +13,9 @@ continue while a release runs; newer work stays off the release branch until ano
 
 ## Plan, validate, and approve
 
-The workflow accepts dispatches from the development branch only and serializes release runs.
+The workflow accepts dispatches from the development branch only and serializes release runs. GitHub keeps at most
+one release run pending behind the active one: a new dispatch cancels a run that is still pending, so the newest
+dispatch replaces it. A run that has started, including one waiting for approval, is never cancelled this way.
 
 1. **Plan** verifies that the official release branch is an ancestor of the selected commit, if that branch exists,
    and refuses a commit that already carries a version tag. Cocogitto computes the next version from Conventional
