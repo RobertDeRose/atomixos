@@ -33,7 +33,7 @@ changes in the lock diff, and commit it.
 | `fix`                    | Apply deterministic hk fixes to the working tree.                       |
 | `docs:install`           | Install the docs site's pnpm dependencies from `docs/pnpm-lock.yaml`.   |
 | `docs:build`             | Build the Docusaurus site into `docs/build`; fails on broken links.     |
-| `docs:deployment:enable` | Configure Pages and enable its repository gate through external `gh`.   |
+| `docs:deployment:enable` | Configure Pages to deploy from `main` and enable its gate through `gh`. |
 | `docs:serve [port]`      | Serve the docs with hot reload on port 3000 or the supplied port.       |
 | `site:build`             | Assemble the product page and the docs build into `_site/atomixos`.     |
 | `site:serve [port]`      | Build and serve the site on port 8000; the product page is served live. |
