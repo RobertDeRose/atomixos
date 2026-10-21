@@ -199,12 +199,15 @@ def test_creation_failure_does_not_rewrite_an_already_selected_environment(pages
     assert state.puts == 0
 
 
-def test_creation_failure_leaves_a_new_environment_unrestricted(pages):
+def test_creation_failure_leaves_a_new_environment_unrestricted(pages, capsys):
     module, state = pages
     state.environment_exists = False
     state.fail = "create"
-    with pytest.raises(module.EnablementError, match="restored"):
-        module.enable()
+    assert module.main() == 1
+    error = capsys.readouterr().err
+    assert "new environment remains with unrestricted deployment branch settings" in error
+    assert "restored" not in error
+    assert "Manual recovery:" in error
     assert state.environment_exists
     assert state.branch_policy is None
     assert state.policies == []

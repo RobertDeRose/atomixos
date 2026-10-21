@@ -70,6 +70,9 @@ Configure these GitHub settings before the first release:
 - Protect `v*` tags against creation, updates, and deletion, with the same deploy-key bypass.
 - Keep the development branch as the default branch, so manual dispatch can discover the release workflow before
   the first release. Continue reviewing development changes through the normal PR checks.
+- If publishing the product page and docs, run `mise run docs:deployment:enable` before the first release, including
+  when Pages was already enabled. This configures the `github-pages` environment for deployments from `main`;
+  see [GitHub Pages Deployment](github-pages.md).
 
 The deploy key only updates Git references. The workflow's `GITHUB_TOKEN` creates the GitHub release and uploads
 assets. Build and validation jobs have read-only repository access and receive no release key. The workflow calls

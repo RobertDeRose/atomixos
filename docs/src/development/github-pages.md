@@ -64,6 +64,9 @@ create a branch policy. If changing that mode succeeds but querying policies or 
 attempts to restore the previous deployment branch settings. Once `main` is allowed, a failure removing another
 policy leaves `main` allowed for the next run.
 
+For an environment created during this run, rollback leaves the new environment present with unrestricted
+deployment branch settings. The error reports this state; complete recovery before dispatching a deployment.
+
 To publish the current official release after enabling deployment, dispatch from `main`:
 
 ```bash

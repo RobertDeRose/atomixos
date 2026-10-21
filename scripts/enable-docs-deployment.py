@@ -142,7 +142,11 @@ def allow_publish_branch(executable: str, environment: str, policies: str, curre
         except EnablementError as rollback_error:
             message = f"{error}; {rollback_error}; previous deployment branch policy: {json.dumps(previous)}"
             raise EnablementError(message) from rollback_error
-        message = f"{error}; previous deployment branch settings restored"
+        if current:
+            outcome = "previous deployment branch settings restored"
+        else:
+            outcome = "new environment remains with unrestricted deployment branch settings"
+        message = f"{error}; {outcome}"
         raise EnablementError(message) from error
     return rows
 
