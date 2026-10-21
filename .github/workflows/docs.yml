@@ -2,15 +2,15 @@ name: Documentation
 on:
   push:
     branches:
-      - "dev"
+      - "main"
   workflow_dispatch:
 permissions: {}
+# Per ref, so a build-only dispatch from another branch cannot cancel a pending main deployment.
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   build:
-    if: vars.DOCS_DEPLOYMENT_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -29,8 +29,6 @@ jobs:
         env:
           MISE_IGNORED_CONFIG_PATHS: /home/runner/.config/mise/config.toml
         run: mise install --locked
-      - name: Configure Pages
-        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # ratchet:actions/configure-pages@v5
       # The product page at the root, with the docs under docs/. docs:build installs the pinned pnpm
       # dependencies from docs/pnpm-lock.yaml first.
       - name: Build site
@@ -42,7 +40,7 @@ jobs:
         with:
           path: _site/atomixos
   deploy:
-    if: vars.DOCS_DEPLOYMENT_ENABLED == 'true'
+    if: github.ref == 'refs/heads/main' && vars.DOCS_DEPLOYMENT_ENABLED == 'true'
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 10

@@ -33,7 +33,7 @@ changes in the lock diff, and commit it.
 | `fix`                    | Apply deterministic hk fixes to the working tree.                       |
 | `docs:install`           | Install the docs site's pnpm dependencies from `docs/pnpm-lock.yaml`.   |
 | `docs:build`             | Build the Docusaurus site into `docs/build`; fails on broken links.     |
-| `docs:deployment:enable` | Configure Pages and enable its repository gate through external `gh`.   |
+| `docs:deployment:enable` | Configure Pages to deploy from `main` and enable its gate through `gh`. |
 | `docs:serve [port]`      | Serve the docs with hot reload on port 3000 or the supplied port.       |
 | `site:build`             | Assemble the product page and the docs build into `_site/atomixos`.     |
 | `site:serve [port]`      | Build and serve the site on port 8000; the product page is served live. |
@@ -63,7 +63,7 @@ Git rejects merges that require a merge commit.
 | `scripts/enable-docs-deployment.py` | Configures workflow-built Pages through external `gh`.                    |
 | `.github/workflows/hk.yml`          | Runs hk checks on PRs, manual dispatches, and release calls.              |
 | `.github/workflows/nix.yml`         | Evaluates the flake per platform; runs U-Boot scripts in a sandbox.       |
-| `.github/workflows/docs.yml`        | Builds gated docs from the default branch or manual dispatch.             |
+| `.github/workflows/docs.yml`        | Builds the site from `main` or manual dispatch; deployment is gated.      |
 | `.github/workflows/pytest.yml`      | Runs provisioning and repository Python tests on aarch64 Linux.           |
 | `.github/workflows/release.yml`     | Plans, validates, builds, and publishes approved official releases.       |
 
