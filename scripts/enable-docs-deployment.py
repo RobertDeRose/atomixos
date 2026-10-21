@@ -104,20 +104,19 @@ def parse_environment(output: str) -> dict:
     return current
 
 
-def allow_publish_branch(executable: str, environment: str, current: dict) -> list[list[str]]:
+def put_environment(executable: str, environment: str, body: dict, operation: str) -> None:
+    """Create or update the environment with the given settings."""
+    gh(executable, ["api", "--method", "PUT", environment, "--input", "-"], operation, json.dumps(body))
+
+
+def allow_publish_branch(executable: str, environment: str, policies: str, current: dict) -> list[list[str]]:
     """Ensure the publish policy exists, restoring the prior mode if setup fails."""
     update = environment_update(current)
     changed = current.get("deployment_branch_policy") != CUSTOM_BRANCH_POLICY
-    policies = f"{environment}/deployment-branch-policies"
     try:
         # The policy endpoints require selected-branch mode, so this PUT must come first.
         if changed:
-            gh(
-                executable,
-                ["api", "--method", "PUT", environment, "--input", "-"],
-                "Pages environment update",
-                json.dumps(update),
-            )
+            put_environment(executable, environment, update, "Pages environment update")
         existing = gh(
             executable,
             ["api", "--paginate", policies, "--jq", '.branch_policies[] | [.id, .type // "branch", .name] | @tsv'],
@@ -139,12 +138,7 @@ def allow_publish_branch(executable: str, environment: str, current: dict) -> li
         previous = current.get("deployment_branch_policy")
         update["deployment_branch_policy"] = previous
         try:
-            gh(
-                executable,
-                ["api", "--method", "PUT", environment, "--input", "-"],
-                "Pages environment rollback",
-                json.dumps(update),
-            )
+            put_environment(executable, environment, update, "Pages environment rollback")
         except EnablementError as rollback_error:
             message = f"{error}; {rollback_error}; previous deployment branch policy: {json.dumps(previous)}"
             raise EnablementError(message) from rollback_error
@@ -191,8 +185,8 @@ def enable() -> str:
     else:
         message = f"Pages environment query failed: {failure_detail(queried)}"
         raise EnablementError(message)
-    rows = allow_publish_branch(executable, environment, current_environment)
     policies = f"{environment}/deployment-branch-policies"
+    rows = allow_publish_branch(executable, environment, policies, current_environment)
     # Main is now allowed; a failed removal must not undo that or roll back the environment.
     for policy_id, policy_type, name in rows:
         if policy_type != "branch" or name != PUBLISH_BRANCH:
