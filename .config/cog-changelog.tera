@@ -4,7 +4,16 @@
 ## Unreleased
 {% endif -%}
 
+{#- Before v1.0.0 every release may break, so breaking commits stay in their type groups unlabeled. -#}
+{% set pre_v1 = not version.tag or version.tag is starting_with("v0.") -%}
+{% if pre_v1 -%}
+{% set breaking = [] -%}
+{% set regular = commits -%}
+{% else -%}
 {% set breaking = commits | filter(attribute="breaking_change", value=true) -%}
+{% set regular = commits | filter(attribute="breaking_change", value=false) -%}
+{% endif -%}
+
 {% if breaking | length > 0 -%}
 ### Breaking changes
 
@@ -13,7 +22,6 @@
 {% endfor %}
 {% endif -%}
 
-{% set regular = commits | filter(attribute="breaking_change", value=false) -%}
 {% for value in regular | group_by_type -%}
 ### {{ value.0 }}
 

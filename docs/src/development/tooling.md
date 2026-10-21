@@ -99,6 +99,8 @@ The three validation workflows also accept an exact commit through `workflow_cal
 Changelog-visible `feat`, `fix`, `perf`, and `refactor` commits require a semantic scope. The commit hook also checks
 Conventional Commit syntax, a 72-character subject, 100-character body lines, and canonical optional `Beads:` footers.
 Internal build, chore, CI, documentation, release, style, and test commits are omitted from `cog changelog`.
+Before `v1.0.0`, breaking commits appear unlabeled under their type's heading, because any pre-1.0 release may break;
+from `v1.0.0` on, they are listed first under **Breaking changes**.
 
 To constrain scopes, add a `scopes = ["..."]` allowlist to `cog.toml`, document each stable subsystem in README, and
 update `AGENTS.md` so agents apply the same taxonomy. Run `cog check` after changing the allowlist.
