@@ -78,6 +78,12 @@ build images, run NixOS VM tests, or regenerate the lock. Full build and VM vali
 `./scripts/nix-with-build-config.sh flake check` or individual `nix build` commands, separately from `mise run check`.
 The hk and Nix jobs have a 45-minute limit.
 
+The `uboot-scripts` job and the release board builds run the Magic Nix Cache action after installing Nix. It stores
+paths that are not on `cache.nixos.org` in the GitHub Actions cache, so later runs substitute them instead of
+rebuilding. GitHub scopes the cache by ref: pull request runs read the `dev` cache but cannot write to it. FlakeHub
+Cache and the action's diagnostics upload are disabled. A cache miss or rate limit only makes a run slower. The
+workflows pin both the action and the cache daemon revision it downloads; update them together.
+
 `.github/workflows/pytest.yml` runs the provisioning package test suite on the same events. It runs on
 `ubuntu-26.04-arm`, matching the device's aarch64 Linux file APIs, which macOS host runs only emulate. It executes
 `uv run --python 3.13 --extra dev pytest tests ../../tests` through `mise x uv` in `scripts/atomixos_provision`,
