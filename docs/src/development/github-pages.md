@@ -52,10 +52,11 @@ mise run docs:deployment:enable
 The task (`scripts/enable-docs-deployment.py`):
 
 1. checks that `gh` is installed, signed in, and can resolve the repository;
-2. creates the Pages site, or updates the existing one, with the GitHub Actions (`workflow`) build type;
+2. creates the Pages site with the GitHub Actions (`workflow`) build type, or switches an existing site to it;
 3. restricts the `github-pages` environment to deployments from `main`, creating the environment if it is missing,
-   replacing the default-branch rule GitHub creates with the site, and keeping the environment's required reviewers
-   and wait timer; an environment that already allows only selected branches is not rewritten;
+   replacing the default-branch rule GitHub creates with the site, and keeping the environment's required reviewers,
+   wait timer, and administrator bypass setting; an environment that already allows only selected branches is not
+   rewritten;
 4. sets `DOCS_DEPLOYMENT_ENABLED=true` as its last change;
 5. prints the Pages URL.
 
@@ -64,8 +65,9 @@ create a branch policy. If changing that mode succeeds but querying policies or 
 attempts to restore the previous deployment branch settings. Once `main` is allowed, a failure removing another
 policy leaves `main` allowed for the next run.
 
-For an environment created during this run, rollback leaves the new environment present with unrestricted
-deployment branch settings. The error reports this state; complete recovery before dispatching a deployment.
+An environment created during this run is not rolled back, because its default mode would allow every branch.
+It stays in selected-branch mode with no branch policies, which blocks every deployment until a rerun allows
+`main`. The error reports this state.
 
 To publish the current official release after enabling deployment, dispatch from `main`:
 

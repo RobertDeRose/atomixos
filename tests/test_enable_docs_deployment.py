@@ -31,6 +31,10 @@ def pages(monkeypatch):
         rollback_fails=False,
         raw_environment=None,
         policy_output=None,
+        admin_bypass=None,
+        build_type="legacy",
+        pages_writes=0,
+        raw_pages=None,
     )
     endpoint = "repos/example/project/pages"
     policies = "repos/example/project/environments/github-pages/deployment-branch-policies"
@@ -50,10 +54,18 @@ def pages(monkeypatch):
         method = args[args.index("--method") + 1] if "--method" in args else "GET"
         if target == endpoint:
             if method == "GET":
-                return result("https://example.github.io/project/\n") if state.exists else result(error="(HTTP 404)")
+                if not state.exists:
+                    return result(error="(HTTP 404)")
+                if "--jq" in args:
+                    return result("https://example.github.io/project/\n")
+                if state.raw_pages is not None:
+                    return result(state.raw_pages)
+                return result(json.dumps({"build_type": state.build_type}))
             if not state.exists:
                 state.policies = [{"id": 1, "type": "branch", "name": "dev"}]
             state.exists = True
+            state.build_type = "workflow"
+            state.pages_writes += 1
             return result()
         if target.endswith("/environments/github-pages") and method == "GET":
             if state.fail == "environment query":
@@ -63,6 +75,8 @@ def pages(monkeypatch):
             if state.raw_environment is not None:
                 return result(state.raw_environment)
             environment = {"protection_rules": state.rules, "deployment_branch_policy": state.branch_policy}
+            if state.admin_bypass is not None:
+                environment["can_admins_bypass"] = state.admin_bypass
             return result(json.dumps(environment))
         if target.endswith("/environments/github-pages") and method == "PUT":
             if state.fail == "environment" or (state.rollback_fails and state.puts):
@@ -146,9 +160,11 @@ def test_environment_update_keeps_other_protection_rules(pages):
         },
         {"id": 3, "type": "branch_policy"},
     ]
+    state.admin_bypass = False
     module.enable()
     assert state.environment == {
         "deployment_branch_policy": {"protected_branches": False, "custom_branch_policies": True},
+        "can_admins_bypass": False,
         "wait_timer": 30,
         "prevent_self_review": True,
         "reviewers": [{"type": "User", "id": 42}],
@@ -170,6 +186,32 @@ def test_rerun_leaves_a_converged_environment_untouched(pages):
     module.enable()
     module.enable()
     assert state.puts == 1
+    assert state.pages_writes == 1
+
+
+@pytest.mark.parametrize(
+    ("exists", "build_type", "writes"), [(False, None, 1), (True, "legacy", 1), (True, "workflow", 0)]
+)
+def test_pages_build_type_is_written_only_when_needed(pages, exists, build_type, writes):
+    module, state = pages
+    state.exists = exists
+    state.build_type = build_type
+    module.enable()
+    assert state.build_type == "workflow"
+    assert state.pages_writes == writes
+
+
+@pytest.mark.parametrize("response", ["not json", "[]", '{"build_type": null}'])
+def test_invalid_pages_response_shows_recovery_before_updating(pages, capsys, response):
+    module, state = pages
+    state.raw_pages = response
+    assert module.main() == 1
+    error = capsys.readouterr().err
+    assert "Pages query returned" in error
+    assert "Manual recovery:" in error
+    assert state.pages_writes == 0
+    assert state.puts == 0
+    assert not state.enabled
 
 
 @pytest.mark.parametrize("failure", ["query", "create"])
@@ -199,18 +241,35 @@ def test_creation_failure_does_not_rewrite_an_already_selected_environment(pages
     assert state.puts == 0
 
 
-def test_creation_failure_leaves_a_new_environment_unrestricted(pages, capsys):
+@pytest.mark.parametrize("failure", ["query", "create"])
+def test_setup_failure_leaves_a_new_environment_allowing_no_branches(pages, capsys, failure):
     module, state = pages
     state.environment_exists = False
-    state.fail = "create"
+    state.fail = failure
     assert module.main() == 1
     error = capsys.readouterr().err
-    assert "new environment remains with unrestricted deployment branch settings" in error
+    assert "new environment allows no deployment branches until setup is rerun" in error
     assert "restored" not in error
     assert "Manual recovery:" in error
     assert state.environment_exists
-    assert state.branch_policy is None
+    assert state.branch_policy == module.CUSTOM_BRANCH_POLICY
+    assert state.puts == 1
     assert state.policies == []
+    assert not state.enabled
+
+
+@pytest.mark.parametrize("exists", [True, False])
+def test_failed_mode_change_is_not_rolled_back(pages, capsys, exists):
+    module, state = pages
+    state.environment_exists = exists
+    state.fail = "environment"
+    assert module.main() == 1
+    error = capsys.readouterr().err
+    assert "Pages environment update failed" in error
+    assert "rollback" not in error
+    assert "Manual recovery:" in error
+    assert state.environment_exists == exists
+    assert state.environment is None
     assert not state.enabled
 
 
@@ -256,6 +315,7 @@ def test_failed_rollback_reports_both_errors_and_recovery(pages, capsys):
         '{"deployment_branch_policy": null, "protection_rules": [{"type": "required_reviewers"}]}',
         '{"deployment_branch_policy": null, "protection_rules": [{"type": "wait_timer", "wait_timer": "bad"}]}',
         '{"deployment_branch_policy": null, "protection_rules": [{"type": "required_reviewers", "reviewers": [{}]}]}',
+        '{"deployment_branch_policy": null, "protection_rules": [], "can_admins_bypass": "no"}',
     ],
 )
 def test_invalid_environment_response_shows_recovery_before_updating(pages, capsys, payload):

@@ -57,29 +57,45 @@ def environment_update(current: dict) -> dict:
     The environment PUT may reset protection rules it omits, so it resends the current ones.
     """
     body: dict = {"deployment_branch_policy": dict(CUSTOM_BRANCH_POLICY)}
+    if "can_admins_bypass" in current:
+        body["can_admins_bypass"] = current["can_admins_bypass"]
     message = "Pages environment query returned unexpected protection rules"
     try:
         for rule in current.get("protection_rules", []):
-            if not isinstance(rule, dict) or not isinstance(rule.get("type"), str) or not rule["type"]:
+            kind = rule.get("type") if isinstance(rule, dict) else None
+            if not isinstance(kind, str) or not kind:
                 raise EnablementError(message)
-            if rule.get("type") == "wait_timer":
+            if kind == "wait_timer":
                 if type(rule["wait_timer"]) is not int:
                     raise EnablementError(message)
                 body["wait_timer"] = rule["wait_timer"]
-            elif rule.get("type") == "required_reviewers":
-                body["prevent_self_review"] = rule.get("prevent_self_review", False)
-                reviewers = rule["reviewers"]
-                if not isinstance(body["prevent_self_review"], bool) or not isinstance(reviewers, list):
+            elif kind == "required_reviewers":
+                prevent_self_review, reviewers = rule.get("prevent_self_review", False), rule["reviewers"]
+                if not isinstance(prevent_self_review, bool) or not isinstance(reviewers, list):
                     raise EnablementError(message)
+                body["prevent_self_review"] = prevent_self_review
                 body["reviewers"] = []
                 for reviewer in reviewers:
-                    kind, identifier = reviewer["type"], reviewer["reviewer"]["id"]
-                    if kind not in {"User", "Team"} or type(identifier) is not int:
+                    reviewer_type, identifier = reviewer["type"], reviewer["reviewer"]["id"]
+                    if reviewer_type not in {"User", "Team"} or type(identifier) is not int:
                         raise EnablementError(message)
-                    body["reviewers"].append({"type": kind, "id": identifier})
+                    body["reviewers"].append({"type": reviewer_type, "id": identifier})
     except (AttributeError, KeyError, TypeError) as error:
         raise EnablementError(message) from error
     return body
+
+
+def parse_build_type(output: str) -> str:
+    """Return the Pages site's build type."""
+    try:
+        site = json.loads(output)
+    except json.JSONDecodeError as error:
+        message = "Pages query returned invalid JSON"
+        raise EnablementError(message) from error
+    if not isinstance(site, dict) or not isinstance(site.get("build_type"), str):
+        message = "Pages query returned an unexpected build type"
+        raise EnablementError(message)
+    return site["build_type"]
 
 
 def parse_environment(output: str) -> dict:
@@ -101,7 +117,21 @@ def parse_environment(output: str) -> dict:
     if not isinstance(current["protection_rules"], list):
         message = "Pages environment query returned unexpected protection rules"
         raise EnablementError(message)
+    if not isinstance(current.get("can_admins_bypass", False), bool):
+        message = "Pages environment query returned an unexpected administrator bypass setting"
+        raise EnablementError(message)
     return current
+
+
+def query_optional(executable: str, endpoint: str, operation: str) -> str | None:
+    """Return a gh api GET response, or None when the resource does not exist."""
+    result = run_gh(executable, ["api", endpoint])
+    if result.returncode == 0:
+        return result.stdout
+    if http_status(result) == "404":
+        return None
+    message = f"{operation} failed: {failure_detail(result)}"
+    raise EnablementError(message)
 
 
 def put_environment(executable: str, environment: str, body: dict, operation: str) -> None:
@@ -113,10 +143,11 @@ def allow_publish_branch(executable: str, environment: str, policies: str, curre
     """Ensure the publish policy exists, restoring the prior mode if setup fails."""
     update = environment_update(current)
     changed = current.get("deployment_branch_policy") != CUSTOM_BRANCH_POLICY
+    # The policy endpoints require selected-branch mode, so this PUT must come first. A failed PUT changed
+    # nothing, so it needs no rollback.
+    if changed:
+        put_environment(executable, environment, update, "Pages environment update")
     try:
-        # The policy endpoints require selected-branch mode, so this PUT must come first.
-        if changed:
-            put_environment(executable, environment, update, "Pages environment update")
         existing = gh(
             executable,
             ["api", "--paginate", policies, "--jq", '.branch_policies[] | [.id, .type // "branch", .name] | @tsv'],
@@ -135,6 +166,11 @@ def allow_publish_branch(executable: str, environment: str, policies: str, curre
     except EnablementError as error:
         if not changed:
             raise
+        if not current:
+            # Restoring a new environment's default mode would allow every branch; selected-branch mode with no
+            # policies blocks every deployment until a rerun allows main.
+            message = f"{error}; new environment allows no deployment branches until setup is rerun"
+            raise EnablementError(message) from error
         previous = current.get("deployment_branch_policy")
         update["deployment_branch_policy"] = previous
         try:
@@ -142,11 +178,7 @@ def allow_publish_branch(executable: str, environment: str, policies: str, curre
         except EnablementError as rollback_error:
             message = f"{error}; {rollback_error}; previous deployment branch policy: {json.dumps(previous)}"
             raise EnablementError(message) from rollback_error
-        if current:
-            outcome = "previous deployment branch settings restored"
-        else:
-            outcome = "new environment remains with unrestricted deployment branch settings"
-        message = f"{error}; {outcome}"
+        message = f"{error}; previous deployment branch settings restored"
         raise EnablementError(message) from error
     return rows
 
@@ -169,26 +201,17 @@ def enable() -> str:
         raise EnablementError(message)
 
     endpoint = f"repos/{repository}/pages"
-    current = run_gh(executable, ["api", endpoint])
-    if current.returncode == 0:
-        gh(executable, ["api", "--method", "PUT", endpoint, "-f", "build_type=workflow"], "Pages update")
-    elif http_status(current) == "404":
+    site = query_optional(executable, endpoint, "Pages query")
+    if site is None:
         gh(executable, ["api", "--method", "POST", endpoint, "-f", "build_type=workflow"], "Pages creation")
-    else:
-        message = f"Pages query failed: {failure_detail(current)}"
-        raise EnablementError(message)
+    elif parse_build_type(site) != "workflow":
+        gh(executable, ["api", "--method", "PUT", endpoint, "-f", "build_type=workflow"], "Pages update")
 
     # GitHub creates github-pages allowing only the default branch (dev); the site publishes from main.
     environment = f"repos/{repository}/environments/{PAGES_ENVIRONMENT}"
-    queried = run_gh(executable, ["api", environment])
-    if queried.returncode == 0:
-        current_environment = parse_environment(queried.stdout)
-    elif http_status(queried) == "404":
-        # The PUT below creates a missing environment.
-        current_environment = {}
-    else:
-        message = f"Pages environment query failed: {failure_detail(queried)}"
-        raise EnablementError(message)
+    queried = query_optional(executable, environment, "Pages environment query")
+    # The environment PUT creates a missing environment.
+    current_environment = {} if queried is None else parse_environment(queried)
     policies = f"{environment}/deployment-branch-policies"
     rows = allow_publish_branch(executable, environment, policies, current_environment)
     # Main is now allowed; a failed removal must not undo that or roll back the environment.
