@@ -89,6 +89,12 @@ const config: Config = {
   ],
 
   themeConfig: {
+    // The product page publishes the wide share image; the docs reuse it.
+    image: 'https://robertderose.github.io/atomixos/social-preview.png',
+    metadata: [
+      {property: 'og:site_name', content: 'AtomixOS'},
+      {property: 'og:image:alt', content: 'AtomixOS: an atom around a hexagon beside the tagline Every update is atomic. Every boot is identical. Any failure finds ground state.'},
+    ],
     colorMode: {respectPrefersColorScheme: true},
     // Brand colors are applied in site/css/custom.css; base themes keep Mermaid's palette neutral.
     // Mermaid sizes boxes with this font, so it must match the site's body font.
