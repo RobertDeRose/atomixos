@@ -17,13 +17,13 @@ the Rock64 (RK3328) or the Raspberry Pi CM4 IO carrier board. Every build names 
    [Before the first flash](#before-the-first-flash).
 3. Flash the eMMC with `mise run flash --board cm3`, as described in [Flash an Image](provisioning/flash-image.md).
 
-| Item            | Value                                                                         |
-|-----------------|-------------------------------------------------------------------------------|
-| Flake outputs   | `nixosConfigurations.cm3`, `.#cm3` (and `.#cm3.image`, `.#cm3.rauc-bundle`)   |
-| RAUC compatible | `radxa-cm3-io`                                                                |
-| U-Boot config   | `radxa-cm3-io-rk3566_defconfig`                                               |
-| Device tree     | `rockchip/rk3566-radxa-cm3-io.dtb`                                            |
-| Kernel          | Unstripped, so RK3566 MMC, power management, Ethernet, and USB stay available |
+| Item            | Value                                                                            |
+|-----------------|----------------------------------------------------------------------------------|
+| Flake outputs   | `nixosConfigurations.cm3`, `.#cm3` (and `.#cm3.image`, `.#cm3.rauc-bundle`)      |
+| RAUC compatible | `radxa-cm3-io`                                                                   |
+| U-Boot config   | `radxa-cm3-io-rk3566_defconfig`                                                  |
+| Device tree     | `rockchip/rk3566-radxa-cm3-io.dtb`                                               |
+| Kernel          | Stripped like the Rock64, plus RK3566 eMMC, power, SCMI, and RK809 audio drivers |
 
 The image layout matches the Rock64: SPL at sector 64, the U-Boot FIT at sector 16384, and slot A from 16 MiB.
 

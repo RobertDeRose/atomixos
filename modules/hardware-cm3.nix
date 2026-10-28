@@ -12,6 +12,32 @@ let
   # Use fixed eMMC paths: every AtomixOS image shares the same GPT labels, so
   # by-partlabel could resolve to an inserted SD card.
   emmc = "/dev/mmcblk0";
+
+  kernelConfig = import ./kernel-config.nix { inherit lib; };
+
+  # RK3566 and CM3 IO drivers on top of the shared Rockchip layer. Most are
+  # already =y in the arm64 defconfig; forcing them keeps boot-critical
+  # hardware built in if that defconfig changes.
+  cm3KernelConfig = with lib.kernel; {
+    # On-module eMMC (rk3568-dwcmshc) and its I/O voltage domains.
+    MMC_SDHCI = lib.mkForce yes;
+    MMC_SDHCI_PLTFM = lib.mkForce yes;
+    MMC_SDHCI_OF_DWCMSHC = lib.mkForce yes;
+    ROCKCHIP_IODOMAIN = lib.mkForce yes;
+    ROCKCHIP_PM_DOMAINS = lib.mkForce yes;
+
+    # Power: RK809 PMIC (rk817 driver family) and the TCS4525 CPU regulator.
+    REGULATOR_FAN53555 = lib.mkForce yes;
+
+    # CPU clock and frequency scaling go through SCMI firmware on RK356x.
+    ARM_SCMI_PROTOCOL = lib.mkForce yes;
+    COMMON_CLK_SCMI = lib.mkForce yes;
+    ARM_SCMI_CPUFREQ = lib.mkForce yes;
+
+    # On-board audio: RK809 codec through the I2S/TDM controller.
+    SND_SOC_RK817 = lib.mkForce yes;
+    SND_SOC_ROCKCHIP_I2S_TDM = lib.mkForce yes;
+  };
 in
 {
   imports = [ ./hardware-rockchip.nix ];
@@ -25,22 +51,38 @@ in
     config.atomixos.watchdog.enableHardware && config.atomixos.watchdog.backend == "external"
   ) "CM3 IO has no external watchdog; using the internal RK3566 watchdog (fe600000).";
 
-  # Start with the stock upstream kernel: the Rock64's aggressively stripped
-  # RK3328 config excludes critical RK3566 eMMC/SDHCI and PMIC drivers.
-  boot.kernelPackages = pkgs.linuxPackages_latest;
+  # Same stripped kernel as the ROCK64, plus the RK3566 drivers above.
+  boot.kernelPackages = pkgs.linuxPackagesFor (
+    pkgs.linux_latest.override {
+      enableCommonConfig = false;
+      autoModules = false;
+      ignoreConfigErrors = true;
+    }
+  );
+  boot.kernelPatches = [
+    {
+      name = "cm3-stripped";
+      patch = null;
+      structuredExtraConfig =
+        kernelConfig.baseKernelConfig
+        // kernelConfig.optionalKernelConfig
+        // kernelConfig.rockchipKernelConfig
+        // cm3KernelConfig;
+    }
+  ];
   hardware.deviceTree = {
     enable = true;
     name = "rockchip/rk3566-radxa-cm3-io.dtb";
   };
-  boot.initrd.availableKernelModules = [
+  # The stripped kernel builds these in; replace the NixOS defaults, which name
+  # modules (SATA, NVMe, USB HID) this kernel does not build.
+  boot.initrd.availableKernelModules = lib.mkForce [
     "mmc_block"
-    "sdhci"
-    "sdhci_pltfm"
     "sdhci_of_dwcmshc"
-    # initrd-prepare-overlay-lower mounts the squashfs slot. The stock kernel
-    # builds squashfs (and the eMMC host drivers) in, so these entries only
-    # matter if the kernel config changes.
     "squashfs"
+    "f2fs"
+    "overlay"
+    "dm_mod"
   ];
 
   # The first 16 MiB contains Rockchip SPL, U-Boot, and redundant environments;

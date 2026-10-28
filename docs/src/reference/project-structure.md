@@ -24,9 +24,9 @@ dts/                               Device-tree overlays (internal and external w
 modules/
   base.nix                         Shared NixOS config (systemd, ssh, users, OverlayFS root, packages)
   build-configuration.nix          Maps effective build policy to options; installs /etc/atomixos audit files
-  kernel-config.nix                Shared stripped kernel baseline for Rock64 and QEMU
-  hardware-rock64.nix              RK3328 kernel, device tree, SPI U-Boot env, RAUC slot devices
-  hardware-cm3.nix                 Radxa CM3 IO (RK3566) kernel, device tree, eMMC paths, U-Boot env location
+  kernel-config.nix                Shared stripped kernel baseline and Rockchip layer for the boards and QEMU
+  hardware-rock64.nix              RK3328 kernel options, device tree, SPI U-Boot env, RAUC slot devices
+  hardware-cm3.nix                 Radxa CM3 IO (RK3566) kernel options, device tree, eMMC paths, U-Boot env location
   hardware-rockchip.nix            Settings shared by the Rockchip board modules
   hardware-qemu.nix                QEMU aarch64-virt target for testing
   networking.nix                   NIC naming (.link files), wan/lan networkd config
