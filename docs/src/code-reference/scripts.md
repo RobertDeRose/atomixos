@@ -240,6 +240,25 @@ wrong image writes the wrong bootloader. On macOS it writes to `/dev/rdiskN` for
 the boot disk, and ejects the disk when done. On Linux it only writes unused removable or USB whole disks, and checks
 the target again just before `dd`.
 
+### flash:maskrom
+
+Flashes an image to the CM3 eMMC over Rockchip Maskrom with `rkdeveloptool`, resolved through the flake's pinned
+nixpkgs (`nix build --inputs-from . nixpkgs#rkdeveloptool`). It needs no working U-Boot, so it recovers a board whose
+bootloader is broken.
+
+| Flag                 | Default                          | Description                  |
+|----------------------|----------------------------------|------------------------------|
+| `-i, --image <path>` | `.gcroots/<board>/current/image` | Image file                   |
+| `--board <board>`    | `cm3`                            | Board in Maskrom mode        |
+| `-y, --yes`          | Off                              | Skip the confirmation prompt |
+
+It checks the board's loader against `loaders/SHA256SUMS` and requires exactly one Rockchip USB device with the board's
+SoC ID (`0x350a` for the RK3566). It downloads `loaders/rk356x_spl_loader_ddr1056_v1.10.111.bin` unless a loader is
+already running, then waits until `rkdeveloptool rfi` can read the eMMC. The RK3566 still reports `Maskrom` in
+`rkdeveloptool ld` once the loader runs, so the task probes the eMMC rather than the reported mode. It then writes the
+image from sector 0 with `rkdeveloptool wl 0` and resets the board. With this loader, `rkdeveloptool rl` returns filler
+past the first 32 MiB, so verify a flash from the booted system rather than by reading it back over USB.
+
 ### serial:capture
 
 Captures the board's serial console (UART2, 1.5 Mbaud) with minicom, resolved through `nix build nixpkgs#minicom`.

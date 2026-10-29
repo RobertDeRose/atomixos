@@ -57,7 +57,8 @@ U-Boot version in the serial output.
   [NIC Naming](architecture/network-topology.md#nic-naming) explains the matching.
 - **USB recovery:** the RK3566 OTG port (DWC3) offers the same USB mass-storage recovery as the Rock64, triggered by
   `boot_to_ums` or `START_UMS=1`. There is no reset-button trigger, because the Rock64 recovery GPIO is not valid on the
-  CM3. Rockchip Maskrom recovery remains available. See [Recover a device](provisioning.md#recover-a-device).
+  CM3. `mise run flash:maskrom` rewrites the eMMC over Rockchip Maskrom even when U-Boot is broken; see
+  [Rockchip Maskrom](provisioning/flash-image.md#rockchip-maskrom-cm3).
 
 ## Watchdog
 
