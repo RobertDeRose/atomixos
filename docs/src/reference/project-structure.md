@@ -21,6 +21,8 @@ schemas/
 
 dts/                               Device-tree overlays (internal and external watchdog paths)
 
+loaders/                           Rockchip Maskrom loader for the CM3, its SHA256SUMS, and the rkbin license
+
 modules/
   base.nix                         Shared NixOS config (systemd, ssh, users, OverlayFS root, packages)
   build-configuration.nix          Maps effective build policy to options; installs /etc/atomixos audit files
@@ -82,7 +84,8 @@ scripts/
     assets/                        Bootstrap UI images (logo and drop zone)
 
 .mise/tasks/
-  flash                            Flash a board image to a disk device (macOS/Linux)
+  flash/_default                   Flash a board image to a disk device (macOS/Linux)
+  flash/maskrom                    Flash the CM3 eMMC over Rockchip Maskrom (rkdeveloptool)
   serial/capture                   Serial console capture (1.5 Mbaud, --bg for background)
   serial/shell                     Interactive serial console (minicom)
   config/lan-range                 Update built-in fallback LAN gateway/DHCP defaults

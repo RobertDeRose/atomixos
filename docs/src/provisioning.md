@@ -159,7 +159,8 @@ you can [flash a new image](provisioning/flash-image.md) to it from your worksta
 - **Any board, from a running device:** run `boot_to_ums` as root. It sets `START_UMS=1` in the U-Boot environment and
   reboots. U-Boot checks the flag before choosing a slot, so it works even when the selected slot cannot boot.
 - **Rock64, with no login:** hold the reset button from power-on for five seconds. The CM3 has no button trigger; use
-  `boot_to_ums`, set `START_UMS=1` from the U-Boot prompt, or fall back to Rockchip Maskrom recovery.
+  `boot_to_ums`, set `START_UMS=1` from the U-Boot prompt, or
+  [flash it over Rockchip Maskrom](provisioning/flash-image.md#rockchip-maskrom-cm3).
 
 [Flash an Image](provisioning/flash-image.md#usb-mass-storage) explains how a host eject ends the session.
 

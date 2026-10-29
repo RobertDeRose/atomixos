@@ -92,6 +92,27 @@ eject at the end also ends `ums`. A `START_UMS` or reset-button session then res
 To rewrite a device that is already installed, put it into USB mass-storage mode first; see
 [Recover a device](../provisioning.md#recover-a-device).
 
+### Rockchip Maskrom (CM3)
+
+Maskrom is the RK3566 boot ROM's USB download mode. It needs no U-Boot, so it rewrites a CM3 whose bootloader no
+longer starts:
+
+1. Connect the IO board's OTG port to your workstation.
+2. Hold the CM3's Maskrom button while you power the board on, then release it.
+3. Flash it:
+
+   ```sh
+   # Flash the latest CM3 build
+   mise run flash:maskrom
+
+   # Use a specific image
+   mise run flash:maskrom -i atomixos-cm3-26.05.img
+   ```
+
+The task loads the vendored Rockchip loader into the SoC, writes the whole image from sector 0, and resets the board
+into it. It refuses to run unless exactly one RK3566 is attached in Maskrom or Loader mode. On Linux, `rkdeveloptool`
+needs access to the Rockchip USB device (vendor `2207`), through a udev rule or `sudo`.
+
 ## What the image contains
 
 | Region                   | Content                                       |

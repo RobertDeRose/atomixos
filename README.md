@@ -328,6 +328,7 @@ All tasks are run with `mise run <task>`. Run `mise tasks` to list them.
 | `e2e:debug`             | Interactive QEMU VM for debugging (`-t <test>`, `--keep`)     |
 | **Provisioning**        |                                                               |
 | `flash`                 | Flash image to disk device with dd + progress (macOS/Linux)   |
+| `flash:maskrom`         | Flash the CM3 eMMC over Rockchip Maskrom (rkdeveloptool)      |
 | **Configuration**       |                                                               |
 | `config:lan-range`      | Update built-in fallback LAN gateway/DHCP defaults            |
 | **Documentation**       |                                                               |

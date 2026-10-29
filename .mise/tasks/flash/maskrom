@@ -1,0 +1,144 @@
+#!/usr/bin/env bash
+#MISE description="Flash an image to the CM3 eMMC over Rockchip Maskrom with rkdeveloptool"
+#USAGE flag "-y --yes" help="Skip confirmation prompt"
+#USAGE flag "-i --image <path>" help="Path to image file (default: .gcroots/<board>/current/image)"
+#USAGE flag "--board <board>" help="Board in Maskrom mode" default="cm3" {
+#USAGE   choices "cm3"
+#USAGE }
+set -euo pipefail
+
+BOARD=${usage_board:-cm3}
+IMAGE_PATH="${usage_image:-}"
+SKIP_CONFIRM="${usage_yes:-false}"
+
+# ── Board loader ───────────────────────────────────────────────────────────────
+# rkdeveloptool downloads this loader into the SoC's SRAM over USB. It brings up
+# DRAM and the eMMC so the image can be written; nothing from it is stored.
+
+case "$BOARD" in
+cm3)
+	LOADER="loaders/rk356x_spl_loader_ddr1056_v1.10.111.bin"
+	USB_PID="0x350a"
+	;;
+*)
+	echo "ERROR: unsupported board '$BOARD' (expected cm3)" >&2
+	exit 1
+	;;
+esac
+
+if ! (cd loaders && shasum -a 256 -c --status SHA256SUMS); then
+	echo "ERROR: $LOADER does not match loaders/SHA256SUMS." >&2
+	exit 1
+fi
+
+# ── Resolve image path ─────────────────────────────────────────────────────────
+
+if [ -z "$IMAGE_PATH" ]; then
+	for candidate in ".gcroots/$BOARD/current/image"/*.img; do
+		if [ -f "$candidate" ]; then
+			IMAGE_PATH="$candidate"
+			break
+		fi
+	done
+fi
+
+if [ -z "$IMAGE_PATH" ] || [ ! -f "$IMAGE_PATH" ]; then
+	echo "ERROR: No image file found."
+	echo ""
+	echo "Either:"
+	echo "  1. Run 'mise run build --board $BOARD' to build the board image"
+	echo "  2. Specify the image path: mise run flash:maskrom --image /path/to/image.img"
+	exit 1
+fi
+
+IMAGE_SIZE=$(stat -c%s "$IMAGE_PATH" 2>/dev/null || stat -f%z "$IMAGE_PATH")
+IMAGE_SIZE_MIB=$((IMAGE_SIZE / 1024 / 1024))
+
+# ── Resolve rkdeveloptool ──────────────────────────────────────────────────────
+# Use the flake's pinned nixpkgs so every host runs the same tool version.
+
+RKDEVELOPTOOL="$(nix build --inputs-from . nixpkgs#rkdeveloptool --no-link --print-out-paths 2>/dev/null)/bin/rkdeveloptool"
+if [ ! -x "$RKDEVELOPTOOL" ]; then
+	echo "ERROR: Failed to resolve rkdeveloptool via nix. Try: nix build --inputs-from . nixpkgs#rkdeveloptool" >&2
+	exit 1
+fi
+
+# ── Find the device ────────────────────────────────────────────────────────────
+# Require exactly one Rockchip USB device, and only the board's SoC, so the task
+# never writes to some other board left in Maskrom on the same host.
+
+# rkdeveloptool ends its lines with CRLF; drop the CR so the mode field matches.
+find_device() {
+	"$RKDEVELOPTOOL" ld 2>/dev/null | tr -d '\r' | grep -E '^DevNo=' || true
+}
+
+DEVICES=$(find_device)
+COUNT=$(printf '%s' "$DEVICES" | grep -c . || true)
+if [ "$COUNT" -eq 0 ]; then
+	echo "ERROR: No Rockchip device in Maskrom or Loader mode." >&2
+	echo "" >&2
+	echo "Put the board into Maskrom: hold its Maskrom button (or short the eMMC clock to GND)," >&2
+	echo "connect the OTG port to this host, and power it on." >&2
+	exit 1
+fi
+if [ "$COUNT" -gt 1 ]; then
+	echo "ERROR: More than one Rockchip device is connected; leave only the target board:" >&2
+	printf '%s\n' "$DEVICES" >&2
+	exit 1
+fi
+if ! printf '%s' "$DEVICES" | grep -qi "Pid=$USB_PID"; then
+	echo "ERROR: The connected device is not a $BOARD SoC (expected Pid=$USB_PID):" >&2
+	printf '%s\n' "$DEVICES" >&2
+	exit 1
+fi
+
+# ── Confirm ────────────────────────────────────────────────────────────────────
+
+echo "Image:  $IMAGE_PATH (${IMAGE_SIZE_MIB} MiB)"
+echo "Device: $DEVICES"
+echo "Loader: $LOADER"
+echo ""
+# The image's partition table holds slot A only; first boot recreates and
+# formats boot-b, rootfs-b, and /data.
+echo "WARNING: This will ERASE the $BOARD eMMC, including /data."
+if [ "$SKIP_CONFIRM" != "true" ]; then
+	read -rp "Continue? [y/N] " answer
+	case "$answer" in
+	[yY] | [yY][eE][sS]) ;;
+	*)
+		echo "Aborted."
+		exit 1
+		;;
+	esac
+fi
+
+# ── Flash ──────────────────────────────────────────────────────────────────────
+
+# The boot ROM cannot read the eMMC; the loader can. The RK356x keeps reporting
+# Maskrom in `ld` once its loader runs, so probe the eMMC instead of the mode.
+emmc_ready() {
+	"$RKDEVELOPTOOL" rfi >/dev/null 2>&1
+}
+
+if ! emmc_ready; then
+	echo "Downloading the loader..."
+	"$RKDEVELOPTOOL" db "$LOADER"
+	for _ in 1 2 3 4 5 6 7 8 9 10; do
+		if emmc_ready; then
+			break
+		fi
+		sleep 1
+	done
+	if ! emmc_ready; then
+		echo "ERROR: The loader is not answering; power-cycle the board into Maskrom and retry." >&2
+		exit 1
+	fi
+fi
+
+echo "Writing $IMAGE_PATH to the eMMC from sector 0..."
+"$RKDEVELOPTOOL" wl 0 "$IMAGE_PATH"
+
+echo "Resetting the board..."
+"$RKDEVELOPTOOL" rd
+
+echo "Done. The board boots the new image."
