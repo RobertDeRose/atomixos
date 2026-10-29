@@ -57,7 +57,9 @@ IMAGE_SIZE_MIB=$((IMAGE_SIZE / 1024 / 1024))
 # ── Resolve rkdeveloptool ──────────────────────────────────────────────────────
 # Use the flake's pinned nixpkgs so every host runs the same tool version.
 
-RKDEVELOPTOOL="$(nix build --inputs-from . nixpkgs#rkdeveloptool --no-link --print-out-paths 2>/dev/null)/bin/rkdeveloptool"
+# Absorb a failed build so set -e does not exit before the hint below prints.
+RKDEVELOPTOOL_OUT=$(nix build --inputs-from . nixpkgs#rkdeveloptool --no-link --print-out-paths 2>/dev/null || true)
+RKDEVELOPTOOL="${RKDEVELOPTOOL_OUT}/bin/rkdeveloptool"
 if [ ! -x "$RKDEVELOPTOOL" ]; then
 	echo "ERROR: Failed to resolve rkdeveloptool via nix. Try: nix build --inputs-from . nixpkgs#rkdeveloptool" >&2
 	exit 1
