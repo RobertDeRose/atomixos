@@ -187,8 +187,8 @@ atomixos.rauc = {
 Radxa CM3 (RK3566) on the CM3 IO Board. See [Radxa CM3](../cm3.md).
 
 - Stripped kernel from `kernel-config.nix`, plus built-in RK3566 drivers: the eMMC host (`MMC_SDHCI_OF_DWCMSHC`), I/O and
-  power domains, the TCS4525 CPU regulator (`REGULATOR_FAN53555`), SCMI clocks and cpufreq, and the on-board RK809
-  audio (`SND_SOC_RK817`, `SND_SOC_ROCKCHIP_I2S_TDM`).
+  power domains, the TCS4525 CPU regulator (`REGULATOR_FAN53555`), and SCMI clocks and cpufreq. It has no audio: the
+  CM3 IO device tree defines no RK809 codec card, and its HDMI sound card needs display drivers the kernel leaves out.
 - The `rockchip/rk3566-radxa-cm3-io.dtb` device tree.
 - Fixed `/dev/mmcblk0pN` eMMC paths for `/boot`, `/data`, systemd-repart, and the RAUC slots; RAUC compatible
   `radxa-cm3-io`.

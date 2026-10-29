@@ -34,9 +34,8 @@ let
     COMMON_CLK_SCMI = lib.mkForce yes;
     ARM_SCMI_CPUFREQ = lib.mkForce yes;
 
-    # On-board audio: RK809 codec through the I2S/TDM controller.
-    SND_SOC_RK817 = lib.mkForce yes;
-    SND_SOC_ROCKCHIP_I2S_TDM = lib.mkForce yes;
+    # No audio: the CM3 IO device tree defines no RK809 codec card, and its
+    # HDMI sound card needs the display drivers this kernel leaves out.
   };
 in
 {

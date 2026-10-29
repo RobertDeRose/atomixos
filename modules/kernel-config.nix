@@ -423,7 +423,7 @@ let
     USB_SERIAL_CONSOLE = lib.mkForce unset;
   };
   # Shared by the Rockchip boards (ROCK64/RK3328, CM3/RK3566), layered over
-  # baseKernelConfig. Board modules add their SoC and on-board audio drivers.
+  # baseKernelConfig. Board modules add their SoC drivers and any on-board audio.
   rockchipKernelConfig = with lib.kernel; {
     # Keep arm64 platform support focused on Rockchip so kernel config
     # generation does not drag in unrelated SoC menus and DT builds.
@@ -476,8 +476,8 @@ let
     ARCH_ZYNQMP = lib.mkForce no;
 
     # ── Audio ──
-    # Each board module re-enables its on-board codec and I2S controller;
-    # the rest of the Rockchip audio family and unrelated codecs stay off.
+    # A board module re-enables the codec and I2S controller its device tree
+    # wires to a sound card; the rest stay off.
     # SND_SOC_ROCKCHIP_I2S is left to the boards: other Rockchip sound
     # options select it before the config generator can answer no.
     SOUND = lib.mkForce yes;
