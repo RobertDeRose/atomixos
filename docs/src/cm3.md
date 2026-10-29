@@ -23,7 +23,7 @@ the Rock64 (RK3328) or the Raspberry Pi CM4 IO carrier board. Every build names 
 | RAUC compatible | `radxa-cm3-io`                                                                |
 | U-Boot config   | `radxa-cm3-io-rk3566_defconfig`                                               |
 | Device tree     | `rockchip/rk3566-radxa-cm3-io.dtb`                                            |
-| Kernel          | Unstripped, so RK3566 MMC, power management, Ethernet, and USB stay available |
+| Kernel          | Stripped like the Rock64, plus RK3566 eMMC, power, and SCMI drivers; no audio |
 
 The image layout matches the Rock64: SPL at sector 64, the U-Boot FIT at sector 16384, and slot A from 16 MiB.
 

@@ -52,13 +52,14 @@ development signing certificate in `certs/`.
 
 ### Stripped kernel with modular USB peripherals
 
-The Rock64 kernel builds in the drivers needed to boot (eMMC, Ethernet, USB host, watchdog, squashfs, f2fs, OverlayFS) and
-builds selected USB Ethernet and USB serial drivers as modules. It is built without Wi-Fi and Bluetooth.
+The Rock64 and CM3 kernels build in the drivers needed to boot (eMMC, Ethernet, USB host, watchdog, squashfs, f2fs,
+OverlayFS) and build selected USB Ethernet and USB serial drivers as modules. They are built without Wi-Fi and Bluetooth.
 
 #### Scenario: Kernel has the required drivers
 
-- Given the Rock64 NixOS configuration is evaluated
+- Given the Rock64 or CM3 NixOS configuration is evaluated
 - Then the kernel sets `MMC_DW_ROCKCHIP=y`, `STMMAC_ETH=y`, `DW_WATCHDOG=y`, and `SQUASHFS=y`
+- And the CM3 kernel also sets `MMC_SDHCI_OF_DWCMSHC=y` for its eMMC
 - And `USB_RTL8152`, `USB_NET_AX88179_178A`, and `USB_NET_CDCETHER` are built as modules
 
 #### Scenario: USB serial works for debugging

@@ -134,11 +134,15 @@ Services and scripts write to stdout and stderr; systemd routes that output thro
 
 ## kernel-config.nix
 
-Shared stripped ARM64 kernel baseline, imported by `hardware-rock64.nix` and `hardware-qemu.nix` so the VM kernel stays
-close to the Rock64 kernel. The CM3 uses the stock upstream kernel instead.
+Shared stripped ARM64 kernel baseline, imported by `hardware-rock64.nix`, `hardware-cm3.nix`, and `hardware-qemu.nix` so
+the board kernels and the VM kernel stay close. Each board builds `linux_latest` without the nixpkgs common config and
+layers these fragments, then its own options:
 
 - `baseKernelConfig`: the common baseline.
 - `optionalKernelConfig`: USB serial support (`USB_SERIAL_FTDI_SIO`, `USB_SERIAL_CP210X` as modules).
+- `rockchipKernelConfig`: the Rockchip board layer. It limits SoC support to `ARCH_ROCKCHIP`, disables PCI, unused
+  filesystems, and the audio drivers neither board uses, and builds the USB Ethernet drivers as modules: `USB_USBNET`,
+  `USB_RTL8152`, `USB_NET_AX88179_178A`, `USB_NET_CDCETHER`.
 
 | Category     | Options                                                    | Build                    |
 |--------------|------------------------------------------------------------|--------------------------|
@@ -151,11 +155,14 @@ close to the Rock64 kernel. The CM3 uses the stock upstream kernel instead.
 | Wi-Fi and BT | `WLAN`, `CFG80211`, `MAC80211`, `RFKILL`, `BT`             | disabled                 |
 | USB network  | `USB_NET_DRIVERS`, `USB_USBNET`                            | disabled in the baseline |
 
+QEMU uses only `baseKernelConfig` and `optionalKernelConfig`.
+
 ## hardware-rock64.nix
 
-Rock64 (RK3328) kernel overrides, device tree, U-Boot environment access, and RAUC slot mapping.
+Rock64 (RK3328) kernel options, device tree, U-Boot environment access, and RAUC slot mapping.
 
-- Enables USB Ethernet as modules: `USB_USBNET`, `USB_RTL8152`, `USB_NET_AX88179_178A`, `USB_NET_CDCETHER`.
+- Stripped kernel from `kernel-config.nix`, plus the on-board RK3328 audio drivers (`SND_SOC_RK3328`,
+  `SND_SOC_ROCKCHIP_I2S`, `SND_SOC_ROCKCHIP_SPDIF`).
 - Device tree `rockchip/rk3328-rock64.dtb` with the `rock64-internal-watchdog` overlay (`dts/rock64-internal-watchdog.dts`).
   The `rock64-i2c-header` overlay (`dts/rock64-i2c-header.dts`) is added only when hardware watchdog enforcement is
   enabled with the `external` backend.
@@ -179,7 +186,10 @@ atomixos.rauc = {
 
 Radxa CM3 (RK3566) on the CM3 IO Board. See [Radxa CM3](../cm3.md).
 
-- Stock upstream kernel (`linuxPackages_latest`) and the `rockchip/rk3566-radxa-cm3-io.dtb` device tree.
+- Stripped kernel from `kernel-config.nix`, plus built-in RK3566 drivers: the eMMC host (`MMC_SDHCI_OF_DWCMSHC`), I/O and
+  power domains, the TCS4525 CPU regulator (`REGULATOR_FAN53555`), and SCMI clocks and cpufreq. It has no audio: the
+  CM3 IO device tree defines no RK809 codec card, and its HDMI sound card needs display drivers the kernel leaves out.
+- The `rockchip/rk3566-radxa-cm3-io.dtb` device tree.
 - Fixed `/dev/mmcblk0pN` eMMC paths for `/boot`, `/data`, systemd-repart, and the RAUC slots; RAUC compatible
   `radxa-cm3-io`.
 - `/etc/fw_env.config` points at the two redundant U-Boot environment copies in the eMMC boot gap (`0x3F8000` and
