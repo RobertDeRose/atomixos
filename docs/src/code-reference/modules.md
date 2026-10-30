@@ -39,6 +39,7 @@ flowchart TD
         NIXSTASIS["nixstasis.nix"]
         DEBUG["boot-storage-debug.nix"]
         WATCHDOG["watchdog.nix"]
+        CLOCK["clock.nix"]
     end
 
     BASE --> IMPORTS
@@ -301,12 +302,12 @@ DHCP, DNS, and NTP for isolated LAN devices. Fallback values come from `defaults
 | DHCP range                    | Provisioned range; fallback `172.20.30.10`–`172.20.30.254`, 24 h lease |
 | Gateway, DNS, and NTP options | Provisioned gateway IP; fallback `172.20.30.1`                         |
 
-| chrony setting | Value                                                                |
-|----------------|----------------------------------------------------------------------|
-| Upstream       | Provisioned `ntp_servers`; fallback `time.cloudflare.com`            |
-| Serves         | Provisioned LAN subnet; fallback `172.20.30.0/24`; all others denied |
-| Fallback       | `local stratum 10` when no upstream is reachable                     |
-| RTC            | Not trimmed by chrony                                                |
+| chrony setting | Value                                                                   |
+|----------------|-------------------------------------------------------------------------|
+| Upstream       | Provisioned `ntp_servers`; fallback `time.cloudflare.com`               |
+| Serves         | Provisioned LAN subnet; fallback `172.20.30.0/24`; all others denied    |
+| Fallback       | `local stratum 10` when no upstream is reachable                        |
+| RTC            | Set by the kernel every 11 minutes once synced (`rtcsync`); not trimmed |
 
 With the `network` bootstrap transport, `atomixos-bootstrap-rebind.service` rebinds the bootstrap API socket to the
 provisioned LAN address.
@@ -353,6 +354,21 @@ the backends, devices, and timeout limits are in
 - With `enableHardware = false`, none of those manager settings is set.
 - On RAUC-enabled systems, `watchdog-boot-count.service` runs before `rauc.service` and logs boot-count and rollback
   state through `scripts/watchdog-boot-count.sh`.
+
+## clock.nix
+
+Keeps the system clock from starting before the image's source date or the last known time, so RAUC signature checks
+never see a certificate as not yet valid. See
+[Clock and Signature Checks](../architecture/update-rollback.md#clock-and-signature-checks).
+
+| Unit                          | When                                        | What it does                                          |
+|-------------------------------|---------------------------------------------|-------------------------------------------------------|
+| `atomixos-clock.service`      | Boot, before `time-set.target`; at shutdown | Moves the clock forward at boot; saves it on shutdown |
+| `atomixos-clock-save.timer`   | 5 minutes after boot, then every 15 minutes | Starts `atomixos-clock-save.service`                  |
+| `atomixos-clock-save.service` | From the timer                              | Saves the current time to `/data/clock/last-known`    |
+
+The floor is `self.lastModified`, the commit time of the AtomixOS source, so it is fixed for a given image. A clock
+earlier than the floor is never saved.
 
 ## os-verification.nix
 

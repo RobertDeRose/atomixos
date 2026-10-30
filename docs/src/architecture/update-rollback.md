@@ -138,5 +138,15 @@ all of them are ROCK64, so the server must treat a missing `X-Compatible` as `ro
 `rauc install` rejects a bundle built for another board. If a newer matching bundle is available, the service downloads
 it to `/data`, installs it with `rauc install`, and reboots.
 
+## Clock and Signature Checks
+
+`rauc install` checks the bundle's signing certificate against the system clock, and refuses a certificate that is not
+yet valid. A board without a battery-backed RTC, or before NTP has synchronized, would otherwise boot with the clock at
+systemd's compiled-in date, which can be earlier than the certificate. `atomixos-clock.service` prevents that: at boot,
+before `time-set.target`, it moves the clock forward to the later of the image's source date (the commit time of the
+AtomixOS source) and the last known time in `/data/clock/last-known`. The last known time is saved every 15 minutes and
+at shutdown, and only while the clock is at or after the source date. Once chrony synchronizes, `rtcsync` lets the
+kernel copy the time to the RTC every 11 minutes.
+
 hawkBit is not a working update path. Setting `os-upgrade.useHawkbit` turns polling off and installs
 `rauc-hawkbit-updater`, but AtomixOS configures no hawkBit server, credentials, or service for it.
