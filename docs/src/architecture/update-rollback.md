@@ -143,10 +143,12 @@ it to `/data`, installs it with `rauc install`, and reboots.
 `rauc install` checks the bundle's signing certificate against the system clock, and refuses a certificate that is not
 yet valid. A board without a battery-backed RTC, or before NTP has synchronized, would otherwise boot with the clock at
 systemd's compiled-in date, which can be earlier than the certificate. `atomixos-clock.service` prevents that: at boot,
-before `time-set.target`, it moves the clock forward to the later of the image's source date (the commit time of the
-AtomixOS source) and the last known time in `/data/clock/last-known`. The last known time is saved every 15 minutes and
-at shutdown, and only while the clock is at or after the source date. Once chrony synchronizes, `rtcsync` lets the
-kernel copy the time to the RTC every 11 minutes.
+before `time-set.target`, it moves the clock forward to the later of a build-time floor and the last known time in
+`/data/clock/last-known`. The floor, in `/etc/atomixos/clock-floor`, is the latest of the AtomixOS source commit time
+and the validity start of each certificate in `atomixos.clock.floorCertificates`, which defaults to the RAUC keyring CA
+(and the development signing certificate with the development keyring). The last known time is saved every 15 minutes
+and at shutdown, only while the clock is at or after the floor, and each save is flushed to storage before it counts.
+Once chrony synchronizes, `rtcsync` lets the kernel copy the time to the RTC every 11 minutes.
 
 hawkBit is not a working update path. Setting `os-upgrade.useHawkbit` turns polling off and installs
 `rauc-hawkbit-updater`, but AtomixOS configures no hawkBit server, credentials, or service for it.

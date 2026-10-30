@@ -8,6 +8,14 @@
 
 let
   nixos-lib = import (pkgs.path + "/nixos/lib") { };
+
+  # A production certificate issued after the source commit: its validity start
+  # must raise the floor.
+  futureCert = pkgs.runCommand "future-cert.pem" { nativeBuildInputs = [ pkgs.openssl ]; } ''
+    openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
+      -keyout /dev/null -subj /CN=future -out "$out" \
+      -not_before 20300101000000Z -not_after 20400101000000Z
+  '';
 in
 nixos-lib.runTest {
   name = "clock";
@@ -29,13 +37,13 @@ nixos-lib.runTest {
       ];
       system.stateVersion = "25.11";
       atomixos.rauc.enable = lib.mkForce false;
+      atomixos.clock.floorCertificates = [ futureCert ];
       virtualisation.memorySize = 1024;
     };
 
   # QEMU's /data is a tmpfs, so this restarts atomixos-clock.service (restore on
   # start, save on stop) instead of rebooting.
   testScript = ''
-    floor = ${toString self.lastModified}
     past = 1000000000  # 2001, before any AtomixOS source date
 
     def now():
@@ -47,6 +55,13 @@ nixos-lib.runTest {
     gateway.start()
     gateway.wait_for_unit("atomixos-clock.service")
     gateway.succeed("systemctl is-active atomixos-clock-save.timer")
+
+    # The certificate starting 2030-01-01 sets the floor, and boot already moved
+    # the clock there.
+    floor = int(gateway.succeed("cat /etc/atomixos/clock-floor"))
+    assert floor == 1893456000, floor
+    assert floor > ${toString self.lastModified}
+    assert now() >= floor, now()
 
     # Saving records the current time on /data.
     gateway.succeed("systemctl start atomixos-clock-save.service")
