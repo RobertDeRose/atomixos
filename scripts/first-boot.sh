@@ -108,6 +108,46 @@ find_usb_config() {
 	return 1
 }
 
+# /boot is boot slot A, which RAUC overwrites while slot B runs, so it is never
+# mounted at runtime. Mount it read-only from its fstab entry only to read the
+# fresh-flash seed. Where /boot is already mounted or has no fstab entry, read
+# the path as it is.
+BOOT_SEED_MOUNTED=0
+
+# Returns 0 with a seed, 1 without one, and 2 when the configured /boot cannot
+# be mounted. A fresh flash is seen only once, so a seed hidden by a failed
+# mount must stop discovery instead of falling through to another source.
+open_boot_seed() {
+	local boot_dir="${BOOT_CONFIG_PATH%/*}"
+	local attempt
+	if ! mountpoint -q "$boot_dir" && findmnt --fstab -n "$boot_dir" >/dev/null 2>&1; then
+		for attempt in 1 2 3; do
+			if mount -o ro "$boot_dir"; then
+				BOOT_SEED_MOUNTED=1
+				break
+			fi
+			[ "$attempt" -lt 3 ] && sleep 1
+		done
+		if [ "$BOOT_SEED_MOUNTED" != 1 ]; then
+			log "ERROR: could not mount $boot_dir to read the fresh-flash seed"
+			return 2
+		fi
+	fi
+	[ -f "$BOOT_CONFIG_PATH" ]
+}
+
+# Keeps BOOT_SEED_MOUNTED set when the unmount fails, so the exit handler tries
+# again.
+close_boot_seed() {
+	if [ "$BOOT_SEED_MOUNTED" = 1 ]; then
+		if umount "${BOOT_CONFIG_PATH%/*}"; then
+			BOOT_SEED_MOUNTED=0
+		else
+			log "WARNING: could not unmount ${BOOT_CONFIG_PATH%/*}"
+		fi
+	fi
+}
+
 cleanup_seed_source() {
 	local source_path="$1"
 	local mount_dir
@@ -116,6 +156,9 @@ cleanup_seed_source() {
 		mount_dir="${source_path%/config.toml}"
 		umount "$mount_dir" >/dev/null 2>&1 || true
 		rmdir "$mount_dir" >/dev/null 2>&1 || true
+		;;
+	"$BOOT_CONFIG_PATH")
+		close_boot_seed
 		;;
 	esac
 }
@@ -211,7 +254,7 @@ has_valid_provisioning() {
 }
 
 discover_and_import_provisioning() {
-	local seed_path usb_path
+	local seed_path="" usb_path boot_status
 	if has_valid_provisioning; then
 		log "Using existing provisioned config from $CONFIG_TOML"
 		apply_managed_users
@@ -220,12 +263,19 @@ discover_and_import_provisioning() {
 		return 0
 	fi
 
-	if is_fresh_flash && [ -f "$BOOT_CONFIG_PATH" ]; then
-		seed_path="$BOOT_CONFIG_PATH"
-	elif usb_path="$(find_usb_config)"; then
+	if is_fresh_flash; then
+		if open_boot_seed; then
+			seed_path="$BOOT_CONFIG_PATH"
+		else
+			boot_status=$?
+			close_boot_seed
+			if [ "$boot_status" -eq 2 ]; then
+				return 1
+			fi
+		fi
+	fi
+	if [ -z "$seed_path" ] && usb_path="$(find_usb_config)"; then
 		seed_path="$usb_path"
-	else
-		seed_path=""
 	fi
 
 	if [ -n "$seed_path" ]; then
@@ -248,6 +298,8 @@ if [ -f "$SENTINEL" ]; then
 	log "Sentinel exists, skipping (not first boot)"
 	exit 0
 fi
+
+trap close_boot_seed EXIT
 
 BOOT_SLOT="$(current_boot_slot || true)"
 

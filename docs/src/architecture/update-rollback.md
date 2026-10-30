@@ -77,8 +77,9 @@ saved it, so a newer U-Boot's defaults apply only once that environment is reset
   `env default bootcmd preboot; saveenv` at the U-Boot prompt to adopt its defaults.
 
 `/boot` is slot A's boot partition, which RAUC overwrites while slot B runs, and RAUC refuses to install to a mounted
-slot. So `/boot` is an automount: it mounts when accessed (first boot reads the fresh-flash `/boot/config.toml` seed)
-and unmounts after a minute idle, so it is not mounted during later updates.
+slot. So `/boot` is never mounted at runtime: its fstab entry is `noauto`, and only `first-boot.sh` mounts it,
+read-only, to read the fresh-flash `/boot/config.toml` seed, then unmounts it. It is not an automount, because every
+service started with `ProtectSystem=` would trigger it and could hold slot A mounted while an update runs.
 
 ## Health Check Details
 

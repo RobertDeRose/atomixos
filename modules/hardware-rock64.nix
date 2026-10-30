@@ -32,7 +32,7 @@ in
 
   # ── Boot partition ────────────────────────────────────────────────────────────
   # Boot slot A's FAT partition, whichever slot is active; hardware-rockchip.nix
-  # makes /boot an idle-unmounting automount.
+  # keeps /boot unmounted at runtime.
   fileSystems."/boot" = {
     device = "/dev/mmcblk1p1";
     fsType = "vfat";

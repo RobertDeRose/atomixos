@@ -204,7 +204,7 @@ Settings shared by the Rock64 and CM3 modules:
 
 - no NixOS-managed bootloader, and `vfat`/`f2fs` support in both boot stages;
 - systemd-repart `discard = false`, which protects SPL and U-Boot in the eMMC gap;
-- `/boot` as an idle-unmounting automount, because RAUC refuses to install to a mounted slot;
+- `/boot` as a `noauto` mount that only first boot mounts, briefly, because RAUC refuses to install to a mounted slot;
 - Realtek USB NIC firmware (`nix/rtl815x-firmware.nix`);
 - the `ttyS2` serial getty at 1.5 Mbaud (UART2), always restarted;
 - one-boot serial root recovery when `_RUT_OH_=1` (`serial-root-debug-gate.service` and `serial-root-debug@ttyS2`);
