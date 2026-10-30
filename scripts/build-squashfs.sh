@@ -32,7 +32,9 @@ ln -s "@systemClosure@/init" "$PSEUDO_ROOT/init"
 # Create empty mount-point directories required by NixOS Stage 2.
 # The squashfs is read-only; these directories exist solely as mount points
 # for virtual filesystems (proc, sys, dev, run) and tmpfs overlays (etc, var, tmp).
-mkdir -p "$PSEUDO_ROOT"/{proc,sys,dev,run,etc,var,tmp,root,home,bin,usr/bin}
+# /boot is a noauto fstab entry that first-boot mounts with mount(8), which does
+# not create a missing mount point.
+mkdir -p "$PSEUDO_ROOT"/{proc,sys,dev,run,etc,var,tmp,boot,root,home,bin,usr/bin}
 
 # Build the squashfs image using zstd compression (best ratio on ARM)
 mksquashfs "$PSEUDO_ROOT" "$out/rootfs.squashfs" \

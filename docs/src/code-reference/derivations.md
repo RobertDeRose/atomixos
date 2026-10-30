@@ -49,7 +49,7 @@ Delegates to `scripts/build-squashfs.sh`:
 1. Collect every store path in the `closureInfo` of `system.build.toplevel`.
 2. Copy them into a pseudo-root directory.
 3. Create `/init` and `/sbin/init` symlinks to the NixOS init.
-4. Create empty mount-point directories (`/proc`, `/sys`, `/dev`, `/run`, `/etc`, `/var`, `/tmp`, and others).
+4. Create empty mount-point directories (`/proc`, `/sys`, `/dev`, `/run`, `/etc`, `/var`, `/tmp`, `/boot`, and others).
 5. Run `mksquashfs` with `-comp zstd -Xcompression-level 19 -b 1048576 -no-xattrs -all-root`.
 6. Fail if the image is larger than `maxSquashfsSize`.
 
