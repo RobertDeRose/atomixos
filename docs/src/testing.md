@@ -160,6 +160,7 @@ Flake-only checks:
 | `kernel-security`             | 1     | BPF LSM/BTF support is active, runtime `kernel.panic` is 10, and unsupported startup diagnostics are absent        |
 | `interface-naming`            | 1     | WAN and LAN are renamed to `wan`/`lan` by hardware match, whichever NIC registers first                            |
 | `rootless-storage`            | 1     | Rootless application images are stored under `/data/containers/rootless`, not on the reset-on-boot overlay root    |
+| `ssh-host-keys`               | 1     | sshd serves one Ed25519 host key from `/data/ssh`, generates none in `/etc/ssh`, and keeps it across restarts      |
 | `first-boot-provision`        | 1     | Provisioning import, validation, apply, auth, rollback, and LAN transport behavior                                 |
 | `first-boot-source-discovery` | 1     | Boot/USB/bootstrap source precedence, marker behavior, and fleet rebind suppression                                |
 | `provisioning-export`         | 1     | Authenticated root-worker export of private workload-owned files, concurrent requests, cleanup, and link rejection |

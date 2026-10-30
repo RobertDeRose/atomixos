@@ -372,6 +372,7 @@
             kernel-security = import ./nix/tests/kernel-security.nix netTestArgs;
             interface-naming = import ./nix/tests/interface-naming.nix netTestArgs;
             rootless-storage = import ./nix/tests/rootless-storage.nix netTestArgs;
+            ssh-host-keys = import ./nix/tests/ssh-host-keys.nix netTestArgs;
             ssh-wan-toggle = import ./nix/tests/ssh-wan-toggle.nix netTestArgs;
           };
 

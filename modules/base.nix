@@ -674,7 +674,20 @@ in
       # Load SSH public keys from /data — written during device provisioning.
       # Uses %u (username) so each user gets their own key file.
       authorizedKeysFiles = [ "/data/config/ssh-authorized-keys/%u" ];
+      # The host key is the device's SSH identity. /etc/ssh sits on the overlay
+      # root, which resets every boot, so keep the key on /data: it then
+      # survives reboots and A/B updates and is replaced only with /data.
+      hostKeys = [
+        {
+          type = "ed25519";
+          path = "/data/ssh/ssh_host_ed25519_key";
+        }
+      ];
     };
+    # Generate and serve the host key only once /data is mounted, never into
+    # the empty mount point underneath it.
+    systemd.services.sshd-keygen.unitConfig.RequiresMountsFor = [ "/data" ];
+    systemd.services.sshd.unitConfig.RequiresMountsFor = [ "/data" ];
 
     # Mask systemd-ssh-generator outputs — systemd 258+ auto-creates sshd
     # socket units that conflict with our explicitly managed sshd.service
