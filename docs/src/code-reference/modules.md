@@ -39,6 +39,7 @@ flowchart TD
         NIXSTASIS["nixstasis.nix"]
         DEBUG["boot-storage-debug.nix"]
         WATCHDOG["watchdog.nix"]
+        CLOCK["clock.nix"]
     end
 
     BASE --> IMPORTS
@@ -301,12 +302,12 @@ DHCP, DNS, and NTP for isolated LAN devices. Fallback values come from `defaults
 | DHCP range                    | Provisioned range; fallback `172.20.30.10`–`172.20.30.254`, 24 h lease |
 | Gateway, DNS, and NTP options | Provisioned gateway IP; fallback `172.20.30.1`                         |
 
-| chrony setting | Value                                                                |
-|----------------|----------------------------------------------------------------------|
-| Upstream       | Provisioned `ntp_servers`; fallback `time.cloudflare.com`            |
-| Serves         | Provisioned LAN subnet; fallback `172.20.30.0/24`; all others denied |
-| Fallback       | `local stratum 10` when no upstream is reachable                     |
-| RTC            | Not trimmed by chrony                                                |
+| chrony setting | Value                                                                   |
+|----------------|-------------------------------------------------------------------------|
+| Upstream       | Provisioned `ntp_servers`; fallback `time.cloudflare.com`               |
+| Serves         | Provisioned LAN subnet; fallback `172.20.30.0/24`; all others denied    |
+| Fallback       | `local stratum 10` when no upstream is reachable                        |
+| RTC            | Set by the kernel every 11 minutes once synced (`rtcsync`); not trimmed |
 
 With the `network` bootstrap transport, `atomixos-bootstrap-rebind.service` rebinds the bootstrap API socket to the
 provisioned LAN address.
@@ -329,7 +330,8 @@ RAUC A/B configuration. Defines `atomixos.rauc.*` and maps it onto the upstream 
 | `slots.rootfs0`           | string          | (required)                | Rootfs slot A device                                |
 | `slots.rootfs1`           | string          | (required)                | Rootfs slot B device                                |
 
-Production builds set `keyringCert` to the production RAUC CA and `allowDevelopmentKeyring = false`. With the
+Production builds set `keyringCert` to the production RAUC CA and `allowDevelopmentKeyring = false`, and add the
+production signing certificate to `atomixos.clock.floorCertificates` so the boot clock never starts before it. With the
 development keyring, `/etc/issue` warns that the image must not be used for production OTA updates.
 
 With `bootloader = "custom"`, a generated script simulates U-Boot environment handling with files in `/var/lib/rauc/`.
@@ -353,6 +355,26 @@ the backends, devices, and timeout limits are in
 - With `enableHardware = false`, none of those manager settings is set.
 - On RAUC-enabled systems, `watchdog-boot-count.service` runs before `rauc.service` and logs boot-count and rollback
   state through `scripts/watchdog-boot-count.sh`.
+
+## clock.nix
+
+Keeps the system clock from starting before a build-time floor or the last known time, so RAUC signature checks never
+see a certificate as not yet valid. See
+[Clock and Signature Checks](../architecture/update-rollback.md#clock-and-signature-checks).
+
+| Unit                          | When                                        | What it does                                          |
+|-------------------------------|---------------------------------------------|-------------------------------------------------------|
+| `atomixos-clock.service`      | Boot, before `time-set.target`; at shutdown | Moves the clock forward at boot; saves it on shutdown |
+| `atomixos-clock-save.timer`   | 5 minutes after boot, then every 15 minutes | Starts `atomixos-clock-save.service`                  |
+| `atomixos-clock-save.service` | From the timer                              | Saves the current time to `/data/clock/last-known`    |
+
+| Option                             | Type          | Default                                               | Description                               |
+|------------------------------------|---------------|-------------------------------------------------------|-------------------------------------------|
+| `atomixos.clock.floorCertificates` | list of paths | `keyringCert`, or the development CA and signing cert | Certificates whose start raises the floor |
+
+The floor is the latest of `self.lastModified`, the commit time of the AtomixOS source, and the validity start of each
+listed certificate. It is computed when the image is built and installed as `/etc/atomixos/clock-floor`. A clock earlier
+than the floor is never saved, and each save is flushed (file, then directory) before the next one.
 
 ## os-verification.nix
 

@@ -144,37 +144,38 @@ malformed requests, bounded snapshot reads, and JSON error responses.
 
 Flake-only checks:
 
-| Test                          | Nodes | What it validates                                                                                                  |
-|-------------------------------|-------|--------------------------------------------------------------------------------------------------------------------|
-| `nixstasis-client`            | 1     | Nixstasis registration, identity reuse, polling, FRP launch-boundary, and post-enrollment API outage path          |
-| `fleet-bootstrap`             | 1     | Loopback fleet socket, named AtomixOS route profile, Host rewrite, withdrawal, and token secrecy                   |
-| `watchdog-module`             | 0     | Watchdog option defaults and opt-in systemd manager settings                                                       |
-| `build-configuration`         | 0     | Schema, canonical policy, provenance, module mapping, and sidecar inputs                                           |
-| `build-config-workflow`       | 0     | Local override wrapper, task matrix, Lima behavior, and per-board retained GC roots                                |
-| `cm3-board`                   | 0     | CM3 eMMC paths and RAUC compatible; every U-Boot setting survives into the resolved `.config`; env order           |
-| `boot-partition-size`         | 0     | An oversized boot payload fails with a size breakdown; a fitting one builds                                        |
-| `uboot-scripts`               | 0     | U-Boot sandbox runs `boot.scr` (failed loads reset, `START_UMS`) and the `PREBOOT`; also a CI job                  |
-| `device-tree-overlay`         | 0     | Boot slot DTB comes from the NixOS device-tree package with overlays; ROCK64 watchdog overlay wiring               |
-| `os-upgrade-query`            | 0     | Update query sends `X-Compatible`; another board's bundle is skipped before download                               |
-| `watchdog-missing-device`     | 1     | Enabled policy without hardware boots, preserves RAUC state, and emits an actionable warning                       |
-| `kernel-security`             | 1     | BPF LSM/BTF support is active, runtime `kernel.panic` is 10, and unsupported startup diagnostics are absent        |
-| `interface-naming`            | 1     | WAN and LAN are renamed to `wan`/`lan` by hardware match, whichever NIC registers first                            |
-| `rootless-storage`            | 1     | Rootless application images are stored under `/data/containers/rootless`, not on the reset-on-boot overlay root    |
-| `ssh-host-keys`               | 1     | sshd serves one Ed25519 host key from `/data/ssh`, generates none in `/etc/ssh`, and keeps it across restarts      |
-| `first-boot-provision`        | 1     | Provisioning import, validation, apply, auth, rollback, and LAN transport behavior                                 |
-| `first-boot-source-discovery` | 1     | Boot/USB/bootstrap source precedence, marker behavior, and fleet rebind suppression                                |
-| `provisioning-export`         | 1     | Authenticated root-worker export of private workload-owned files, concurrent requests, cleanup, and link rejection |
-| `initrd-fresh-flash-marker`   | 1     | Initrd repartitioning creates slot B/data and persists the fresh-flash marker                                      |
-| `forensics-podman-log-path`   | 1     | Podman journald output reaches the persistent `/data/logs` path                                                    |
-| `forensics-rsyslog-path`      | 1     | Buffered rsyslog output is written to persistent `/data/logs`                                                      |
-| `forensics-rsyslog-buffering` | 1     | Rsyslog batches writes instead of synchronously writing every message                                              |
-| `forensics-shutdown-flush`    | 1     | The logging shutdown-flush service persists buffered log output                                                    |
-| `chrony-wan-recovery`         | 1     | Chrony and its wait-sync probe behave correctly while WAN time sources are offline                                 |
-| `nixstasis-module`            | 0     | Nixstasis client module renders its configuration and registration service                                         |
-| `boot-script`                 | 0     | The U-Boot script derives the rootfs partition from the selected boot slot (Linux only)                            |
-| `lan-defaults`                | 0     | Shipped LAN defaults reach the networkd, dnsmasq, and chrony configuration                                         |
-| `partition-layout`            | 0     | Repart partition sizes and labels match the shared partition layout                                                |
-| `e2e-launcher`                | 0     | The `scripts/run-e2e-check.sh` launcher used by the `e2e:*` tasks                                                  |
+| Test                          | Nodes | What it validates                                                                                                   |
+|-------------------------------|-------|---------------------------------------------------------------------------------------------------------------------|
+| `nixstasis-client`            | 1     | Nixstasis registration, identity reuse, polling, FRP launch-boundary, and post-enrollment API outage path           |
+| `fleet-bootstrap`             | 1     | Loopback fleet socket, named AtomixOS route profile, Host rewrite, withdrawal, and token secrecy                    |
+| `watchdog-module`             | 0     | Watchdog option defaults and opt-in systemd manager settings                                                        |
+| `build-configuration`         | 0     | Schema, canonical policy, provenance, module mapping, and sidecar inputs                                            |
+| `build-config-workflow`       | 0     | Local override wrapper, task matrix, Lima behavior, and per-board retained GC roots                                 |
+| `cm3-board`                   | 0     | CM3 eMMC paths and RAUC compatible; every U-Boot setting survives into the resolved `.config`; env order            |
+| `boot-partition-size`         | 0     | An oversized boot payload fails with a size breakdown; a fitting one builds                                         |
+| `uboot-scripts`               | 0     | U-Boot sandbox runs `boot.scr` (failed loads reset, `START_UMS`) and the `PREBOOT`; also a CI job                   |
+| `device-tree-overlay`         | 0     | Boot slot DTB comes from the NixOS device-tree package with overlays; ROCK64 watchdog overlay wiring                |
+| `os-upgrade-query`            | 0     | Update query sends `X-Compatible`; another board's bundle is skipped before download                                |
+| `watchdog-missing-device`     | 1     | Enabled policy without hardware boots, preserves RAUC state, and emits an actionable warning                        |
+| `kernel-security`             | 1     | BPF LSM/BTF support is active, runtime `kernel.panic` is 10, and unsupported startup diagnostics are absent         |
+| `interface-naming`            | 1     | WAN and LAN are renamed to `wan`/`lan` by hardware match, whichever NIC registers first                             |
+| `rootless-storage`            | 1     | Rootless application images are stored under `/data/containers/rootless`, not on the reset-on-boot overlay root     |
+| `clock`                       | 1     | A clock set back moves forward to the last known time or the image source date; never saves a past clock; `rtcsync` |
+| `ssh-host-keys`               | 1     | sshd serves one Ed25519 host key from `/data/ssh`, generates none in `/etc/ssh`, and keeps it across restarts       |
+| `first-boot-provision`        | 1     | Provisioning import, validation, apply, auth, rollback, and LAN transport behavior                                  |
+| `first-boot-source-discovery` | 1     | Boot/USB/bootstrap source precedence, marker behavior, and fleet rebind suppression                                 |
+| `provisioning-export`         | 1     | Authenticated root-worker export of private workload-owned files, concurrent requests, cleanup, and link rejection  |
+| `initrd-fresh-flash-marker`   | 1     | Initrd repartitioning creates slot B/data and persists the fresh-flash marker                                       |
+| `forensics-podman-log-path`   | 1     | Podman journald output reaches the persistent `/data/logs` path                                                     |
+| `forensics-rsyslog-path`      | 1     | Buffered rsyslog output is written to persistent `/data/logs`                                                       |
+| `forensics-rsyslog-buffering` | 1     | Rsyslog batches writes instead of synchronously writing every message                                               |
+| `forensics-shutdown-flush`    | 1     | The logging shutdown-flush service persists buffered log output                                                     |
+| `chrony-wan-recovery`         | 1     | Chrony and its wait-sync probe behave correctly while WAN time sources are offline                                  |
+| `nixstasis-module`            | 0     | Nixstasis client module renders its configuration and registration service                                          |
+| `boot-script`                 | 0     | The U-Boot script derives the rootfs partition from the selected boot slot (Linux only)                             |
+| `lan-defaults`                | 0     | Shipped LAN defaults reach the networkd, dnsmasq, and chrony configuration                                          |
+| `partition-layout`            | 0     | Repart partition sizes and labels match the shared partition layout                                                 |
+| `e2e-launcher`                | 0     | The `scripts/run-e2e-check.sh` launcher used by the `e2e:*` tasks                                                   |
 
 ## Platform performance
 

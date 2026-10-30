@@ -47,6 +47,7 @@ in
     ./nixstasis.nix
     ./boot-storage-debug.nix
     ./watchdog.nix
+    ./clock.nix
   ];
 
   config = {

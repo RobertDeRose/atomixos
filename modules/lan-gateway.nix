@@ -61,6 +61,11 @@ in
       # Step large RTC drift whenever upstream time becomes available.
       makestep 1.0 -1
 
+      # Once synchronized, let the kernel copy the time to the RTC every 11
+      # minutes, so a board with a battery-backed RTC boots with the right time.
+      # The kernel writes the RTC, so chronyd never holds /dev/rtc open.
+      rtcsync
+
       # Sync from provisioned WAN NTP servers and serve time to LAN devices.
       include /etc/atomixos/chrony-lan.conf
 
