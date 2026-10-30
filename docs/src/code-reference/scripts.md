@@ -83,7 +83,8 @@ First-boot provisioning and slot confirmation, run by `first-boot.service`.
 1. Exit if `/data/.completed_first_boot` exists.
 2. Find provisioning input: a valid existing `/data/config/config.toml`, then `/boot/config.toml` on a fresh flash,
    then `config.toml` on USB media (searched by label and partition label), and otherwise wait for the bootstrap web
-   console.
+   console. On a fresh flash it mounts `/boot` read-only from its fstab entry to read the seed and unmounts it right
+   after, since `/boot` is otherwise never mounted.
 3. Validate the config and import it into `/data/config/`.
 4. Apply managed users, then render and sync rootful and rootless Quadlet units and restart LAN apply and provisioned
    firewall apply. A failed LAN or firewall apply, or a failed sync with required units, stops before slot

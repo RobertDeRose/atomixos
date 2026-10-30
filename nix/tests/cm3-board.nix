@@ -58,9 +58,9 @@ assert cm3.atomixos.serialRootDebug.enable;
 assert cm3.systemd.services.serial-root-debug-gate.wantedBy == [ "multi-user.target" ];
 assert lib.hasInfix "--autologin root"
   cm3.systemd.services."serial-root-debug@".serviceConfig.ExecStart;
-# RAUC refuses to install to a mounted slot, so boot slot A is not kept mounted.
-assert builtins.elem "x-systemd.automount" cm3.fileSystems."/boot".options;
-assert builtins.elem "noauto" cm3.fileSystems."/boot".options;
+# RAUC refuses to install to a mounted slot, so boot slot A is never mounted at
+# runtime, not even by an automount that any sandboxed service could trigger.
+assert cm3.fileSystems."/boot".options == [ "noauto" ];
 pkgs.runCommand "test-cm3-board"
   {
     passAsFile = [ "enabledSettings" ];

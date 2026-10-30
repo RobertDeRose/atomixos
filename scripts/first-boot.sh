@@ -108,6 +108,27 @@ find_usb_config() {
 	return 1
 }
 
+# /boot is boot slot A, which RAUC overwrites while slot B runs, so it is never
+# mounted at runtime. Mount it read-only from its fstab entry only to read the
+# fresh-flash seed. Where /boot is already mounted or has no fstab entry, read
+# the path as it is.
+BOOT_SEED_MOUNTED=0
+
+open_boot_seed() {
+	local boot_dir="${BOOT_CONFIG_PATH%/*}"
+	if ! mountpoint -q "$boot_dir" && mount -o ro "$boot_dir" >/dev/null 2>&1; then
+		BOOT_SEED_MOUNTED=1
+	fi
+	[ -f "$BOOT_CONFIG_PATH" ]
+}
+
+close_boot_seed() {
+	if [ "$BOOT_SEED_MOUNTED" = 1 ]; then
+		umount "${BOOT_CONFIG_PATH%/*}" || log "WARNING: could not unmount ${BOOT_CONFIG_PATH%/*}"
+		BOOT_SEED_MOUNTED=0
+	fi
+}
+
 cleanup_seed_source() {
 	local source_path="$1"
 	local mount_dir
@@ -116,6 +137,9 @@ cleanup_seed_source() {
 		mount_dir="${source_path%/config.toml}"
 		umount "$mount_dir" >/dev/null 2>&1 || true
 		rmdir "$mount_dir" >/dev/null 2>&1 || true
+		;;
+	"$BOOT_CONFIG_PATH")
+		close_boot_seed
 		;;
 	esac
 }
@@ -220,12 +244,15 @@ discover_and_import_provisioning() {
 		return 0
 	fi
 
-	if is_fresh_flash && [ -f "$BOOT_CONFIG_PATH" ]; then
+	if is_fresh_flash && open_boot_seed; then
 		seed_path="$BOOT_CONFIG_PATH"
-	elif usb_path="$(find_usb_config)"; then
-		seed_path="$usb_path"
 	else
-		seed_path=""
+		close_boot_seed
+		if usb_path="$(find_usb_config)"; then
+			seed_path="$usb_path"
+		else
+			seed_path=""
+		fi
 	fi
 
 	if [ -n "$seed_path" ]; then
@@ -248,6 +275,8 @@ if [ -f "$SENTINEL" ]; then
 	log "Sentinel exists, skipping (not first boot)"
 	exit 0
 fi
+
+trap close_boot_seed EXIT
 
 BOOT_SLOT="$(current_boot_slot || true)"
 

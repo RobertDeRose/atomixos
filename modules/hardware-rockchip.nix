@@ -51,14 +51,11 @@ in
   ];
 
   # /boot is boot slot A, which RAUC overwrites when B is running, and RAUC
-  # refuses to install to a mounted slot. Mount it only on access (first-boot
-  # reads the fresh-flash /boot/config.toml seed) and unmount it when idle, so
-  # it is not mounted during later updates.
-  fileSystems."/boot".options = [
-    "noauto"
-    "x-systemd.automount"
-    "x-systemd.idle-timeout=1min"
-  ];
+  # refuses to install to a mounted slot. Never mount it at runtime: first-boot
+  # mounts it read-only only to read the fresh-flash /boot/config.toml seed.
+  # No automount either: every service started with ProtectSystem= triggers
+  # it, and the hourly logrotate run kept slot A mounted for minutes at a time.
+  fileSystems."/boot".options = [ "noauto" ];
 
   # The eMMC gap before the first GPT partition holds SPL and U-Boot (and on
   # CM3 the U-Boot environment). systemd-repart's default discard pass trims

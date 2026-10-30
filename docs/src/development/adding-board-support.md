@@ -19,7 +19,7 @@ Create `modules/hardware-<board>.nix` and set `atomixos.board = "<board>";`. For
 `./hardware-rockchip.nix`, which supplies what the Rockchip boards share:
 
 - no NixOS-managed bootloader, because U-Boot boots the slots;
-- a `/boot` automount, so RAUC can write boot slot A while slot B runs;
+- a `noauto` `/boot` that stays unmounted at runtime, so RAUC can write boot slot A while slot B runs;
 - systemd-repart without discard, so it never trims the SPL and U-Boot area before the first partition;
 - the Realtek USB NIC firmware, the `boot_to_ums` helper, and the serial console on `ttyS2`;
 - the `_RUT_OH_` serial root recovery.
