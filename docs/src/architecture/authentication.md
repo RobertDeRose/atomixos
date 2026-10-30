@@ -12,6 +12,7 @@ Device credentials live on `/data`, so they survive updates and rollbacks:
 |---------------------------|-------------------------------------------|---------------------------------------------------|
 | Admin signer keys         | `/data/config/admin-signers`              | SSH keys allowed to sign configuration re-applies |
 | User SSH public keys      | `/data/config/ssh-authorized-keys/<user>` | Per-user SSH login                                |
+| SSH host key              | `/data/ssh/ssh_host_ed25519_key`          | The device's own SSH identity                     |
 | Nixstasis identity        | `/data/nixstasis/id`                      | Device UUID and runtime token issued by Nixstasis |
 | Nixstasis SSH public keys | `/data/nixstasis/.ssh/authorized_keys`    | Remote-access keys for the Nixstasis SSH user     |
 
@@ -36,6 +37,11 @@ Where you can connect from:
 
 - **LAN (`lan`):** always, with a provisioned key.
 - **WAN (`wan`):** only while the flag file `/data/config/ssh-wan-enabled` exists. Nothing creates it automatically.
+
+The device presents one Ed25519 host key, generated on the first boot after `/data` is created and kept at
+`/data/ssh/ssh_host_ed25519_key`. It stays the same across reboots, updates, and rollbacks, so a changed host key
+means the device was reflashed with a new `/data` or something else is answering. Reprovisioning does not replace it,
+because the key lives outside `/data/config`.
 
 User keys are read from `/data/config/ssh-authorized-keys/<user>`. Admin signer keys are kept separately in
 `/data/config/admin-signers`, so being able to log in does not by itself allow re-applying configuration. How signed

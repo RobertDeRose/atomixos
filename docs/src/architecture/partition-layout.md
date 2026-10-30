@@ -60,6 +60,7 @@ budget eMMC modules that can corrupt the boot area; `nix/uboot.nix` builds U-Boo
     admin-signers                    Admin SSH keys trusted to sign configuration re-applies
     ssh-authorized-keys/<user>       Per-user SSH authorized keys
     files/                           Files delivered in a configuration bundle
+  ssh/ssh_host_ed25519_key           The device's SSH host key, generated on first boot
   nixstasis/                         Nixstasis identity and remote-access keys, when enabled
   containers/rootless/               Podman storage for rootless containers
   logs/                              Durable host and application logs written by rsyslog
