@@ -50,6 +50,11 @@ let
       fi
       ;;
     save)
+      # /data is a nofail mount: never write the state onto the overlay root.
+      if ! mountpoint -q "''${dir%/*}"; then
+        echo "''${dir%/*} is not mounted; not saving the time"
+        exit 0
+      fi
       if [ "$now" -lt "$floor" ]; then
         echo "clock is before the build-time floor; not saving it"
         exit 0
@@ -111,7 +116,10 @@ in
       ];
       conflicts = [ "shutdown.target" ];
       wantedBy = [ "sysinit.target" ];
-      path = [ pkgs.coreutils ];
+      path = [
+        pkgs.coreutils
+        pkgs.util-linux
+      ];
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;
@@ -124,7 +132,10 @@ in
       description = "Save the current time as the last known time";
       after = [ "atomixos-clock.service" ];
       unitConfig.RequiresMountsFor = [ "/data" ];
-      path = [ pkgs.coreutils ];
+      path = [
+        pkgs.coreutils
+        pkgs.util-linux
+      ];
       serviceConfig = {
         Type = "oneshot";
         ExecStart = "${clockScript} save";

@@ -92,6 +92,11 @@ nixos-lib.runTest {
     gateway.succeed("systemctl start atomixos-clock-save.service")
     assert saved() == ahead, saved()
 
+    # If /data is not mounted at shutdown, the save writes nothing onto the overlay root.
+    gateway.succeed("umount -l /data && systemctl stop atomixos-clock.service")
+    gateway.succeed("test ! -e /data/clock")
+    gateway.succeed("journalctl -u atomixos-clock.service | grep -q '/data is not mounted; not saving the time'")
+
     # chronyd keeps the RTC in sync through the kernel's 11-minute mode.
     gateway.succeed("grep -qx rtcsync $(systemctl cat chronyd | grep -o '/nix/store/[^ ]*chrony.conf' | head -1)")
   '';
