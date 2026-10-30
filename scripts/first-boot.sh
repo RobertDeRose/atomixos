@@ -114,18 +114,37 @@ find_usb_config() {
 # the path as it is.
 BOOT_SEED_MOUNTED=0
 
+# Returns 0 with a seed, 1 without one, and 2 when the configured /boot cannot
+# be mounted. A fresh flash is seen only once, so a seed hidden by a failed
+# mount must stop discovery instead of falling through to another source.
 open_boot_seed() {
 	local boot_dir="${BOOT_CONFIG_PATH%/*}"
-	if ! mountpoint -q "$boot_dir" && mount -o ro "$boot_dir" >/dev/null 2>&1; then
-		BOOT_SEED_MOUNTED=1
+	local attempt
+	if ! mountpoint -q "$boot_dir" && findmnt --fstab -n "$boot_dir" >/dev/null 2>&1; then
+		for attempt in 1 2 3; do
+			if mount -o ro "$boot_dir"; then
+				BOOT_SEED_MOUNTED=1
+				break
+			fi
+			[ "$attempt" -lt 3 ] && sleep 1
+		done
+		if [ "$BOOT_SEED_MOUNTED" != 1 ]; then
+			log "ERROR: could not mount $boot_dir to read the fresh-flash seed"
+			return 2
+		fi
 	fi
 	[ -f "$BOOT_CONFIG_PATH" ]
 }
 
+# Keeps BOOT_SEED_MOUNTED set when the unmount fails, so the exit handler tries
+# again.
 close_boot_seed() {
 	if [ "$BOOT_SEED_MOUNTED" = 1 ]; then
-		umount "${BOOT_CONFIG_PATH%/*}" || log "WARNING: could not unmount ${BOOT_CONFIG_PATH%/*}"
-		BOOT_SEED_MOUNTED=0
+		if umount "${BOOT_CONFIG_PATH%/*}"; then
+			BOOT_SEED_MOUNTED=0
+		else
+			log "WARNING: could not unmount ${BOOT_CONFIG_PATH%/*}"
+		fi
 	fi
 }
 
@@ -235,7 +254,7 @@ has_valid_provisioning() {
 }
 
 discover_and_import_provisioning() {
-	local seed_path usb_path
+	local seed_path="" usb_path boot_status
 	if has_valid_provisioning; then
 		log "Using existing provisioned config from $CONFIG_TOML"
 		apply_managed_users
@@ -244,15 +263,19 @@ discover_and_import_provisioning() {
 		return 0
 	fi
 
-	if is_fresh_flash && open_boot_seed; then
-		seed_path="$BOOT_CONFIG_PATH"
-	else
-		close_boot_seed
-		if usb_path="$(find_usb_config)"; then
-			seed_path="$usb_path"
+	if is_fresh_flash; then
+		if open_boot_seed; then
+			seed_path="$BOOT_CONFIG_PATH"
 		else
-			seed_path=""
+			boot_status=$?
+			close_boot_seed
+			if [ "$boot_status" -eq 2 ]; then
+				return 1
+			fi
 		fi
+	fi
+	if [ -z "$seed_path" ] && usb_path="$(find_usb_config)"; then
+		seed_path="$usb_path"
 	fi
 
 	if [ -n "$seed_path" ]; then
