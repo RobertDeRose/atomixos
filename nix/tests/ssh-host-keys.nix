@@ -47,7 +47,9 @@ nixos-lib.runTest {
     stored = gateway.succeed(f"cut -d' ' -f2 {key}.pub").strip()
     served = gateway.wait_until_succeeds("ssh-keyscan -t ed25519 127.0.0.1 2>/dev/null | grep ssh-ed25519 | cut -d' ' -f3").strip()
     assert served == stored, (served, stored)
-    gateway.fail("ssh-keyscan -t rsa 127.0.0.1 2>/dev/null | grep -q ssh-rsa")
+    # It is the only host key: no RSA, ECDSA, or other type is served.
+    scanned = gateway.succeed("ssh-keyscan -t rsa,ecdsa,ed25519 127.0.0.1 2>/dev/null | grep -v '^#' | cut -d' ' -f2").split()
+    assert scanned == ["ssh-ed25519"], scanned
 
     # Restarting key generation and sshd keeps the same key.
     gateway.succeed("systemctl restart sshd-keygen.service sshd.service")
