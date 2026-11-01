@@ -1,4 +1,13 @@
 module.exports = {
+  // The default header pattern rejects the `<type>(<scope>)!: <summary>`
+  // breaking-change form that AGENTS.md documents.
+  parserPreset: {
+    parserOpts: {
+      headerPattern: /^(\w*)(?:\((.*)\))?!?: (.*)$/,
+      breakingHeaderPattern: /^(\w*)(?:\((.*)\))?!: (.*)$/,
+      headerCorrespondence: ["type", "scope", "subject"],
+    },
+  },
   rules: {
     "body-max-line-length": [2, "always", 100],
     "header-max-length": [2, "always", 72],
