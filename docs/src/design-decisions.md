@@ -127,8 +127,8 @@ directly through `networking.nftables`.
 
 ## Update polling first
 
-**Choice:** Updates come from simple HTTP polling (`os-upgrade.service`). The `os-upgrade.useHawkbit` option is kept as
-a seam for a hawkBit client later.
+**Choice:** Updates come from simple HTTP polling (`os-upgrade.service`). The `atomixos.os-upgrade.useHawkbit` option is
+kept as a seam for a hawkBit client later.
 
 **Why:** Polling needs no fleet server beyond a small HTTP endpoint and is enough for the current scale. hawkBit is not
 a working update path; see [Update Polling](architecture/update-rollback.md#update-polling).

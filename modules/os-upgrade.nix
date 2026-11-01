@@ -8,7 +8,7 @@
 }:
 
 let
-  cfg = config.os-upgrade;
+  cfg = config.atomixos.os-upgrade;
   raucEnabled = config.atomixos.rauc.enable;
   osUpgradeConfigFile = "/data/config/os-upgrade.json";
 
@@ -17,7 +17,7 @@ in
 {
   # ── Configuration options ────────────────────────────────────────────────────
 
-  options.os-upgrade = {
+  options.atomixos.os-upgrade = {
     useHawkbit = lib.mkOption {
       type = lib.types.bool;
       default = false;

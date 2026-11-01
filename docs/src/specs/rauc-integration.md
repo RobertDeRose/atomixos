@@ -88,12 +88,12 @@ RAUC. It does nothing until `/data/config/os-upgrade.json` names an update serve
 
 ### hawkBit mode installs the package only
 
-`os-upgrade.useHawkbit = true` disables the polling service and installs the `rauc-hawkbit-updater` package; see
+`atomixos.os-upgrade.useHawkbit = true` disables the polling service and installs the `rauc-hawkbit-updater` package; see
 [Update Polling](../architecture/update-rollback.md#update-polling) for what that means for updates.
 
 #### Scenario: hawkBit mode
 
-- Given `os-upgrade.useHawkbit = true`
+- Given `atomixos.os-upgrade.useHawkbit = true`
 - Then the `os-upgrade` polling timer is not created
 - And the `rauc-hawkbit-updater` package is installed
 - And no `rauc-hawkbit-updater` systemd service is created

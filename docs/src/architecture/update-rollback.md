@@ -120,7 +120,7 @@ newly updated or previously confirmed, uses up its tries and U-Boot falls back t
 ## Update Polling
 
 `os-upgrade.service` runs from a systemd timer: first 5 minutes after boot, then every hour by default
-(`os-upgrade.pollingInterval`), with up to 10 minutes of random delay so a fleet does not poll in step.
+(`atomixos.os-upgrade.pollingInterval`), with up to 10 minutes of random delay so a fleet does not poll in step.
 
 It reads its server from `/data/config/os-upgrade.json` and does nothing when no server is provisioned. Otherwise it
 sends `GET <server_url>/api/v1/updates/latest` with these headers:
@@ -150,5 +150,5 @@ and the validity start of each certificate in `atomixos.clock.floorCertificates`
 and at shutdown, only while the clock is at or after the floor, and each save is flushed to storage before it counts.
 Once chrony synchronizes, `rtcsync` lets the kernel copy the time to the RTC every 11 minutes.
 
-hawkBit is not a working update path. Setting `os-upgrade.useHawkbit` turns polling off and installs
+hawkBit is not a working update path. Setting `atomixos.os-upgrade.useHawkbit` turns polling off and installs
 `rauc-hawkbit-updater`, but AtomixOS configures no hawkBit server, credentials, or service for it.
