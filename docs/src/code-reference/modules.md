@@ -391,10 +391,10 @@ Post-update health check. Created only when RAUC is enabled.
 
 OTA update polling. Created only when RAUC is enabled and `useHawkbit` is `false`.
 
-| Option                       | Type   | Default | Description                                                         |
-|------------------------------|--------|---------|---------------------------------------------------------------------|
-| `os-upgrade.useHawkbit`      | bool   | `false` | Disable polling and install the `rauc-hawkbit-updater` package only |
-| `os-upgrade.pollingInterval` | string | `"1h"`  | Timer interval                                                      |
+| Option                                | Type   | Default | Description                                                         |
+|---------------------------------------|--------|---------|---------------------------------------------------------------------|
+| `atomixos.os-upgrade.useHawkbit`      | bool   | `false` | Disable polling and install the `rauc-hawkbit-updater` package only |
+| `atomixos.os-upgrade.pollingInterval` | string | `"1h"`  | Timer interval                                                      |
 
 - Timer: `OnBootSec=5min`, `OnUnitActiveSec=<pollingInterval>`, `RandomizedDelaySec=10min`.
 - Service conditions: `/data/.completed_first_boot` and the provisioned `/data/config/os-upgrade.json` both exist. It
