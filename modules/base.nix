@@ -453,6 +453,14 @@ in
     # carries slot A; initrd systemd-repart provisions the inactive A/B slot and
     # the persistent data partition from the remaining eMMC space on first boot.
     boot.initrd.systemd.enable = true;
+    # `_RUT_OH_=1` also covers the initrd: boot.scr then adds
+    # atomixos.initrd_shell, so a failed initrd stays at a root shell on the
+    # serial console instead of panicking. Like the stage-2 autologin, it is
+    # unauthenticated: whoever can set `_RUT_OH_` already has root.
+    boot.initrd.systemd.emergencyAccess = config.atomixos.serialRootDebug.enable;
+    boot.initrd.systemd.services.panic-on-fail.unitConfig.ConditionKernelCommandLine =
+      lib.mkIf config.atomixos.serialRootDebug.enable
+        [ "!atomixos.initrd_shell" ];
     # Custom initrd services do not automatically get their `path` entries copied
     # into the initrd image, so include the probe tools they invoke explicitly.
     boot.initrd.systemd.initrdBin = [

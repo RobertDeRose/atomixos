@@ -58,7 +58,9 @@ also covers panics in early boot and in the initrd, before `systemd-sysctl` runs
 
 An initrd failure does not panic by itself: systemd would enter emergency mode and wait on the console. The
 `boot.panic_on_fail` kernel parameter makes the initrd panic instead, so a missing or unmountable root slot also reboots
-and spends a boot try. The initrd has no emergency shell; the console shows the failing unit's error before the reboot.
+and spends a boot try. The console shows the failing unit's error before the reboot. To debug such a failure, set
+`_RUT_OH_=1` ([Physical Recovery](authentication.md#physical-recovery)): the initrd then keeps a serial root shell
+instead of panicking.
 
 ### Bootloader updates
 
