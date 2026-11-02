@@ -50,6 +50,11 @@ assert builtins.match ".*bootflow scan -[a-z]*G.*" (ubootConfig "BOOTCOMMAND") =
 assert
   builtins.match ''.*bootflow scan( -[a-zA-Z]+)? [^-;"][^;"]*[;"].*'' (ubootConfig "BOOTCOMMAND")
   == null;
+# A failed initrd panics, and a panic reboots, so each failure spends a boot try.
+# VM tests cannot show this: the test driver adds both parameters itself.
+assert builtins.elem "boot.panic_on_fail" cm3.boot.kernelParams;
+assert builtins.elem "panic=10" cm3.boot.kernelParams;
+assert cm3.boot.initrd.systemd.emergencyAccess == false;
 # The squashfs slot can appear after initrd-root-device.target; wait for it.
 assert lib.hasInfix ''until [ -b "$lower_device" ]''
   cm3.boot.initrd.systemd.services.initrd-prepare-overlay-lower.script;

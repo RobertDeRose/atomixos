@@ -59,6 +59,7 @@ Shared NixOS configuration for every target: filesystem layout, users, core serv
 | `documentation.enable` | `false`     | Saves closure space                    |
 | `security.sudo.enable` | `false`     | Privilege escalation uses `run0`       |
 | `panic` kernel param   | `10`        | Reboot 10 seconds after a kernel panic |
+| `boot.panic_on_fail`   | set         | An initrd failure panics               |
 | `time.timeZone`        | `"UTC"`     |                                        |
 
 ### OverlayFS root
@@ -81,6 +82,9 @@ Assembly order before `switch_root`:
 3. `sysroot.mount` mounts `/` as overlay with `lowerdir=/run/rootfs-base`, `upperdir=/run/overlay-root/upper`, and
    `workdir=/run/overlay-root/work`.
 4. `sysroot-run.mount` bind-mounts `/run` into the switched root.
+
+If any step fails, the `boot.panic_on_fail` kernel parameter makes the initrd panic rather than open an emergency shell,
+and `panic=10` reboots the device, which spends one boot try.
 
 The flashable image has no `/data` partition. Initrd `systemd-repart` creates it from the remaining eMMC space on
 first boot.

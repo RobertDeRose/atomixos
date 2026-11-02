@@ -152,7 +152,7 @@ Flake-only checks:
 | `watchdog-module`             | 0     | Watchdog option defaults and opt-in systemd manager settings                                                        |
 | `build-configuration`         | 0     | Schema, canonical policy, provenance, module mapping, and sidecar inputs                                            |
 | `build-config-workflow`       | 0     | Local override wrapper, task matrix, Lima behavior, and per-board retained GC roots                                 |
-| `cm3-board`                   | 0     | CM3 eMMC paths and RAUC compatible; every U-Boot setting survives into the resolved `.config`; env order            |
+| `cm3-board`                   | 0     | CM3 eMMC paths and RAUC compatible; initrd failures panic; U-Boot settings reach `.config`; env order               |
 | `boot-partition-size`         | 0     | An oversized boot payload fails with a size breakdown; a fitting one builds                                         |
 | `uboot-scripts`               | 0     | U-Boot sandbox runs `boot.scr` (failed loads reset, `START_UMS`) and the `PREBOOT`; also a CI job                   |
 | `device-tree-overlay`         | 0     | Boot slot DTB comes from the NixOS device-tree package with overlays; ROCK64 watchdog overlay wiring                |

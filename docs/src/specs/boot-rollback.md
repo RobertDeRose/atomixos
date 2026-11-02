@@ -60,7 +60,8 @@ After three failed boots, the counter reaches 0 and U-Boot boots the previous wo
 kept for diagnostics but is not booted.
 
 A kernel panic at any point in boot, including the initrd, reboots the device after 10 seconds (`panic=10` on the
-kernel command line), which counts as a failed boot.
+kernel command line), which counts as a failed boot. An initrd failure, such as the root slot never appearing, panics
+instead of opening an emergency shell (`boot.panic_on_fail`), so it also counts as a failed boot.
 
 #### Scenario: Automatic rollback after three failures
 
