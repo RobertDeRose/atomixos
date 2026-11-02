@@ -24,7 +24,18 @@ jobs:
             system: aarch64-linux
           - runner: macos-latest
             system: aarch64-darwin
-    runs-on: ${{ matrix.runner }}
+            self-hosted: true
+    # The darwin evaluation runs on the self-hosted Mac (label atomixos) for dispatches, release
+    # calls, and same-repository pull requests. Fork pull requests keep the hosted runner, but a
+    # fork can edit this file, so approving a fork run is the real gate (see tooling docs).
+    runs-on: >-
+      ${{
+        matrix.self-hosted
+        && (github.event_name != 'pull_request'
+          || github.event.pull_request.head.repo.full_name == github.repository)
+        && fromJSON('["self-hosted", "macOS", "ARM64", "atomixos"]')
+        || matrix.runner
+      }}
     timeout-minutes: 45
     permissions:
       contents: read
@@ -35,6 +46,8 @@ jobs:
           ref: ${{ inputs.ref }}
           persist-credentials: false
       - name: Set up Nix
+        # The self-hosted Mac already has Nix with flakes enabled.
+        if: runner.environment == 'github-hosted'
         uses: cachix/install-nix-action@96951a368ba55167b55f1c916f7d416bac6505fe # v31.10.3
         with:
           extra_nix_config: |
