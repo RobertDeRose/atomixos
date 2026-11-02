@@ -59,10 +59,11 @@ rollback attempts.
 After three failed boots, the counter reaches 0 and U-Boot boots the previous working slot. The failed slot's data is
 kept for diagnostics but is not booted.
 
-A kernel panic at any point in boot, including the initrd, reboots the device after 10 seconds (`panic=10` on the
-kernel command line), which counts as a failed boot. An initrd failure, such as the root slot never appearing, panics
-instead of opening an emergency shell (`boot.panic_on_fail`), so it also counts as a failed boot. Only the `_RUT_OH_=1`
-serial debug flag keeps the emergency shell, and then the device waits at that shell instead of falling back.
+A kernel panic at any point in boot, including the initrd, reboots the device after 10 seconds (`panic=10` on the kernel
+command line), which counts as a failed boot. An initrd failure that enters emergency mode, such as the root slot never
+appearing, panics instead of opening an emergency shell (`boot.panic_on_fail`), so it also counts as a failed boot. Only
+the `_RUT_OH_=1` serial debug flag keeps the emergency shell, and then the device waits at that shell instead of falling
+back.
 
 #### Scenario: Automatic rollback after three failures
 
