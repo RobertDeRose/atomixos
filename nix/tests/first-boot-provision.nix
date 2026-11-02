@@ -271,6 +271,17 @@ nixos-lib.runTest {
         gateway.succeed("grep '^restart edgeproxy.service$' /tmp/quadlet-sync/systemctl.log")
         gateway.succeed("grep '^enable-linger appsvc$' /tmp/quadlet-sync/loginctl.log")
         gateway.succeed("grep '^--user stop oldapp.service$' /tmp/quadlet-sync/systemctl.log")
+        # A stale unit whose stop fails fails the sync only while it is still running;
+        # a removed unit that already failed is unloaded and cannot be stopped.
+        gateway.succeed("cat > /tmp/quadlet-sync/bin/systemctl <<'EOF'\n#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" >>/tmp/quadlet-sync/systemctl.log\ncase \"$*\" in\n  'stop obsolete.service') echo 'Failed to stop obsolete.service' >&2; exit 1 ;;\n  'show -P ActiveState obsolete.service') cat /tmp/quadlet-sync/obsolete-state ;;\nesac\nexit 0\nEOF\nchmod +x /tmp/quadlet-sync/bin/systemctl")
+        gateway.succeed("printf 'active\\n' >/tmp/quadlet-sync/obsolete-state && rm -f /tmp/quadlet-sync/systemctl.log")
+        gateway.fail("ATOMIXOS_CHRONY_WAIT_TIMEOUT_SECONDS=1 ATOMIXOS_CHRONY_WAIT_ATTEMPTS=1 ATOMIXOS_ALLOW_UNSAFE_PATH=1 PATH=/tmp/quadlet-sync/bin:$PATH quadlet-sync >/tmp/quadlet-sync/stale-running.log 2>&1")
+        gateway.succeed("grep 'ERROR: stale units are still running: obsolete.service' /tmp/quadlet-sync/stale-running.log")
+        gateway.fail("grep '^restart edgeproxy.service$' /tmp/quadlet-sync/systemctl.log")
+        gateway.succeed("printf 'failed\\n' >/tmp/quadlet-sync/obsolete-state && rm -f /tmp/quadlet-sync/systemctl.log")
+        gateway.succeed("ATOMIXOS_CHRONY_WAIT_TIMEOUT_SECONDS=1 ATOMIXOS_CHRONY_WAIT_ATTEMPTS=1 ATOMIXOS_ALLOW_UNSAFE_PATH=1 PATH=/tmp/quadlet-sync/bin:$PATH quadlet-sync >/tmp/quadlet-sync/stale-unloaded.log 2>&1 || (cat /tmp/quadlet-sync/stale-unloaded.log >&2; false)")
+        gateway.fail("grep 'ERROR' /tmp/quadlet-sync/stale-unloaded.log")
+        gateway.succeed("grep '^restart edgeproxy.service$' /tmp/quadlet-sync/systemctl.log")
         gateway.succeed("cat > /tmp/quadlet-sync/bin/first-boot-provision <<'EOF'\n#!/usr/bin/env bash\nset -euo pipefail\nif [ \"$1\" = \"sync-quadlet\" ]; then\n  exit 1\nfi\necho unexpected first-boot-provision invocation >&2\nexit 1\nEOF\nchmod +x /tmp/quadlet-sync/bin/first-boot-provision")
         gateway.fail("ATOMIXOS_ALLOW_UNSAFE_PATH=1 PATH=/tmp/quadlet-sync/bin:$PATH quadlet-sync >/tmp/quadlet-sync/fatal.log 2>&1")
         gateway.succeed("printf '{bad json\n' >/data/config/quadlet-runtime.json")
