@@ -110,8 +110,8 @@ actionable warning reports that enforcement is unavailable.
 
 The `kernel-security` VM check verifies the stripped kernel exposes the BPF LSM and BTF required by systemd filesystem
 sandboxing. It also rejects unsupported-BPF, MTD-probe, boot-storage, and hung-task-sysctl startup diagnostics, and
-checks that `panic=10` is on the kernel command line, so a panic at any point in boot, including the initrd, reboots
-the device.
+checks that `panic=10` is on the kernel command line. It does not trigger a panic: the NixOS test driver appends its own
+`panic=1`, so the VM cannot show the reboot delay a board gets.
 
 The `build-configuration` check covers strict schema parsing, merge behavior, timeout bounds, canonical bytes,
 provenance, NixOS option mapping, artifact sidecar inputs, and the network-versus-fleet bootstrap transport boundary.
