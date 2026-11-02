@@ -59,8 +59,10 @@ local recovery tool, not part of network authentication.
 
 The variable also covers a boot that fails in the initrd. Normally such a failure panics and reboots, so the device can
 fall back to the other slot. With `_RUT_OH_=1`, `boot.scr` adds `atomixos.initrd_shell` to the kernel command line,
-and a failed initrd opens an unauthenticated root shell on the serial console instead. Linux clears the variable only
-after a full boot, so it stays set, and the device does not fall back, until the initrd problem is fixed.
+and a failed initrd opens an unauthenticated root shell on the serial console instead. The `serial-root-debug-gate`
+service clears the variable when the system reaches `multi-user.target`. A failed initrd never gets that far, so the
+variable stays set, and the device does not fall back, until the initrd problem is fixed. To clear it sooner, reset the
+board, interrupt autoboot, and run `setenv _RUT_OH_; saveenv; reset` at the U-Boot prompt.
 
 To set the variable:
 

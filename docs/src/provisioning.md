@@ -166,11 +166,9 @@ you can [flash a new image](provisioning/flash-image.md) to it from your worksta
 
 **Get a root shell on the serial console.** The image keeps `root` locked. On every board, set the U-Boot environment
 variable `_RUT_OH_=1` (for example with `fw_setenv _RUT_OH_ 1`); on the next boot the debug UART (UART2, `ttyS2`,
-1,500,000 baud) logs in as root instead of showing a login prompt. Linux clears the variable once that boot completes,
-so it applies to one boot only. If the boot fails before the root filesystem is mounted, the same variable opens a root
-shell on that console instead of rebooting, and it stays set until you clear it from the U-Boot prompt
-(`setenv _RUT_OH_; saveenv`). [Physical Recovery](architecture/authentication.md#physical-recovery) covers the
-details.
+1,500,000 baud) logs in as root instead of showing a login prompt, and a boot that fails in the initrd keeps a root
+shell there instead of rebooting. [Physical Recovery](architecture/authentication.md#physical-recovery) covers when the
+variable is cleared and how to clear it yourself.
 
 **Recover an interrupted change.** If the device loses power or the worker stops in the middle of a change, the change
 is finished or rolled back on the next run, and its job reports the real outcome. You do not need to clean anything up.
