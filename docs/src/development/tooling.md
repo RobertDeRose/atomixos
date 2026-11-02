@@ -85,16 +85,20 @@ target the Mac. The repository requires approval before any outside contributor'
 fork run, check that it changes nothing under `.github/workflows/`. The self-hosted runner uses the Mac's own Nix and
 skips the install step. If that runner is offline, the darwin job waits in the queue until it comes back.
 
-The runner runs as a dedicated, hidden, non-admin macOS user under a LaunchDaemon, so jobs cannot read the operator's
-home directory, keys, or tokens. To set it up on a Mac with multi-user Nix:
+The runner runs as a dedicated, hidden, non-admin macOS user under a LaunchDaemon. A separate user does not hide
+other users' files on its own: macOS puts new users in the `staff` group and creates home directories readable by that
+group, and `Public` folders are readable by everyone. Jobs can read any file that other users' permissions or ACLs
+allow. To set it up on a Mac with multi-user Nix:
 
 1. Download the `osx-arm64` runner from `actions/runner` releases and check its SHA-256 against the release asset.
 2. Create the user, for example `gha-runner`, with `sysadminctl -addUser`, and hide it with
    `dscl . -create /Users/gha-runner IsHidden 1`.
-3. Unpack the runner into that user's home and register it as that user:
+3. Run `chmod 700` on every other user's home directory, and keep keys and tokens out of `Public` and other shared
+   folders. Use a dedicated Mac if that is not possible.
+4. Unpack the runner into that user's home and register it as that user:
    `./config.sh --unattended --url <repository URL> --token <registration token> --labels atomixos`. Get a token from
    `gh api -X POST repos/<owner>/<repo>/actions/runners/registration-token`; it is single-use and expires in an hour.
-4. Install a LaunchDaemon with `UserName` set to the runner user, `ProgramArguments` set to the runner's `run.sh`,
+5. Install a LaunchDaemon with `UserName` set to the runner user, `ProgramArguments` set to the runner's `run.sh`,
    `KeepAlive` and `RunAtLoad` enabled, and a `PATH` that starts with the system Nix (`/run/current-system/sw/bin` on
    nix-darwin), then load it with `launchctl bootstrap system <plist>`.
 
