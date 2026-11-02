@@ -24,13 +24,18 @@ let
     line: lib.hasPrefix "CONFIG_" line && !(lib.hasSuffix "=n" line)
   ) ubootConfigLines;
   envSize = ubootConfig "ENV_SIZE";
-  # `_RUT_OH_` with a required root password, built in or missing.
+  # `_RUT_OH_` without a password, and with a required one, built in or missing.
+  # Each fixture forces both options, so build.toml policy cannot change them.
   testPasswordHash = "$y$j9T$3b8cf4ea23612c5d1452$YA82C.PVPWBZHNWLz7qT2Tgc7tTlndR4p0AUEqUB0WA";
   cm3With =
     serialRootDebug:
     (self.nixosConfigurations.cm3.extendModules {
       modules = [ { atomixos.serialRootDebug = lib.mapAttrs (_: lib.mkForce) serialRootDebug; } ];
     }).config;
+  cm3Open = cm3With {
+    requirePassword = false;
+    passwordHash = null;
+  };
   cm3Password = cm3With {
     requirePassword = true;
     passwordHash = testPasswordHash;
@@ -70,9 +75,8 @@ assert
 assert builtins.elem "boot.panic_on_fail" cm3.boot.kernelParams;
 assert builtins.elem "panic=10" cm3.boot.kernelParams;
 # `_RUT_OH_` (atomixos.initrd_shell) is the only way to keep the initrd shell.
-assert cm3.boot.initrd.systemd.emergencyAccess == true;
-assert builtins.elem "!atomixos.initrd_shell"
-  cm3.boot.initrd.systemd.services.panic-on-fail.unitConfig.ConditionKernelCommandLine;
+assert cm3Open.boot.initrd.systemd.emergencyAccess == true;
+assert builtins.elem "!atomixos.initrd_shell" (panicConditions cm3Open);
 # The squashfs slot can appear after initrd-root-device.target; wait for it.
 assert lib.hasInfix ''until [ -b "$lower_device" ]''
   cm3.boot.initrd.systemd.services.initrd-prepare-overlay-lower.script;
@@ -82,7 +86,7 @@ assert cm3.systemd.services.serial-root-debug-gate.wantedBy == [ "multi-user.tar
 assert lib.hasInfix "--autologin root"
   cm3.systemd.services."serial-root-debug@".serviceConfig.ExecStart;
 # Without a required password, `_RUT_OH_` swaps the getty for the autologin.
-assert lib.hasInfix "systemctl start serial-root-debug@ttyS2.service" (gateScript cm3);
+assert lib.hasInfix "systemctl start serial-root-debug@ttyS2.service" (gateScript cm3Open);
 # With one, both shells ask for it: sulogin in the initrd, the normal getty after boot.
 assert cm3Password.boot.initrd.systemd.emergencyAccess == testPasswordHash;
 assert builtins.elem "!atomixos.initrd_shell" (panicConditions cm3Password);
