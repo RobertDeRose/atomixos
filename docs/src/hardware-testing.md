@@ -492,7 +492,8 @@ The CM3 U-Boot starts the watchdog before every kernel; see
 ```sh
 # U-Boot serial log, every boot:
 #   WDT:   Started watchdog@fe600000 with servicing every 1000ms (44s timeout)
-# U-Boot prompt: `wdt dev` prints watchdog@fe600000; `dm tree` marks it probed ([ + ])
+# U-Boot prompt: `wdt list` lists watchdog@fe600000 and `dm tree` marks it probed ([ + ]);
+#   select it with `wdt dev watchdog@fe600000` before other `wdt` commands
 cat /proc/cmdline                       # contains watchdog.open_timeout=180
 systemctl show --property WatchdogDevice --property RuntimeWatchdogUSec
 systemctl status watchdog-device-check  # no "enforcement is unavailable" warning
