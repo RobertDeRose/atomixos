@@ -397,10 +397,12 @@ readlink -f "/sys/class/watchdog/$(basename "$external_device")/device/driver"
 Expected results include address `0x41` claimed by the PCA/TCA9536-compatible expander, `/dev/watchdog-external`, and
 the `gpio-wdt` driver. Systemd remains the sole owner; do not run the legacy `i2cset` kicker.
 
-For `enable_hardware = false` on Rock64, `systemctl show` must omit `WatchdogDevice`, `RuntimeWatchdogUSec`, and
-`RebootWatchdogUSec`; CM3 images report them whatever the switch says (Test 8.5). The external always-running
-device-tree node is omitted; an internal image may still expose an unarmed `/dev/watchdog-internal`, so verify that
-PID 1 does not hold the device rather than relying only on node absence.
+For `enable_hardware = false` on Rock64, `systemctl show` must report `RuntimeWatchdogUSec=0` and PID 1 must not
+hold the watchdog device (`ls -l /proc/1/fd` lists no `/dev/watchdog*`). systemd still reports its defaults for the
+other properties, for example `RebootWatchdogUSec=10min`, so do not expect them to be absent; to confirm which settings
+the image omits, read the rendered `/etc/systemd/system.conf`. CM3 images enable enforcement whatever the switch says
+(Test 8.5). The external always-running device-tree node is omitted; an internal image may still expose an unarmed
+`/dev/watchdog-internal`, so check PID 1's open files rather than relying only on node absence.
 
 ### Test 8.2: Watchdog-triggered reboot
 
