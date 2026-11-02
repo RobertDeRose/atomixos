@@ -40,7 +40,10 @@ let
     requirePassword = true;
     passwordHash = testPasswordHash;
   };
-  cm3Locked = cm3With { requirePassword = true; };
+  cm3Locked = cm3With {
+    requirePassword = true;
+    passwordHash = null;
+  };
   gateScript = config: config.systemd.services.serial-root-debug-gate.script;
   panicConditions =
     config: config.boot.initrd.systemd.services.panic-on-fail.unitConfig.ConditionKernelCommandLine;
