@@ -261,6 +261,13 @@ fw_printenv -n _RUT_OH_    # expect: empty / unset
 - SSH behavior on the network is unchanged after the recovery boot
 - `_RUT_OH_` is cleared after use
 
+With an image built with `serial_root_debug.require_password = true` and a password, repeat the test:
+
+- UART2 shows the normal login prompt instead of an autologin; `root` with the build's password logs in
+- After one more `reboot` without `_RUT_OH_`, `root` with the same password is rejected on UART2
+- With an image that requires a password but was built without one, `_RUT_OH_=1` opens nothing, the journal shows
+  `serial-root-debug: ignoring _RUT_OH_=1`, and the variable is still cleared
+
 ### Test 6.3: Initrd failure reboots, or opens a shell with `_RUT_OH_`
 
 This installs a bundle into slot B and then destroys its root filesystem; the next RAUC install rewrites it. A freshly
@@ -283,6 +290,8 @@ Repeat with `fw_setenv _RUT_OH_ 1` before `reboot`:
 - U-Boot prints `_RUT_OH_=1: a failed initrd opens a serial root shell instead of rebooting`
 - The failed initrd stays at an emergency-mode root shell instead of resetting
 - To leave, reset the board, interrupt autoboot, and run `setenv _RUT_OH_; saveenv; reset` at the U-Boot prompt
+- With an image that requires a root password, the shell asks for it first (`Enter root password for system
+  maintenance`); with an image that requires one but was built without it, the initrd panics as without `_RUT_OH_`
 
 ## Phase 7: RAUC update lifecycle
 

@@ -147,8 +147,17 @@ jobs:
         env:
           BOARD: ${{ matrix.board }}
           TAG: ${{ needs.plan.outputs.tag }}
+          # Hashed by the wrapper before Nix runs; the plaintext never reaches the store.
+          ATOMIXOS_SERIAL_ROOT_PASSWORD: ${{ secrets.SERIAL_ROOT_PASSWORD }}
         run: |
           set -euo pipefail
+          # A required but missing password would disable the _RUT_OH_ shells; refuse instead.
+          required=$(nix eval --impure --expr \
+            '(builtins.fromTOML (builtins.readFile ./build.toml)).serial_root_debug.require_password')
+          if [ "$required" = true ] && [ -z "$ATOMIXOS_SERIAL_ROOT_PASSWORD" ]; then
+            echo "::error::build.toml requires a serial root password; set the SERIAL_ROOT_PASSWORD secret"
+            exit 1
+          fi
           ./scripts/nix-with-build-config.sh build ".#$BOARD" -o result-release
           mkdir release-assets
           archive="atomixos-$BOARD-$TAG.tar.xz"

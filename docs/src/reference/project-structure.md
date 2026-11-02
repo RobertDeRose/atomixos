@@ -12,6 +12,8 @@ mise.lock                          Resolved tool downloads
 hk.pkl                             Check, fix, pre-commit, and commit-msg steps
 build.toml                         Committed immutable build policy
 build.dev.toml                     Ignored local build-policy overlay, when present
+serial-root.password               Ignored local serial root password, when present
+serial-root.salt                   Ignored yescrypt salt for that password, created on first use
 
 defaults/
   lan.json                         Built-in fallback LAN gateway, DHCP, DNS, and NTP contract

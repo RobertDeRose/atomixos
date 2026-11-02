@@ -46,6 +46,8 @@
         baseText = builtins.readFile ./build.toml;
         overlayName = "build.dev.toml";
         overlayText = if buildDevConfigPath == "" then null else builtins.readFile buildDevConfigPath;
+        # Set only by scripts/nix-with-build-config.sh, which hashes the password.
+        serialRootPasswordHash = builtins.getEnv "ATOMIXOS_SERIAL_ROOT_PASSWORD_HASH";
       };
       partitionLayout = import ./nix/partition-layout.nix;
 

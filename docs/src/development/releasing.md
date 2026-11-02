@@ -64,6 +64,11 @@ Configure these GitHub settings before the first release:
   environment setting; naming the environment in the workflow alone does not configure reviewers.
 - Add a dedicated write-enabled deploy key. Store its private half as `RELEASE_DEPLOY_KEY` in that environment,
   rather than as a repository-wide secret. Publication refuses to run without that key.
+- If `build.toml` sets `serial_root_debug.require_password = true`, store the plaintext serial root password as the
+  repository secret `SERIAL_ROOT_PASSWORD`. The board builds run before release approval, outside the `release`
+  environment, so an environment secret would not reach them. The build hashes the password before Nix sees it and
+  stops when the password is required but the secret is empty; see
+  [Serial Root Password](../reference/build-configuration.md#serial-root-password).
 - Protect `main` with a ruleset that restricts creation and updates, blocks deletion and force pushes, and requires
   linear history. Allow the release deploy key to bypass the creation and update restrictions. Do not require a
   merge commit or a release PR for this branch.
@@ -89,6 +94,11 @@ local private-key files after storing the secret.
 A failure before approval changes no remote branch, tag, or GitHub release. If the branch diverges before approval,
 publication fails rather than creating a merge commit or forcing a push. The branch and tag are pushed atomically:
 if either reference update is rejected, neither changes.
+
+When `build.toml` requires a serial root password and the `SERIAL_ROOT_PASSWORD` secret is empty, both board builds
+fail before Nix runs with `build.toml requires a serial root password; set the SERIAL_ROOT_PASSWORD secret`, so the
+release never reaches approval. Add the repository secret, then rerun the failed jobs from the same run. Setting
+`require_password = false` instead changes the release source, so it needs a new commit and a new release run.
 
 An upload or GitHub API failure after promotion can leave the branch and tag in place with a draft or absent GitHub
 release. Rerun the failed jobs from the **same run** to retain the planned version and validated source. The workflow
