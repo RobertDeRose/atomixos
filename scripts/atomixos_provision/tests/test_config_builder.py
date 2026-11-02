@@ -89,6 +89,12 @@ class TestBuildConfigFromForm:
         assert "[containers.container.myapp]" in result
         assert '[activation]\nrequired = ["myapp"]' in result
 
+    def test_without_containers(self):
+        result = build_config_from_form({"ssh_keys": "ssh-ed25519 AAAA test@test"})
+        assert "[users.admin]" in result
+        assert "[activation]" not in result
+        assert "[containers" not in result
+
     def test_with_firewall(self):
         form = {
             "ssh_keys": "ssh-ed25519 AAAA test",

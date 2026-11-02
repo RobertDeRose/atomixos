@@ -118,7 +118,7 @@ def build_config_from_form(form: dict[str, str]) -> str:
             - os_upgrade_server_url: optional OTA server URL
             - gateway_cidr, dhcp_start, dhcp_end, lan_domain: LAN settings
             - gateway_aliases, hostname_pattern: optional LAN settings
-            - quadlet: TOML snippet for container definitions
+            - quadlet: optional TOML snippet for container definitions
             - required: newline-separated unit names (auto-detected if empty)
 
     Returns:
@@ -153,7 +153,7 @@ def build_config_from_form(form: dict[str, str]) -> str:
     quadlet = form.get("quadlet", "").strip()
     quadlet = normalize_quadlet_headers(quadlet)
     required = [line.strip() for line in form.get("required", "").splitlines() if line.strip()]
-    if not required:
+    if not required and quadlet:
         required = generated_required_units(quadlet)
 
     # Build firewall section
@@ -219,12 +219,7 @@ def build_config_from_form(form: dict[str, str]) -> str:
         lan_text,
         ntp_text,
         os_upgrade_text,
-        "\n".join(
-            [
-                "[activation]",
-                f"required = {json.dumps(required)}",
-            ]
-        ),
+        f"[activation]\nrequired = {json.dumps(required)}" if required else "",
         quadlet,
     ]
     config_text = "\n\n".join(section for section in sections if section).strip() + "\n"

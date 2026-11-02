@@ -44,6 +44,9 @@ Provisioning writes:
 | Managed user tracking     | `/data/config/managed-users.json`         |
 | Bundle payload files      | `/data/config/files/`                     |
 
+A configuration without containers still writes every file: `health-required.json` and the activation policy's
+`required` list are empty, `quadlet/` has no units, and `quadlet-runtime.json` lists none.
+
 If syncing Quadlets, applying LAN settings, or applying the firewall fails, `first-boot.service` fails before the slot
 is confirmed.
 
