@@ -177,6 +177,7 @@ Flake-only checks:
 | `first-boot-provision`        | 1     | Provisioning import, validation, apply, auth, rollback, and LAN transport behavior                                                        |
 | `first-boot-source-discovery` | 1     | Boot/USB/bootstrap source precedence, marker behavior, and fleet rebind suppression                                                       |
 | `provisioning-export`         | 1     | Authenticated root-worker export of private workload-owned files, concurrent requests, cleanup, and link rejection                        |
+| `users-only-provision`        | 1     | A fresh image takes a users-only `config.toml` over the API, commits it with no required units, and accepts the admin's SSH key           |
 | `initrd-fresh-flash-marker`   | 1     | Initrd repartitioning creates slot B/data and persists the fresh-flash marker                                                             |
 | `forensics-podman-log-path`   | 1     | Podman journald output reaches the persistent `/data/logs` path                                                                           |
 | `forensics-rsyslog-path`      | 1     | Buffered rsyslog output is written to persistent `/data/logs`                                                                             |
