@@ -52,9 +52,9 @@ If the selected slot fails to load or boot, the U-Boot boot command ends with `r
 counter already decremented instead of stopping at the U-Boot prompt. A slot whose counter reaches 0 is skipped, so
 three failed boots in a row move the device back to the other slot.
 
-A kernel panic counts as a failed boot without anyone power-cycling the device: `kernel.panic` is 10, so the kernel
-reboots itself 10 seconds after a panic. This sysctl is applied by `systemd-sysctl` in the running system, so a panic
-earlier in boot, including in the initrd, still hangs until the hardware watchdog or a power cycle resets the board.
+A kernel panic counts as a failed boot without anyone power-cycling the device: `panic=10` is on the kernel command
+line, so the kernel reboots itself 10 seconds after a panic. Because it is a kernel parameter rather than a sysctl, it
+also covers panics in early boot and in the initrd, before `systemd-sysctl` runs.
 
 ### Bootloader updates
 
