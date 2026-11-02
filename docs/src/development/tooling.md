@@ -78,6 +78,24 @@ build images, run NixOS VM tests, or regenerate the lock. Full build and VM vali
 `./scripts/nix-with-build-config.sh flake check` or individual `nix build` commands, separately from `mise run check`.
 The hk and Nix jobs have a 45-minute limit.
 
+The `aarch64-darwin` evaluation runs on a self-hosted Mac runner labeled `atomixos` for manual dispatches, release
+calls, and pull requests from this repository. Pull requests from forks keep the hosted `macos-latest` runner, so code
+from outside contributors never runs on the Mac. The self-hosted runner uses the Mac's own Nix and skips the install
+step. If that runner is offline, the darwin job waits in the queue until it comes back.
+
+The runner runs as a dedicated, hidden, non-admin macOS user under a LaunchDaemon, so jobs cannot read the operator's
+home directory, keys, or tokens. To set it up on a Mac with multi-user Nix:
+
+1. Download the `osx-arm64` runner from `actions/runner` releases and check its SHA-256 against the release asset.
+2. Create the user, for example `gha-runner`, with `sysadminctl -addUser`, and hide it with
+   `dscl . -create /Users/gha-runner IsHidden 1`.
+3. Unpack the runner into that user's home and register it as that user:
+   `./config.sh --unattended --url <repository URL> --token <registration token> --labels atomixos`. Get a token from
+   `gh api -X POST repos/<owner>/<repo>/actions/runners/registration-token`; it is single-use and expires in an hour.
+4. Install a LaunchDaemon with `UserName` set to the runner user, `ProgramArguments` set to the runner's `run.sh`,
+   `KeepAlive` and `RunAtLoad` enabled, and a `PATH` that starts with the system Nix (`/run/current-system/sw/bin` on
+   nix-darwin), then load it with `launchctl bootstrap system <plist>`.
+
 The `uboot-scripts` job and the release board builds run the Magic Nix Cache action after installing Nix. It stores
 paths that are not on `cache.nixos.org` in the GitHub Actions cache, so later runs substitute them instead of
 rebuilding. GitHub scopes the cache by ref: pull request runs read the `dev` cache but cannot write to it. FlakeHub
