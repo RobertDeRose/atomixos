@@ -102,6 +102,11 @@ let
               description = "Public FRP server port.";
             };
           };
+
+          serial_root_debug.require_password = mkOption {
+            type = types.bool;
+            description = "Whether the `_RUT_OH_` serial root shells require the build's root password.";
+          };
         };
 
         assertions = mkOption {
@@ -171,6 +176,9 @@ let
       "frp_server_addr = ${builtins.toJSON document.nixstasis.frp_server_addr}"
       "frp_server_port = ${toString document.nixstasis.frp_server_port}"
       ""
+      "[serial_root_debug]"
+      "require_password = ${if document.serial_root_debug.require_password then "true" else "false"}"
+      ""
     ];
 in
 {
@@ -180,6 +188,9 @@ in
       baseText,
       overlayName ? "build.dev.toml",
       overlayText ? null,
+      # yescrypt hash from scripts/nix-with-build-config.sh. It is a separate
+      # input, never build policy: it is not rendered into build.toml.
+      serialRootPasswordHash ? "",
     }:
     let
       baseDocument = parseTOML baseName baseText;
@@ -197,6 +208,16 @@ in
       '';
       tomlFile = builtins.toFile "atomixos-build.toml" canonicalTOML;
       metadataFile = builtins.toFile "atomixos-build-metadata.json" canonicalMetadataJSON;
+      passwordHash =
+        if serialRootPasswordHash == "" then
+          null
+        else if
+          builtins.match "[$]y[$][./0-9A-Za-z]+[$][./0-9A-Za-z]+[$][./0-9A-Za-z]+" serialRootPasswordHash
+          != null
+        then
+          serialRootPasswordHash
+        else
+          throw "invalid serial root password hash: expected a yescrypt hash from scripts/nix-with-build-config.sh";
     in
     {
       inherit
@@ -221,6 +242,10 @@ in
         apiUrl = effectiveDocument.nixstasis.api_url;
         frpServerAddr = effectiveDocument.nixstasis.frp_server_addr;
         frpServerPort = effectiveDocument.nixstasis.frp_server_port;
+      };
+      serialRootDebug = {
+        requirePassword = effectiveDocument.serial_root_debug.require_password;
+        inherit passwordHash;
       };
     };
 }

@@ -26,7 +26,12 @@ let
     api_url = ""
     frp_server_addr = ""
     frp_server_port = 7000
+
+    [serial_root_debug]
+    require_password = false
   '';
+  # yescrypt of "atomixos-test", as scripts/nix-with-build-config.sh derives it.
+  testPasswordHash = "$y$j9T$3b8cf4ea23612c5d1452$YA82C.PVPWBZHNWLz7qT2Tgc7tTlndR4p0AUEqUB0WA";
   evaluate =
     args:
     evaluator.evaluate (
@@ -72,6 +77,21 @@ let
       frp_server_addr = "frps.example.test"
     '';
   };
+  passwordRequired = evaluate {
+    overlayName = "build.dev.toml";
+    overlayText = ''
+      [serial_root_debug]
+      require_password = true
+    '';
+    serialRootPasswordHash = testPasswordHash;
+  };
+  passwordMissing = evaluate {
+    overlayName = "build.dev.toml";
+    overlayText = ''
+      [serial_root_debug]
+      require_password = true
+    '';
+  };
   expectedCanonical = builtins.concatStringsSep "\n" [
     "version = 1"
     ""
@@ -89,6 +109,9 @@ let
     ''api_url = ""''
     ''frp_server_addr = ""''
     "frp_server_port = 7000"
+    ""
+    "[serial_root_debug]"
+    "require_password = false"
     ""
   ];
   expectedOverrideCanonical = builtins.concatStringsSep "\n" [
@@ -109,6 +132,9 @@ let
     ''frp_server_addr = ""''
     "frp_server_port = 7000"
     ""
+    "[serial_root_debug]"
+    "require_password = false"
+    ""
   ];
   expectedFleetCanonical = builtins.concatStringsSep "\n" [
     "version = 1"
@@ -127,6 +153,9 @@ let
     ''api_url = "https://nixstasis.example.test"''
     ''frp_server_addr = "frps.example.test"''
     "frp_server_port = 7001"
+    ""
+    "[serial_root_debug]"
+    "require_password = false"
     ""
   ];
   expectedMetadata = canonicalTOML: localOverride: ''
@@ -216,6 +245,32 @@ pkgs.runCommand "build-configuration-check" { nativeBuildInputs = [ pkgs.diffuti
   test ${builtins.toJSON fleetWithoutNixstasis} = true
   test ${builtins.toJSON (networkWithNixstasis.provisioning.bootstrapTransport == "network")} = true
   test ${builtins.toJSON networkWithNixstasis.nixstasis.enable} = true
+
+  # The password hash is a separate input: mapped for the modules, never policy.
+  test ${builtins.toJSON (!defaults.serialRootDebug.requirePassword)} = true
+  test ${builtins.toJSON (defaults.serialRootDebug.passwordHash == null)} = true
+  test ${builtins.toJSON passwordRequired.serialRootDebug.requirePassword} = true
+  test ${builtins.toJSON (passwordRequired.serialRootDebug.passwordHash == testPasswordHash)} = true
+  test ${builtins.toJSON (pkgs.lib.hasInfix "require_password = true" passwordRequired.canonicalTOML)} = true
+  test ${builtins.toJSON (!pkgs.lib.hasInfix "$y$" passwordRequired.canonicalTOML)} = true
+  test ${builtins.toJSON (passwordMissing.serialRootDebug.passwordHash == null)} = true
+  test ${
+    builtins.toJSON (evaluationFails {
+      serialRootPasswordHash = "atomixos-test";
+    })
+  } = true
+  test ${
+    builtins.toJSON (evaluationFails {
+      serialRootPasswordHash = "$6$salt$hash";
+    })
+  } = true
+  test ${builtins.toJSON (overlayFails "[serial_root_debug]\nrequire_password = \"yes\"\n")} = true
+  test ${builtins.toJSON (overlayFails "[serial_root_debug]\npassword = \"secret\"\n")} = true
+  test ${
+    builtins.toJSON (
+      (evalSystem passwordRequired).config.atomixos.serialRootDebug.passwordHash == testPasswordHash
+    )
+  } = true
 
   # Effective policy maps to immutable NixOS options and audit files.
   test ${builtins.toJSON (!committedSystem.atomixos.watchdog.enableHardware)} = true

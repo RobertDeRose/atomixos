@@ -25,6 +25,10 @@
       rebootWatchdogSec = effectiveBuildConfig.watchdog.rebootTimeout;
     };
 
+    atomixos.serialRootDebug = {
+      inherit (effectiveBuildConfig.serialRootDebug) requirePassword passwordHash;
+    };
+
     atomixos.nixstasis = {
       enable = effectiveBuildConfig.nixstasis.enable;
       apiUrl = effectiveBuildConfig.nixstasis.apiUrl;

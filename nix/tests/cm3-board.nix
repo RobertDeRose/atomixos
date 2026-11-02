@@ -24,6 +24,21 @@ let
     line: lib.hasPrefix "CONFIG_" line && !(lib.hasSuffix "=n" line)
   ) ubootConfigLines;
   envSize = ubootConfig "ENV_SIZE";
+  # `_RUT_OH_` with a required root password, built in or missing.
+  testPasswordHash = "$y$j9T$3b8cf4ea23612c5d1452$YA82C.PVPWBZHNWLz7qT2Tgc7tTlndR4p0AUEqUB0WA";
+  cm3With =
+    serialRootDebug:
+    (self.nixosConfigurations.cm3.extendModules {
+      modules = [ { atomixos.serialRootDebug = lib.mapAttrs (_: lib.mkForce) serialRootDebug; } ];
+    }).config;
+  cm3Password = cm3With {
+    requirePassword = true;
+    passwordHash = testPasswordHash;
+  };
+  cm3Locked = cm3With { requirePassword = true; };
+  gateScript = config: config.systemd.services.serial-root-debug-gate.script;
+  panicConditions =
+    config: config.boot.initrd.systemd.services.panic-on-fail.unitConfig.ConditionKernelCommandLine;
 in
 # fw_env.config lists the primary copy first and the redundant copy second.
 assert builtins.elemAt fwEnvLines 0 == "/dev/mmcblk0 ${ubootConfig "ENV_OFFSET"} ${envSize}";
@@ -66,6 +81,19 @@ assert cm3.atomixos.serialRootDebug.enable;
 assert cm3.systemd.services.serial-root-debug-gate.wantedBy == [ "multi-user.target" ];
 assert lib.hasInfix "--autologin root"
   cm3.systemd.services."serial-root-debug@".serviceConfig.ExecStart;
+# Without a required password, `_RUT_OH_` swaps the getty for the autologin.
+assert lib.hasInfix "systemctl start serial-root-debug@ttyS2.service" (gateScript cm3);
+# With one, both shells ask for it: sulogin in the initrd, the normal getty after boot.
+assert cm3Password.boot.initrd.systemd.emergencyAccess == testPasswordHash;
+assert builtins.elem "!atomixos.initrd_shell" (panicConditions cm3Password);
+assert lib.hasInfix "usermod --password" (gateScript cm3Password);
+assert !lib.hasInfix "serial-root-debug@ttyS2" (gateScript cm3Password);
+# A required password that is missing disables both shells and warns.
+assert cm3Locked.boot.initrd.systemd.emergencyAccess == false;
+assert !builtins.elem "!atomixos.initrd_shell" (panicConditions cm3Locked);
+assert lib.hasInfix "ignoring _RUT_OH_=1" (gateScript cm3Locked);
+assert !lib.hasInfix "serial-root-debug@ttyS2" (gateScript cm3Locked);
+assert builtins.any (lib.hasInfix "serial root shells are disabled") cm3Locked.warnings;
 # RAUC refuses to install to a mounted slot, so boot slot A is never mounted at
 # runtime, not even by an automount that any sandboxed service could trigger.
 assert cm3.fileSystems."/boot".options == [ "noauto" ];

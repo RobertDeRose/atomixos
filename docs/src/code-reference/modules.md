@@ -86,7 +86,9 @@ Assembly order before `switch_root`:
 If any step fails, the `boot.panic_on_fail` kernel parameter makes the initrd panic rather than open an emergency shell,
 and `panic=10` reboots the device, which spends one boot try. When `atomixos.serialRootDebug.enable` is set (every
 hardware board), the `atomixos.initrd_shell` parameter that `boot.scr` adds for `_RUT_OH_=1` suppresses that panic and
-keeps an unauthenticated root shell on the serial console.
+keeps a root shell on the serial console. The shell asks for the root password when
+`atomixos.serialRootDebug.requirePassword` is set; with that option set but no `passwordHash`, the panic is not
+suppressed.
 
 The flashable image has no `/data` partition. Initrd `systemd-repart` creates it from the remaining eMMC space on
 first boot.
@@ -215,7 +217,9 @@ Settings shared by the Rock64 and CM3 modules:
 - Realtek USB NIC firmware (`nix/rtl815x-firmware.nix`);
 - the `ttyS2` serial getty at 1.5 Mbaud (UART2), always restarted;
 - one-boot serial root recovery when `_RUT_OH_=1` (`serial-root-debug-gate.service` and `serial-root-debug@ttyS2`),
-  plus an initrd root shell instead of a panic when that boot fails before switching root;
+  plus an initrd root shell instead of a panic when that boot fails before switching root. With
+  `atomixos.serialRootDebug.requirePassword`, the gate sets root's `passwordHash` for that boot and keeps the normal
+  getty instead of the autologin; without a hash it opens nothing;
 - the `boot_to_ums` command, which sets `START_UMS=1` and reboots into U-Boot USB mass storage;
 - `boot-storage-debug.service` disabled.
 

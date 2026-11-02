@@ -10,18 +10,28 @@
 let
   ubootEnvTools = config.atomixos.ubootEnvTools;
 
-  serialRootDebugScript = pkgs.writeShellScript "serial-root-debug" ''
-    set -euo pipefail
+  serialRootDebug = config.atomixos.serialRootDebug;
+  serialRootLocked = serialRootDebug.requirePassword && serialRootDebug.passwordHash == null;
 
-    env_value="$(${ubootEnvTools}/bin/fw_printenv -n _RUT_OH_ 2>/dev/null || true)"
-    if [ "$env_value" != "1" ]; then
-      exit 0
-    fi
-
-    ${pkgs.systemd}/bin/systemctl stop serial-getty@ttyS2.service
-    ${pkgs.systemd}/bin/systemctl start serial-root-debug@ttyS2.service
-    ${ubootEnvTools}/bin/fw_setenv _RUT_OH_
-  '';
+  # What `_RUT_OH_=1` opens for this boot: a root autologin, a root password
+  # login on the normal getty, or nothing when a required password is missing.
+  serialRootDebugAction =
+    if serialRootLocked then
+      ''
+        echo "serial-root-debug: ignoring _RUT_OH_=1: this build requires a root password but has none" >&2
+      ''
+    else if serialRootDebug.requirePassword then
+      ''
+        # /etc/shadow is rebuilt from the locked configuration on every boot,
+        # so the password works for this boot only.
+        usermod --password ${lib.escapeShellArg serialRootDebug.passwordHash} root
+        echo "serial-root-debug: root password login enabled on ttyS2 for this boot"
+      ''
+    else
+      ''
+        systemctl stop serial-getty@ttyS2.service
+        systemctl start serial-root-debug@ttyS2.service
+      '';
 
   # Request U-Boot USB mass storage recovery on the next boot (START_UMS PREBOOT).
   bootToUms = pkgs.writeShellScriptBin "boot_to_ums" ''
@@ -79,7 +89,9 @@ in
   # Root is locked and there is no built-in operator account. With serial
   # access, set `_RUT_OH_=1` (fw_setenv in Linux, or `setenv _RUT_OH_ 1;
   # saveenv` at the U-Boot prompt): the next boot replaces the ttyS2 getty with
-  # a root autologin and clears the flag, so it lasts for one boot.
+  # a root autologin and clears the flag, so it lasts for one boot. When the
+  # build requires a root password, root can log in on the normal ttyS2 getty
+  # with it for that boot instead.
   atomixos.serialRootDebug.enable = true;
 
   systemd.services."serial-root-debug@" = lib.mkIf config.atomixos.serialRootDebug.enable {
@@ -109,14 +121,25 @@ in
     unitConfig.RequiresMountsFor = [ "/data" ];
     path = [
       pkgs.coreutils
+      pkgs.shadow
       pkgs.systemd
       ubootEnvTools
     ];
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
-      ExecStart = serialRootDebugScript;
     };
+    script = ''
+      set -euo pipefail
+
+      env_value="$(fw_printenv -n _RUT_OH_ 2>/dev/null || true)"
+      if [ "$env_value" != "1" ]; then
+        exit 0
+      fi
+
+      ${serialRootDebugAction}
+      fw_setenv _RUT_OH_
+    '';
   };
 
   # boot-storage-debug probes ROCK64's SPI NOR and mmcblk1; keep it off on

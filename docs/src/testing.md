@@ -113,9 +113,11 @@ sandboxing. It also rejects unsupported-BPF, MTD-probe, boot-storage, and hung-t
 checks that `panic=10` is on the kernel command line. It does not trigger a panic: the NixOS test driver appends its own
 `panic=1`, so the VM cannot show the reboot delay a board gets.
 
-The `initrd-failure` VM check makes a required initrd unit fail. On one node the initrd panics; on the other, the
-`atomixos.initrd_shell` parameter that `boot.scr` adds for `_RUT_OH_=1` suppresses the panic, and the check runs a
-command in the serial root shell. The panic delay is the test driver's `panic=1`, not the board's `panic=10`.
+The `initrd-failure` VM check makes a required initrd unit fail on four nodes. Without the flag, the initrd panics.
+With the `atomixos.initrd_shell` parameter that `boot.scr` adds for `_RUT_OH_=1`, the check runs a command in the
+serial root shell. A node that requires a root password rejects a wrong one and opens the shell for the right one, and
+a node that requires a password but has none still panics. The panic delay is the test driver's `panic=1`, not the
+board's `panic=10`.
 
 The `build-configuration` check covers strict schema parsing, merge behavior, timeout bounds, canonical bytes,
 provenance, NixOS option mapping, artifact sidecar inputs, and the network-versus-fleet bootstrap transport boundary.
@@ -163,7 +165,7 @@ Flake-only checks:
 | `os-upgrade-query`            | 0     | Update query sends `X-Compatible`; another board's bundle is skipped before download                                |
 | `watchdog-missing-device`     | 1     | Enabled policy without hardware boots, preserves RAUC state, and emits an actionable warning                        |
 | `kernel-security`             | 1     | BPF LSM/BTF support is active, the command line has `panic=10`, and unsupported startup diagnostics are absent      |
-| `initrd-failure`              | 2     | A failed initrd panics; with `atomixos.initrd_shell` (`_RUT_OH_`) it keeps a serial root shell                      |
+| `initrd-failure`              | 4     | Failed initrd panics; `_RUT_OH_` shell opens, asks for a required password, or stays shut without one               |
 | `interface-naming`            | 1     | WAN and LAN are renamed to `wan`/`lan` by hardware match, whichever NIC registers first                             |
 | `rootless-storage`            | 1     | Rootless application images are stored under `/data/containers/rootless`, not on the reset-on-boot overlay root     |
 | `clock`                       | 1     | A clock set back moves forward to the last known time or the image source date; never saves a past clock; `rtcsync` |

@@ -15,6 +15,11 @@ let
   nixosCodeName = config.system.nixos.codeName;
   nixosCodeNameLower = lib.toLower nixosCodeName;
   partitionLayout = import ../nix/partition-layout.nix;
+  serialRootDebug = config.atomixos.serialRootDebug;
+  # A required password that was not built in disables the serial root shells
+  # rather than leaving them open.
+  serialRootLocked = serialRootDebug.requirePassword && serialRootDebug.passwordHash == null;
+  serialRootShell = serialRootDebug.enable && !serialRootLocked;
 in
 {
   options.atomixos.board = lib.mkOption {
@@ -32,6 +37,24 @@ in
     description = ''
       Enable the serial-only root debug escape hatch triggered by the
       `_RUT_OH_` U-Boot environment variable. Every hardware board enables it.
+    '';
+  };
+
+  options.atomixos.serialRootDebug.requirePassword = lib.mkOption {
+    type = lib.types.bool;
+    default = false;
+    description = ''
+      Require the root password for the `_RUT_OH_` serial root shells. When
+      no password hash is built in, the shells are disabled instead.
+    '';
+  };
+
+  options.atomixos.serialRootDebug.passwordHash = lib.mkOption {
+    type = lib.types.nullOr (lib.types.strMatching "[$]y[$][./0-9A-Za-z$]+");
+    default = null;
+    description = ''
+      yescrypt root password hash for the `_RUT_OH_` serial root shells,
+      used when `requirePassword` is set. It ends up in the image.
     '';
   };
 
@@ -455,12 +478,25 @@ in
     boot.initrd.systemd.enable = true;
     # `_RUT_OH_=1` also covers the initrd: boot.scr then adds
     # atomixos.initrd_shell, so a failed initrd stays at a root shell on the
-    # serial console instead of panicking. Like the stage-2 autologin, it is
-    # unauthenticated: whoever can set `_RUT_OH_` already has root.
-    boot.initrd.systemd.emergencyAccess = config.atomixos.serialRootDebug.enable;
+    # serial console instead of panicking. The shell asks for the root password
+    # when the build requires one; otherwise, like the stage-2 autologin, it is
+    # open: whoever can set `_RUT_OH_` already has root.
+    boot.initrd.systemd.emergencyAccess =
+      if !serialRootShell then
+        false
+      else if serialRootDebug.requirePassword then
+        serialRootDebug.passwordHash
+      else
+        true;
     boot.initrd.systemd.services.panic-on-fail.unitConfig.ConditionKernelCommandLine =
-      lib.mkIf config.atomixos.serialRootDebug.enable
+      lib.mkIf serialRootShell
         [ "!atomixos.initrd_shell" ];
+
+    warnings = lib.optional (serialRootDebug.enable && serialRootLocked) ''
+      build.toml sets serial_root_debug.require_password, but no password was
+      supplied (ATOMIXOS_SERIAL_ROOT_PASSWORD or serial-root.password through
+      scripts/nix-with-build-config.sh): `_RUT_OH_` serial root shells are disabled.
+    '';
     # Custom initrd services do not automatically get their `path` entries copied
     # into the initrd image, so include the probe tools they invoke explicitly.
     boot.initrd.systemd.initrdBin = [

@@ -59,10 +59,22 @@ local recovery tool, not part of network authentication.
 
 The variable also covers a boot that fails in the initrd. Normally such a failure panics and reboots, so the device can
 fall back to the other slot. With `_RUT_OH_=1`, `boot.scr` adds `atomixos.initrd_shell` to the kernel command line,
-and a failed initrd opens an unauthenticated root shell on the serial console instead. The `serial-root-debug-gate`
-service clears the variable when the system reaches `multi-user.target`. A failed initrd never gets that far, so the
-variable stays set, and the device does not fall back, until the initrd problem is fixed. To clear it sooner, reset the
-board, interrupt autoboot, and run `setenv _RUT_OH_; saveenv; reset` at the U-Boot prompt.
+and a failed initrd opens a root shell on the serial console instead. The `serial-root-debug-gate` service clears the
+variable when the system reaches `multi-user.target`. A failed initrd never gets that far, so the variable stays set,
+and the device does not fall back, until the initrd problem is fixed. To clear it sooner, reset the board, interrupt
+autoboot, and run `setenv _RUT_OH_; saveenv; reset` at the U-Boot prompt.
+
+Whether these shells ask for a password is build policy (`serial_root_debug.require_password` in
+[Build Configuration](../reference/build-configuration.md#serial-root-password)):
+
+| Build                               | Root on `ttyS2` after boot                 | Failed initrd                   |
+|-------------------------------------|--------------------------------------------|---------------------------------|
+| No password required                | Autologin, no password                     | Root shell, no password         |
+| Password required and built in      | Normal login prompt; root's password works | Root shell after the password   |
+| Password required but none built in | Nothing; `_RUT_OH_` is cleared and ignored | Panic and reboot, as without it |
+
+With a password, the root account is unlocked only for the boot that used `_RUT_OH_`: `/etc/shadow` is rebuilt with
+root locked on every boot. SSH never accepts passwords, so the password cannot be used to log in over the network.
 
 To set the variable:
 

@@ -29,20 +29,24 @@ enable = false
 api_url = ""
 frp_server_addr = ""
 frp_server_port = 7000
+
+[serial_root_debug]
+require_password = false
 ```
 
-| Field                              | Type    | Required in `build.toml` | Default    | Validation                          |
-|------------------------------------|---------|--------------------------|------------|-------------------------------------|
-| `version`                          | Integer | Yes                      | `1`        | Must equal `1`                      |
-| `watchdog.enable_hardware`         | Boolean | Yes                      | `false`    | `true` or `false`                   |
-| `watchdog.backend`                 | String  | Yes                      | `external` | `internal` or `external`            |
-| `watchdog.runtime_timeout`         | String  | Yes                      | `30s`      | Inclusive range: 10 seconds–5 min   |
-| `watchdog.reboot_timeout`          | String  | Yes                      | `10min`    | Inclusive range: 1 minute–10 min    |
-| `provisioning.bootstrap_transport` | String  | Yes                      | `network`  | `network` or `nixstasis`            |
-| `nixstasis.enable`                 | Boolean | Yes                      | `false`    | `true` or `false`                   |
-| `nixstasis.api_url`                | String  | Yes                      | `""`       | Non-empty when Nixstasis is enabled |
-| `nixstasis.frp_server_addr`        | String  | Yes                      | `""`       | Non-empty when Nixstasis is enabled |
-| `nixstasis.frp_server_port`        | Integer | Yes                      | `7000`     | Inclusive range: 1–65535            |
+| Field                                | Type    | Required in `build.toml` | Default    | Validation                          |
+|--------------------------------------|---------|--------------------------|------------|-------------------------------------|
+| `version`                            | Integer | Yes                      | `1`        | Must equal `1`                      |
+| `watchdog.enable_hardware`           | Boolean | Yes                      | `false`    | `true` or `false`                   |
+| `watchdog.backend`                   | String  | Yes                      | `external` | `internal` or `external`            |
+| `watchdog.runtime_timeout`           | String  | Yes                      | `30s`      | Inclusive range: 10 seconds–5 min   |
+| `watchdog.reboot_timeout`            | String  | Yes                      | `10min`    | Inclusive range: 1 minute–10 min    |
+| `provisioning.bootstrap_transport`   | String  | Yes                      | `network`  | `network` or `nixstasis`            |
+| `nixstasis.enable`                   | Boolean | Yes                      | `false`    | `true` or `false`                   |
+| `nixstasis.api_url`                  | String  | Yes                      | `""`       | Non-empty when Nixstasis is enabled |
+| `nixstasis.frp_server_addr`          | String  | Yes                      | `""`       | Non-empty when Nixstasis is enabled |
+| `nixstasis.frp_server_port`          | Integer | Yes                      | `7000`     | Inclusive range: 1–65535            |
+| `serial_root_debug.require_password` | Boolean | Yes                      | `false`    | `true` or `false`                   |
 
 Duration strings contain a positive integer followed immediately by one of `ms`, `s`, `min`, or `h`. Signs, zero,
 decimals, compound spans, whitespace, unitless numbers, values that overflow conversion, and values outside the field's
@@ -101,6 +105,25 @@ assertions in downstream adapter modules:
 When `nixstasis.enable` is `true`, both `api_url` and `frp_server_addr` must be non-empty. These values are public
 routing configuration only; runtime tokens, FRP credentials, signing keys, and other secrets are not valid build-policy
 fields.
+
+## Serial Root Password
+
+`serial_root_debug.require_password` decides whether the `_RUT_OH_` serial root shells
+([Physical Recovery](../architecture/authentication.md#physical-recovery)) ask for a root password. With `false`, they
+open without one. With `true`, both the initrd emergency shell and the root login on `ttyS2` after boot require the
+build's root password.
+
+The password itself is never build policy. `scripts/nix-with-build-config.sh` reads it from
+`ATOMIXOS_SERIAL_ROOT_PASSWORD`, or else from the first line of the ignored repository-root `serial-root.password`
+file. Before Nix runs, the wrapper hashes it with yescrypt (`mkpasswd` from the flake's pinned nixpkgs), removes the
+plaintext from the environment, and passes only the hash. The salt is derived from the password, so the same password
+always builds the same image. The hash is not rendered into `build.toml` or `build-metadata.json` and does not change
+`policy_sha256`, but it is part of the image: the initrd and the root system both carry it.
+
+When `require_password = true` and no password was supplied, the build still succeeds, prints a warning, and disables
+both serial root shells: `_RUT_OH_=1` is cleared without opening anything, and a failed initrd panics as it does
+without the flag. The release workflow passes the `SERIAL_ROOT_PASSWORD` secret and stops before building when
+`build.toml` requires a password and the secret is empty.
 
 ## Watchdog Backend Selection
 
@@ -168,7 +191,8 @@ Both documents reject:
 - malformed or out-of-range durations;
 - an incomplete committed document.
 
-After the overlay is merged, an enabled Nixstasis policy also rejects an empty `api_url` or `frp_server_addr`.
+After the overlay is merged, an enabled Nixstasis policy also rejects an empty `api_url` or `frp_server_addr`. A
+supplied serial root password hash that is not a yescrypt hash fails evaluation.
 
 A TOML syntax error reports the input filename and preserves the native parser's line and column context. A schema error
 reports the input filename and canonical field path. Validation completes during Nix evaluation, before an artifact
@@ -196,6 +220,9 @@ enable = false
 api_url = ""
 frp_server_addr = ""
 frp_server_port = 7000
+
+[serial_root_debug]
+require_password = false
 ```
 
 ## Immutable Policy and Provenance
@@ -220,7 +247,9 @@ mode, signing certificate trust, or release readiness. Without a local override,
 
 `scripts/nix-with-build-config.sh` resolves only repository-root `build.dev.toml`. It removes any caller-provided
 `ATOMIXOS_BUILD_DEV_CONFIG`; when the file exists, it sets that internal transport to the canonical repository path,
-prints the warning, and appends `--impure` to the Nix command. The wrapper does not accept another configuration path or
+prints the warning, and appends `--impure` to the Nix command. It also removes any caller-provided
+`ATOMIXOS_SERIAL_ROOT_PASSWORD_HASH`; when a [serial root password](#serial-root-password) is supplied, it sets that
+variable to the computed hash and appends `--impure`. The wrapper does not accept another configuration path or
 parse policy itself. Lima tasks invoke the same wrapper inside the repository mounted at the same path.
 
 | `mise` task                 | Applies local overlay | Contract                                                     |
@@ -260,6 +289,7 @@ finishes publishing. A `current` link whose store path no longer exists is repla
 
 ## Security Boundary
 
-Build configuration must not contain credentials, signing keys, certificates, tokens, or arbitrary Nix expressions.
+Build configuration must not contain credentials, signing keys, certificates, tokens, or arbitrary Nix expressions. The
+serial root password is a separate input for this reason; only the non-secret `require_password` switch is policy.
 Source revision, `flake.lock`, verification certificates, and signing credentials remain separately owned build inputs.
 Unknown sections fail validation.

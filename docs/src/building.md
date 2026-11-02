@@ -101,6 +101,15 @@ Direct Nix commands use the committed `build.toml` only; they never read `build.
 - **Abandon or recover:** delete or rename `build.dev.toml` and rerun the command. Nix reports TOML syntax errors with
   the source location and schema errors with the field path. A validation failure never removes a retained root.
 
+### Serial root password
+
+When `serial_root_debug.require_password = true`, put the password on the first line of an ignored
+`serial-root.password` file at the repository root, or export `ATOMIXOS_SERIAL_ROOT_PASSWORD`. The `mise` tasks and
+`./scripts/nix-with-build-config.sh` hash it before Nix runs; the plaintext never reaches the Nix store. Lima builds
+read the file through the repository mount; they do not see host environment variables. Without a password, the build
+warns and the `_RUT_OH_` serial root shells are disabled. See
+[Serial Root Password](reference/build-configuration.md#serial-root-password).
+
 [Build Configuration](reference/build-configuration.md) defines the schema, the watchdog backends, and the full task
 matrix.
 
