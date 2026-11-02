@@ -95,6 +95,11 @@ A failure before approval changes no remote branch, tag, or GitHub release. If t
 publication fails rather than creating a merge commit or forcing a push. The branch and tag are pushed atomically:
 if either reference update is rejected, neither changes.
 
+When `build.toml` requires a serial root password and the `SERIAL_ROOT_PASSWORD` secret is empty, both board builds
+fail before Nix runs with `build.toml requires a serial root password; set the SERIAL_ROOT_PASSWORD secret`, so the
+release never reaches approval. Add the repository secret, then rerun the failed jobs from the same run. Setting
+`require_password = false` instead changes the release source, so it needs a new commit and a new release run.
+
 An upload or GitHub API failure after promotion can leave the branch and tag in place with a draft or absent GitHub
 release. Rerun the failed jobs from the **same run** to retain the planned version and validated source. The workflow
 accepts an existing tag only when it is annotated and points to that exact commit, preserves its original tag object,
