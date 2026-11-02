@@ -505,11 +505,17 @@ systemctl status watchdog-device-check  # no "enforcement is unavailable" warnin
 
 Then build test bundles with one stall fixture each, install each to the inactive slot, and reboot:
 
-- A device-tree overlay that makes the pin controller fail to probe stops the kernel before the initrd
-- `rd.systemd.unit=emergency.target` in `boot.kernelParams` stops in the initrd
+- A device-tree overlay that makes the pin controller fail to probe (for example a pin configuration node placed inside
+  a pin function) stops the kernel before the initrd. Confirm it on the serial console: the log ends with the
+  `rockchip-pinctrl` probe failure and `clk: Disabling unused clocks`, with no initrd or systemd output after it.
+- `rd.systemd.unit=emergency.target atomixos.initrd_shell` in `boot.kernelParams` stops in the initrd.
+  `atomixos.initrd_shell` keeps the emergency shell waiting; without it, `panic-on-fail` panics the initrd and the
+  board reboots after 10 seconds instead of testing the watchdog.
 
-Each stalled try resets 180 to 225 seconds after the kernel registers the watchdog driver (`dw_wdt` in `dmesg`), or
-about 45 seconds after U-Boot's `Starting kernel` if the kernel stops before that.
+The watchdog driver registers within the kernel's first seconds but logs nothing when it does, so time each stalled try
+from U-Boot's `Starting kernel` line: it resets about 180 to 230 seconds later, or about 45 seconds later if the kernel
+stops before the driver registers. For the exact registration time, add `initcall_debug` to the fixture's kernel
+command line and find the watchdog driver's initcall in the serial log.
 
 **Pass criteria**:
 
