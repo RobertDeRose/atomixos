@@ -25,8 +25,9 @@ jobs:
           - runner: macos-latest
             system: aarch64-darwin
             self-hosted: true
-    # The darwin evaluation runs on the self-hosted Mac (label atomixos) for pushes and
-    # same-repository pull requests. Fork pull requests keep the hosted runner.
+    # The darwin evaluation runs on the self-hosted Mac (label atomixos) for dispatches, release
+    # calls, and same-repository pull requests. Fork pull requests keep the hosted runner, but a
+    # fork can edit this file, so approving a fork run is the real gate (see tooling docs).
     runs-on: >-
       ${{
         matrix.self-hosted

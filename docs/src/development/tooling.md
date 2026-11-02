@@ -79,9 +79,11 @@ build images, run NixOS VM tests, or regenerate the lock. Full build and VM vali
 The hk and Nix jobs have a 45-minute limit.
 
 The `aarch64-darwin` evaluation runs on a self-hosted Mac runner labeled `atomixos` for manual dispatches, release
-calls, and pull requests from this repository. Pull requests from forks keep the hosted `macos-latest` runner, so code
-from outside contributors never runs on the Mac. The self-hosted runner uses the Mac's own Nix and skips the install
-step. If that runner is offline, the darwin job waits in the queue until it comes back.
+calls, and pull requests from this repository. Pull requests from forks keep the hosted `macos-latest` runner. That
+routing is not a security boundary: a fork pull request runs its own copy of the workflows, so it can edit them to
+target the Mac. The repository requires approval before any outside contributor's workflow runs; before approving a
+fork run, check that it changes nothing under `.github/workflows/`. The self-hosted runner uses the Mac's own Nix and
+skips the install step. If that runner is offline, the darwin job waits in the queue until it comes back.
 
 The runner runs as a dedicated, hidden, non-admin macOS user under a LaunchDaemon, so jobs cannot read the operator's
 home directory, keys, or tokens. To set it up on a Mac with multi-user Nix:
