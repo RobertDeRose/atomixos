@@ -66,6 +66,20 @@ The CM3 always uses the internal RK3566 watchdog (`fe600000`). If `build.toml` s
 `backend = "external"`, evaluation prints a warning and still uses the internal watchdog. [Build Configuration](reference/build-configuration.md)
 describes the watchdog settings.
 
+U-Boot starts the watchdog before every kernel and feeds it at the prompt and during `ums`. The kernel feeds it for
+180 seconds after its watchdog driver registers, and systemd holds it from the start of stage 2, so enforcement is on
+for every CM3 build whatever `enable_hardware` says. A kernel or initrd that stalls before systemd resets the board
+and spends a boot try; [Boot stalls](architecture/update-rollback.md#boot-stalls) gives the timings. The U-Boot serial
+log shows `WDT:   Started watchdog@fe600000 with servicing every 1000ms (44s timeout)`.
+
+Once started, the watchdog runs until the next reset; nothing can stop it. The initrd emergency shell therefore resets
+the board when the open timeout passes. To keep the shell for debugging, feed the watchdog from it:
+
+```sh
+exec 3>/dev/watchdog0
+while sleep 10; do printf . >&3; done &
+```
+
 ## OTA updates
 
 A CM3 sends `X-Compatible: radxa-cm3-io` when it polls for updates, and the update server must answer with a CM3
@@ -90,5 +104,5 @@ Confirm the storage numbering on new hardware before you flash a production modu
 5. Exercise the RAUC mark-good, simulated failed boot, and rollback cycle.
 
 On a new board, also check the GMAC, both USB host and OTG controllers, the RK817 PMIC, and the watchdog, along with eMMC
-and serial boot. Enable the hardware watchdog and deploy production RAUC updates only after boot, power-loss recovery,
-and rollback tests pass.
+and serial boot. Deploy production RAUC updates only after boot, power-loss recovery, watchdog, and rollback tests
+pass.

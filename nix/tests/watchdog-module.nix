@@ -57,6 +57,21 @@ let
         };
       }
     ]).config;
+  bootloaderStarted =
+    (evalSystem [
+      nonRaucModule
+      {
+        atomixos.watchdog = {
+          bootloaderStarted = true;
+          openTimeoutSec = 240;
+        };
+      }
+    ]).config;
+  # ROCK64's U-Boot does not start a watchdog, so it keeps the build policy default.
+  rock64 = self.nixosConfigurations.rock64.config;
+  hasOpenTimeout =
+    evaluatedConfig:
+    builtins.any (nixlib.hasPrefix "watchdog.open_timeout=") evaluatedConfig.boot.kernelParams;
   customRauc =
     (evalSystem [
       ./rauc-qemu-config.nix
@@ -101,6 +116,35 @@ pkgs.runCommand "watchdog-module-check" { } ''
   test ${builtins.toJSON (!(defaults.systemd.settings.Manager ? WatchdogDevice))} = true
   test ${builtins.toJSON (!builtins.hasAttr "watchdog-boot-count" defaults.systemd.services)} = true
   test ${builtins.toJSON (!hasBootCountPackage defaults)} = true
+
+  test ${builtins.toJSON (defaults.atomixos.watchdog.bootloaderStarted == false)} = true
+  test ${builtins.toJSON (!hasOpenTimeout defaults)} = true
+  test ${builtins.toJSON (!hasOpenTimeout enabled)} = true
+
+  # A bootloader-started watchdog turns on enforcement and bounds the kernel's
+  # pre-userspace feeding, even though enableHardware stays false.
+  test ${builtins.toJSON (bootloaderStarted.atomixos.watchdog.enableHardware == false)} = true
+  test ${builtins.toJSON (builtins.elem "watchdog.open_timeout=240" bootloaderStarted.boot.kernelParams)} = true
+  test ${
+    builtins.toJSON (bootloaderStarted.systemd.settings.Manager.RuntimeWatchdogSec == "30s")
+  } = true
+  test ${
+    builtins.toJSON (bootloaderStarted.systemd.settings.Manager.RebootWatchdogSec == "10min")
+  } = true
+  test ${builtins.toJSON (bootloaderStarted.systemd.services ? watchdog-device-check)} = true
+
+  test ${builtins.toJSON (rock64.atomixos.watchdog.bootloaderStarted == false)} = true
+  test ${builtins.toJSON (!hasOpenTimeout rock64)} = true
+  test ${
+    builtins.toJSON (
+      !(nixlib.hasInfix "CONFIG_WATCHDOG_AUTOSTART=y" rock64.atomixos.ubootEnvTools.extraConfig)
+    )
+  } = true
+  test ${
+    builtins.toJSON (
+      rock64.atomixos.watchdog.enableHardware == (rock64.systemd.settings.Manager ? RuntimeWatchdogSec)
+    )
+  } = true
 
   test ${builtins.toJSON (enabled.systemd.settings.Manager.RuntimeWatchdogSec == "30s")} = true
   test ${builtins.toJSON (enabled.systemd.settings.Manager.RebootWatchdogSec == "10min")} = true

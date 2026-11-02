@@ -34,6 +34,10 @@ let
     COMMON_CLK_SCMI = lib.mkForce yes;
     ARM_SCMI_CPUFREQ = lib.mkForce yes;
 
+    # U-Boot starts the watchdog (nix/uboot-cm3.nix); the watchdog core must
+    # feed it from driver probe until systemd opens it or open_timeout passes.
+    WATCHDOG_HANDLE_BOOT_ENABLED = lib.mkForce yes;
+
     # No audio: the CM3 IO device tree defines no RK809 codec card, and its
     # HDMI sound card needs the display drivers this kernel leaves out.
   };
@@ -43,6 +47,11 @@ in
 
   atomixos.board = "cm3";
   atomixos.watchdog.device = "/dev/watchdog-internal";
+  # U-Boot starts the RK3566 watchdog before every kernel (nix/uboot-cm3.nix),
+  # so a kernel or initrd that stalls before systemd still resets the board and
+  # spends a RAUC boot try. This keeps systemd enforcement on for every CM3
+  # build, whatever build.toml's enable_hardware says.
+  atomixos.watchdog.bootloaderStarted = true;
 
   # build.toml is shared with ROCK64, whose default backend is external. The
   # CM3 always uses the internal watchdog device, so warn instead of failing.

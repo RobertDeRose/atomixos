@@ -61,12 +61,17 @@ on the CM3's eMMC, because the CM3's SPI flash is optional.
 
 ## Hardware watchdog off by default
 
-**Choice:** systemd hardware watchdog enforcement is opt-in through `build.toml`, which also selects the watchdog
-device; see [Watchdog Backend Selection](reference/build-configuration.md#watchdog-backend-selection).
+**Choice:** on the ROCK64, systemd hardware watchdog enforcement is opt-in through `build.toml`, which also selects the
+watchdog device; see [Watchdog Backend Selection](reference/build-configuration.md#watchdog-backend-selection). The CM3
+is the exception: its U-Boot starts the watchdog before every kernel, the kernel feeds it only until
+`watchdog.open_timeout`, and systemd always holds it; see [Boot stalls](architecture/update-rollback.md#boot-stalls).
 
 **Why:** A watchdog that resets a board before its timing and rollback behavior are proven on that hardware can trap a
 device in a reboot loop in the field. Keeping it off by default means each release profile turns it on only after
-physical reset-timing, rollback, and soak testing.
+physical reset-timing, rollback, and soak testing. On the CM3, the opposite risk is worse: a kernel that stalls before
+systemd, without panicking, otherwise waits for someone to press reset once per boot try, so a bad update never rolls
+back on its own. The CM3 watchdog resets the board from U-Boot and from a running Linux but not from a panicked kernel,
+which `panic=10` reboots instead.
 
 **How it fits:** systemd is the only watchdog owner, and watchdog resets use up boot tries like any failed boot, so they
 lead into the normal rollback path.

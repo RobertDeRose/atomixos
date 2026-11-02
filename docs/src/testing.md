@@ -104,7 +104,10 @@ rendered configuration, systemd environment output, or the journal. It covers th
 server's bundle delivery and the public FRPS and Caddy path are outside this check.
 
 The `watchdog-module` check verifies that hardware watchdog enforcement is off by default and that the systemd manager
-watchdog settings are rendered only when enforcement is enabled. The `watchdog-missing-device` VM check enables
+watchdog settings are rendered only when enforcement is enabled or the board's U-Boot starts the watchdog, which also
+adds `watchdog.open_timeout`. It also checks that ROCK64 keeps neither. The `cm3-board` check verifies the CM3 side of
+that handover: U-Boot starts and feeds the watchdog in U-Boot proper only, within the hardware maximum, and the CM3
+system always has systemd enforcement and the open timeout. The `watchdog-missing-device` VM check enables
 enforcement without exposing a watchdog device, then verifies that boot continues, RAUC state is unchanged, and an
 actionable warning reports that enforcement is unavailable.
 
@@ -155,10 +158,10 @@ Flake-only checks:
 |-------------------------------|-------|---------------------------------------------------------------------------------------------------------------------|
 | `nixstasis-client`            | 1     | Nixstasis registration, identity reuse, polling, FRP launch-boundary, and post-enrollment API outage path           |
 | `fleet-bootstrap`             | 1     | Loopback fleet socket, named AtomixOS route profile, Host rewrite, withdrawal, and token secrecy                    |
-| `watchdog-module`             | 0     | Watchdog option defaults and opt-in systemd manager settings                                                        |
+| `watchdog-module`             | 0     | Watchdog option defaults, opt-in systemd manager settings, and the bootloader-started open timeout                  |
 | `build-configuration`         | 0     | Schema, canonical policy, provenance, module mapping, and sidecar inputs                                            |
 | `build-config-workflow`       | 0     | Local override wrapper, task matrix, Lima behavior, and per-board retained GC roots                                 |
-| `cm3-board`                   | 0     | CM3 eMMC paths, RAUC compatible; initrd panic parameters and shell gate; U-Boot settings reach `.config`; env order |
+| `cm3-board`                   | 0     | CM3 eMMC paths, RAUC compatible; initrd panic parameters and shell gate; U-Boot boot watchdog; U-Boot settings reach `.config`; env order |
 | `boot-partition-size`         | 0     | An oversized boot payload fails with a size breakdown; a fitting one builds                                         |
 | `uboot-scripts`               | 0     | U-Boot sandbox runs `boot.scr` (failed loads reset, `START_UMS`) and the `PREBOOT`; also a CI job                   |
 | `device-tree-overlay`         | 0     | Boot slot DTB comes from the NixOS device-tree package with overlays; ROCK64 watchdog overlay wiring                |

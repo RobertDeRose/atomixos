@@ -1,6 +1,8 @@
 # Systemd watchdog configuration.
-# Integration is implemented but intentionally disabled during development
-# until Rock64 boot reliability is fully validated.
+# Enforcement is opt-in through build policy, except on boards whose U-Boot
+# starts the watchdog before the kernel (bootloaderStarted): there systemd
+# always holds it, and the kernel feeds it only until openTimeoutSec, so a boot
+# that stalls before systemd resets the board and spends a RAUC boot try.
 {
   config,
   lib,
@@ -10,6 +12,9 @@
 
 let
   cfg = config.atomixos.watchdog;
+  # A bootloader-started watchdog must be held by systemd: once the kernel's
+  # open timeout passes, nothing else feeds it.
+  enforced = cfg.enableHardware || cfg.bootloaderStarted;
   watchdogBootCountCli = pkgs.writeShellScriptBin "watchdog-boot-count" (
     builtins.readFile ../scripts/watchdog-boot-count.sh
   );
@@ -79,12 +84,34 @@ in
       default = null;
       description = "Stable watchdog device path selected by systemd when hardware enforcement is enabled.";
     };
+
+    bootloaderStarted = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Whether the board's U-Boot starts the hardware watchdog before booting the kernel. Board modules set
+        this to match their U-Boot build. It turns on systemd enforcement whatever enableHardware says, and
+        adds watchdog.open_timeout so a boot that stalls before systemd opens the watchdog resets the board.
+      '';
+    };
+
+    openTimeoutSec = lib.mkOption {
+      type = lib.types.ints.positive;
+      default = 180;
+      description = ''
+        Seconds after the kernel's watchdog driver registers during which the kernel feeds a
+        bootloader-started watchdog before systemd opens it (watchdog.open_timeout). It must cover the kernel
+        and the initrd on a slow first boot, which creates slot B and formats /data.
+      '';
+    };
   };
 
   config = {
     # ── Watchdog ─────────────────────────────────────────────────────────────────
 
-    systemd.settings.Manager = lib.mkIf cfg.enableHardware {
+    boot.kernelParams = lib.optional cfg.bootloaderStarted "watchdog.open_timeout=${toString cfg.openTimeoutSec}";
+
+    systemd.settings.Manager = lib.mkIf enforced {
       RuntimeWatchdogSec = cfg.runtimeWatchdogSec;
       RebootWatchdogSec = cfg.rebootWatchdogSec;
       WatchdogDevice = lib.mkIf (cfg.device != null) cfg.device;
@@ -94,7 +121,7 @@ in
       watchdogBootCountCli
     ];
 
-    systemd.services.watchdog-device-check = lib.mkIf cfg.enableHardware {
+    systemd.services.watchdog-device-check = lib.mkIf enforced {
       description = "Report unavailable hardware watchdog enforcement";
       wantedBy = [ "multi-user.target" ];
       after = [
