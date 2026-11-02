@@ -56,6 +56,14 @@ A kernel panic counts as a failed boot without anyone power-cycling the device: 
 line, so the kernel reboots itself 10 seconds after a panic. Because it is a kernel parameter rather than a sysctl, it
 also covers panics in early boot and in the initrd, before `systemd-sysctl` runs.
 
+An initrd failure that sends systemd into emergency mode, such as a missing or unmountable root slot, does not panic by
+itself: emergency mode waits on the console. The `boot.panic_on_fail` kernel parameter makes the initrd panic when
+emergency mode starts, so such a failure also reboots and spends a boot try, and the console shows the failing unit's
+error before the reboot. A failed unit that does not lead to emergency mode neither panics nor reboots; its error
+appears on the console and boot continues. To debug an emergency-mode failure, set `_RUT_OH_=1`
+([Physical Recovery](authentication.md#physical-recovery)): the initrd then keeps a serial root shell instead of
+panicking.
+
 ### Bootloader updates
 
 RAUC bundles update the boot and root slots, including `boot.scr`, but never U-Boot itself. U-Boot changes, such as the

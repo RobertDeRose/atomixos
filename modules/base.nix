@@ -61,8 +61,13 @@ in
     # optional (and on some boards does not recover a panicked kernel). A kernel
     # parameter rather than a sysctl, so it also covers panics in early boot and
     # the initrd, before systemd-sysctl runs; every panic spends a boot try and
-    # lets U-Boot fall back to the other slot.
-    boot.kernelParams = [ "panic=10" ];
+    # lets U-Boot fall back to the other slot. boot.panic_on_fail turns an initrd
+    # failure (for example, the root slot never appearing) into such a panic
+    # instead of an emergency shell that waits on a console forever.
+    boot.kernelParams = [
+      "panic=10"
+      "boot.panic_on_fail"
+    ];
 
     # ── Base system ──────────────────────────────────────────────────────────────
 
@@ -405,7 +410,7 @@ in
         # The slot device is only known from the command line, so no unit can
         # order on it. initrd-root-device.target does not wait for it either,
         # and eMMC can probe late (CM3 sdhci waits on PMIC regulators), so wait
-        # for the block device rather than failing into emergency mode.
+        # for the block device rather than failing (which panics and reboots).
         waited=0
         until [ -b "$lower_device" ]; do
           if [ "$waited" -ge 900 ]; then
@@ -448,9 +453,14 @@ in
     # carries slot A; initrd systemd-repart provisions the inactive A/B slot and
     # the persistent data partition from the remaining eMMC space on first boot.
     boot.initrd.systemd.enable = true;
-    # Keep initrd emergency mode usable on the serial console while we are
-    # validating early-boot storage changes on hardware.
-    boot.initrd.systemd.emergencyAccess = true;
+    # `_RUT_OH_=1` also covers the initrd: boot.scr then adds
+    # atomixos.initrd_shell, so a failed initrd stays at a root shell on the
+    # serial console instead of panicking. Like the stage-2 autologin, it is
+    # unauthenticated: whoever can set `_RUT_OH_` already has root.
+    boot.initrd.systemd.emergencyAccess = config.atomixos.serialRootDebug.enable;
+    boot.initrd.systemd.services.panic-on-fail.unitConfig.ConditionKernelCommandLine =
+      lib.mkIf config.atomixos.serialRootDebug.enable
+        [ "!atomixos.initrd_shell" ];
     # Custom initrd services do not automatically get their `path` entries copied
     # into the initrd image, so include the probe tools they invoke explicitly.
     boot.initrd.systemd.initrdBin = [

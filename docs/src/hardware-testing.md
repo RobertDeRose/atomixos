@@ -261,6 +261,29 @@ fw_printenv -n _RUT_OH_    # expect: empty / unset
 - SSH behavior on the network is unchanged after the recovery boot
 - `_RUT_OH_` is cleared after use
 
+### Test 6.3: Initrd failure reboots, or opens a shell with `_RUT_OH_`
+
+This installs a bundle into slot B and then destroys its root filesystem; the next RAUC install rewrites it. A freshly
+flashed device has no boot files in slot B, so without the install U-Boot fails before the initrd runs.
+
+```sh
+# On the device, booted from slot A (check with `rauc status`), with the bundle copied as in Test 7.2
+rauc install /data/rock64.raucb    # writes slot B and makes it the next boot
+dd if=/dev/zero of=/dev/disk/by-partlabel/rootfs-b bs=1M count=4 conv=fsync
+reboot
+```
+
+**Pass criteria**:
+
+- On UART2, each slot B boot shows `initrd-prepare-overlay-lower` failing, a kernel panic, and a reset 10 seconds later
+- After three failed boots, the device boots slot A and `rauc status` shows it booted
+
+Repeat with `fw_setenv _RUT_OH_ 1` before `reboot`:
+
+- U-Boot prints `_RUT_OH_=1: a failed initrd opens a serial root shell instead of rebooting`
+- The failed initrd stays at an emergency-mode root shell instead of resetting
+- To leave, reset the board, interrupt autoboot, and run `setenv _RUT_OH_; saveenv; reset` at the U-Boot prompt
+
 ## Phase 7: RAUC update lifecycle
 
 ### Test 7.1: RAUC status

@@ -141,6 +141,13 @@ setenv initrd_size ${filesize}
 
 # NixOS boot.kernelParams first, so the board's console and loglevel win.
 setenv bootargs "@kernelParams@ ${bootargs_base} root=fstab rw atomixos.lowerdev=${atomixos_lowerdev} atomixos.lowerfstype=squashfs init=@systemClosure@/init rauc.slot=${rauc_slot}"
+# Serial root debug: a failed initrd keeps a root shell on the console instead
+# of panicking. Linux clears _RUT_OH_ only after a full boot, so the flag stays
+# set until the initrd problem is fixed.
+if test "${_RUT_OH_}" = "1"; then
+  echo "_RUT_OH_=1: a failed initrd opens a serial root shell instead of rebooting"
+  setenv bootargs "${bootargs} atomixos.initrd_shell"
+fi
 booti ${kernel_addr_r} ${ramdisk_addr_r}:${initrd_size} ${fdt_addr_r}
 
 # Reset here too: a U-Boot build, or a saved environment, whose boot command

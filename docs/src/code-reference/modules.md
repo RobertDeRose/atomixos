@@ -59,6 +59,7 @@ Shared NixOS configuration for every target: filesystem layout, users, core serv
 | `documentation.enable` | `false`     | Saves closure space                    |
 | `security.sudo.enable` | `false`     | Privilege escalation uses `run0`       |
 | `panic` kernel param   | `10`        | Reboot 10 seconds after a kernel panic |
+| `boot.panic_on_fail`   | set         | An initrd failure panics               |
 | `time.timeZone`        | `"UTC"`     |                                        |
 
 ### OverlayFS root
@@ -81,6 +82,11 @@ Assembly order before `switch_root`:
 3. `sysroot.mount` mounts `/` as overlay with `lowerdir=/run/rootfs-base`, `upperdir=/run/overlay-root/upper`, and
    `workdir=/run/overlay-root/work`.
 4. `sysroot-run.mount` bind-mounts `/run` into the switched root.
+
+If any step fails, the `boot.panic_on_fail` kernel parameter makes the initrd panic rather than open an emergency shell,
+and `panic=10` reboots the device, which spends one boot try. When `atomixos.serialRootDebug.enable` is set (every
+hardware board), the `atomixos.initrd_shell` parameter that `boot.scr` adds for `_RUT_OH_=1` suppresses that panic and
+keeps an unauthenticated root shell on the serial console.
 
 The flashable image has no `/data` partition. Initrd `systemd-repart` creates it from the remaining eMMC space on
 first boot.
@@ -208,7 +214,8 @@ Settings shared by the Rock64 and CM3 modules:
 - `/boot` as a `noauto` mount that only first boot mounts, briefly, because RAUC refuses to install to a mounted slot;
 - Realtek USB NIC firmware (`nix/rtl815x-firmware.nix`);
 - the `ttyS2` serial getty at 1.5 Mbaud (UART2), always restarted;
-- one-boot serial root recovery when `_RUT_OH_=1` (`serial-root-debug-gate.service` and `serial-root-debug@ttyS2`);
+- one-boot serial root recovery when `_RUT_OH_=1` (`serial-root-debug-gate.service` and `serial-root-debug@ttyS2`),
+  plus an initrd root shell instead of a panic when that boot fails before switching root;
 - the `boot_to_ums` command, which sets `START_UMS=1` and reboots into U-Boot USB mass storage;
 - `boot-storage-debug.service` disabled.
 

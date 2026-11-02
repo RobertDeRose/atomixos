@@ -38,6 +38,9 @@ pkgs.runCommand "test-boot-script" { } ''
   grep -F 'setenv bootargs "lsm=bpf net.ifnames=0 ''${bootargs_base} root=fstab rw' "$compiled"
   test "$(grep -o 'root=fstab' "$compiled" | wc -l)" -eq 1
   ! grep -E '@[A-Za-z]+@' "$compiled"
+  # _RUT_OH_=1 appends the initrd shell flag after bootargs is built.
+  grep -A2 -F 'if test "''${_RUT_OH_}" = "1"; then' "$compiled" \
+    | grep -F 'setenv bootargs "''${bootargs} atomixos.initrd_shell"'
   test -s ${bootScript}/boot.scr
 
   touch "$out"

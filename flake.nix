@@ -370,6 +370,7 @@
             chrony-wan-recovery = import ./nix/tests/chrony-wan-recovery.nix netTestArgs;
             network-isolation = import ./nix/tests/network-isolation.nix netTestArgs;
             kernel-security = import ./nix/tests/kernel-security.nix netTestArgs;
+            initrd-failure = import ./nix/tests/initrd-failure.nix netTestArgs;
             interface-naming = import ./nix/tests/interface-naming.nix netTestArgs;
             rootless-storage = import ./nix/tests/rootless-storage.nix netTestArgs;
             clock = import ./nix/tests/clock.nix netTestArgs;
@@ -447,6 +448,7 @@
             chrony-wan-recovery = import ./nix/tests/chrony-wan-recovery.nix darwinNetTestArgs;
             network-isolation = import ./nix/tests/network-isolation.nix darwinNetTestArgs;
             kernel-security = import ./nix/tests/kernel-security.nix darwinNetTestArgs;
+            initrd-failure = import ./nix/tests/initrd-failure.nix darwinNetTestArgs;
             rootless-storage = import ./nix/tests/rootless-storage.nix darwinNetTestArgs;
             clock = import ./nix/tests/clock.nix darwinNetTestArgs;
             ssh-host-keys = import ./nix/tests/ssh-host-keys.nix darwinNetTestArgs;
