@@ -110,7 +110,8 @@ actionable warning reports that enforcement is unavailable.
 
 The `kernel-security` VM check verifies the stripped kernel exposes the BPF LSM and BTF required by systemd filesystem
 sandboxing. It also rejects unsupported-BPF, MTD-probe, boot-storage, and hung-task-sysctl startup diagnostics, and
-checks that the runtime `kernel.panic` value is 10, so a panic after `systemd-sysctl` reboots the device.
+checks that `panic=10` is on the kernel command line, so a panic at any point in boot, including the initrd, reboots
+the device.
 
 The `build-configuration` check covers strict schema parsing, merge behavior, timeout bounds, canonical bytes,
 provenance, NixOS option mapping, artifact sidecar inputs, and the network-versus-fleet bootstrap transport boundary.
@@ -157,7 +158,7 @@ Flake-only checks:
 | `device-tree-overlay`         | 0     | Boot slot DTB comes from the NixOS device-tree package with overlays; ROCK64 watchdog overlay wiring                |
 | `os-upgrade-query`            | 0     | Update query sends `X-Compatible`; another board's bundle is skipped before download                                |
 | `watchdog-missing-device`     | 1     | Enabled policy without hardware boots, preserves RAUC state, and emits an actionable warning                        |
-| `kernel-security`             | 1     | BPF LSM/BTF support is active, runtime `kernel.panic` is 10, and unsupported startup diagnostics are absent         |
+| `kernel-security`             | 1     | BPF LSM/BTF support is active, the command line has `panic=10`, and unsupported startup diagnostics are absent      |
 | `interface-naming`            | 1     | WAN and LAN are renamed to `wan`/`lan` by hardware match, whichever NIC registers first                             |
 | `rootless-storage`            | 1     | Rootless application images are stored under `/data/containers/rootless`, not on the reset-on-boot overlay root     |
 | `clock`                       | 1     | A clock set back moves forward to the last known time or the image source date; never saves a past clock; `rtcsync` |

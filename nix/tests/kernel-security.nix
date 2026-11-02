@@ -44,9 +44,11 @@ nixos-lib.runTest {
     gateway.fail("journalctl -b --no-pager | grep 'mtd_probe'")
     gateway.fail("journalctl -b --no-pager | grep 'boot-storage-debug'")
     gateway.succeed("systemctl is-active systemd-sysctl.service")
-    # Once systemd-sysctl has run, a panic reboots the device instead of
-    # leaving it hung. This checks the runtime value, not initrd panics.
-    gateway.succeed("test \"$(cat /proc/sys/kernel/panic)\" = 10")
+    # A panic reboots the device instead of leaving it hung. The kernel
+    # parameter covers initrd panics too, before any sysctl could apply.
+    # Only its presence is checked: the NixOS test driver appends its own
+    # panic=1 after it, so the runtime value here is the driver's, not ours.
+    gateway.succeed("grep -Eq '(^| )panic=10($| )' /proc/cmdline")
     gateway.fail("journalctl -b --no-pager | grep 'kernel/hung_task_timeout_secs'")
   '';
 }

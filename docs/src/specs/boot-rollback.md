@@ -59,8 +59,8 @@ rollback attempts.
 After three failed boots, the counter reaches 0 and U-Boot boots the previous working slot. The failed slot's data is
 kept for diagnostics but is not booted.
 
-A kernel panic after `systemd-sysctl` reboots the device after 10 seconds (`kernel.panic = 10`), which counts as a
-failed boot. A panic earlier in the initrd needs a hardware watchdog reset or a power cycle.
+A kernel panic at any point in boot, including the initrd, reboots the device after 10 seconds (`panic=10` on the
+kernel command line), which counts as a failed boot.
 
 #### Scenario: Automatic rollback after three failures
 

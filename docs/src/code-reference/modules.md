@@ -58,7 +58,7 @@ Shared NixOS configuration for every target: filesystem layout, users, core serv
 | `nix.enable`           | `false`     | No Nix daemon on the read-only root    |
 | `documentation.enable` | `false`     | Saves closure space                    |
 | `security.sudo.enable` | `false`     | Privilege escalation uses `run0`       |
-| `kernel.panic` sysctl  | `10`        | Reboot 10 seconds after a kernel panic |
+| `panic` kernel param   | `10`        | Reboot 10 seconds after a kernel panic |
 | `time.timeZone`        | `"UTC"`     |                                        |
 
 ### OverlayFS root
