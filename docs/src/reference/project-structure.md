@@ -52,6 +52,7 @@ nix/
   uboot-cm3.nix                    Radxa CM3 IO U-Boot (redundant eMMC env, RAUC bootmeth, UMS)
   uboot-start-ums.nix              Shared U-Boot PREBOOT for START_UMS recovery
   uboot-sandbox.nix                U-Boot sandbox binary for running boot scripts on the build host
+  patches/                         Source patches applied to board packages (CM3 U-Boot watchdog clock)
   rtl815x-firmware.nix             Realtek USB NIC firmware blobs shared by both boards
   boot-partition.nix               Shared boot-slot vfat derivation
   squashfs.nix                     Squashfs image derivation (closureInfo + mksquashfs)

@@ -42,8 +42,8 @@ The full documentation is published at <https://robertderose.github.io/atomixos/
 
 - **Atomic OTA updates** -- installs to the inactive slot pair while the active slot stays online
 - **Automatic rollback** -- uses U-Boot boot-count fallback after repeated failed boots
-- **Hardware watchdog (currently disabled)** -- integration is implemented and tested in QEMU;
-  Rock64 runtime enablement is pending boot-stability validation
+- **Hardware watchdog** -- always on for the CM3, started by U-Boot so a boot that stalls before
+  systemd still resets and rolls back; opt-in on Rock64, pending boot-stability validation
 - **Local health-check confirmation** -- commits new slots only after service and manifest container checks pass
 - **Signed RAUC bundles** -- builds reproducible, signed `.raucb` artifacts from the flake
 - **Network isolation boundary** -- keeps LAN clients off the internet; only explicit application-layer proxying is
@@ -98,8 +98,9 @@ selectively bridges WAN and LAN with authentication.
 8. After 3 failed boots → U-Boot falls back to previous good slot
 ```
 
-The hardware watchdog integration is implemented, but runtime enforcement is currently disabled
-during development on Rock64 until boot stability is fully validated.
+On the CM3, U-Boot starts the hardware watchdog and systemd always holds it, so a boot that stalls
+before systemd also counts as a failed boot. On Rock64, runtime enforcement stays disabled until
+boot stability is fully validated.
 
 ### Squashfs rootfs
 

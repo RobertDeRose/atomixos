@@ -397,9 +397,12 @@ readlink -f "/sys/class/watchdog/$(basename "$external_device")/device/driver"
 Expected results include address `0x41` claimed by the PCA/TCA9536-compatible expander, `/dev/watchdog-external`, and
 the `gpio-wdt` driver. Systemd remains the sole owner; do not run the legacy `i2cset` kicker.
 
-For `enable_hardware = false`, `systemctl show` must omit `WatchdogDevice`, `RuntimeWatchdogUSec`, and
-`RebootWatchdogUSec`. The external always-running device-tree node is omitted; an internal image may still expose an
-unarmed `/dev/watchdog-internal`, so verify that PID 1 does not hold the device rather than relying only on node absence.
+For `enable_hardware = false` on Rock64, `systemctl show` must report `RuntimeWatchdogUSec=0` and PID 1 must not
+hold the watchdog device (`ls -l /proc/1/fd` lists no `/dev/watchdog*`). systemd still reports its defaults for the
+other properties, for example `RebootWatchdogUSec=10min`, so do not expect them to be absent; to confirm which settings
+the image omits, read the rendered `/etc/systemd/system.conf`. CM3 images enable enforcement whatever the switch says
+(Test 8.5). The external always-running device-tree node is omitted; an internal image may still expose an unarmed
+`/dev/watchdog-internal`, so check PID 1's open files rather than relying only on node absence.
 
 ### Test 8.2: Watchdog-triggered reboot
 
@@ -479,6 +482,46 @@ last -x reboot | head
 - Normal update confirmation and local recovery services continue to operate
 - Reboot history covers the soak window and contains only operator-initiated reboots
 
+### Test 8.5: CM3 boot-stall reset
+
+> The stall fixtures are destructive. Use a test CM3 with serial capture, a known-good slot, and Maskrom recovery.
+
+The CM3 U-Boot starts the watchdog before every kernel; see
+[Boot stalls](architecture/update-rollback.md#boot-stalls). Check that it does not disturb normal use:
+
+```sh
+# U-Boot serial log, every boot:
+#   WDT:   Started watchdog@fe600000 with servicing every 1000ms (44s timeout)
+# U-Boot prompt: `wdt list` lists watchdog@fe600000 and `dm tree` marks it probed ([ + ]);
+#   select it with `wdt dev watchdog@fe600000` before other `wdt` commands
+cat /proc/cmdline                       # contains watchdog.open_timeout=180
+systemctl show --property WatchdogDevice --property RuntimeWatchdogUSec
+systemctl status watchdog-device-check  # no "enforcement is unavailable" warning
+```
+
+- A normal boot and a fresh-flash first boot reach `multi-user.target` with no reset
+- The U-Boot prompt, and `ums` started with `boot_to_ums`, each stay up for at least 3 minutes with no reset
+- `mise run flash:maskrom` still rewrites the eMMC
+
+Then build test bundles with one stall fixture each, install each to the inactive slot, and reboot:
+
+- A device-tree overlay that makes the pin controller fail to probe (for example a pin configuration node placed inside
+  a pin function) stops the kernel before the initrd. Confirm it on the serial console: the log ends with the
+  `rockchip-pinctrl` probe failure and `clk: Disabling unused clocks`, with no initrd or systemd output after it.
+- `rd.systemd.unit=emergency.target atomixos.initrd_shell` in `boot.kernelParams` stops in the initrd.
+  `atomixos.initrd_shell` keeps the emergency shell waiting; without it, `panic-on-fail` panics the initrd and the
+  board reboots after 10 seconds instead of testing the watchdog.
+
+The watchdog driver registers within the kernel's first seconds but logs nothing when it does, so time each stalled try
+from U-Boot's `Starting kernel` line: it resets about 180 to 230 seconds later, or about 45 seconds later if the kernel
+stops before the driver registers. For the exact registration time, add `initcall_debug` to the fixture's kernel
+command line and find the watchdog driver's initcall in the serial log.
+
+**Pass criteria**:
+
+- Every stalled try resets with no manual action, and each reset decrements that slot's `BOOT_*_LEFT`
+- After the third stalled try, U-Boot boots the previous slot, which reaches `multi-user.target`
+
 ## Checklist
 
 Record results for each run in Beads, not on this page.
@@ -505,3 +548,4 @@ Record results for each run in Beads, not on this page.
 | 8.2 | Watchdog reboot       |
 | 8.3 | Watchdog rollback     |
 | 8.4 | Watchdog soak         |
+| 8.5 | CM3 boot-stall reset  |

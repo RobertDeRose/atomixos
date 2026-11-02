@@ -64,6 +64,36 @@ appears on the console and boot continues. To debug an emergency-mode failure, s
 ([Physical Recovery](authentication.md#physical-recovery)): the initrd then keeps a serial root shell instead of
 panicking.
 
+### Boot stalls
+
+On the CM3, a boot that stalls without panicking also counts as a failed boot: for example, a kernel whose core driver
+fails to probe, or an initrd that waits forever for its root device. U-Boot starts the RK3566 watchdog before every
+kernel, and something feeds it at every stage until systemd takes it over:
+
+| Stage                                             | Feeds the watchdog                                  | A stall resets the board          |
+|---------------------------------------------------|-----------------------------------------------------|-----------------------------------|
+| U-Boot: prompt, autoboot, `ums`, loading the slot | U-Boot, every second                                | Never; U-Boot keeps feeding it    |
+| Kernel, before its watchdog driver registers      | Nothing                                             | 44.7 s after U-Boot's last feed   |
+| Kernel and initrd, after the driver registers     | The kernel, for 180 s (`watchdog.open_timeout=180`) | Up to 44.7 s after those 180 s    |
+| systemd, from the start of stage 2                | systemd, as its runtime watchdog                    | After the runtime watchdog period |
+
+Each stalled try ends in a reset within about four minutes and spends a boot try, so three stalled tries fall back to
+the other slot with no manual reset. The 180-second open timeout covers the kernel and the initrd on a slow first
+boot, when the initrd creates slot B and formats `/data`. It also bounds the initrd emergency shell; see
+[CM3 Watchdog](../cm3.md#watchdog).
+
+The watchdog driver (`dw_wdt`) is built into the kernel and needs only the clock controller. A kernel that gets past
+its late initialization without that driver turns off the watchdog's clock as unused, which stops the watchdog, so such
+a kernel is not reset.
+
+The 44.7-second period is the hardware step that U-Boot's 44-second request rounds up to: the RK3566 watchdog counts a
+24 MHz clock and supports only periods of 2^16 to 2^31 cycles, up to about 89.5 seconds. Maskrom flashing is not
+affected, because the BootROM runs Maskrom before U-Boot and never starts the watchdog, and SPL does not start it
+either.
+
+The ROCK64's U-Boot does not start a watchdog, so a ROCK64 boot that stalls before systemd still waits for a manual
+reset.
+
 ### Bootloader updates
 
 RAUC bundles update the boot and root slots, including `boot.scr`, but never U-Boot itself. U-Boot changes, such as the
@@ -112,14 +142,19 @@ check.
 
 ## Watchdog Integration
 
-Hardware watchdog enforcement is off by default and is turned on in `build.toml`, which also picks the watchdog device
-and timeouts; see [Watchdog Backend Selection](../reference/build-configuration.md#watchdog-backend-selection).
+On the ROCK64, hardware watchdog enforcement is off by default and is turned on in `build.toml`, which also picks the
+watchdog device and timeouts; see [Watchdog Backend Selection](../reference/build-configuration.md#watchdog-backend-selection).
+On the CM3, enforcement is always on, because U-Boot starts the watchdog before every kernel (see
+[Boot stalls](#boot-stalls)); `build.toml` still sets its timeouts.
 
-systemd is the only process that drives the watchdog. Its runtime timeout resets the board if systemd hangs, and its
-reboot timeout resets the board if a reboot hangs.
+Once stage-2 systemd starts, it is the only process that drives the watchdog. Its runtime timeout resets the board if
+systemd hangs, and its reboot timeout resets the board if a reboot hangs.
 
 If enforcement is on but no usable device exists, `watchdog-device-check.service` logs a warning and exits successfully.
-Boot and update verification carry on, and RAUC state is not changed.
+On the ROCK64, boot and update verification carry on, and RAUC state is not changed. On the CM3, the watchdog is already
+running, so a system whose systemd does not hold it is reset once the kernel stops feeding it. `os-verification`
+therefore also requires that systemd holds a watchdog device on the CM3; otherwise the slot is not confirmed, its tries
+run out, and it falls back like any other failed boot.
 
 Watchdog resets feed the same boot counter as any other failed boot. U-Boot spends a try on every boot, and
 `os-verification` restores the counter only after a healthy boot, so any slot that resets three boots in a row, whether

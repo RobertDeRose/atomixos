@@ -202,6 +202,10 @@ Radxa CM3 U-Boot, built from the nixpkgs `ubootRock3C` package with the `radxa-c
 - The RAUC bootmeth selects slots, and `boot_targets` scans only `mmc0` (the eMMC), so the SD slot never boots first.
 - `bootcmd` resets when the selected slot fails to load or boot, so the decremented try counter falls back to the other
   slot instead of stopping at the prompt.
+- U-Boot proper starts the RK3566 DesignWare watchdog with a 44-second request and feeds it whenever U-Boot runs; SPL
+  does not start it. `CMD_WDT` adds the `wdt` command at the prompt.
+- `nix/patches/uboot-rk3568-wdt-clk-enable.patch` gives the RK3568 clock driver an enable operation for the two
+  watchdog clocks. Without it, the watchdog driver's clock enable fails, so the watchdog never probes and never starts.
 - Installs `idbloader.img` and `u-boot.itb`.
 
 Both boards add `nix/uboot-start-ums.nix`, a `PREBOOT` that runs before slot selection: when `START_UMS=1` (set from

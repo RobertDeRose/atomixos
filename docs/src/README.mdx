@@ -50,7 +50,7 @@ appliance that you can update remotely without fear of bricking it:
 |-------------------|-----------------------------------------------------------------------------------------------------|
 | Hardware          | Rock64 (RK3328) and [Radxa CM3 IO](cm3.md) (RK3566), both aarch64 and booting from eMMC             |
 | Testing           | NixOS VM tests for updates, rollback, provisioning, networking, and logging; QEMU development VM    |
-| Hardware watchdog | Opt-in through `build.toml`: the SoC watchdog on both boards, or an external SOM watchdog on Rock64 |
+| Hardware watchdog | Opt-in on Rock64 (SoC or external SOM watchdog); always on for the CM3, from U-Boot through systemd |
 | Remote management | Optional Nixstasis enrollment, plus key-only SSH that is off on the WAN side unless provisioned     |
 | Updates           | Full-image RAUC bundles, polled from an update server; hawkBit is not supported                     |
 | Applications      | Podman Quadlets from `config.toml`; image provenance, registry auth, and rollout approval are yours |

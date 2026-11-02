@@ -6,15 +6,16 @@ Acceptance contract for hardware watchdog enforcement. The settings are in
 
 ## Requirements
 
-### Hardware watchdog enforcement is opt-in
+### Hardware watchdog enforcement is opt-in on Rock64
 
-The onboard SoC watchdog and, on Rock64, the external UCC2946 path are available, but systemd watchdog manager settings
-are set only when `watchdog.enable_hardware = true` in build policy (`atomixos.watchdog.enableHardware`). The committed
-`build.toml` leaves enforcement off.
+The onboard SoC watchdog and, on Rock64, the external UCC2946 path are available. On Rock64, systemd watchdog manager
+settings are set only when `watchdog.enable_hardware = true` in build policy (`atomixos.watchdog.enableHardware`). The
+committed `build.toml` leaves enforcement off. The CM3 is the exception: see
+[Boot stalls reset the CM3](#boot-stalls-reset-the-cm3).
 
 #### Scenario: Default image leaves the watchdog unset
 
-- Given an image built from the committed `build.toml`
+- Given a Rock64 image built from the committed `build.toml`
 - When it boots
 - Then systemd's `RuntimeWatchdogSec`, `RebootWatchdogSec`, and `WatchdogDevice` are unset
 
@@ -51,11 +52,50 @@ the external hardware. The CM3 always uses its internal watchdog. Systemd is the
 - Then the build warns that the CM3 IO Board has no external watchdog
 - And systemd uses `/dev/watchdog-internal`
 
+### Boot stalls reset the CM3
+
+The CM3 U-Boot starts the RK3566 watchdog before every kernel and feeds it whenever U-Boot is running, including at the
+prompt and during `ums`. Its 44-second request rounds up to the 44.7-second hardware period. The board module sets
+`atomixos.watchdog.bootloaderStarted`, which:
+
+1. adds `watchdog.open_timeout=180` (`atomixos.watchdog.openTimeoutSec`) to the kernel command line, so the kernel feeds
+   the running watchdog for at most 180 seconds after its driver registers, unless systemd opens it first;
+2. turns systemd enforcement on whatever `watchdog.enable_hardware` says, with the build policy's timeouts and
+   `/dev/watchdog-internal`.
+
+The initrd's systemd does not open the watchdog, so the open timeout covers the kernel and the whole initrd. It must be
+longer than the slowest first-boot initrd, which creates slot B and formats `/data`.
+
+#### Scenario: A kernel stalls before its watchdog driver registers
+
+- Given a CM3 slot whose kernel stops before the watchdog driver registers, without panicking
+- When U-Boot boots that slot
+- Then the watchdog resets the board within 44.7 seconds of U-Boot's last feed
+- And the reset spends one of the slot's boot tries
+
+#### Scenario: A boot stalls before stage-2 systemd
+
+- Given a CM3 slot whose kernel or initrd stalls after the watchdog driver registers
+- When U-Boot boots that slot
+- Then the kernel stops feeding the watchdog 180 seconds after the driver registers
+- And the watchdog resets the board up to 44.7 seconds later
+- And after three stalled tries U-Boot boots the other slot without a manual reset
+
+#### Scenario: Normal CM3 boot hands the watchdog to systemd
+
+- Given a CM3 image built from the committed `build.toml`, where `enable_hardware = false`
+- When it boots, including its first boot
+- Then PID 1 holds `/dev/watchdog-internal` with `RuntimeWatchdogSec` and `RebootWatchdogSec` from build policy
+- And the board is not reset
+
+Rock64's U-Boot does not start a watchdog, and Rock64 kernels carry no `watchdog.open_timeout`.
+
 ### Missing hardware fails open with a warning
 
 When enforcement is enabled but systemd holds no usable watchdog device, `watchdog-device-check.service` logs a warning
-and exits successfully. Boot continues; a missing watchdog alone does not fail update verification or change RAUC slot
-state.
+and exits successfully. On Rock64, boot continues; a missing watchdog alone does not fail update verification or change
+RAUC slot state. On the CM3, U-Boot has already started the watchdog, so a system whose systemd does not hold it is
+reset once the kernel stops feeding it, and its slot falls back like any other failed boot.
 
 #### Scenario: Enabled policy has no watchdog device
 

@@ -129,9 +129,9 @@ without the flag. The release workflow passes the `SERIAL_ROOT_PASSWORD` secret 
 
 ## Watchdog Backend Selection
 
-`watchdog.enable_hardware` is the master switch. `watchdog.backend` remains required even when enforcement is disabled;
-it selects the hardware path that will be used when enforcement is enabled. Neither setting is read from runtime
-`config.toml`.
+On Rock64, `watchdog.enable_hardware` is the master switch. `watchdog.backend` remains required even when enforcement
+is disabled; it selects the hardware path that will be used when enforcement is enabled. CM3 builds always enforce, as
+described below. Neither setting is read from runtime `config.toml`.
 
 Use an ignored `build.dev.toml` for a local test build, or put the same values in committed `build.toml` for a promoted
 build. The timeout fields may be omitted from a local overlay and inherit the committed values.
@@ -167,6 +167,10 @@ The CM3 IO Board has no external watchdog. CM3 builds always use the internal RK
 `/dev/watchdog-internal`; selecting `backend = "external"` with enforcement enabled logs a build warning and still uses
 the internal device.
 
+CM3 builds always enforce the watchdog, whatever `enable_hardware` says: the CM3 U-Boot starts it before every kernel,
+and the kernel stops feeding it 180 seconds after its driver registers, so systemd must hold it. `runtime_timeout` and
+`reboot_timeout` apply as usual. See [Boot stalls](../architecture/update-rollback.md#boot-stalls).
+
 ### Disable Watchdog Enforcement
 
 Keep a valid backend value but set the master switch to `false`:
@@ -177,9 +181,10 @@ enable_hardware = false
 backend = "internal"
 ```
 
-With enforcement disabled, systemd does not set `WatchdogDevice`, `RuntimeWatchdogSec`, or `RebootWatchdogSec`. The
-external always-running device-tree node is also omitted, so the external hardware is not armed accidentally. The
-backend choice has no runtime effect until enforcement is enabled.
+With enforcement disabled, a Rock64 systemd does not set `WatchdogDevice`, `RuntimeWatchdogSec`, or
+`RebootWatchdogSec`. The external always-running device-tree node is also omitted, so the external hardware is not
+armed accidentally. The backend choice has no runtime effect until enforcement is enabled. CM3 builds ignore the switch
+and keep enforcement on.
 
 ## Strict Validation
 

@@ -6,6 +6,9 @@
 }:
 (pkgs.ubootRock3C.override {
   defconfig = "radxa-cm3-io-rk3566_defconfig";
+  # The rk3568 clock driver has no enable op, so the DesignWare watchdog's
+  # clk_enable() fails and watchdog@fe600000 never probes or starts.
+  extraPatches = [ ./patches/uboot-rk3568-wdt-clk-enable.patch ];
   filesToInstall = [
     "idbloader.img"
     "u-boot.itb"
@@ -65,6 +68,27 @@
     CONFIG_USB_FUNCTION_THOR=n
     CONFIG_CMD_ROCKUSB=n
     CONFIG_USB_FUNCTION_ROCKUSB=n
+
+    # ── Boot watchdog ─────────────────────────────────────────────────────
+    # Start the RK3566 DesignWare watchdog (fe600000) in U-Boot proper and
+    # leave it running into the kernel, so a kernel that stalls before
+    # systemd still resets the board and spends a RAUC try. U-Boot feeds it
+    # every second wherever it calls schedule(): the prompt, autoboot,
+    # delays, storage I/O, and ums. Linux feeds it until systemd opens it or
+    # watchdog.open_timeout passes (atomixos.watchdog.bootloaderStarted in
+    # hardware-cm3.nix). The 24 MHz counter only takes 2^(16+n)-cycle
+    # periods, so 44 s rounds up to 2^30 cycles, 44.7 s: the same period
+    # systemd's 30 s runtime timeout selects. SPL and the BootROM (Maskrom)
+    # never start it.
+    # CMD_WDT adds `wdt dev`, `wdt start`, and `wdt expire` at the prompt.
+    CONFIG_WDT=y
+    CONFIG_CMD_WDT=y
+    CONFIG_DESIGNWARE_WATCHDOG=y
+    CONFIG_WATCHDOG=y
+    CONFIG_WATCHDOG_AUTOSTART=y
+    CONFIG_WATCHDOG_TIMEOUT_MSECS=44000
+    CONFIG_SPL_WATCHDOG=n
+    CONFIG_SPL_WDT=n
 
     CONFIG_EFI_LOADER=n
     CONFIG_FAT_WRITE=y

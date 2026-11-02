@@ -1,0 +1,56 @@
+From 6dfa9170056e5aaa9cf99de44116aaed5befe38c Mon Sep 17 00:00:00 2001
+From: Robert DeRose <RobertDeRose@users.noreply.github.com>
+Date: Mon, 2 Nov 2026 12:05:51 -0500
+Subject: [PATCH] clk: rockchip: rk3568: enable the watchdog clocks
+
+designware_wdt_probe() calls clk_enable() on its first clock and fails
+when it returns an error. The rk3568 CRU driver has no enable op, so
+clk_enable() returns -ENOSYS for TCLK_WDT_NS and the watchdog@fe600000
+device never probes: WATCHDOG_AUTOSTART cannot start it and the wdt
+command cannot find it.
+
+Add an enable op that ungates PCLK_WDT_NS and TCLK_WDT_NS and returns
+-ENOSYS for every other clock, as before. The px30 driver does the same
+for its watchdog clock.
+---
+ drivers/clk/rockchip/clk_rk3568.c | 24 ++++++++++++++++++++++++
+ 1 file changed, 24 insertions(+)
+
+diff --git a/drivers/clk/rockchip/clk_rk3568.c b/drivers/clk/rockchip/clk_rk3568.c
+index 533031c..9dd447b 100644
+--- a/drivers/clk/rockchip/clk_rk3568.c
++++ b/drivers/clk/rockchip/clk_rk3568.c
+@@ -2856,9 +2856,33 @@ static int rk3568_clk_set_parent(struct clk *clk, struct clk *parent)
+ }
+ #endif
+ 
++static int rk3568_clk_enable(struct clk *clk)
++{
++	struct rk3568_clk_priv *priv = dev_get_priv(clk->dev);
++
++	switch (clk->id) {
++	/*
++	 * The DesignWare watchdog driver fails to probe unless clk_enable()
++	 * succeeds on its first clock. Ungate both watchdog clocks
++	 * (CRU_GATE_CON26 bits 13 and 14, set-to-disable) in case a previous
++	 * boot gated them.
++	 */
++	case PCLK_WDT_NS:
++		rk_clrreg(&priv->cru->clkgate_con[26], BIT(13));
++		return 0;
++	case TCLK_WDT_NS:
++		rk_clrreg(&priv->cru->clkgate_con[26], BIT(14));
++		return 0;
++	}
++
++	/* Keep the old "no enable op" result for every other clock. */
++	return -ENOSYS;
++}
++
+ static struct clk_ops rk3568_clk_ops = {
+ 	.get_rate = rk3568_clk_get_rate,
+ 	.set_rate = rk3568_clk_set_rate,
++	.enable = rk3568_clk_enable,
+ #if (CONFIG_IS_ENABLED(OF_CONTROL)) || (!CONFIG_IS_ENABLED(OF_PLATDATA))
+ 	.set_parent = rk3568_clk_set_parent,
+ #endif

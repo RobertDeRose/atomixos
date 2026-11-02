@@ -206,6 +206,8 @@ Radxa CM3 (RK3566) on the CM3 IO Board. See [Radxa CM3](../cm3.md).
 - The WAN NIC (GMAC1) is matched by `atomixos.network.wanLinkMatch.Path = "platform-fe010000.ethernet"`.
 - Always uses the internal RK3566 watchdog (`/dev/watchdog-internal`); selecting the `external` backend only logs a
   warning.
+- Sets `atomixos.watchdog.bootloaderStarted`, because its U-Boot starts the watchdog before the kernel, and builds in
+  `WATCHDOG_HANDLE_BOOT_ENABLED` so the kernel feeds it until systemd takes over.
 
 ## hardware-rockchip.nix
 
@@ -360,10 +362,14 @@ the backends, devices, and timeout limits are in
 | `atomixos.watchdog.runtimeWatchdogSec` | string         | `"30s"`      | `RuntimeWatchdogSec` when enabled             |
 | `atomixos.watchdog.rebootWatchdogSec`  | string         | `"10min"`    | `RebootWatchdogSec` when enabled              |
 | `atomixos.watchdog.device`             | string or null | `null`       | `WatchdogDevice` when enabled                 |
+| `atomixos.watchdog.bootloaderStarted`  | bool           | `false`      | The board's U-Boot starts the watchdog        |
+| `atomixos.watchdog.openTimeoutSec`     | positive int   | `180`        | `watchdog.open_timeout` when U-Boot starts it |
 
-- With `enableHardware = true`, systemd sets `RuntimeWatchdogSec`, `RebootWatchdogSec`, and `WatchdogDevice`, and
-  `watchdog-device-check.service` logs a warning if systemd holds no watchdog device.
-- With `enableHardware = false`, none of those manager settings is set.
+- With `enableHardware = true` or `bootloaderStarted = true`, systemd sets `RuntimeWatchdogSec`, `RebootWatchdogSec`,
+  and `WatchdogDevice`, and `watchdog-device-check.service` logs a warning if systemd holds no watchdog device.
+- With both `false`, none of those manager settings is set.
+- With `bootloaderStarted = true`, the kernel command line gets `watchdog.open_timeout=<openTimeoutSec>`. Board modules
+  set it to match their U-Boot build: `hardware-cm3.nix` sets it, `hardware-rock64.nix` does not.
 - On RAUC-enabled systems, `watchdog-boot-count.service` runs before `rauc.service` and logs boot-count and rollback
   state through `scripts/watchdog-boot-count.sh`.
 

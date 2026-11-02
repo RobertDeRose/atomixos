@@ -1,5 +1,6 @@
-# CM3 hardware output wiring, including U-Boot/fw_env.config environment agreement
-# and ROCK64 U-Boot feature parity (UMS recovery, FAT write).
+# CM3 hardware output wiring, including U-Boot/fw_env.config environment agreement,
+# ROCK64 U-Boot feature parity (UMS recovery, FAT write), and the boot watchdog
+# handover from U-Boot through the kernel to systemd.
 {
   pkgs,
   self,
@@ -80,6 +81,25 @@ assert builtins.elem "panic=10" cm3.boot.kernelParams;
 # `_RUT_OH_` (atomixos.initrd_shell) is the only way to keep the initrd shell.
 assert cm3Open.boot.initrd.systemd.emergencyAccess == true;
 assert builtins.elem "!atomixos.initrd_shell" (panicConditions cm3Open);
+# U-Boot starts the watchdog before the kernel and keeps feeding it; the kernel
+# feeds it only until open_timeout, so systemd must always hold it on CM3.
+assert ubootConfig "WDT" == "y";
+assert ubootConfig "DESIGNWARE_WATCHDOG" == "y";
+assert ubootConfig "WATCHDOG" == "y";
+assert ubootConfig "WATCHDOG_AUTOSTART" == "y";
+assert ubootConfig "CMD_WDT" == "y";
+# Without an enable op in the rk3568 clock driver the watchdog never probes.
+assert builtins.any (patch: baseNameOf patch == "uboot-rk3568-wdt-clk-enable.patch") uboot.patches;
+# Within the 2^31-cycle (89.5 s at 24 MHz) hardware maximum.
+assert lib.toInt (ubootConfig "WATCHDOG_TIMEOUT_MSECS") <= 89000;
+assert cm3.atomixos.watchdog.bootloaderStarted;
+assert builtins.elem "watchdog.open_timeout=${toString cm3.atomixos.watchdog.openTimeoutSec}"
+  cm3.boot.kernelParams;
+assert cm3.atomixos.watchdog.openTimeoutSec >= 120;
+assert cm3.systemd.settings.Manager.RuntimeWatchdogSec == cm3.atomixos.watchdog.runtimeWatchdogSec;
+assert cm3.systemd.settings.Manager.WatchdogDevice == "/dev/watchdog-internal";
+assert cm3.systemd.services ? watchdog-device-check;
+assert cm3.systemd.services.os-verification.environment.ATOMIXOS_REQUIRE_WATCHDOG == "1";
 # The squashfs slot can appear after initrd-root-device.target; wait for it.
 assert lib.hasInfix ''until [ -b "$lower_device" ]''
   cm3.boot.initrd.systemd.services.initrd-prepare-overlay-lower.script;
@@ -120,6 +140,8 @@ pkgs.runCommand "test-cm3-board"
       fi
     done <"$enabledSettingsPath"
     test "$missing" -eq 0
+    # Only U-Boot proper runs the watchdog: SPL hands over to it unarmed.
+    ! grep -E '^CONFIG_SPL_(WDT|WATCHDOG)=y' ${uboot}/u-boot.config
     grep -F 'defconfig = "radxa-cm3-io-rk3566_defconfig";' ${../../nix/uboot-cm3.nix}
     grep -F 'CONFIG_ENV_IS_IN_MMC=y' ${../../nix/uboot-cm3.nix}
     grep -F 'CONFIG_ENV_REDUNDANT=y' ${../../nix/uboot-cm3.nix}
