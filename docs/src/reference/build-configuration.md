@@ -116,8 +116,10 @@ build's root password.
 The password itself is never build policy. `scripts/nix-with-build-config.sh` reads it from
 `ATOMIXOS_SERIAL_ROOT_PASSWORD`, or else from the first line of the ignored repository-root `serial-root.password`
 file. Before Nix runs, the wrapper hashes it with yescrypt (`mkpasswd` from the flake's pinned nixpkgs), removes the
-plaintext from the environment, and passes only the hash. The salt is derived from the password, so the same password
-always builds the same image. The hash is not rendered into `build.toml` or `build-metadata.json` and does not change
+plaintext from the environment, and passes only the hash. The salt is random, never derived from the password. The
+wrapper creates it on first use in the ignored repository-root `serial-root.salt` file and reuses it, so rebuilding with
+the same password reuses the same hash; delete the file to pick a new salt. A checkout without that file, such as each
+release build, gets a new salt. The hash is not rendered into `build.toml` or `build-metadata.json` and does not change
 `policy_sha256`, but it is part of the image: the initrd and the root system both carry it.
 
 When `require_password = true` and no password was supplied, the build still succeeds, prints a warning, and disables

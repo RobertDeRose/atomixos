@@ -69,7 +69,7 @@ nixos-lib.runTest {
   nodes.password = shellRequested {
     atomixos.serialRootDebug = {
       requirePassword = true;
-      # yescrypt of "atomixos-test", as scripts/nix-with-build-config.sh derives it.
+      # yescrypt of "atomixos-test", as scripts/nix-with-build-config.sh hashes it.
       passwordHash = "$y$j9T$3b8cf4ea23612c5d1452$YA82C.PVPWBZHNWLz7qT2Tgc7tTlndR4p0AUEqUB0WA";
     };
   };

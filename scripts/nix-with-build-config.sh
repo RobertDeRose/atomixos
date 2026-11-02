@@ -11,6 +11,7 @@ fi
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 override="$repo_root/build.dev.toml"
 password_file="$repo_root/serial-root.password"
+salt_file="$repo_root/serial-root.salt"
 
 # Never honor a caller-selected path or hash. The ignored repository-root files
 # and ATOMIXOS_SERIAL_ROOT_PASSWORD are the only supported inputs.
@@ -23,23 +24,24 @@ if [[ -f "$override" ]]; then
 	impure=true
 fi
 
-sha256_hex() {
-	if command -v sha256sum >/dev/null; then
-		sha256sum
-	else
-		shasum -a 256
-	fi
-}
-
-# The plaintext never reaches Nix: only its yescrypt hash does. The salt comes
-# from the password, so the same password always builds the same image.
+# The plaintext never reaches Nix: only its yescrypt hash does. The salt is
+# random, never derived from the password, and is kept in the ignored salt file
+# so rebuilds with the same password reuse the same hash and image.
 password="${ATOMIXOS_SERIAL_ROOT_PASSWORD:-}"
 unset ATOMIXOS_SERIAL_ROOT_PASSWORD
 if [[ -z "$password" && -f "$password_file" ]]; then
 	IFS= read -r password <"$password_file" || true
 fi
 if [[ -n "$password" ]]; then
-	salt=$(printf 'atomixos-serial-root:%s' "$password" | sha256_hex | cut -c1-20)
+	if [[ ! -f "$salt_file" ]]; then
+		# 15 random bytes are 20 base64 characters; '+' is not a crypt character.
+		head -c 15 /dev/urandom | base64 | tr '+' '.' >"$salt_file"
+	fi
+	IFS= read -r salt <"$salt_file" || true
+	if [[ ! "$salt" =~ ^[./0-9A-Za-z]{20}$ ]]; then
+		echo "ERROR: $salt_file must hold 20 characters from [./0-9A-Za-z]; delete it to regenerate." >&2
+		exit 1
+	fi
 	hash=$(printf '%s\n' "$password" |
 		nix run --inputs-from "$repo_root" nixpkgs#mkpasswd -- --stdin --salt "\$y\$j9T\$$salt")
 	unset password

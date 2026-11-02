@@ -35,6 +35,7 @@ Thumbs.db
 .local
 build.dev.toml
 serial-root.password
+serial-root.salt
 
 # AI Agents
 .playwright-mcp/
