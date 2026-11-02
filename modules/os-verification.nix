@@ -50,6 +50,8 @@ in
     environment = {
       ATOMIXOS_WAN_INTERFACE = config.atomixos.network.wanInterface or "wan";
       ATOMIXOS_LAN_INTERFACE = config.atomixos.network.lanInterface or "lan";
+      # A bootloader-started watchdog must be held by systemd before the slot is confirmed.
+      ATOMIXOS_REQUIRE_WATCHDOG = if config.atomixos.watchdog.bootloaderStarted then "1" else "0";
     };
 
     path = [

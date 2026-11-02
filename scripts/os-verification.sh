@@ -14,6 +14,7 @@ LAN_DEFAULTS_FILE="${ATOMIXOS_LAN_DEFAULTS_FILE:-/etc/atomixos/lan-defaults.json
 APP_RUNTIME_USER="${ATOMIXOS_APP_RUNTIME_USER:-appsvc}"
 WAN_INTERFACE="${ATOMIXOS_WAN_INTERFACE:-wan}"
 LAN_INTERFACE="${ATOMIXOS_LAN_INTERFACE:-lan}"
+REQUIRE_WATCHDOG="${ATOMIXOS_REQUIRE_WATCHDOG:-0}"
 
 log() { echo "[os-verification] $*" >&2; }
 
@@ -202,6 +203,25 @@ unit_mode() {
 	' "$RUNTIME_METADATA_FILE" 2>/dev/null || printf '%s\n' rootful
 }
 
+# On boards whose U-Boot starts the watchdog (CM3), the kernel stops feeding it at
+# watchdog.open_timeout. If systemd does not hold it, the board resets minutes after
+# this check passes, so confirming the slot would reset forever instead of falling back.
+check_watchdog_held() {
+	[ "$REQUIRE_WATCHDOG" = "1" ] || return 0
+	local fd target
+	for fd in /proc/1/fd/*; do
+		target="$(readlink "$fd" 2>/dev/null || true)"
+		case "$target" in
+		/dev/watchdog*)
+			log "  OK systemd holds $target"
+			return 0
+			;;
+		esac
+	done
+	log "  FAIL systemd does not hold a watchdog device"
+	return 1
+}
+
 run_health_checks() {
 	local required_units="$1"
 	local system_ok=true
@@ -213,6 +233,7 @@ run_health_checks() {
 	check_wan_interface || system_ok=false
 	check_lan_gateway_ip || system_ok=false
 	check_required_units "$required_units" || system_ok=false
+	check_watchdog_held || system_ok=false
 
 	[ "$system_ok" = "true" ]
 }

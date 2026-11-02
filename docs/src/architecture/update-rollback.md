@@ -152,8 +152,9 @@ systemd hangs, and its reboot timeout resets the board if a reboot hangs.
 
 If enforcement is on but no usable device exists, `watchdog-device-check.service` logs a warning and exits successfully.
 On the ROCK64, boot and update verification carry on, and RAUC state is not changed. On the CM3, the watchdog is already
-running, so a system whose systemd does not hold it is reset once the kernel stops feeding it, and the slot falls back
-like any other failed boot.
+running, so a system whose systemd does not hold it is reset once the kernel stops feeding it. `os-verification`
+therefore also requires that systemd holds a watchdog device on the CM3; otherwise the slot is not confirmed, its tries
+run out, and it falls back like any other failed boot.
 
 Watchdog resets feed the same boot counter as any other failed boot. U-Boot spends a try on every boot, and
 `os-verification` restores the counter only after a healthy boot, so any slot that resets three boots in a row, whether

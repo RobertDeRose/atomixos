@@ -99,6 +99,7 @@ assert cm3.atomixos.watchdog.openTimeoutSec >= 120;
 assert cm3.systemd.settings.Manager.RuntimeWatchdogSec == cm3.atomixos.watchdog.runtimeWatchdogSec;
 assert cm3.systemd.settings.Manager.WatchdogDevice == "/dev/watchdog-internal";
 assert cm3.systemd.services ? watchdog-device-check;
+assert cm3.systemd.services.os-verification.environment.ATOMIXOS_REQUIRE_WATCHDOG == "1";
 # The squashfs slot can appear after initrd-root-device.target; wait for it.
 assert lib.hasInfix ''until [ -b "$lower_device" ]''
   cm3.boot.initrd.systemd.services.initrd-prepare-overlay-lower.script;
