@@ -762,9 +762,17 @@ def load_firewall_inbound(network_value: Any) -> dict[str, dict[str, list[int]]]
 
 
 def load_activation_policy(activation_value: Any, known_units: set[str]) -> dict[str, Any]:
-    """Parse and validate activation policy."""
-    activation = require_mapping(activation_value, "activation")
-    required_units = require_string_list(activation.get("required"), "activation.required")
+    """Parse and validate activation policy.
+
+    An absent [activation] table or required list means no required units:
+    activation then succeeds once the system services apply.
+    """
+    activation = require_mapping(
+        {} if activation_value is None else activation_value, "activation"
+    )
+    required_units = require_optional_string_list(
+        activation.get("required"), "activation.required"
+    )
     restart = require_optional_string_list(activation.get("restart"), "activation.restart")
     allow_degraded = require_optional_string_list(
         activation.get("allow_degraded"), "activation.allow_degraded"
@@ -854,8 +862,10 @@ def load_config(
             "server_url": require_https_url(os_upgrade.get("server_url"), "os_upgrade.server_url")
         }
 
-    containers = require_mapping(root.get("containers"), "containers")
-    container_table = require_mapping(containers.get("container"), "containers.container")
+    # [containers] and its container table are optional: a configuration with
+    # only users, network, and firewall settings runs no containers.
+    containers = require_mapping(root.get("containers", {}), "containers")
+    container_table = require_mapping(containers.get("container", {}), "containers.container")
     activation_policy = load_activation_policy(root.get("activation"), set(container_table))
     required_units = activation_policy["required"]
 

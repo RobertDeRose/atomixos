@@ -44,6 +44,23 @@ ssh admin@<device-ip>
 
 [Data Flow](data-flow.md) lists every file the device derives from your configuration.
 
+### Start with users only
+
+A configuration needs only `version` and one admin user with an SSH key. `[containers]`, `[activation]`, and the
+network sections are optional, so a fresh device can be brought up for access first:
+
+```toml
+version = 1
+
+[users.admin]
+isAdmin = true
+ssh_key = "ssh-ed25519 AAAA... admin@example"
+```
+
+With no containers there are no required units, so activation succeeds once the users, network, and firewall apply,
+and a missing registry or a slow image pull cannot roll back the admin account. Add containers afterwards with a signed
+change; see [Runtime Boundaries](runtime-boundaries.md#the-configtoml-contract) for every section.
+
 ## Change a provisioned device
 
 Once a device is provisioned, every change goes through the provisioning API and must be signed with the SSH key of an

@@ -1491,3 +1491,39 @@ def test_direct_initial_import_grants_service_read_access(tmp_path, monkeypatch)
     assert result["reapply"] is False
     assert (config_root.parent / "config-candidate", -1, 1000) in calls
     assert (config_root / "config.toml").stat().st_mode & 0o040
+
+
+def test_users_only_import_activates_and_commits(tmp_path, monkeypatch):
+    """A config without containers applies users and keys and activates with no units."""
+    hook = tmp_path / "activation-hook"
+    hook.write_text(f"#!/bin/sh\ntouch {tmp_path / 'activated'}\n")
+    hook.chmod(0o755)
+    monkeypatch.setenv("ATOMIXOS_BOOTSTRAP_ACTIVATION", str(hook))
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        f"""\
+version = 1
+
+[users.admin]
+isAdmin = true
+ssh_key = "{VALID_ED25519_KEY} admin@example"
+"""
+    )
+    config_root = tmp_path / "config"
+
+    result = import_config_from_path(config_path, config_root)
+
+    assert result["reapply"] is False
+    assert (tmp_path / "activated").exists()
+    assert (config_root / "config.toml").read_text() == config_path.read_text()
+    assert (config_root / "ssh-authorized-keys" / "admin").read_text().startswith(
+        VALID_ED25519_KEY
+    )
+    assert json.loads((config_root / "health-required.json").read_text()) == []
+    policy = json.loads((config_root / "activation-policy.json").read_text())
+    assert policy["required"] == []
+    runtime = json.loads((config_root / "quadlet-runtime.json").read_text())
+    assert runtime["units"] == []
+    assert not any((config_root / "quadlet").iterdir())
+    assert not (tmp_path / "config-candidate").exists()
+    assert not (tmp_path / "config-rollback").exists()

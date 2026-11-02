@@ -378,6 +378,7 @@
             clock = import ./nix/tests/clock.nix netTestArgs;
             ssh-host-keys = import ./nix/tests/ssh-host-keys.nix netTestArgs;
             ssh-wan-toggle = import ./nix/tests/ssh-wan-toggle.nix netTestArgs;
+            users-only-provision = import ./nix/tests/users-only-provision.nix netTestArgs;
           };
 
           allTests = raucTests // netTests;
@@ -455,6 +456,7 @@
             clock = import ./nix/tests/clock.nix darwinNetTestArgs;
             ssh-host-keys = import ./nix/tests/ssh-host-keys.nix darwinNetTestArgs;
             ssh-wan-toggle = import ./nix/tests/ssh-wan-toggle.nix darwinNetTestArgs;
+            users-only-provision = import ./nix/tests/users-only-provision.nix darwinNetTestArgs;
           };
         in
         {

@@ -67,7 +67,7 @@ VM tests:
 
 - RAUC: `rauc-slots`, `rauc-update`, `rauc-rollback`, `rauc-confirm`, `rauc-power-loss`, `rauc-watchdog`
 - Provisioning: `first-boot-provision`, `first-boot-source-discovery`, `initrd-fresh-flash-marker`,
-  `provisioning-export`, `rootless-storage`
+  `provisioning-export`, `rootless-storage`, `users-only-provision`
 - Nixstasis: `nixstasis-client`, `nixstasis-module`, `fleet-bootstrap`
 - Networking: `firewall`, `network-isolation`, `ssh-wan-toggle`, `chrony-wan-recovery`
 - Logging: `forensics-podman-log-path`, `forensics-rsyslog-path`, `forensics-rsyslog-buffering`,

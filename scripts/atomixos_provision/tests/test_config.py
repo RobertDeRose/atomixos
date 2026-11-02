@@ -590,6 +590,74 @@ class TestLoadConfig:
         }
         assert "myapp" in result["containers"]["container"]
 
+    @pytest.mark.parametrize(
+        "extra",
+        [
+            "",
+            "[containers]\n",
+            "[containers.container]\n",
+            "[activation]\n",
+            "[activation]\nrequired = []\n",
+            "[activation]\nrequired = []\ntimeout_seconds = 60\n\n[containers.container]\n",
+        ],
+        ids=[
+            "absent",
+            "empty-containers",
+            "empty-container-table",
+            "empty-activation",
+            "empty-required",
+            "empty-required-and-containers",
+        ],
+    )
+    def test_users_only_valid(self, tmp_path: Path, schema_path: Path, monkeypatch, extra: str):
+        monkeypatch.setenv("ATOMIXOS_CONFIG_SCHEMA", str(schema_path))
+        config = tmp_path / "config.toml"
+        config.write_text(
+            f"""\
+version = 1
+
+[users.admin]
+isAdmin = true
+ssh_key = "{VALID_ED25519_KEY} test@test"
+
+{extra}"""
+        )
+        result = load_config(config)
+        assert result["ssh_keys"] == [f"{VALID_ED25519_KEY} test@test"]
+        assert result["required_units"] == []
+        assert result["activation_policy"]["required"] == []
+        assert result["activation_policy"]["strategy"] == "rollback"
+        assert result["containers"]["container"] == {}
+
+    def test_users_only_rejects_unknown_required_unit(
+        self, tmp_path: Path, schema_path: Path, monkeypatch
+    ):
+        monkeypatch.setenv("ATOMIXOS_CONFIG_SCHEMA", str(schema_path))
+        config = tmp_path / "config.toml"
+        config.write_text(
+            f"""\
+version = 1
+
+[users.admin]
+isAdmin = true
+ssh_key = "{VALID_ED25519_KEY} test@test"
+
+[activation]
+required = ["myapp"]
+"""
+        )
+        with pytest.raises(ProvisionError, match=r"activation\.required references unknown unit"):
+            load_config(config)
+
+    def test_users_only_still_requires_admin_key(
+        self, tmp_path: Path, schema_path: Path, monkeypatch
+    ):
+        monkeypatch.setenv("ATOMIXOS_CONFIG_SCHEMA", str(schema_path))
+        config = tmp_path / "config.toml"
+        config.write_text("version = 1\n\n[users.admin]\nisAdmin = true\n")
+        with pytest.raises(ProvisionError, match="at least one admin"):
+            load_config(config)
+
     def test_activation_options_valid(self, tmp_path: Path, schema_path: Path, monkeypatch):
         monkeypatch.setenv("ATOMIXOS_CONFIG_SCHEMA", str(schema_path))
         config = tmp_path / "config.toml"

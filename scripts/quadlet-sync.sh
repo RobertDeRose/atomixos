@@ -183,11 +183,25 @@ fi
 
 systemctl daemon-reload
 
+# A removed unit that already failed or exited is unloaded once its file is gone, so
+# `systemctl stop` reports an error for it. Only a unit that is still running is a
+# failure: its container would keep running unmanaged after the config commits.
+# Usage: still_running <service> <systemctl command...>
+still_running() {
+	local service="$1" state
+	shift
+	state="$("$@" show -P ActiveState "$service" 2>/dev/null || true)"
+	[ -n "$state" ] && [ "$state" != inactive ] && [ "$state" != failed ]
+}
+
+stale_failures=()
+
 for service_name in "${stale_rootful_services[@]}"; do
 	[ -n "$service_name" ] || continue
 	log "Stopping stale $service_name"
-	if ! systemctl stop "$service_name"; then
-		log "WARNING: failed to stop stale $service_name"
+	if ! systemctl stop "$service_name" && still_running "$service_name" systemctl; then
+		log "ERROR: failed to stop stale $service_name"
+		stale_failures+=("$service_name")
 	fi
 done
 
@@ -195,10 +209,17 @@ if has_rootless_units || [ "${#stale_rootless_services[@]}" -gt 0 ]; then
 	for service_name in "${stale_rootless_services[@]}"; do
 		[ -n "$service_name" ] || continue
 		log "Stopping stale rootless $service_name"
-		if ! run_as_appsvc systemctl --user stop "$service_name"; then
-			log "WARNING: failed to stop stale rootless $service_name"
+		if ! run_as_appsvc systemctl --user stop "$service_name" &&
+			still_running "$service_name" run_as_appsvc systemctl --user; then
+			log "ERROR: failed to stop stale rootless $service_name"
+			stale_failures+=("$service_name")
 		fi
 	done
+fi
+
+if [ "${#stale_failures[@]}" -gt 0 ]; then
+	log "ERROR: stale units are still running: ${stale_failures[*]}"
+	exit 1
 fi
 
 failed_units=()

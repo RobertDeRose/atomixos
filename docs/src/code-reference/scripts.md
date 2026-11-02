@@ -139,7 +139,11 @@ Logs boot-count and rollback state for the configured RAUC backend, run by `watc
 
 ### quadlet-sync.sh
 
-Syncs rendered rootful and rootless Quadlet units and starts them, run by `quadlet-sync.service`.
+Syncs rendered rootful and rootless Quadlet units and starts them, run by `quadlet-sync.service`. It stops the
+services of units removed from the configuration first. If a removed service is still running after its stop, the sync
+fails before starting anything, so activation rolls back instead of committing with an unmanaged container still
+running. A removed service that had already stopped or failed is not an error. Units that fail to start are logged as
+warnings, and the sync still succeeds.
 
 ### apply-users.py
 

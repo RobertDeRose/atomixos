@@ -183,6 +183,9 @@ Image = "ghcr.io/example/myapp:latest"
 PublishPort = ["10080:8080"]
 ```
 
+- **Required sections.** Only `version` and `[users]` are required, and `[users]` must declare at least one admin user
+  with an `ssh_key`. Every other section is optional. A configuration without `[containers]` runs no containers, and
+  one without `[activation]` or with an empty `required` list has no required units.
 - **Firewall.** WAN ports stay closed unless listed. LAN stays open unless `[network.firewall.inbound.lan]` lists ports,
   which turns it into an allowlist.
 - **LAN gateway.** `[network.dnsmasq]` is optional; missing fields use the default LAN gateway. `[network.ntp]` is
@@ -192,9 +195,10 @@ PublishPort = ["10080:8080"]
   interface. The top-level IPv4 default gateway applies to `wan`; set a per-interface gateway for other interfaces.
   With no gateway set, none is rendered, and an empty gateway string is invalid. `lan` must stay static because it is
   the LAN gateway.
-- **Activation.** `required` names provisioned container services that must become active. `timeout_seconds`,
-  `settle_seconds`, `restart`, and `allow_degraded` are optional. Units may only be declared container services, never
-  arbitrary systemd units. `strategy` accepts only `rollback`, so a failed activation always rolls back.
+- **Activation.** `required` names provisioned container services that must become active; it may be empty or left
+  out. `timeout_seconds`, `settle_seconds`, `restart`, and `allow_degraded` are optional. Units may only be declared
+  container services, never arbitrary systemd units. `strategy` accepts only `rollback`, so a failed activation always
+  rolls back.
 
 ## Firewall JSON
 
@@ -281,8 +285,9 @@ supported. These files never add firewall rules, NAT, IP forwarding, or forward-
 ```
 
 Activation runs the standard activation hook, restarts the listed services, waits `settle_seconds`, and then checks the
-required services within `timeout_seconds`. An invalid policy fails closed and rolls back. When no policy file exists,
-the older `health-required.json` is used instead.
+required services within `timeout_seconds`. With no required units, activation succeeds once the hook has applied
+users, Quadlets, the network, and the firewall. An invalid policy fails closed and rolls back. When no policy file
+exists, the older `health-required.json` is used instead.
 
 `allow_degraded_configured` records whether `allow_degraded` was set. If it was left out, failed services that are not
 required are reported but tolerated. If it was set, any failed service that is neither required nor listed fails the
