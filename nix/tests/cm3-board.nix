@@ -87,6 +87,9 @@ assert ubootConfig "WDT" == "y";
 assert ubootConfig "DESIGNWARE_WATCHDOG" == "y";
 assert ubootConfig "WATCHDOG" == "y";
 assert ubootConfig "WATCHDOG_AUTOSTART" == "y";
+assert ubootConfig "CMD_WDT" == "y";
+# Without an enable op in the rk3568 clock driver the watchdog never probes.
+assert builtins.any (patch: baseNameOf patch == "uboot-rk3568-wdt-clk-enable.patch") uboot.patches;
 # Within the 2^31-cycle (89.5 s at 24 MHz) hardware maximum.
 assert lib.toInt (ubootConfig "WATCHDOG_TIMEOUT_MSECS") <= 89000;
 assert cm3.atomixos.watchdog.bootloaderStarted;

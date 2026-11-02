@@ -70,7 +70,8 @@ U-Boot starts the watchdog before every kernel and feeds it at the prompt and du
 180 seconds after its watchdog driver registers, and systemd holds it from the start of stage 2, so enforcement is on
 for every CM3 build whatever `enable_hardware` says. A kernel or initrd that stalls before systemd resets the board
 and spends a boot try; [Boot stalls](architecture/update-rollback.md#boot-stalls) gives the timings. The U-Boot serial
-log shows `WDT:   Started watchdog@fe600000 with servicing every 1000ms (44s timeout)`.
+log shows `WDT:   Started watchdog@fe600000 with servicing every 1000ms (44s timeout)`. At the U-Boot prompt,
+`wdt dev` names the active watchdog and `dm tree` lists `watchdog@fe600000` as probed (`[ + ]`).
 
 Once started, the watchdog runs until the next reset; nothing can stop it. The initrd emergency shell therefore resets
 the board when the open timeout passes. To keep the shell for debugging, feed the watchdog from it:

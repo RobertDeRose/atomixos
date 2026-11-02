@@ -6,6 +6,9 @@
 }:
 (pkgs.ubootRock3C.override {
   defconfig = "radxa-cm3-io-rk3566_defconfig";
+  # The rk3568 clock driver has no enable op, so the DesignWare watchdog's
+  # clk_enable() fails and watchdog@fe600000 never probes or starts.
+  extraPatches = [ ./patches/uboot-rk3568-wdt-clk-enable.patch ];
   filesToInstall = [
     "idbloader.img"
     "u-boot.itb"
@@ -77,7 +80,9 @@
     # periods, so 44 s rounds up to 2^30 cycles, 44.7 s: the same period
     # systemd's 30 s runtime timeout selects. SPL and the BootROM (Maskrom)
     # never start it.
+    # CMD_WDT adds `wdt dev`, `wdt start`, and `wdt expire` at the prompt.
     CONFIG_WDT=y
+    CONFIG_CMD_WDT=y
     CONFIG_DESIGNWARE_WATCHDOG=y
     CONFIG_WATCHDOG=y
     CONFIG_WATCHDOG_AUTOSTART=y

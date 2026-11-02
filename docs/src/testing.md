@@ -106,7 +106,8 @@ server's bundle delivery and the public FRPS and Caddy path are outside this che
 The `watchdog-module` check verifies that hardware watchdog enforcement is off by default and that the systemd manager
 watchdog settings are rendered only when enforcement is enabled or the board's U-Boot starts the watchdog, which also
 adds `watchdog.open_timeout`. It also checks that ROCK64 keeps neither. The `cm3-board` check verifies the CM3 side of
-that handover: U-Boot starts and feeds the watchdog in U-Boot proper only, within the hardware maximum, and the CM3
+that handover: U-Boot starts and feeds the watchdog in U-Boot proper only, within the hardware maximum, with the
+clock patch its watchdog driver needs to probe and the `wdt` command, and the CM3
 system always has systemd enforcement and the open timeout. The `watchdog-missing-device` VM check enables
 enforcement without exposing a watchdog device, then verifies that boot continues, RAUC state is unchanged, and an
 actionable warning reports that enforcement is unavailable.
