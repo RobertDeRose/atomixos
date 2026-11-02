@@ -263,12 +263,13 @@ fw_printenv -n _RUT_OH_    # expect: empty / unset
 
 ### Test 6.3: Initrd failure reboots, or opens a shell with `_RUT_OH_`
 
-This destroys the inactive root slot; the next RAUC install rewrites it.
+This installs a bundle into slot B and then destroys its root filesystem; the next RAUC install rewrites it. A freshly
+flashed device has no boot files in slot B, so without the install U-Boot fails before the initrd runs.
 
 ```sh
-# On the device, booted from slot A (check with `rauc status`)
+# On the device, booted from slot A (check with `rauc status`), with the bundle copied as in Test 7.2
+rauc install /data/rock64.raucb    # writes slot B and makes it the next boot
 dd if=/dev/zero of=/dev/disk/by-partlabel/rootfs-b bs=1M count=4 conv=fsync
-rauc status mark-active other
 reboot
 ```
 
@@ -281,7 +282,7 @@ Repeat with `fw_setenv _RUT_OH_ 1` before `reboot`:
 
 - U-Boot prints `_RUT_OH_=1: a failed initrd opens a serial root shell instead of rebooting`
 - The failed initrd stays at an emergency-mode root shell instead of resetting
-- To leave, interrupt autoboot and run `setenv _RUT_OH_; saveenv; reset` at the U-Boot prompt
+- To leave, reset the board, interrupt autoboot, and run `setenv _RUT_OH_; saveenv; reset` at the U-Boot prompt
 
 ## Phase 7: RAUC update lifecycle
 
